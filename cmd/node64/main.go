@@ -380,6 +380,12 @@ func run() error {
 		return ipv64Key.RemoteChannels(ctx)
 	})
 	hcModule.SetLinked(syncClient.Linked)
+	hcModule.SetAccountChannels(func(ctx context.Context) []*notify.Channel { // in der Alarmierung waehlbar wie in Benachrichtigungen
+		if syncClient.Linked() {
+			return nil
+		}
+		return ipv64Key.RemoteChannels(ctx)
+	})
 	viaCluster := func() bool { // nicht verknuepft: eine verknuepfte Node des Clusters reicht weiter
 		if syncClient.Linked() {
 			return false

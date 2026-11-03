@@ -1483,7 +1483,11 @@ func (m *Module) channels(ctx context.Context) ([]*notify.Channel, error) {
 	if m.notifyStore == nil {
 		return nil, nil
 	}
-	return m.notifyStore.Channels(ctx)
+	chans, err := m.notifyStore.Channels(ctx)
+	if err == nil && m.accountCh != nil {
+		chans = append(chans, m.accountCh(ctx)...) // ipv64-Mail/-SMS/App des Accounts (ohne Verknuepfung, nur ueber die API)
+	}
+	return chans, err
 }
 
 // translator liefert eine Uebersetzungsfunktion fuer eine feste Sprache.

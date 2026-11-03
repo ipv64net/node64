@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: e-mail, SMS and app channels of the ipv64 account can be chosen in a check's alerting even without health check sync.
+
 ## 0.12.0-alpha.38 – 2026-11-03
 
 - Healthchecks: Proxmox nodes in maintenance ("offline is fine") no longer make the system "partly impaired"; the confirmation can be undone with a button.

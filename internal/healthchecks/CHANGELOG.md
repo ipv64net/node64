@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.51.4 – 2026-11-03
+
+### Behoben
+- Ohne Healthchecks-Sync (nur API-Key): Die E-Mail-, SMS- und App-Kanäle des ipv64-Accounts stehen jetzt auch in der Alarmierung eines Checks (wie unter Benachrichtigungen) und werden bei Auswahl gesendet – auch, wenn sie kein Standardkanal sind.
+
 ## 2.51.3 – 2026-11-03
 
 ### Behoben

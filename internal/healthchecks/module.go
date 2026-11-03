@@ -50,12 +50,13 @@ type Module struct {
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 	push       *pushLimiter
-	linked     func() bool                      // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
-	viaCluster func() bool                      // nicht verknuepft, aber eine verknuepfte Node des Clusters reicht an ipv64 weiter
-	quota      func() (today, limit, locs int)  // Tageskontingent der Online-Checks, nil = standalone
-	api        *ipv64api.Key                    // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
-	groupRole  GroupRole                        // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
-	groupPeers func(ctx context.Context) []Peer // Nodes der lokalen Gruppe (Auswahl der Messstellen)
+	linked     func() bool                             // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
+	accountCh  func(context.Context) []*notify.Channel // ohne Verknuepfung: ipv64-Kanaele des Accounts (E-Mail, SMS, App; IDs negativ)
+	viaCluster func() bool                             // nicht verknuepft, aber eine verknuepfte Node des Clusters reicht an ipv64 weiter
+	quota      func() (today, limit, locs int)         // Tageskontingent der Online-Checks, nil = standalone
+	api        *ipv64api.Key                           // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
+	groupRole  GroupRole                               // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
+	groupPeers func(ctx context.Context) []Peer        // Nodes der lokalen Gruppe (Auswahl der Messstellen)
 	// Account-Klasse und Online-Messstellen-Limit, nil = standalone
 	account func() (plan string, onlineLimit int)
 	// Testlauf von ipv64 vor dem Umhaengen, nil = standalone
@@ -207,6 +208,10 @@ func (m *Module) Store() *Store { return m.st }
 // SetLinked meldet, ob die Node mit ipv64 verknuepft ist (schaltet Online/Hybrid im Formular frei).
 func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
 
+// SetAccountChannels liefert ohne Verknuepfung die ipv64-Kanaele des Accounts (wie Benachrichtigungen), damit sie in
+// der Alarmierung eines Checks waehlbar sind; verknuepft kommen sie als Platzhalter ueber den Sync (fn liefert nil).
+func (m *Module) SetAccountChannels(fn func(context.Context) []*notify.Channel) { m.accountCh = fn }
+
 // SetViaCluster meldet, ob eine verknuepfte Node des Clusters die Aenderungen dieser (nicht verknuepften) Node an ipv64
 // weiterreicht: dann gehen Online- und Hybrid-Checks auch hier (anlegen, aendern, verschieben).
 func (m *Module) SetViaCluster(fn func() bool) { m.viaCluster = fn }
@@ -236,7 +241,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "2.51.3", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "2.51.4", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

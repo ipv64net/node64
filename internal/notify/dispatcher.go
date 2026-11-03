@@ -401,17 +401,17 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
 		if len(want) > 0 {
-			if want[ch.ID] {
+			if want[ch.ID] || (ch.RemoteID > 0 && want[-ch.RemoteID]) { // -RemoteID: ohne Verknuepfung gewaehlter ipv64-Kanal
 				out = append(out, ch)
 			}
 		} else if ch.Default {
 			out = append(out, ch)
 		}
 	}
-	// ohne Verknuepfung: die ipv64-Kanaele des Accounts ueber die API (nur Standardkanaele)
-	if _, _, remote := d.hooks(); d.viaAPI(c) && remote != nil && len(want) == 0 {
+	// ohne Verknuepfung: die ipv64-Kanaele des Accounts ueber die API (IDs negativ; gewaehlt oder Standardkanaele)
+	if _, _, remote := d.hooks(); d.viaAPI(c) && remote != nil {
 		for _, ch := range remote(ctx) {
-			if ch.Enabled && ch.Default {
+			if ch.Enabled && (len(want) > 0 && want[ch.ID] || len(want) == 0 && ch.Default) {
 				out = append(out, ch)
 			}
 		}

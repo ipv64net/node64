@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.51.4 – 2026-11-03
+
+### Fixed
+- Without health check sync (API key only): the e-mail, SMS and app channels of the ipv64 account now also appear in a check's alerting (as under Notifications) and are sent when selected – even if they are not a default channel.
+
 ## 2.51.3 – 2026-11-03
 
 ### Fixed
