@@ -1746,7 +1746,7 @@
       "mode_auto": "Automatisch installieren",
       "channel": "Kanal",
       "channel_stable": "Stabil",
-      "channel_preview": "Vorschau (alpha/beta)",
+      "channel_preview": "Release-Candidate (Vorabversionen)",
       "window": "Zeitfenster (automatisch)",
       "hint": "Node64 lädt die neue Version signiert von ipv64.net, sichert vorher die Datenbank und startet in wenigen Sekunden neu. Läuft sie nicht stabil, geht es automatisch zurück.",
       "dev": "Entwicklungsstand: automatische Updates sind aus.",

@@ -40,7 +40,7 @@ const (
 	envImageVersion = "NODE64_IMAGE_VERSION"
 )
 
-// Kanaele: stable (ohne Vorab-Kennung) und preview (alpha/beta).
+// Kanaele: stable (ohne Vorab-Kennung) und preview (Release-Candidates; bis 0.12 alpha/beta).
 var Channels = []string{"stable", "preview"}
 
 // PublicKeys: oeffentliche Ed25519-Schluessel (base64, durch Komma getrennt), die Manifeste signieren duerfen.

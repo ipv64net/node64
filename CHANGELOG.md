@@ -4,6 +4,11 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.0.0 – 2026-11-04
+
+- Erste stabile Version: Node64 ist öffentlich. Ab jetzt keine alpha/beta mehr, neue Versionen kommen als Release-Candidate und danach stabil.
+- Updates: Der Kanal „Vorschau (alpha/beta)“ heißt jetzt „Release-Candidate“. Das Image-Tag `latest` zeigt nur noch auf stabile Versionen, Release-Candidates bekommen `rc`.
+
 ## 0.12.0-alpha.39.1 – 2026-11-03
 
 - Healthchecks: Anleitung für Proxmox Backup Server nennt die Rolle Audit für Benutzer und Token (nur einer reicht nicht).
