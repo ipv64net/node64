@@ -1,5 +1,5 @@
 # Node64-Image bauen und nach GitHub Container Registry (ghcr.io/ipv64net/node64) schieben, dazu nach Docker Hub,
-# sobald die Variable DOCKERHUB_IMAGE (z. B. ipv64net/node64) und die Secrets DOCKERHUB_USERNAME/DOCKERHUB_TOKEN
+# sobald DOCKERHUB_IMAGE (Variable oder Secret) (z. B. ipv64net/node64) und die Secrets DOCKERHUB_USERNAME/DOCKERHUB_TOKEN
 # gesetzt sind (docs/RELEASE.md, Abschnitt Docker Hub). Ohne sie nur ghcr.io wie bisher.
 # Ausloeser: ein Versions-Tag (z. B. v0.12.0-alpha.1) oder von Hand (Actions › image › Run workflow).
 # Vorher laufen vet und die Tests; schlagen sie fehl, entsteht kein Image.
@@ -33,7 +33,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     env:
-      DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+      DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || secrets.DOCKERHUB_IMAGE }} # Variable oder Secret
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -53,7 +53,7 @@ jobs:
           # leere Zeile (keine Docker-Hub-Variable) ignoriert die Action
           images: |
             ghcr.io/${{ github.repository }}
-            ${{ vars.DOCKERHUB_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
           # Tag v1.0.0 -> 1.0.0, 1.0, latest; Release-Candidate v1.0.1-rc.1 -> 1.0.1-rc.1, rc (latest nur fuer stabile Versionen)
           tags: |
             type=semver,pattern={{version}}
@@ -84,7 +84,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ vars.DOCKERHUB_IMAGE }}
+          repository: ${{ env.DOCKERHUB_IMAGE }}
           short-description: "Node64 by ipv64.net: health checks, reverse proxy, DNS filter, DynDNS, honeypot"
           readme-filepath: docs/DOCKERHUB.md
 

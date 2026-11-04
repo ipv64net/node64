@@ -20,8 +20,9 @@ permissions:
 
 jobs:
   copy:
-    if: vars.DOCKERHUB_IMAGE != ''
     runs-on: ubuntu-latest
+    env:
+      DH: ${{ vars.DOCKERHUB_IMAGE || secrets.DOCKERHUB_IMAGE }} # Variable oder Secret
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -38,9 +39,9 @@ jobs:
         env:
           V: ${{ inputs.version }}
           LATEST: ${{ inputs.latest }}
-          DH: ${{ vars.DOCKERHUB_IMAGE }}
           SRC: ghcr.io/${{ github.repository }}
         run: |
+          if [ -z "$DH" ]; then echo "DOCKERHUB_IMAGE fehlt (Variable oder Secret)"; exit 1; fi
           case "$V" in ""|*[!0-9A-Za-z.-]*) echo "ungueltige Version: $V"; exit 1;; esac
           set -- -t "$DH:$V"
           case "$V" in
@@ -56,6 +57,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ vars.DOCKERHUB_IMAGE }}
+          repository: ${{ env.DH }}
           short-description: "Node64 by ipv64.net: health checks, reverse proxy, DNS filter, DynDNS, honeypot"
           readme-filepath: docs/DOCKERHUB.md
