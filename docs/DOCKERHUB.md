@@ -16,7 +16,7 @@ docker run -d --name node64 \
   -p 8080:8080 \
   -v node64-data:/data \
   --restart unless-stopped \
-  ipv64net/node64:latest
+  x64gmbh/node64:latest
 ```
 
 Then open `http://<host>:8080`. On first start a wizard sets the language and the admin account. There is no default
@@ -27,7 +27,7 @@ password.
 ```yaml
 services:
   node:
-    image: ipv64net/node64:latest
+    image: x64gmbh/node64:latest
     container_name: node64
     restart: unless-stopped
     ports:
