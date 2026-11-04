@@ -82,6 +82,8 @@ func Open(dsn, location, node string, log *slog.Logger) (*Store, error) {
 	s := &Store{db: db, log: log.With("module", "store"), source: "loc:" + location, location: location, node: node,
 		users: map[string]int64{}, intervl: map[string]int{}, states: map[string]string{},
 		meas: make(chan measurementRow, 10000), stopCh: make(chan struct{}), Metrics: NewMetrics()}
+	s.Metrics.x.pool = db.Stats
+	s.Metrics.x.buffer = func() (int, int) { return len(s.meas), cap(s.meas) }
 	s.wg.Add(1)
 	go s.measurementWriter()
 	s.startIngestWriter()
@@ -154,6 +156,7 @@ type Metrics struct {
 	Checks            int
 	Nodes             int
 	SlotIndex, Slots  int
+	x                 metricsExtra // je Check-Typ und Datenbank (metrics.go)
 }
 
 func NewMetrics() *Metrics { return &Metrics{} }

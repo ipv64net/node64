@@ -179,12 +179,19 @@ func (s *Store) RotatePartitions(ctx context.Context, now time.Time, keepDays in
 
 // Cleanup raeumt Log, erledigte Auftraege, abgelaufene Codes und alte Tombstones auf.
 func (s *Store) Cleanup(ctx context.Context, now time.Time) {
+	failed := false
 	exec := func(q string, args ...any) {
 		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 			s.log.Warn("cleanup failed", "sql", q[:40], "err", err)
 			s.Metrics.add(&s.Metrics.DBErrors, 1)
+			failed = true
 		}
 	}
+	defer func() {
+		if !failed {
+			s.Metrics.cleanupDone(time.Now())
+		}
+	}()
 	exec(`DELETE FROM hc2_config_log WHERE time < ?`, now.UTC().AddDate(0, 0, -30).Format(TimeFormat))
 	exec(`DELETE FROM hc2_send_orders WHERE (done_at IS NOT NULL AND done_at < ?) OR created_at < ?`, now.UTC().Add(-time.Hour).Format(TimeFormat), now.UTC().AddDate(0, 0, -7).Format(TimeFormat))
 	exec(`DELETE FROM hc2_commands WHERE created_at < ?`, now.UTC().AddDate(0, 0, -1).Format(TimeFormat))

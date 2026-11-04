@@ -40,3 +40,24 @@ func TestServeMetrics(t *testing.T) {
 		t.Fatalf("fremder absender: %d", code)
 	}
 }
+
+// Werte je Check-Typ: Anzahl, Laeufe nach Ergebnis, Dauer, Ping-Pakete.
+func TestDetailMetrics(t *testing.T) {
+	m := store.NewMetrics()
+	m.SetTypes(map[string]int{"icmp": 2, "http": 1})
+	m.ObserveRun("icmp", true, 2*time.Second, 6, 0)
+	m.ObserveRun("icmp", false, time.Second, 3, 2)
+	m.ObserveRun("http", true, 500*time.Millisecond, 0, 0)
+	s := New("127.0.0.1:0", slog.New(slog.NewTextHandler(io.Discard, nil)), m, nil)
+	var sb strings.Builder
+	s.detailMetrics(&sb)
+	body := sb.String()
+	for _, want := range []string{`hub_checks_by_type{type="icmp"} 2`, `hub_checks_by_type{type="http"} 1`,
+		`hub_check_runs_total{type="icmp",result="ok"} 1`, `hub_check_runs_total{type="icmp",result="fail"} 1`,
+		`hub_check_duration_seconds_sum{type="icmp"} 3`, `hub_check_duration_seconds_count{type="icmp"} 2`,
+		`hub_ping_packets_sent_total 9`, `hub_ping_packets_lost_total 2`, "hub_cleanup_last_success_timestamp_seconds 0"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("ohne %q:\n%s", want, body)
+		}
+	}
+}

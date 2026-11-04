@@ -38,8 +38,9 @@ type Checker struct {
 	mu       sync.Mutex
 	slotIdx  int
 	slotMod  int
-	loaded   map[string]int64 // token -> revision
-	liveLocs map[string]bool  // Standorte mit lebendem hub (Push-Auswertung)
+	loaded   map[string]int64  // token -> revision
+	kinds    map[string]string // token -> Check-Typ (Prometheus)
+	liveLocs map[string]bool   // Standorte mit lebendem hub (Push-Auswertung)
 	lastLog  int64
 	lastPush time.Time
 	wg       sync.WaitGroup
@@ -50,7 +51,7 @@ type Checker struct {
 // New erzeugt den Checker.
 func New(st *store.Store, log *slog.Logger, location, version, roles string, workers int) *Checker {
 	return &Checker{st: st, log: log.With("module", "checker"), location: location, version: version, roles: roles, workers: workers,
-		loaded: map[string]int64{}, slotMod: 1, reminders: map[string]time.Time{}}
+		loaded: map[string]int64{}, kinds: map[string]string{}, slotMod: 1, reminders: map[string]time.Time{}}
 }
 
 // SetNotifier haengt Dispatcher und Kanal-Store an; der Store ruft OnOverall.
@@ -163,7 +164,8 @@ func (c *Checker) Start(ctx context.Context) error {
 	if c.throttle == nil {
 		c.throttle = newThrottle(0, 0, c.log)
 	}
-	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers, Allow: c.st.AllowRun, Throttle: c.throttle.allow})
+	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers, Allow: c.st.AllowRun, Throttle: c.throttle.allow,
+		Observe: c.observe})
 	nodes, _ := c.st.LiveNodes(ctx)
 	c.slotIdx, c.slotMod = c.st.SlotShare(nodes)
 	if len(nodes) > 0 {
@@ -304,6 +306,7 @@ func (c *Checker) reloadAll(ctx context.Context) error {
 		c.mu.Lock()
 		rev, known := c.loaded[ck.Token]
 		c.loaded[ck.Token] = ck.Revision
+		c.kinds[ck.Token] = string(ck.Type)
 		c.mu.Unlock()
 		if known && rev == ck.Revision {
 			continue
@@ -321,6 +324,7 @@ func (c *Checker) reloadAll(ctx context.Context) error {
 	for token := range c.loaded {
 		if !want[token] {
 			delete(c.loaded, token)
+			delete(c.kinds, token)
 			c.sched.Remove(token)
 			c.st.Forget(token)
 			removed++
@@ -329,6 +333,7 @@ func (c *Checker) reloadAll(ctx context.Context) error {
 	n := len(c.loaded)
 	c.mu.Unlock()
 	c.st.Metrics.Set(n, 0, idx, mod)
+	c.st.Metrics.SetTypes(c.typeCounts())
 	c.log.Info("checks loaded", "count", n, "added", added, "updated", updated, "removed", removed, "slot", idx, "of", mod)
 	return nil
 }
@@ -350,6 +355,7 @@ func (c *Checker) applyCheck(ctx context.Context, token string) {
 		c.st.Remember(ck)
 		c.mu.Lock()
 		c.loaded[token] = ck.Revision
+		c.kinds[token] = string(ck.Type)
 		c.mu.Unlock()
 		c.sched.Upsert(ck.SchedulerCheck(), nil)
 		c.log.Info("check updated", "token", token, "name", ck.Name, "revision", ck.Revision)
@@ -357,12 +363,14 @@ func (c *Checker) applyCheck(ctx context.Context, token string) {
 		c.st.Remember(ck)
 		c.mu.Lock()
 		c.loaded[token] = ck.Revision
+		c.kinds[token] = string(ck.Type)
 		c.mu.Unlock()
 		c.sched.Upsert(ck.SchedulerCheck(), ck.Runtime)
 		c.log.Info("check added", "token", token, "name", ck.Name)
 	case !mine && known:
 		c.mu.Lock()
 		delete(c.loaded, token)
+		delete(c.kinds, token)
 		c.mu.Unlock()
 		c.sched.Remove(token)
 		c.st.Forget(token)
@@ -372,6 +380,34 @@ func (c *Checker) applyCheck(ctx context.Context, token string) {
 	n := len(c.loaded)
 	c.mu.Unlock()
 	c.st.Metrics.Set(n, 0, idx, mod)
+	c.st.Metrics.SetTypes(c.typeCounts())
+}
+
+// typeCounts zaehlt die geladenen Checks je Typ.
+func (c *Checker) typeCounts() map[string]int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m := map[string]int{}
+	for _, t := range c.kinds {
+		m[t]++
+	}
+	return m
+}
+
+// observe zaehlt einen Lauf je Typ fuer /metrics; bei Ping auch gesendete und verlorene Pakete (v4 und v6).
+func (c *Checker) observe(ck scheduler.Check, m scheduler.Measurement, took time.Duration) {
+	var sent, lost int64
+	if ck.Def.Type == checks.TypeICMP {
+		for _, r := range m.Results {
+			s, okS := r.Details["sent"].(int)
+			rc, okR := r.Details["received"].(int)
+			if okS && okR {
+				sent += int64(s)
+				lost += int64(max(s-rc, 0))
+			}
+		}
+	}
+	c.st.Metrics.ObserveRun(string(ck.Def.Type), m.Status == checks.Up, took, sent, lost)
 }
 
 func locsOf(nodes []store.HubInstance) map[string]bool {

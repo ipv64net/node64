@@ -86,12 +86,14 @@ func (s *Store) writeIngest(batch []ingestJob) error {
 	}
 	if n > 0 {
 		var err error
+		start := time.Now()
 		for try := 0; try < 3; try++ { // Sperrkonflikte (z. B. mit der Verdichtung) kurz abwarten
 			if _, err = s.db.ExecContext(ctx, sb.String(), args...); err == nil {
 				break
 			}
 			time.Sleep(time.Duration(200*(try+1)) * time.Millisecond)
 		}
+		s.Metrics.observeWrite("node_measurements", start) // mit Wiederholungen
 		if err != nil {
 			s.Metrics.add(&s.Metrics.DBErrors, 1)
 			s.log.Error("node measurements insert failed", "rows", n, "err", err)

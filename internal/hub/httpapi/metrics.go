@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/netip"
 	"runtime"
+	"sort"
 	"time"
 )
 
@@ -70,6 +71,57 @@ func allowed(remote string, allow []netip.Prefix) bool {
 		}
 	}
 	return false
+}
+
+// detailMetrics: je Check-Typ (eigene Laeufe dieses hub) und Datenbank; Liste in docs/HUB-PROMETHEUS.md.
+func (s *Server) detailMetrics(w io.Writer) {
+	d := s.metrics.Detail()
+	fmt.Fprint(w, "# TYPE hub_checks_by_type gauge\n")
+	for _, t := range sortedKeys(d.Checks) {
+		fmt.Fprintf(w, "hub_checks_by_type{type=%q} %d\n", t, d.Checks[t])
+	}
+	fmt.Fprint(w, "# TYPE hub_check_runs_total counter\n")
+	for _, t := range sortedKeys(d.Runs) {
+		fmt.Fprintf(w, "hub_check_runs_total{type=%q,result=\"ok\"} %d\nhub_check_runs_total{type=%q,result=\"fail\"} %d\n", t, d.Runs[t].OK, t, d.Runs[t].Fail)
+	}
+	fmt.Fprint(w, "# TYPE hub_check_duration_seconds summary\n")
+	for _, t := range sortedKeys(d.Runs) {
+		r := d.Runs[t]
+		fmt.Fprintf(w, "hub_check_duration_seconds_sum{type=%q} %g\nhub_check_duration_seconds_count{type=%q} %d\n", t, r.Seconds, t, r.OK+r.Fail)
+	}
+	fmt.Fprintf(w, "# TYPE hub_ping_packets_sent_total counter\nhub_ping_packets_sent_total %d\n", d.PingSent)
+	fmt.Fprintf(w, "# TYPE hub_ping_packets_lost_total counter\nhub_ping_packets_lost_total %d\n", d.PingLost)
+	fmt.Fprint(w, "# TYPE hub_db_write_seconds summary\n")
+	for _, op := range sortedKeys(d.Writes) {
+		fmt.Fprintf(w, "hub_db_write_seconds_sum{op=%q} %g\nhub_db_write_seconds_count{op=%q} %d\n", op, d.Writes[op].Seconds, op, d.Writes[op].Count)
+	}
+	if d.Pool != nil {
+		p := d.Pool
+		fmt.Fprintf(w, "# TYPE hub_db_pool_max gauge\nhub_db_pool_max %d\n", p.MaxOpenConnections)
+		fmt.Fprintf(w, "# TYPE hub_db_pool_open gauge\nhub_db_pool_open %d\n", p.OpenConnections)
+		fmt.Fprintf(w, "# TYPE hub_db_pool_in_use gauge\nhub_db_pool_in_use %d\n", p.InUse)
+		fmt.Fprintf(w, "# TYPE hub_db_pool_idle gauge\nhub_db_pool_idle %d\n", p.Idle)
+		fmt.Fprintf(w, "# TYPE hub_db_pool_waits_total counter\nhub_db_pool_waits_total %d\n", p.WaitCount)
+		fmt.Fprintf(w, "# TYPE hub_db_pool_wait_seconds_total counter\nhub_db_pool_wait_seconds_total %g\n", p.WaitDuration.Seconds())
+	}
+	if d.BufferCap > 0 {
+		fmt.Fprintf(w, "# TYPE hub_measurement_buffer gauge\nhub_measurement_buffer %d\n", d.Buffer)
+		fmt.Fprintf(w, "# TYPE hub_measurement_buffer_capacity gauge\nhub_measurement_buffer_capacity %d\n", d.BufferCap)
+	}
+	var ts int64
+	if !d.CleanupAt.IsZero() {
+		ts = d.CleanupAt.Unix()
+	}
+	fmt.Fprintf(w, "# TYPE hub_cleanup_last_success_timestamp_seconds gauge\nhub_cleanup_last_success_timestamp_seconds %d\n", ts)
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // runtimeMetrics: Go-Laufzeit und Verbindungen (aus dem Status von /v1/health).

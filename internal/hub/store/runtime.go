@@ -120,6 +120,7 @@ func (s *Store) insertMeasurements(rows []measurementRow) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	defer s.Metrics.observeWrite("measurements", time.Now())
 	_, err := s.db.ExecContext(ctx, sb.String(), args...)
 	return err
 }
@@ -127,6 +128,7 @@ func (s *Store) insertMeasurements(rows []measurementRow) error {
 // SaveRuntime schreibt den Zustand dieser Messstelle und stoesst bei einem
 // Zustandswechsel die Neubewertung des Gesamtzustands an.
 func (s *Store) SaveRuntime(ctx context.Context, token string, rt scheduler.Runtime) error {
+	start := time.Now()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_check_states (token, source, state, since, last_check_at, next_check_at, last_status, last_latency_ms,
 			last_reason, last_message, consecutive_fail, consecutive_ok, down_since, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -135,6 +137,7 @@ func (s *Store) SaveRuntime(ctx context.Context, token string, rt scheduler.Runt
 			consecutive_fail=VALUES(consecutive_fail), consecutive_ok=VALUES(consecutive_ok), down_since=VALUES(down_since), updated_at=VALUES(updated_at)`,
 		token, s.source, string(rt.State), ft(rt.Since), ft(rt.LastCheck), ft(rt.NextCheck), nullStr(string(rt.LastStatus)), msf(rt.LastLatency),
 		nullStr(string(rt.LastReason)), truncate(rt.LastMessage, 500), smallCount(rt.ConsecutiveFail), smallCount(rt.ConsecutiveOK), ft(rt.DownSince), nowStr())
+	s.Metrics.observeWrite("states", start)
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)
 		return err
@@ -174,6 +177,7 @@ func (s *Store) SaveEvent(ctx context.Context, e scheduler.Event) error {
 	if e.Maintenance {
 		flags |= FlagMaintenance
 	}
+	defer s.Metrics.observeWrite("events", time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_events (event_id, token, userid, source, kind, time, from_state, to_state, reason, message, duration_sec, flaps, flags, incident_id)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
 		e.ID, e.Token, s.userOf(e.Token), s.source, string(e.Kind), ft(e.Time), string(e.From), string(e.To), nullStr(string(e.Reason)), truncate(e.Message, 500),

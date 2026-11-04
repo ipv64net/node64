@@ -149,6 +149,8 @@ type Options struct {
 	// Throttle (optional, hub): false = diesen Lauf auslassen, weil das Ziel bzw. der Server gerade genug Anfragen
 	// bekommt (Bremse gegen Missbrauch als Lastquelle); Zustand bleibt, naechster Versuch nach dem Intervall.
 	Throttle func(c Check) bool
+	// Observe (optional, hub): jeder ausgefuehrte Lauf mit Messpunkt und Dauer (Prometheus je Check-Typ).
+	Observe func(c Check, m Measurement, took time.Duration)
 }
 
 type entry struct {
@@ -453,11 +455,15 @@ func (s *Scheduler) runOnce(e *entry) {
 		e.mu.Unlock()
 		return
 	}
+	start := time.Now()
 	results := s.runner.Run(ctx, e.check.Def)
 	if ctx.Err() != nil {
 		return
 	}
 	m := combine(e.check, results, s.now())
+	if s.opts.Observe != nil {
+		s.opts.Observe(e.check, m, time.Since(start))
+	}
 	s.record(ctx, e, m)
 }
 
