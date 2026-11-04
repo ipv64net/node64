@@ -1,5 +1,12 @@
 # Datenschutzerklärung ipv64.net – Entwurf für die neuen Dienste (Stand 2026-11-04)
 
+**Umgesetzt 2026-11-04** in `deploy/web/datenschutz.php` nach Dennis' Entscheidungen: Proben (Zugangsdaten u. a.)
+365 Tage (`bots/honeypot_cleanup.php`), CDN64-Summen/Verlauf 13 Monate, `node64_nodes.last_ip` nur solange
+verknüpft und aktiv (90 Tage), Wochenbericht-Protokoll 90 Tage (`bots/retention_cleanup.php`, Job `retention`),
+Healthchecks Tageswerte/Störungen 13 Monate, Zustellprotokoll 90 Tage (hub `internal/hub/store/aggregate.go`).
+SecNtfy: deutscher Anbieter, Server in Deutschland. E-Mail: eigener Mailserver bei Hetzner. Wochenbericht aufgenommen.
+Offen: Name des SMS-Anbieters (Text nennt ihn allgemein), Aufbewahrung der nginx-Logs der hubs (Text sagt 14 Tage).
+
 Entwurf für `datenschutz.php` (Verantwortlicher bleibt Prox IT UG). Grundlage: Code-Stand Container `5bb54ab`
 (Fundstellen im Abschnitt „Belege“). **Keine Rechtsberatung** – vor dem Hochladen von Dennis freigeben, im Zweifel
 anwaltlich prüfen lassen. `[[…]]` = Angabe fehlt bzw. Entscheidung nötig (siehe „Offene Punkte“).

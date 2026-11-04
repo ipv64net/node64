@@ -198,6 +198,10 @@ func (s *Store) Cleanup(ctx context.Context, now time.Time) {
 	exec(`DELETE FROM hc2_maintenance WHERE deleted_at IS NOT NULL AND deleted_at < ?`, old)
 	exec(`DELETE FROM hc2_hourly WHERE hour < ?`, now.UTC().AddDate(0, 0, -HourlyKeepDays).Format("2006-01-02 15:04:05"))
 	exec(`DELETE FROM hc2_events WHERE time < ?`, now.UTC().AddDate(-1, 0, 0).Format(TimeFormat))
+	// Fristen laut Datenschutzerklaerung (2026-11-04): Tageswerte und beendete Stoerungen 13 Monate, Zustellprotokoll 90 Tage
+	exec(`DELETE FROM hc2_daily WHERE day < ?`, now.UTC().AddDate(0, -13, 0).Format("2006-01-02"))
+	exec(`DELETE FROM hc2_incidents WHERE ended_at IS NOT NULL AND ended_at < ?`, now.UTC().AddDate(0, -13, 0).Format(TimeFormat))
+	exec(`DELETE FROM hc2_deliveries WHERE time < ?`, old)
 }
 
 // CloseDeletedIncidents schliesst offene Stoerungen geloeschter Checks (Ende = Loeschzeitpunkt).
