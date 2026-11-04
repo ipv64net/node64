@@ -46,7 +46,7 @@ Einrichten (nur Dennis, das Token bleibt bei ihm):
    [DOCKERHUB.md](DOCKERHUB.md) eingefügt (Repository › *General* › Kurzbeschreibung und *Repository overview*).
 3. GitHub › ipv64net/node64 › *Settings › Secrets and variables › Actions*:
    - Secrets: `DOCKERHUB_USERNAME` (Docker-Hub-Benutzername), `DOCKERHUB_TOKEN` (das Token)
-   - `DOCKERHUB_IMAGE` = Name des Images, z. B. `ipv64net/node64` (als Variable oder Secret; als Variable ist der Name in den Logs lesbar)
+   - `DOCKERHUB_IMAGE` = Name des Images, z. B. `x64gmbh/node64`, oder nur der Benutzername (dann `<name>/node64`); als Variable oder Secret, als Variable ist der Name in den Logs lesbar
 4. Bereits gebaute Versionen ohne Neubau kopieren: *Actions › dockerhub-copy › Run workflow*, Version `1.0.0`
    (`latest` nur für die neueste stabile Version).
 
