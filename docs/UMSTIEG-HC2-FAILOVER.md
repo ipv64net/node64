@@ -1,6 +1,7 @@
 # Umstieg: DNS Failover auf die neuen Healthchecks (hc2)
 
-Stand 2026-10-26: **vorbereitet, nicht live.** DNS Failover liest bisher nur die alte Tabelle `healthchecks`. Die
+Stand 2026-11-04: **Schalter an** (öffentlicher Start, Upload mit der neuen Navigation; Punkte 4 und 5 nach dem
+Hochladen prüfen). Vorher, Stand 2026-10-26: vorbereitet, nicht live. DNS Failover liest bisher nur die alte Tabelle `healthchecks`. Die
 Umstellung liegt fertig in `deploy/web` (Commits `c7ea3ae`, `6401c2a`) hinter dem Schalter `FAILOVER_HC2`
 (Standard aus – ohne Schalter verhält sich alles wie vorher).
 
