@@ -40,8 +40,10 @@ relativen Links).
 
 Einrichten (nur Dennis, das Token bleibt bei ihm):
 1. Auf hub.docker.com das öffentliche Repository anlegen, z. B. `ipv64net/node64`.
-2. *Account settings › Personal access tokens*: Token mit **Read, Write, Delete** anlegen (Delete braucht nur die
-   Beschreibung).
+2. *Account settings › Personal access tokens*: Token mit Zugriff **Read & Write** anlegen, das reicht für die
+   Images. Die Beschreibung setzt der Workflow nur mit „Read, Write, Delete“. Gibt es die Stufe nicht bzw. ist sie
+   nicht gewählt, schlägt nur dieser Schritt fehl (ohne Folgen), und die Beschreibung wird einmal von Hand aus
+   [DOCKERHUB.md](DOCKERHUB.md) eingefügt (Repository › *General* › Kurzbeschreibung und *Repository overview*).
 3. GitHub › ipv64net/node64 › *Settings › Secrets and variables › Actions*:
    - Secrets: `DOCKERHUB_USERNAME` (Docker-Hub-Benutzername), `DOCKERHUB_TOKEN` (das Token)
    - Variable (Reiter *Variables*): `DOCKERHUB_IMAGE` = `ipv64net/node64`
