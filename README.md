@@ -73,6 +73,8 @@ docker run -d --name node64 \
 
 Danach `http://<host>:8080` öffnen. Beim ersten Start führt ein Assistent durch Sprache und Admin-Konto. Es gibt kein Standardpasswort.
 
+Dasselbe Image gibt es mit denselben Tags auch auf [Docker Hub](https://hub.docker.com/r/x64gmbh/node64) als `x64gmbh/node64`.
+
 ### docker compose
 
 ```yaml
