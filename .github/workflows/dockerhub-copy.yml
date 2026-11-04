@@ -1,0 +1,61 @@
+# Eine schon gebaute Version von ghcr.io nach Docker Hub kopieren (ohne neu zu bauen, alle Architekturen).
+# Fuer Versionen vor der Docker-Hub-Einrichtung (z. B. 1.0.0) oder wenn der Push nach Docker Hub fehlgeschlagen ist.
+# Von Hand: Actions › dockerhub-copy › Run workflow, Version ohne v. "latest" nur fuer die neueste stabile Version.
+name: dockerhub-copy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version ohne v, z. B. 1.0.0"
+        required: true
+      latest:
+        description: "bei stabiler Version auch latest und X.Y setzen"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  copy:
+    if: vars.DOCKERHUB_IMAGE != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: copy
+        env:
+          V: ${{ inputs.version }}
+          LATEST: ${{ inputs.latest }}
+          DH: ${{ vars.DOCKERHUB_IMAGE }}
+          SRC: ghcr.io/${{ github.repository }}
+        run: |
+          case "$V" in ""|*[!0-9A-Za-z.-]*) echo "ungueltige Version: $V"; exit 1;; esac
+          set -- -t "$DH:$V"
+          case "$V" in
+            *-*) set -- "$@" -t "$DH:rc" ;;
+            *) if [ "$LATEST" = "true" ]; then set -- "$@" -t "$DH:${V%.*}" -t "$DH:latest"; fi ;;
+          esac
+          docker buildx imagetools create "$@" "$SRC:$V"
+          docker buildx imagetools inspect "$DH:$V"
+      # Beschreibung auf Docker Hub (wie in image.yml), damit die Seite schon mit der ersten Kopie fertig ist
+      - uses: peter-evans/dockerhub-description@v4
+        if: inputs.latest && !contains(inputs.version, '-')
+        continue-on-error: true
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_IMAGE }}
+          short-description: "Node64 by ipv64.net: health checks, reverse proxy, DNS filter, DynDNS, honeypot"
+          readme-filepath: docs/DOCKERHUB.md

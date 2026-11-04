@@ -31,6 +31,23 @@ git push origin v1.0.1-rc.1
 
 Das Image ist öffentlich (ghcr.io ohne Anmeldung).
 
+## Docker Hub
+
+Sobald eingerichtet, schiebt derselbe Lauf dieselben Tags zusätzlich nach Docker Hub (Variable `DOCKERHUB_IMAGE`,
+z. B. `ipv64net/node64`). Ohne die Variable bleibt es bei ghcr.io. Die Beschreibung auf Docker Hub kommt aus
+[DOCKERHUB.md](DOCKERHUB.md) und wird nur bei stabilen Versionen aktualisiert (höchstens 25 000 Zeichen, keine
+relativen Links).
+
+Einrichten (nur Dennis, das Token bleibt bei ihm):
+1. Auf hub.docker.com das öffentliche Repository anlegen, z. B. `ipv64net/node64`.
+2. *Account settings › Personal access tokens*: Token mit **Read, Write, Delete** anlegen (Delete braucht nur die
+   Beschreibung).
+3. GitHub › ipv64net/node64 › *Settings › Secrets and variables › Actions*:
+   - Secrets: `DOCKERHUB_USERNAME` (Docker-Hub-Benutzername), `DOCKERHUB_TOKEN` (das Token)
+   - Variable (Reiter *Variables*): `DOCKERHUB_IMAGE` = `ipv64net/node64`
+4. Bereits gebaute Versionen ohne Neubau kopieren: *Actions › dockerhub-copy › Run workflow*, Version `1.0.0`
+   (`latest` nur für die neueste stabile Version).
+
 ## Selbst-Update (ipv64.net/node64)
 
 Kanäle: `stable` und `preview` (in der Oberfläche „Release-Candidate“). Ohne eigene Wahl liest eine Node `preview`,
