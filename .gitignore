@@ -11,3 +11,7 @@ build/
 
 # Upload fuer ipv64.net (kann Schluessel enthalten, nie committen)
 deploy/upload/
+# ipv64.net-Portal (PHP, SQL, Server-Skripte): eigenes lokales Git in deploy/.git, nie in dieses oeffentliche Repo
+deploy/web/
+deploy/sql/
+deploy/server/

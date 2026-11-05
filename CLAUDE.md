@@ -32,3 +32,5 @@ für ipv64.net (`deploy/web`, PHP). Allgemeine Regeln (Sicherheit, Rollout, Uplo
 - Nur eigene Dateien: `git commit -- <pfade>` (neue Dateien vorher `git add <pfad>`), nie `-a`/`-A`.
 - Commit-Text deutsch, Modul und Version vorne („Healthchecks 2.36.1: …“).
 - `deploy/upload/` und `node64-src.tar` nie committen.
+- Portal-Dateien (`deploy/web`, `deploy/sql`, `deploy/server`) gehören nicht in dieses öffentliche Repo: eigenes lokales Git
+  in `deploy/.git` (siehe `../CLAUDE.md`), im Container per `.gitignore` gesperrt.
