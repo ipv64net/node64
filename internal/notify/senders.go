@@ -706,16 +706,19 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 	}
 	d := dialer(ctx, 15*time.Second)
 	d.Deadline = deadline
-	var conn net.Conn
-	var err error
-	if security == "tls" {
-		// mit ctx: Abbruch und Zeitlimit greifen auch im TLS-Handschlag
-		conn, err = (&tls.Dialer{NetDialer: d, Config: &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}}).DialContext(ctx, "tcp", addr)
-	} else {
-		conn, err = d.DialContext(ctx, "tcp", addr)
-	}
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return smtpErr("connect", addr, security, err)
+	}
+	if security == "tls" {
+		// eigener Schritt: eine Zeitueberschreitung der Verbindung ist kein TLS-Problem; mit ctx greifen Abbruch und
+		// Zeitlimit auch im Handschlag
+		tc := tls.Client(conn, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+		if err := tc.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return smtpErr("tls", addr, security, err)
+		}
+		conn = tc
 	}
 	_ = conn.SetDeadline(deadline)
 	c, err := smtp.NewClient(conn, host)
@@ -773,19 +776,21 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 }
 
 // smtpErr: Schritt und Server in die Meldung; Zeitueberschreitung als "timeout" statt "context deadline exceeded", dazu
-// ein Hinweis bei den typischen Fehleinstellungen (465 ohne TLS, TLS gegen Klartext). Die Fehlerkette bleibt erhalten
-// (%w): netErr bzw. textproto.Error erkennen sie weiter.
+// ein Hinweis bei den typischen Fehleinstellungen (keine Verbindung, 465 ohne TLS, TLS gegen STARTTLS oder Klartext).
+// Die Fehlerkette bleibt erhalten (%w): netErr bzw. textproto.Error erkennen sie weiter.
 func smtpErr(phase, addr, security string, err error) error {
 	var ne net.Error
 	timeout := errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout())
 	_, port, _ := net.SplitHostPort(addr)
 	hint := ""
 	switch {
-	case timeout && (phase == "greeting" || phase == "connect") && security != "tls" && port == "465":
+	case timeout && phase == "connect":
+		hint = " (no connection: check host and port; some providers block outgoing mail ports)"
+	case timeout && phase == "greeting" && security != "tls" && port == "465":
 		hint = " (port 465 expects TLS: set encryption to TLS)"
-	case timeout && phase == "connect" && security == "tls":
-		hint = " (TLS handshake did not finish: check port and encryption, TLS is usually port 465)"
-	case security == "tls" && strings.Contains(err.Error(), "first record does not look like a TLS handshake"):
+	case timeout && phase == "tls":
+		hint = " (no TLS answer: the server probably expects STARTTLS, usually port 587)"
+	case phase == "tls" && strings.Contains(err.Error(), "first record does not look like a TLS handshake"):
 		hint = " (server answers without TLS: set encryption to STARTTLS, usually port 587)"
 	}
 	if timeout {

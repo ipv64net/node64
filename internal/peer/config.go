@@ -69,7 +69,7 @@ type pullState struct {
 	busy  map[string]*sync.Mutex
 	timer *time.Timer
 	idle  map[string]time.Time // Node mit abgeschaltetem Healthchecks: bis dahin nicht abholen
-	again map[string]bool      // Anstoss kam, waehrend schon abgeholt wurde: danach gleich noch einmal
+	again map[string]bool      // "weg|node": Anstoss kam, waehrend dort schon abgeholt wurde: danach gleich noch einmal
 	s2    sync2State           // allgemeiner Abgleich (sync2.go)
 }
 
@@ -278,20 +278,22 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Me
 }
 
 // pullAgainLater merkt einen Anstoss, der auf ein laufendes Abholen bei der Node traf (sonst wartete die Aenderung
-// bis zur naechsten Runde, bis zu pullEvery); pullAgainNow stoesst nach dem Abholen erneut an.
-func (m *Manager) pullAgainLater(nodeID string) {
+// bis zur naechsten Runde, bis zu pullEvery); pullAgainNow stoesst nach dem Abholen erneut an. Je Weg (v1, v2)
+// getrennt: jeder hat sein eigenes Schloss, sonst verbrauchte der eine die Marke des anderen und stiesse sich sofort
+// wieder an, solange der andere laeuft.
+func (m *Manager) pullAgainLater(way, nodeID string) {
 	m.pull.mu.Lock()
 	if m.pull.again == nil {
 		m.pull.again = map[string]bool{}
 	}
-	m.pull.again[nodeID] = true
+	m.pull.again[way+"|"+nodeID] = true
 	m.pull.mu.Unlock()
 }
 
-func (m *Manager) pullAgainNow(nodeID string) {
+func (m *Manager) pullAgainNow(way, nodeID string) {
 	m.pull.mu.Lock()
-	again := m.pull.again[nodeID]
-	delete(m.pull.again, nodeID)
+	again := m.pull.again[way+"|"+nodeID]
+	delete(m.pull.again, way+"|"+nodeID)
 	m.pull.mu.Unlock()
 	if again {
 		select {
@@ -508,10 +510,10 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 	}
 	m.pull.mu.Unlock()
 	if !lock.TryLock() {
-		m.pullAgainLater(x.NodeID)
+		m.pullAgainLater("v1", x.NodeID)
 		return nil
 	}
-	defer m.pullAgainNow(x.NodeID) // nach dem Freigeben (defer laufen rueckwaerts)
+	defer m.pullAgainNow("v1", x.NodeID) // nach dem Freigeben (defer laufen rueckwaerts)
 	defer lock.Unlock()
 	var cursor int64
 	var seen string

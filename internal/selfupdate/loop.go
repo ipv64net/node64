@@ -68,19 +68,20 @@ func DefaultChannel(running string) string {
 	return Channel(func(_, d string) string { return d }, running)
 }
 
-const setChannelV1 = "updates.channel_v1" // Kanal aus der Alpha-Zeit einmal geprueft (MigrateChannel)
+// channelV1Until: bis hierhin gespeicherte Kanaele stammen aus der Alpha-Zeit (Tag von 1.0.0)
+var channelV1Until = time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC)
 
-// MigrateChannel (einmalig, ab 1.0): Bis 1.0 speicherte die Einstellungsseite den Kanal immer mit, vorgewaehlt war
-// bei Alpha-Versionen "preview". Heute heisst preview Release-Candidates; laeuft eine stabile Version, gilt wieder
-// der Standard (stable). Wer Release-Candidates will, waehlt sie neu.
-func MigrateChannel(get Getter, set func(key, value string) error, running string) {
-	if get(setChannelV1, "") != "" {
+// MigrateChannel: Bis 1.0 speicherte die Einstellungsseite den Kanal immer mit, vorgewaehlt war bei Alpha-Versionen
+// "preview". Heute heisst preview Release-Candidates; laeuft eine stabile Version, gilt fuer einen so gespeicherten
+// Kanal wieder der Standard (stable). Auf einer Vorab-Version bleibt er bis zur naechsten stabilen. Eine Wahl seit 1.0
+// bleibt immer. del entfernt die Einstellung nur hier (nicht im Cluster: jede Node prueft selbst).
+func MigrateChannel(get Getter, savedAt func(key string) time.Time, del func(key string) error, running string) {
+	if DefaultChannel(running) != "stable" || get(SetChannel, "") != "preview" {
 		return
 	}
-	if DefaultChannel(running) == "stable" && get(SetChannel, "") == "preview" {
-		_ = set(SetChannel, "")
+	if at := savedAt(SetChannel); !at.IsZero() && at.Before(channelV1Until) {
+		_ = del(SetChannel)
 	}
-	_ = set(setChannelV1, "1")
 }
 
 // Window: Zeitfenster fuer automatische Updates (Standard 03:00-05:00).
@@ -129,6 +130,8 @@ type Latest struct {
 	CheckedAt time.Time `json:"checked_at"`
 	Newer     bool      `json:"newer"`
 	Error     string    `json:"error,omitempty"`
+	// ApplyError: Installation dieser Version fehlgeschlagen (laeuft im Hintergrund, die Seite zeigt es danach)
+	ApplyError string `json:"apply_error,omitempty"`
 }
 
 // CheckNow prueft den Kanal und speichert das Ergebnis.

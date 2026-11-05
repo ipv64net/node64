@@ -499,6 +499,13 @@ func (u *Updater) Newer(m *Manifest) bool {
 var ErrBusy = errors.New("update already running")
 
 // Apply laedt die Version des Manifests, prueft sie, sichert die Datenbank und startet neu (Restart).
+// Busy: ein Update wird gerade installiert.
+func (u *Updater) Busy() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.busy
+}
+
 func (u *Updater) Apply(ctx context.Context, m *Manifest) error {
 	u.mu.Lock()
 	if u.busy {

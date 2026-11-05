@@ -60,7 +60,7 @@ func (m *Manager) joined(ctx context.Context) {
 		list = append(list, p)
 	}
 	m.mu.Unlock()
-	// eigene Schalter nicht in den neuen Cluster tragen: die Node uebernimmt die des Clusters (logSwitches)
+	// eigene Schalter nicht in den neuen Cluster tragen: die Node uebernimmt die der annehmenden Node (adoptSwitches)
 	_, _ = m.db.ExecContext(ctx, `DELETE FROM cluster_log WHERE module = ?`, switchModule)
 	for _, p := range list {
 		j, ok := p.(Joiner)
@@ -228,7 +228,9 @@ func (m *Manager) SetSync(ctx context.Context, module, item string, on bool) err
 			return ErrUnknownSync
 		}
 	}
-	if err := m.setSyncLocal(ctx, module, item, on); err != nil {
+	m.pull.s2.apply.Lock() // nicht zwischen Pruefen und Uebernehmen eines abgeholten Stands
+	defer m.pull.s2.apply.Unlock()
+	if _, err := m.setSyncLocal(ctx, module, item, on); err != nil {
 		return err
 	}
 	id := module
@@ -239,10 +241,19 @@ func (m *Manager) SetSync(ctx context.Context, module, item string, on bool) err
 	return nil
 }
 
-// setSyncLocal speichert einen Schalter auf dieser Node (auch fuer Module, die es hier noch nicht gibt).
-func (m *Manager) setSyncLocal(ctx context.Context, module, item string, on bool) error {
+// setSyncLocal speichert einen Schalter auf dieser Node (auch fuer Module, die es hier noch nicht gibt); changed =
+// der wirksame Schalter hat sich geaendert.
+func (m *Manager) setSyncLocal(ctx context.Context, module, item string, on bool) (changed bool, err error) {
 	m.syncMu.Lock()
 	defer m.syncMu.Unlock()
+	id := module
+	if item != "" {
+		id += "/" + item
+	}
+	before, known := m.switchValue(ctx, id)
+	if !known {
+		before, known = m.switchStored(ctx, id)
+	}
 	cfg := m.syncCfg(ctx)
 	c := cfg[module]
 	if item == "" {
@@ -256,10 +267,10 @@ func (m *Manager) setSyncLocal(ctx context.Context, module, item string, on bool
 	cfg[module] = c
 	b, _ := json.Marshal(cfg)
 	if err := m.d.Core.SetSetting(ctx, setSync, string(b)); err != nil {
-		return err
+		return false, err
 	}
 	m.pokeSoon() // andere Nodes erfahren die Bereiche beim naechsten Ping
-	return nil
+	return !known || before != on, nil
 }
 
 // syncCaps: eingeschaltete Bereiche dieser Node als "modul/bereich" (fuer den Ping).

@@ -124,6 +124,7 @@ type Manager struct {
 	mu      sync.Mutex
 	prov    map[string]Provider // Module, die ueber den Cluster abgleichen (cluster.go)
 	syncMu  sync.Mutex          // Schalter peer.sync lesen und schreiben (SetSync, Uebernahme)
+	bg      sync.WaitGroup      // Abgleich nach dem Beitritt (Tests warten darauf)
 	watch   map[string]bool     // Mitglieder, deren Ausfall diese Node gemeldet hat (watch.go)
 	proxied map[string]bool     // Mitglieder, deren zurueckgehaltene Checks schon an den hub gingen (proxy.go)
 	code    string              // offener Kopplungscode

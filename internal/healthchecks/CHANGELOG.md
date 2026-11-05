@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.52.2 – 2026-11-05
+
+### Behoben
+- Benachrichtigungen per eigenem SMTP-Server: Fehler nennen Server und Schritt (Verbindung, TLS, Begrüßung, Versand) und „timeout“ statt „context deadline exceeded“. Ein Hinweis hilft bei den typischen Fehleinstellungen: keine Verbindung (Host, Port oder vom Anbieter gesperrter Port), Port 465 ohne TLS, TLS gegen einen Server mit STARTTLS oder ohne TLS.
+
 ## 2.52.1 – 2026-11-03
 
 ### Behoben

@@ -5,10 +5,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Zertifikate: neuer DNS-Anbieter do.de (API-Token), jetzt 27 Anbieter.
-- Cluster: Die Schalter „Was wird abgeglichen“ gelten jetzt für den ganzen Cluster – ein- oder ausschalten auf einer Node übernehmen alle anderen automatisch, eine neue Node übernimmt die Schalter des Clusters.
+- Cluster: Die Schalter „Was wird abgeglichen“ gelten jetzt für den ganzen Cluster – ein- oder ausschalten auf einer Node übernehmen alle anderen automatisch, eine neue Node übernimmt die Schalter der Node, bei der sie beitritt (die anderen Mitglieder behalten ihre).
 - Cluster: Änderungen (z. B. Benachrichtigungskanäle) kommen schneller bei den anderen Nodes an; ein Anstoß während eines laufenden Abgleichs ging bisher bis zur nächsten Runde verloren.
-- Updates: Nach einem Update zeigt die Seite die eben installierte Version nicht mehr als „neu verfügbar“; das Laden bricht bei langsamer Leitung nicht mehr nach 60 s ab, Fehler stehen im Log. Der Kanal „Release-Candidate“, der aus der Alpha-Zeit ungewollt gespeichert war, wird auf stabilen Versionen einmalig auf „Stabil“ zurückgesetzt.
-- Benachrichtigungen: Fehler beim eigenen SMTP-Server nennen Server und Schritt („timeout“ statt „context deadline exceeded“) und geben einen Hinweis bei Port 465 ohne TLS bzw. TLS gegen einen Server ohne TLS.
+- Updates: Nach einem Update zeigen Seite und API die eben installierte Version nicht mehr als „neu verfügbar“. „Jetzt installieren“ lädt im Hintergrund (kein Abbruch nach 60 s hinter einem Reverse Proxy), ein Fehler steht danach in den Einstellungen und im Log. Neu beim Kanal: „Automatisch“ (folgt der laufenden Version). Der Kanal „Release-Candidate“, der aus der Alpha-Zeit ungewollt gespeichert war, gilt auf stabilen Versionen nicht mehr.
+- Healthchecks: Fehler beim eigenen SMTP-Server nennen Server und Schritt („timeout“ statt „context deadline exceeded“) und geben einen Hinweis bei gesperrtem Port, Port 465 ohne TLS bzw. TLS gegen einen Server ohne TLS.
 
 ## 1.0.0 – 2026-11-04
 

@@ -80,7 +80,7 @@ func TestNodeCfgCluster(t *testing.T) {
 	// dem Abgleich der Schalter)
 	for _, n := range []*testNode{a, b, c} {
 		for item, on := range map[string]bool{"": true, nodecfg.ItemAPIKey: n != c, nodecfg.ItemSettings: true} {
-			if err := n.m.setSyncLocal(ctx, nodecfg.ModuleID, item, on); err != nil {
+			if _, err := n.m.setSyncLocal(ctx, nodecfg.ModuleID, item, on); err != nil {
 				t.Fatal(err)
 			}
 		}

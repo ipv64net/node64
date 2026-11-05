@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -257,8 +256,8 @@ func (s *Server) apiOverview(w http.ResponseWriter, r *http.Request) {
 			out["account"] = acc
 		}
 	}
-	if raw := s.Store.SettingOr(ctx, "updates.latest", ""); raw != "" && json.Valid([]byte(raw)) {
-		out["update"] = json.RawMessage(raw)
+	if u := s.updateViewOf(ctx); u != nil && u.Latest != nil { // wie die Einstellungen: Kanal und laufende Version beachtet
+		out["update"] = u.Latest
 	}
 	writeJSON(w, 200, out)
 }

@@ -72,9 +72,14 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 Je Modul/Bereich schaltbar (`PUT /api/group/sync`, Einstellung `peer.sync`). Die Schalter gelten für den ganzen
 Cluster: jede Änderung geht als Eintrag `cluster/switches` (Kennung `modul` bzw. `modul/bereich`, Inhalt `{"on":…}`)
 über `/peer/v2/sync` an alle Mitglieder, die jüngere Änderung gewinnt. Dieser Bereich ist immer an (auch das
-Ausschalten muss ankommen) und steht nicht in der Liste. Eine beitretende Node übernimmt die Schalter des Clusters
-(die annehmende Node legt ihre ins Protokoll, die eigenen der neuen Node fallen weg). Vorhandene Cluster gleichen
-sich erst mit der nächsten Änderung eines Schalters an; Nodes mit älterer Version behalten ihre Schalter.
+Ausschalten muss ankommen) und steht weder in der Liste noch in `GET /api/group`. Ist mit einem Mitglied nur dieser
+Bereich abzugleichen, holt die regelmäßige Runde ihn nur alle 5 Minuten (jede Änderung stößt die anderen ohnehin an);
+kommt er nach einem Update dazu, holt die Node nur die Schalter von vorn, nicht alle Bereiche. Eine beitretende Node
+übernimmt die Schalter der annehmenden Node direkt (`GET /peer/v2/switches`, ohne Protokoll: die anderen Mitglieder
+behalten ihre; die eigenen Einträge der neuen Node fallen weg). Vorhandene Cluster gleichen sich erst mit der nächsten
+Änderung eines Schalters an; Nodes mit älterer Version behalten ihre Schalter. Ein Mitglied ohne das Modul reicht den
+Schalter mit seinem Wert weiter. Prüfen, Übernehmen und Eintragen eines abgeholten Stands laufen am Stück, damit ein
+älterer Stand (anderes Mitglied, Schalter hier) keinen jüngeren überholt.
 Ausgetauscht wird ein Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre Bereiche, die
 liefernde prüft ihre); neue Bereiche der anderen Nodes erfährt eine Node beim nächsten Ping (spätestens 30 s).
 
@@ -308,7 +313,7 @@ jüngere Änderung gewinnt.
 |---|---|---|
 | `node.timezone` | gültige Zeitzone | – |
 | `updates.mode` | `off`/`notify`/`auto` | `selfupdate.SaveMode`: `updates.check` mit, bei `off` `updates.latest` leeren |
-| `updates.channel` | `stable`/`preview` | – |
+| `updates.channel` | `stable`/`preview` (ohne Wert: Automatisch, folgt der laufenden Version; wird nicht abgeglichen) | – |
 | `updates.window` | `HH:MM-HH:MM` | – |
 | `mcp.enabled` | `0`/`1` | – |
 

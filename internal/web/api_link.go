@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -289,7 +290,7 @@ func (s *Server) apiGroupGet(w http.ResponseWriter, r *http.Request) {
 		}
 		members = append(members, map[string]any{"node_id": x.NodeID, "name": x.Name, "url": x.URL, "online": x.Online(), "linked": x.Linked,
 			"version": x.Version, "last_seen": x.LastSeen, "last_error": x.LastError, "added_at": x.AddedAt,
-			"state": state, "reason": x.Reason, "sync": x.Sync})
+			"state": state, "reason": x.Reason, "sync": slices.DeleteFunc(slices.Clone(x.Sync), func(c string) bool { return c == peer.SwitchCap })}) // Schalter-Bereich ist intern
 	}
 	_, fwd, fwdSelf := s.Peer.Forwarder(ctx)
 	out := map[string]any{"account_id": s.Peer.Account(), "linked": s.Peer.LinkedSelf(), "members": members, "forwarder": fwd, "forwarder_self": fwdSelf,

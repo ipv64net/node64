@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +54,10 @@ type sync2State struct {
 	due    map[string]time.Time // je Mitglied: naechste Wiederholung abgelehnter Eintraege (fehlt = sofort)
 	tries  map[string]int       // je Mitglied: Wiederholungen ohne Erfolg (Abstand verdoppelt sich)
 	warned map[string]bool      // Ablehnung schon gemeldet (Mitglied, Eintrag, Zeitpunkt): Wiederholungen nur Debug
+	// apply: Pruefen (newer), Uebernehmen und Eintragen eines Stands am Stueck (Abholen bei mehreren Mitgliedern
+	// nebenher, Schalter hier): sonst ueberholte ein aelterer Stand einen juengeren
+	apply    sync.Mutex
+	swPulled map[string]time.Time // je Mitglied: letzte regelmaessige Abholung nur der Schalter (switchPullDue)
 }
 
 // Abgelehnte Eintraege (z. B. Statusseite mit gleichem Slug, Benutzer zur Wahl, Key eines anderen Accounts) koennen
@@ -69,6 +74,7 @@ const sync2RetryMax = 6 * time.Hour
 // registerSync2 haengt den Endpunkt an (aus Register).
 func (m *Manager) registerSync2(mux *http.ServeMux) {
 	mux.Handle("GET /peer/v2/sync", m.Handle(m.handleSync2))
+	mux.Handle("GET /peer/v2/switches", m.Handle(m.handleSwitches))
 }
 
 // ClusterChange meldet eine Aenderung eines Eintrags (Hook des Moduls, auch bei Uebernahmen von anderen Nodes:
@@ -259,6 +265,9 @@ func (m *Manager) pullSync2(ctx context.Context, list []Member, only string) {
 		if len(wants) == 0 {
 			continue
 		}
+		if only == "" && len(wants) == 1 && wants[0] == SwitchCap && !m.switchPullDue(x.NodeID) {
+			continue // nur die Schalter: eine Aenderung stoesst an, die Runde holt nur selten nach
+		}
 		wg.Go(func() {
 			if err := m.pullSync2From(ctx, x, wants); err != nil {
 				m.d.Log.Debug("cluster pull", "from", x.Name, "err", err)
@@ -280,16 +289,24 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 	}
 	m.pull.s2.mu.Unlock()
 	if !lock.TryLock() {
-		m.pullAgainLater(x.NodeID)
+		m.pullAgainLater("v2", x.NodeID)
 		return nil
 	}
-	defer m.pullAgainNow(x.NodeID) // nach dem Freigeben (defer laufen rueckwaerts)
+	defer m.pullAgainNow("v2", x.NodeID) // nach dem Freigeben (defer laufen rueckwaerts)
 	defer lock.Unlock()
 	var cursor, retry int64
 	var seen string
 	_ = m.db.QueryRowContext(ctx, `SELECT cursor2, sync_seen2, retry2 FROM peer_members WHERE node_id = ?`, x.NodeID).Scan(&cursor, &seen, &retry)
 	items := joinCaps(wants)
-	if seen != items { // Bereiche geaendert: von vorn (die juengere Aenderung gewinnt, doppelt schadet nicht)
+	switch {
+	case seen == items:
+	case cursor > 0 && has(wants, SwitchCap) && seen == joinCaps(slices.DeleteFunc(slices.Clone(wants), func(c string) bool { return c == SwitchCap })):
+		// nur die Schalter neu (Update einer der beiden Nodes): nur sie von vorn, der Stand der anderen Bereiche bleibt
+		if err := m.catchUpSwitches(ctx, x); err != nil {
+			return err
+		}
+		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET sync_seen2 = ? WHERE node_id = ?`, items, x.NodeID)
+	default: // Bereiche geaendert: von vorn (die juengere Aenderung gewinnt, doppelt schadet nicht)
 		cursor, retry = 0, -1
 		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor2 = 0, retry2 = -1, sync_seen2 = ? WHERE node_id = ?`, items, x.NodeID)
 	}
@@ -341,33 +358,14 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 			if p == nil {
 				continue
 			}
-			l, err := m.syncLocal(e.Module, e.Item, e.ID)
-			if err != nil || !newer(e.ChangedAt, e.Origin, l) {
-				continue
-			}
-			if e.Unavailable { // dort gerade nicht lesbar: spaeter erneut abholen
-				m.d.Log.Debug("cluster entry not readable there", "from", x.Name, "module", e.Module, "item", e.Item)
-				if failed < 0 || e.Seq-1 < failed {
-					failed = e.Seq - 1
-				}
-				continue
-			}
-			if err := p.ClusterApply(WithMemberSince(WithClusterOrigin(ctx, e.Origin, e.ChangedAt), sinceOf(e.Origin, l)), e.Item, e.ID, e.Data, e.Deleted); err != nil {
-				if superseded(err) {
-					continue
-				}
-				if m.firstReject(x.NodeID + "|" + e.Module + "/" + e.Item + "/" + e.ID + "|" + fmtTime(e.ChangedAt)) {
-					m.d.Log.Warn("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
-				} else {
-					m.d.Log.Debug("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
-				}
-				if failed < 0 || e.Seq-1 < failed {
-					failed = e.Seq - 1
-				}
-				continue
-			}
-			if _, err := m.logSync(e.Module, e.Item, e.ID, e.Deleted, e.Origin, e.ChangedAt); err == nil {
+			m.pull.s2.apply.Lock()
+			ok, fail := m.applySync2(ctx, x, p, e, sinceOf)
+			m.pull.s2.apply.Unlock()
+			if ok {
 				applied++
+			}
+			if fail && (failed < 0 || e.Seq-1 < failed) {
+				failed = e.Seq - 1
 			}
 		}
 		if out.More && out.Last <= since { // kein Fortschritt (aeltere Node, Eintrag dort nicht lesbar): nicht 100-mal dasselbe
@@ -395,6 +393,32 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 		m.pokeSoon() // an die anderen weiterreichen
 	}
 	return nil
+}
+
+// applySync2 uebernimmt einen abgeholten Stand, wenn er juenger ist als der hier (unter pull.s2.apply); fail = spaeter
+// erneut abholen (dort nicht lesbar oder hier abgelehnt).
+func (m *Manager) applySync2(ctx context.Context, x Member, p Provider, e syncEntry, sinceOf func(string, *syncLocal) time.Time) (ok, fail bool) {
+	l, err := m.syncLocal(e.Module, e.Item, e.ID)
+	if err != nil || !newer(e.ChangedAt, e.Origin, l) {
+		return false, false
+	}
+	if e.Unavailable { // dort gerade nicht lesbar: spaeter erneut abholen
+		m.d.Log.Debug("cluster entry not readable there", "from", x.Name, "module", e.Module, "item", e.Item)
+		return false, true
+	}
+	if err := p.ClusterApply(WithMemberSince(WithClusterOrigin(ctx, e.Origin, e.ChangedAt), sinceOf(e.Origin, l)), e.Item, e.ID, e.Data, e.Deleted); err != nil {
+		if superseded(err) {
+			return false, false
+		}
+		if m.firstReject(x.NodeID + "|" + e.Module + "/" + e.Item + "/" + e.ID + "|" + fmtTime(e.ChangedAt)) {
+			m.d.Log.Warn("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
+		} else {
+			m.d.Log.Debug("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
+		}
+		return false, true
+	}
+	_, err = m.logSync(e.Module, e.Item, e.ID, e.Deleted, e.Origin, e.ChangedAt)
+	return err == nil, false
 }
 
 // setRetry merkt abgelehnte Eintraege eines Mitglieds zum erneuten Abholen (old = bisherige Nummer, failed = Nummer

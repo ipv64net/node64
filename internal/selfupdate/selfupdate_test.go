@@ -277,35 +277,31 @@ func TestWindowAndMode(t *testing.T) {
 	}
 }
 
-// Kanal aus der Alpha-Zeit: auf einer stabilen Version einmal auf den Standard zurueck, eine spaetere Wahl bleibt.
+// Kanal aus der Alpha-Zeit (vor 1.0 gespeichert): auf einer stabilen Version zurueck auf den Standard, auf einem
+// Release-Candidate erst mit der naechsten stabilen; eine Wahl seit 1.0 bleibt.
 func TestMigrateChannel(t *testing.T) {
-	s := map[string]string{SetChannel: "preview"}
+	old, now := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	s, at := map[string]string{SetChannel: "preview"}, old
 	get := func(k, d string) string {
 		if v, ok := s[k]; ok {
 			return v
 		}
 		return d
 	}
-	set := func(k, v string) error { s[k] = v; return nil }
-	MigrateChannel(get, set, "1.0.0")
-	if Channel(get, "1.0.0") != "stable" {
-		t.Fatalf("stable version: %q", Channel(get, "1.0.0"))
-	}
-	s[SetChannel] = "preview" // danach bewusst gewaehlt
-	MigrateChannel(get, set, "1.0.1")
-	if Channel(get, "1.0.1") != "preview" {
-		t.Fatal("a later choice must stay")
-	}
-	// Release-Candidate: preview bleibt
-	r := map[string]string{SetChannel: "preview"}
-	MigrateChannel(func(k, d string) string {
-		if v, ok := r[k]; ok {
-			return v
-		}
-		return d
-	}, func(k, v string) error { r[k] = v; return nil }, "1.0.1-rc.1")
-	if r[SetChannel] != "preview" {
+	savedAt := func(string) time.Time { return at }
+	del := func(k string) error { delete(s, k); return nil }
+	MigrateChannel(get, savedAt, del, "1.0.1-rc.1") // erst auf dem Release-Candidate: bleibt
+	if Channel(get, "1.0.1-rc.1") != "preview" {
 		t.Fatal("rc keeps preview")
+	}
+	MigrateChannel(get, savedAt, del, "1.0.1") // dann stabil: zurueck auf den Standard
+	if Channel(get, "1.0.1") != "stable" {
+		t.Fatalf("stable version: %q", Channel(get, "1.0.1"))
+	}
+	s[SetChannel], at = "preview", now // seit 1.0 bewusst gewaehlt
+	MigrateChannel(get, savedAt, del, "1.0.2")
+	if Channel(get, "1.0.2") != "preview" {
+		t.Fatal("a later choice must stay")
 	}
 	if DefaultChannel("1.0.1-rc.1") != "preview" || DefaultChannel("1.0.1") != "stable" {
 		t.Fatal("default channel")

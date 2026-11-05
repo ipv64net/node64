@@ -41,6 +41,21 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	return err
 }
 
+// DeleteSetting entfernt eine Einstellung (ohne Hook: geht nicht an den Cluster).
+func (s *Store) DeleteSetting(ctx context.Context, key string) error {
+	_, err := s.w.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, key)
+	return err
+}
+
+// SettingSavedAt: Zeitpunkt der letzten Speicherung einer Einstellung (Null = keine).
+func (s *Store) SettingSavedAt(ctx context.Context, key string) time.Time {
+	var at string
+	if s.Reader().QueryRowContext(ctx, `SELECT updated_at FROM settings WHERE key = ?`, key).Scan(&at) != nil {
+		return time.Time{}
+	}
+	return ParseTime(at)
+}
+
 // SetSettingHook haengt einen Beobachter an jedes Schreiben einer Einstellung (z. B. Abgleich im Cluster, nodecfg);
 // er bekommt nur den Schluessel und laeuft nach dem Schreiben. Es gibt genau einen (nil = keiner).
 func (s *Store) SetSettingHook(f func(ctx context.Context, key string)) {

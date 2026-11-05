@@ -139,10 +139,10 @@ func TestClusterSync2(t *testing.T) {
 	}
 	// A und B schalten demo/a ein, C nur das Modul ohne Bereich a
 	for _, n := range []*testNode{a, b, c} {
-		if err := n.m.setSyncLocal(ctx, "demo", "", true); err != nil { // je Node verschieden: nur lokal
+		if _, err := n.m.setSyncLocal(ctx, "demo", "", true); err != nil { // je Node verschieden: nur lokal
 			t.Fatal(err)
 		}
-		if err := n.m.setSyncLocal(ctx, "demo", "a", n != c); err != nil {
+		if _, err := n.m.setSyncLocal(ctx, "demo", "a", n != c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -317,7 +317,9 @@ func TestHealthchecksSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitMembers(t, a, "B")
-	if err := b.m.SetSync(ctx, "healthchecks", "", false); err != nil {
+	// Abgleich nach dem Beitritt abwarten (holt sonst noch mit dem alten Schalter ab)
+	b.m.bg.Wait()
+	if _, err := b.m.setSyncLocal(ctx, "healthchecks", "", false); err != nil { // nur B (z. B. aeltere Version)
 		t.Fatal(err)
 	}
 	fa.set("nur A", "tok1", time.Now().Add(-time.Minute))
@@ -328,9 +330,9 @@ func TestHealthchecksSwitch(t *testing.T) {
 	if len(a.m.hcMembers(ctx)) != 0 {
 		t.Fatal("B must not count as healthchecks member of A")
 	}
-	_ = b.m.SetSync(ctx, "healthchecks", "", true)
+	_, _ = b.m.setSyncLocal(ctx, "healthchecks", "", true)
 	round2(a, b)
-	round2(a, b) // A uebernimmt den Schalter, B erfaehrt es beim naechsten Ping
+	round2(a, b) // A erfaehrt den Schalter beim naechsten Ping
 	if fb.name("tok1") != "nur A" {
 		t.Fatalf("after switching on: %q", fb.name("tok1"))
 	}
@@ -450,7 +452,7 @@ func TestClusterChannels(t *testing.T) {
 		t.Fatal("channels must not be in v1 wants")
 	}
 	// nur A an (nur lokal, wie bei einer aelteren Node): weiterhin nichts
-	_ = a.m.setSyncLocal(ctx, "notifications", "channels", true)
+	_, _ = a.m.setSyncLocal(ctx, "notifications", "channels", true)
 	round2(a, b)
 	if pb.get("channels", "u1") != "" {
 		t.Fatal("B has channels off")

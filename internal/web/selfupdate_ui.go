@@ -26,6 +26,7 @@ type updateView struct {
 	selfupdate.Status
 	Mode     string
 	Channel  string
+	Chosen   bool // Kanal selbst gewaehlt (sonst Automatisch: folgt der laufenden Version)
 	Window   string
 	Modes    []string
 	Channels []string
@@ -43,7 +44,7 @@ func (s *Server) updateViewOf(ctx context.Context) *updateView {
 	get := s.updateGetter(ctx)
 	st := s.Updater.Status()
 	v := &updateView{Status: st, Mode: selfupdate.Mode(get), Channel: selfupdate.Channel(get, st.Running), Window: selfupdate.Window(get),
-		Modes: selfupdate.Modes, Channels: selfupdate.Channels}
+		Modes: selfupdate.Modes, Channels: selfupdate.Channels, Chosen: containsString(selfupdate.Channels, get(selfupdate.SetChannel, ""))}
 	if raw := s.Store.SettingOr(ctx, selfupdate.SetLatest, ""); raw != "" {
 		var l selfupdate.Latest
 		// nur ein Ergebnis fuer den aktuellen Kanal; "neuer" gegen die laufende Version (nach einem Update lief sonst
@@ -80,26 +81,43 @@ func (s *Server) settingsUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings#about", http.StatusSeeOther)
 }
 
-// applyLatest: Manifest holen und installieren (startet bei Erfolg neu). Download und Sicherung der Datenbank
-// dauern laenger als das Zeitlimit einer Anfrage: Fristen der Verbindung wie bei Sicherungen verlaengern.
-func (s *Server) applyLatest(w http.ResponseWriter, r *http.Request) (ver string, err error) {
-	longTransfer(w)
-	defer func() {
-		if err != nil && !errors.Is(err, errNotNewer) {
-			s.Log.Slog().Warn("self-update failed", "module", "update", "version", ver, "err", err)
-		}
-	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+// applyLatest: Manifest holen und die Installation im Hintergrund starten (startet bei Erfolg neu). Download und
+// Sicherung der Datenbank dauern laenger, als ein Reverse Proxy auf die Antwort wartet; ein Fehler steht danach in
+// updates.latest (ApplyError) und im Log.
+func (s *Server) applyLatest(r *http.Request) (string, error) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	m, err := s.Updater.CheckNow(ctx, s.updateGetter(r.Context()), s.updateSet(r.Context()))
-	if err != nil {
+	m, err := s.Updater.CheckNow(ctx, s.updateGetter(ctx), s.updateSet(ctx))
+	switch {
+	case err != nil:
+		s.Log.Slog().Warn("self-update failed", "module", "update", "err", err)
 		return "", err
-	}
-	if !s.Updater.Newer(m) {
+	case !s.Updater.Newer(m):
 		return m.Version, errNotNewer
+	case s.Updater.Busy():
+		return m.Version, selfupdate.ErrBusy
 	}
 	s.audit(r, "update.apply", m.Version, "")
-	return m.Version, s.Updater.Apply(ctx, m)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if err := s.Updater.Apply(ctx, m); err != nil && !errors.Is(err, selfupdate.ErrBusy) {
+			s.Log.Slog().Warn("self-update failed", "module", "update", "version", m.Version, "err", err)
+			s.noteApplyFailed(ctx, m.Version, err)
+		}
+	}()
+	return m.Version, nil
+}
+
+// noteApplyFailed haengt den Fehler an das letzte Pruefergebnis (Anzeige in den Einstellungen und in der API).
+func (s *Server) noteApplyFailed(ctx context.Context, ver string, err error) {
+	var l selfupdate.Latest
+	if json.Unmarshal([]byte(s.Store.SettingOr(ctx, selfupdate.SetLatest, "")), &l) != nil || l.Version != ver {
+		return
+	}
+	l.ApplyError = err.Error()
+	b, _ := json.Marshal(l)
+	_ = s.Store.SetSetting(ctx, selfupdate.SetLatest, string(b))
 }
 
 var errNotNewer = errors.New("no newer version")
@@ -110,7 +128,7 @@ func (s *Server) settingsUpdateApply(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	ver, err := s.applyLatest(w, r)
+	ver, err := s.applyLatest(r)
 	switch {
 	case errors.Is(err, errNotNewer):
 		s.flash(w, r, "success", v.T("settings.update_none", "version", ver))
@@ -167,7 +185,7 @@ func (s *Server) apiUpdateApply(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "self-update not available"})
 		return
 	}
-	ver, err := s.applyLatest(w, r)
+	ver, err := s.applyLatest(r)
 	switch {
 	case errors.Is(err, errNotNewer):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "already up to date", "version": ver})

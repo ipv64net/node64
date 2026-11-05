@@ -109,6 +109,9 @@ func (f *fakeChecks) PeerTokens(context.Context) []string {
 }
 
 func syncRound(nodes ...*testNode) {
+	for _, n := range nodes {
+		n.m.bg.Wait() // Abgleich nach einem Beitritt haelt sonst die Schloesser (TryLock: Runde ohne Abholen)
+	}
 	for i := 0; i < 3; i++ { // mehrere Runden: Weiterreichen ueber Zwischenstationen
 		for _, n := range nodes {
 			n.m.pullAll(context.Background(), "")
@@ -215,9 +218,12 @@ func TestForwarderRule(t *testing.T) {
 	pair(t, a, u)
 	waitMembers(t, a, "B", "U")
 	waitMembers(t, b, "A", "U")
+	for _, n := range []*testNode{a, b, u} {
+		n.m.bg.Wait() // Abgleich nach dem Beitritt abwarten (Pings lesen Linked)
+	}
 	a.m.d.Linked = func() bool { return true }
 	b.m.d.Linked = func() bool { return true }
-	if err := a.m.SetSync(ctx, "healthchecks", "checks", false); err != nil {
+	if _, err := a.m.setSyncLocal(ctx, "healthchecks", "checks", false); err != nil { // nur A (aeltere Version)
 		t.Fatal(err)
 	}
 	for _, n := range []*testNode{a, b, u} {

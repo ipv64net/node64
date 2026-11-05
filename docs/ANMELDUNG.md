@@ -71,7 +71,7 @@ Login-Seite steht dann „Mit Passkey anmelden“, ohne Benutzernamen.
 
 ## Im Cluster (Bereich „Benutzer & Anmeldung“)
 
-Standardmäßig aus; einschalten auf der Seite **Cluster** auf beiden Nodes. Dann gelten die Benutzer (Passwort, App-2FA,
+Standardmäßig aus; einschalten auf der Seite **Cluster** (auf einer Node, der Schalter gilt für den ganzen Cluster). Dann gelten die Benutzer (Passwort, App-2FA,
 Wiederherstellungscodes, Sprache, Zeitzone, verknüpfte SSO-Konten) und die SSO-Einrichtung (Issuer, Client-ID,
 Client-Secret, Beschriftung, Scopes) auf allen Nodes. **Je Node bleiben** Passkeys (an den Hostnamen gebunden),
 Sitzungen, API-Keys, die feste Rückleit-Adresse für SSO und Forward-Auth.

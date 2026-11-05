@@ -48,9 +48,15 @@ func TestSMTPErrorTexts(t *testing.T) {
 	if e := send("tls", true); !strings.Contains(e, ln.Addr().String()) || !strings.Contains(e, "STARTTLS") {
 		t.Fatalf("tls gegen Klartext: %s", e)
 	}
-	// TLS eingestellt, Server schweigt: Handschlag laeuft in die Zeit
-	if e := send("tls", false); !strings.HasPrefix(e, "connect "+ln.Addr().String()+": timeout (TLS handshake") {
+	// TLS eingestellt, Server schweigt: Handschlag laeuft in die Zeit (Verbindung steht, kein Hinweis auf Port 465)
+	if e := send("tls", false); !strings.HasPrefix(e, "tls "+ln.Addr().String()+": timeout (no TLS answer") {
 		t.Fatalf("tls ohne Antwort: %s", e)
+	}
+	// keine Verbindung (Port gesperrt): kein TLS-Hinweis, gleich welche Verschluesselung
+	for _, sec := range []string{"tls", "starttls"} {
+		if e := smtpErr("connect", "mail.example.org:465", sec, context.DeadlineExceeded).Error(); !strings.Contains(e, "no connection") || strings.Contains(e, "TLS") {
+			t.Fatalf("connect %s: %s", sec, e)
+		}
 	}
 	// Port 465 mit STARTTLS: Hinweis auf TLS
 	if e := smtpErr("greeting", "mail.example.org:465", "starttls", context.DeadlineExceeded).Error(); !strings.Contains(e, "port 465 expects TLS") {

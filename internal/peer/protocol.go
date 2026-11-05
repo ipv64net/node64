@@ -347,12 +347,15 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 		}
 	}
 	m.joined(ctx)
+	if x, err := m.member(ctx, out.NodeID); err == nil && x != nil {
+		m.adoptSwitches(ctx, *x) // die Schalter des Clusters gelten jetzt auch hier
+	}
 	m.d.Log.Info("joined cluster", "via", out.Name, "members", len(out.Members)+1)
-	go func() {
+	m.bg.Go(func() {
 		m.pingAll(context.Background())
 		m.pullAll(context.Background(), "")
 		m.pokeSoon() // die anderen holen den Bestand dieser Node
-	}()
+	})
 	return nil
 }
 
@@ -437,8 +440,6 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 	out.MAC = out.mac(code, bind)
 	m.d.Log.Info("node joined cluster", "node", in.Name, "url", url)
 	m.auditPeer(r.Context(), in.Name, "peer.joined", in.Name, url)
-	// die neue Node uebernimmt die Schalter dieser Node
-	m.logSwitches(r.Context())
 	go m.gossip(context.Background(), memberOp{Op: "add", Member: newcomer}, in.NodeID) // die anderen lernen die neue Node kennen
 	writeJSON(w, http.StatusOK, out)
 }
