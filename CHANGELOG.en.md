@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.0.1 – 2026-11-05
+
 - Certificates: new DNS provider do.de (API token), now 27 providers.
 - Cluster: the "What is synced" switches now apply to the whole cluster – switching on or off on one node is adopted by all others automatically, a new node adopts the switches of the node it joins through (the other members keep theirs).
 - Cluster: changes (e.g. notification channels) reach the other nodes faster; a nudge during a running sync was lost until the next round.

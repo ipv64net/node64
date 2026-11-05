@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.0.1 – 2026-11-05
+
 - Zertifikate: neuer DNS-Anbieter do.de (API-Token), jetzt 27 Anbieter.
 - Cluster: Die Schalter „Was wird abgeglichen“ gelten jetzt für den ganzen Cluster – ein- oder ausschalten auf einer Node übernehmen alle anderen automatisch, eine neue Node übernimmt die Schalter der Node, bei der sie beitritt (die anderen Mitglieder behalten ihre).
 - Cluster: Änderungen (z. B. Benachrichtigungskanäle) kommen schneller bei den anderen Nodes an; ein Anstoß während eines laufenden Abgleichs ging bisher bis zur nächsten Runde verloren.
