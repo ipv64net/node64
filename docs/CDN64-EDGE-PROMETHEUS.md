@@ -1,6 +1,6 @@
 # CDN64-Server: Prometheus (nur für den Betreiber)
 
-Stand 2026-10-20 (cdn64-edge 0.13.1). Die CDN64-Server srv07/srv08 liefern ihre Zahlen auf einem eigenen Port – nicht
+Stand 2026-11-05 (cdn64-edge 0.20.5). Die CDN64-Server srv07 bis srv10 liefern ihre Zahlen auf einem eigenen Port – nicht
 öffentlich: nur für die eingetragenen Adressen und nur mit Bearer-Token. Code: `internal/cdnedge/promexport.go`.
 
 ## Zugang
@@ -28,12 +28,12 @@ systemctl restart cdn64-edge
 cat /var/lib/cdn64-edge/metrics-token   # nur fuer den Prometheus, nie in Chats/Logs
 ```
 
-Eingerichtet seit 2026-10-20 auf srv07 und srv08: `metrics_listen: ":9464"`, `metrics_allow` = Prometheus von Dennis
+Eingerichtet seit 2026-10-20 auf srv07 und srv08, seit 2026-11-02 auch auf srv09 und srv10 (Einrichtung mit der Config von srv08): `metrics_listen: ":9464"`, `metrics_allow` = Prometheus von Dennis
 (195.201.218.7, 2a01:4f8:1c1e:a8ac::1) und `127.0.0.1` (Prüfung auf dem Server selbst, z. B.
 `curl -H "Authorization: Bearer $(cat /var/lib/cdn64-edge/metrics-token)" http://127.0.0.1:9464/metrics`); Firewall-Regeln
 für die beiden Adressen in `/etc/nftables.conf`; Sicherungen `*.bak-metrics-*`.
 
-Beide Server haben eigene Tokens. Auf dem Prometheus je Server eine Datei mit dem Token ablegen (0600).
+Jeder Server hat ein eigenes Token. Auf dem Prometheus je Server eine Datei mit dem Token ablegen (0600).
 
 ## prometheus.yml
 
@@ -55,6 +55,22 @@ scrape_configs:
       credentials_file: /etc/prometheus/cdn64-srv08.token
     static_configs:
       - targets: ["srv08.cdn64.de:9464"]
+  - job_name: cdn64-srv09
+    scheme: http
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/cdn64-srv09.token
+    static_configs:
+      - targets: ["srv09.cdn64.de:9464"]
+  - job_name: cdn64-srv10
+    scheme: http
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/cdn64-srv10.token
+    static_configs:
+      - targets: ["srv10.cdn64.de:9464"]
 ```
 
 (`bearer_token_file:` statt `authorization:` geht bei älteren Prometheus-Versionen genauso.) Die Verbindung ist
@@ -63,7 +79,7 @@ den Weg über WireGuard o. Ä. führen.
 
 ## Werte
 
-Alle Zeilen tragen `server` (srv07/srv08). Zähler (`_total`) zählen seit dem Start des Dienstes.
+Alle Zeilen tragen `server` (srv07 bis srv10). Zähler (`_total`) zählen seit dem Start des Dienstes.
 
 | Name | Labels | Bedeutung |
 |---|---|---|
