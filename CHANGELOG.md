@@ -5,6 +5,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Zertifikate: neuer DNS-Anbieter do.de (API-Token), jetzt 27 Anbieter.
+- Benachrichtigungen: Fehler beim eigenen SMTP-Server nennen Server und Schritt („timeout“ statt „context deadline exceeded“) und geben einen Hinweis bei Port 465 ohne TLS bzw. TLS gegen einen Server ohne TLS.
 
 ## 1.0.0 – 2026-11-04
 

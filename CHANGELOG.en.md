@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Certificates: new DNS provider do.de (API token), now 27 providers.
+- Notifications: errors with your own SMTP server name the server and the step ("timeout" instead of "context deadline exceeded") and give a hint for port 465 without TLS or TLS against a server without TLS.
 
 ## 1.0.0 – 2026-11-04
 

@@ -709,30 +709,31 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 	var conn net.Conn
 	var err error
 	if security == "tls" {
-		conn, err = tls.DialWithDialer(d, "tcp", addr, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+		// mit ctx: Abbruch und Zeitlimit greifen auch im TLS-Handschlag
+		conn, err = (&tls.Dialer{NetDialer: d, Config: &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}}).DialContext(ctx, "tcp", addr)
 	} else {
 		conn, err = d.DialContext(ctx, "tcp", addr)
 	}
 	if err != nil {
-		return fmt.Errorf("connect: %w", err)
+		return smtpErr("connect", addr, security, err)
 	}
 	_ = conn.SetDeadline(deadline)
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		conn.Close()
-		return err
+		return smtpErr("greeting", addr, security, err)
 	}
 	defer c.Close()
 	// EHLO mit einem richtigen Namen statt "localhost" (Spamfilter pruefen den HELO-Namen)
 	if err := c.Hello(heloName(ch.Config["from"])); err != nil {
-		return fmt.Errorf("ehlo: %w", err)
+		return smtpErr("ehlo", addr, security, err)
 	}
 	if security == "starttls" {
 		if okTLS, _ := c.Extension("STARTTLS"); !okTLS {
-			return errors.New("server does not offer STARTTLS")
+			return fmt.Errorf("server %s does not offer STARTTLS", addr)
 		}
 		if err := c.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
-			return fmt.Errorf("starttls: %w", err)
+			return smtpErr("starttls", addr, security, err)
 		}
 	}
 	if user := ch.Config["user"]; user != "" {
@@ -758,15 +759,37 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 	}
 	wc, err := c.Data()
 	if err != nil {
-		return err
+		return smtpErr("data", addr, security, err)
 	}
 	subject, text, htmlBody := MailContent(m, MailBrand{Name: "Node64", ManageURL: manageURL(m.URL)})
 	buf := bytes.NewBuffer(BuildMail(mail.Address{Name: "Node64", Address: from}, tos, subject, text, htmlBody))
 	if _, err := wc.Write(buf.Bytes()); err != nil {
-		return err
+		return smtpErr("data", addr, security, err)
 	}
 	if err := wc.Close(); err != nil {
-		return err
+		return smtpErr("data", addr, security, err)
 	}
 	return c.Quit()
+}
+
+// smtpErr: Schritt und Server in die Meldung; Zeitueberschreitung als "timeout" statt "context deadline exceeded", dazu
+// ein Hinweis bei den typischen Fehleinstellungen (465 ohne TLS, TLS gegen Klartext). Die Fehlerkette bleibt erhalten
+// (%w): netErr bzw. textproto.Error erkennen sie weiter.
+func smtpErr(phase, addr, security string, err error) error {
+	var ne net.Error
+	timeout := errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout())
+	_, port, _ := net.SplitHostPort(addr)
+	hint := ""
+	switch {
+	case timeout && (phase == "greeting" || phase == "connect") && security != "tls" && port == "465":
+		hint = " (port 465 expects TLS: set encryption to TLS)"
+	case timeout && phase == "connect" && security == "tls":
+		hint = " (TLS handshake did not finish: check port and encryption, TLS is usually port 465)"
+	case security == "tls" && strings.Contains(err.Error(), "first record does not look like a TLS handshake"):
+		hint = " (server answers without TLS: set encryption to STARTTLS, usually port 587)"
+	}
+	if timeout {
+		return fmt.Errorf("%s %s: timeout%s: %w", phase, addr, hint, err)
+	}
+	return fmt.Errorf("%s %s%s: %w", phase, addr, hint, err)
 }
