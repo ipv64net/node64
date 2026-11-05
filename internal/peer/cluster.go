@@ -60,6 +60,8 @@ func (m *Manager) joined(ctx context.Context) {
 		list = append(list, p)
 	}
 	m.mu.Unlock()
+	// eigene Schalter nicht in den neuen Cluster tragen: die Node uebernimmt die des Clusters (logSwitches)
+	_, _ = m.db.ExecContext(ctx, `DELETE FROM cluster_log WHERE module = ?`, switchModule)
 	for _, p := range list {
 		j, ok := p.(Joiner)
 		if !ok {
@@ -167,7 +169,7 @@ func (m *Manager) modules() []ModuleInfo {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		if !builtin(id) { // Provider eingebauter Module: Bereiche stehen schon oben
+		if !builtin(id) && id != switchModule { // eingebaute Module stehen schon oben, die Schalter selbst nicht in der Liste
 			out = append(out, m.prov[id].ClusterModule())
 		}
 	}
@@ -205,7 +207,7 @@ func (m *Manager) running(id string) bool {
 	return !ok || r.ClusterRunning()
 }
 
-// SetSync schaltet ein Modul (item "") oder einen Bereich.
+// SetSync schaltet ein Modul (item "") oder einen Bereich, auf allen Nodes des Clusters (syncswitch.go).
 func (m *Manager) SetSync(ctx context.Context, module, item string, on bool) error {
 	var mi *ModuleInfo
 	for _, x := range m.modules() {
@@ -226,6 +228,21 @@ func (m *Manager) SetSync(ctx context.Context, module, item string, on bool) err
 			return ErrUnknownSync
 		}
 	}
+	if err := m.setSyncLocal(ctx, module, item, on); err != nil {
+		return err
+	}
+	id := module
+	if item != "" {
+		id += "/" + item
+	}
+	m.ClusterChange(ctx, switchModule, switchItem, id, false) // an die anderen Nodes
+	return nil
+}
+
+// setSyncLocal speichert einen Schalter auf dieser Node (auch fuer Module, die es hier noch nicht gibt).
+func (m *Manager) setSyncLocal(ctx context.Context, module, item string, on bool) error {
+	m.syncMu.Lock()
+	defer m.syncMu.Unlock()
 	cfg := m.syncCfg(ctx)
 	c := cfg[module]
 	if item == "" {
@@ -247,7 +264,7 @@ func (m *Manager) SetSync(ctx context.Context, module, item string, on bool) err
 
 // syncCaps: eingeschaltete Bereiche dieser Node als "modul/bereich" (fuer den Ping).
 func (m *Manager) syncCaps(ctx context.Context) []string {
-	out := []string{}
+	out := []string{SwitchCap} // Schalter immer abgleichen, auch das Ausschalten muss ankommen
 	for _, st := range m.SyncModules(ctx) {
 		if !st.Available || !st.Enabled {
 			continue

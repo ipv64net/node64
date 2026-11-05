@@ -94,6 +94,9 @@ func (s *Server) groupView(r *http.Request) groupData {
 	for _, x := range list {
 		row := memberRow{Member: x, NoSync: x.Sync == nil}
 		for _, a := range x.Sync {
+			if a == peer.SwitchCap {
+				continue // Abgleich der Schalter selbst, kein Bereich
+			}
 			k := titles[a]
 			if k == "" {
 				k = a

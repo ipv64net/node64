@@ -437,6 +437,8 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 	out.MAC = out.mac(code, bind)
 	m.d.Log.Info("node joined cluster", "node", in.Name, "url", url)
 	m.auditPeer(r.Context(), in.Name, "peer.joined", in.Name, url)
+	// die neue Node uebernimmt die Schalter dieser Node
+	m.logSwitches(r.Context())
 	go m.gossip(context.Background(), memberOp{Op: "add", Member: newcomer}, in.NodeID) // die anderen lernen die neue Node kennen
 	writeJSON(w, http.StatusOK, out)
 }

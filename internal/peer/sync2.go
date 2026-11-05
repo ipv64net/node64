@@ -280,8 +280,10 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 	}
 	m.pull.s2.mu.Unlock()
 	if !lock.TryLock() {
+		m.pullAgainLater(x.NodeID)
 		return nil
 	}
+	defer m.pullAgainNow(x.NodeID) // nach dem Freigeben (defer laufen rueckwaerts)
 	defer lock.Unlock()
 	var cursor, retry int64
 	var seen string

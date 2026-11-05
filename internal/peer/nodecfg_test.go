@@ -76,10 +76,11 @@ func TestNodeCfgCluster(t *testing.T) {
 	if kb.Get(ctx) != "" || stB.SettingOr(ctx, "node.timezone", "") != "" {
 		t.Fatal("module node is off by default")
 	}
-	// A und B: Modul mit beiden Bereichen; C nur die Einstellungen
+	// A und B: Modul mit beiden Bereichen; C nur die Einstellungen (je Node verschieden: nur lokal gesetzt, wie vor
+	// dem Abgleich der Schalter)
 	for _, n := range []*testNode{a, b, c} {
 		for item, on := range map[string]bool{"": true, nodecfg.ItemAPIKey: n != c, nodecfg.ItemSettings: true} {
-			if err := n.m.SetSync(ctx, nodecfg.ModuleID, item, on); err != nil {
+			if err := n.m.setSyncLocal(ctx, nodecfg.ModuleID, item, on); err != nil {
 				t.Fatal(err)
 			}
 		}

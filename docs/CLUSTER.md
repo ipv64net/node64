@@ -69,8 +69,14 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 
 ## Was abgeglichen wird
 
-Je Node und je Modul/Bereich schaltbar (`PUT /api/group/sync`, Einstellung `peer.sync`). Ausgetauscht wird ein
-Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre Bereiche, die liefernde prüft ihre).
+Je Modul/Bereich schaltbar (`PUT /api/group/sync`, Einstellung `peer.sync`). Die Schalter gelten für den ganzen
+Cluster: jede Änderung geht als Eintrag `cluster/switches` (Kennung `modul` bzw. `modul/bereich`, Inhalt `{"on":…}`)
+über `/peer/v2/sync` an alle Mitglieder, die jüngere Änderung gewinnt. Dieser Bereich ist immer an (auch das
+Ausschalten muss ankommen) und steht nicht in der Liste. Eine beitretende Node übernimmt die Schalter des Clusters
+(die annehmende Node legt ihre ins Protokoll, die eigenen der neuen Node fallen weg). Vorhandene Cluster gleichen
+sich erst mit der nächsten Änderung eines Schalters an; Nodes mit älterer Version behalten ihre Schalter.
+Ausgetauscht wird ein Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre Bereiche, die
+liefernde prüft ihre); neue Bereiche der anderen Nodes erfährt eine Node beim nächsten Ping (spätestens 30 s).
 
 | Modul | Bereiche | Standard | Weg |
 |---|---|---|---|
@@ -309,7 +315,7 @@ jüngere Änderung gewinnt.
 Erkannt wird eine Änderung beim Schreiben (Hook des Stores) am Inhalt (Prüfsumme in `nodecfg.seen`), ein
 unverändert gespeicherter Wert zählt nicht; beim Start gilt für neue bzw. geänderte Werte der Zeitpunkt aus der
 Datenbank. Gelöschte Einstellungen werden nicht übertragen. **Nie abgeglichen:** Name und Kennung der Node, Ports,
-Adressen, HTTPS/Zertifikate der Oberfläche, Datenverzeichnis, Cluster-Einstellungen, Netz-Einstellungen
+Adressen, HTTPS/Zertifikate der Oberfläche, Datenverzeichnis, Cluster-Einstellungen (außer den Schaltern „Was wird abgeglichen“, siehe oben), Netz-Einstellungen
 (Proxy-Netze, Forward-Auth …), Stand des Selbst-Updates. Prometheus hat keine Einstellungen (Zugriff über API-Keys),
 MCP-Schlüssel gehören zu den Benutzern (nur als Hash gespeichert), die Sprache ist je Benutzer.
 

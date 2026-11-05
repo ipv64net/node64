@@ -3351,7 +3351,7 @@
     "seen": "zuletzt erreicht",
     "empty": "Noch keine weiteren Nodes. Auf einer Node einen Code erzeugen und auf der anderen damit beitreten.",
     "sync_title": "Was wird abgeglichen",
-    "sync_hint": "Ein Bereich wird nur mit Nodes abgeglichen, bei denen er ebenfalls eingeschaltet ist – also nur, wenn er auf beiden Nodes an ist.",
+    "sync_hint": "Die Schalter gelten für den ganzen Cluster: Was du hier ein- oder ausschaltest, übernehmen alle Nodes automatisch (Nodes mit älterer Version behalten ihre eigenen Schalter). Ausgetauscht wird ein Bereich nur mit Nodes, bei denen er ebenfalls an ist.",
     "channels_hint": "Nur nötig ohne Verbindung zu ipv64.net – verknüpfte Nodes bekommen die Kanäle des Portals über ipv64.net. Abgeglichen werden nur die eigenen Kanäle der Node, nie die des Portals.",
     "dyndns_hint": "Nur eine Node meldet die Adressen an ipv64 (bevorzugte Node auf der Seite DynDNS). Fällt sie aus, übernimmt eine andere – in einem anderen Netz zeigen die Namen dann auf deren Anschluss.",
     "mod_unavailable": "(auf dieser Node nicht aktiv)",

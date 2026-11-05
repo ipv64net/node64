@@ -139,10 +139,10 @@ func TestClusterSync2(t *testing.T) {
 	}
 	// A und B schalten demo/a ein, C nur das Modul ohne Bereich a
 	for _, n := range []*testNode{a, b, c} {
-		if err := n.m.SetSync(ctx, "demo", "", true); err != nil {
+		if err := n.m.setSyncLocal(ctx, "demo", "", true); err != nil { // je Node verschieden: nur lokal
 			t.Fatal(err)
 		}
-		if err := n.m.SetSync(ctx, "demo", "a", n != c); err != nil {
+		if err := n.m.setSyncLocal(ctx, "demo", "a", n != c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -298,7 +298,7 @@ func TestSyncModulesDefaults(t *testing.T) {
 		t.Fatal("healthchecks and notifications on by default, others off")
 	}
 	newFake(a)
-	if caps := a.m.syncCaps(ctx); len(caps) != 3 {
+	if caps := a.m.syncCaps(ctx); len(caps) != 4 || caps[0] != SwitchCap { // dazu immer die Schalter selbst
 		t.Fatalf("caps: %v", caps)
 	}
 	_ = a.m.SetSync(ctx, "healthchecks", "maintenance", false)
@@ -330,6 +330,7 @@ func TestHealthchecksSwitch(t *testing.T) {
 	}
 	_ = b.m.SetSync(ctx, "healthchecks", "", true)
 	round2(a, b)
+	round2(a, b) // A uebernimmt den Schalter, B erfaehrt es beim naechsten Ping
 	if fb.name("tok1") != "nur A" {
 		t.Fatalf("after switching on: %q", fb.name("tok1"))
 	}
@@ -448,8 +449,8 @@ func TestClusterChannels(t *testing.T) {
 	if has(a.m.v1Wants(a.m.syncCaps(ctx), *x), "channels") {
 		t.Fatal("channels must not be in v1 wants")
 	}
-	// nur A an: weiterhin nichts
-	_ = a.m.SetSync(ctx, "notifications", "channels", true)
+	// nur A an (nur lokal, wie bei einer aelteren Node): weiterhin nichts
+	_ = a.m.setSyncLocal(ctx, "notifications", "channels", true)
 	round2(a, b)
 	if pb.get("channels", "u1") != "" {
 		t.Fatal("B has channels off")

@@ -3351,7 +3351,7 @@
     "seen": "last reached",
     "empty": "No other nodes yet. Create a code on one node and join with it on the other.",
     "sync_title": "What is synced",
-    "sync_hint": "An area is only synced with nodes that have it switched on as well – i.e. only if it is on on both nodes.",
+    "sync_hint": "The switches apply to the whole cluster: whatever you switch on or off here, all nodes adopt automatically (nodes with an older version keep their own switches). An area is only exchanged with nodes that have it switched on as well.",
     "channels_hint": "Only needed without a connection to ipv64.net – linked nodes get the portal's channels via ipv64.net. Only the node's own channels are synced, never those of the portal.",
     "dyndns_hint": "Only one node reports the addresses to ipv64 (preferred node on the DynDNS page). If it fails, another one takes over – in a different network the names then point to its connection.",
     "mod_unavailable": "(not active on this node)",

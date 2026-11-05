@@ -123,6 +123,7 @@ type Manager struct {
 
 	mu      sync.Mutex
 	prov    map[string]Provider // Module, die ueber den Cluster abgleichen (cluster.go)
+	syncMu  sync.Mutex          // Schalter peer.sync lesen und schreiben (SetSync, Uebernahme)
 	watch   map[string]bool     // Mitglieder, deren Ausfall diese Node gemeldet hat (watch.go)
 	proxied map[string]bool     // Mitglieder, deren zurueckgehaltene Checks schon an den hub gingen (proxy.go)
 	code    string              // offener Kopplungscode
@@ -137,6 +138,7 @@ type Manager struct {
 func New(ctx context.Context, d Deps) (*Manager, error) {
 	m := &Manager{d: d, db: d.Core.Writer()}
 	m.pull.kick, m.pull.busy = make(chan string, 16), map[string]*sync.Mutex{}
+	m.RegisterProvider(switchProvider{m}) // Schalter "Was wird abgeglichen" fuer den ganzen Cluster (syncswitch.go)
 	raw := d.Core.SettingOr(ctx, setKey, "")
 	if raw != "" && d.Box != nil {
 		if plain, err := d.Box.Decrypt(raw); err == nil {
