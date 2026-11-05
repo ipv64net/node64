@@ -46,7 +46,10 @@ func (s *Server) updateViewOf(ctx context.Context) *updateView {
 		Modes: selfupdate.Modes, Channels: selfupdate.Channels}
 	if raw := s.Store.SettingOr(ctx, selfupdate.SetLatest, ""); raw != "" {
 		var l selfupdate.Latest
-		if json.Unmarshal([]byte(raw), &l) == nil && (l.Version != "" || l.Error != "") {
+		// nur ein Ergebnis fuer den aktuellen Kanal; "neuer" gegen die laufende Version (nach einem Update lief sonst
+		// die eben installierte Version weiter als "neu verfuegbar")
+		if json.Unmarshal([]byte(raw), &l) == nil && (l.Version != "" || l.Error != "") && (l.Channel == "" || l.Channel == v.Channel) {
+			l.Newer = l.Version != "" && s.Updater.Newer(&selfupdate.Manifest{Version: l.Version})
 			v.Latest = &l
 		}
 	}
@@ -77,8 +80,15 @@ func (s *Server) settingsUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings#about", http.StatusSeeOther)
 }
 
-// applyLatest: Manifest holen und installieren (startet bei Erfolg neu).
-func (s *Server) applyLatest(r *http.Request) (string, error) {
+// applyLatest: Manifest holen und installieren (startet bei Erfolg neu). Download und Sicherung der Datenbank
+// dauern laenger als das Zeitlimit einer Anfrage: Fristen der Verbindung wie bei Sicherungen verlaengern.
+func (s *Server) applyLatest(w http.ResponseWriter, r *http.Request) (ver string, err error) {
+	longTransfer(w)
+	defer func() {
+		if err != nil && !errors.Is(err, errNotNewer) {
+			s.Log.Slog().Warn("self-update failed", "module", "update", "version", ver, "err", err)
+		}
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	m, err := s.Updater.CheckNow(ctx, s.updateGetter(r.Context()), s.updateSet(r.Context()))
@@ -100,7 +110,7 @@ func (s *Server) settingsUpdateApply(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	ver, err := s.applyLatest(r)
+	ver, err := s.applyLatest(w, r)
 	switch {
 	case errors.Is(err, errNotNewer):
 		s.flash(w, r, "success", v.T("settings.update_none", "version", ver))
@@ -157,7 +167,7 @@ func (s *Server) apiUpdateApply(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "self-update not available"})
 		return
 	}
-	ver, err := s.applyLatest(r)
+	ver, err := s.applyLatest(w, r)
 	switch {
 	case errors.Is(err, errNotNewer):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "already up to date", "version": ver})

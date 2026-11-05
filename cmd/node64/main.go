@@ -447,6 +447,9 @@ func run() error {
 	upd.Backup = st.Backup
 	upd.Restart = func() { restartAfterStop.Store(true); stop() }
 	getSetting := func(k, d string) string { return st.SettingOr(ctx, k, d) }
+	if run, _, _ := selfupdate.Running(Version); run != "" {
+		selfupdate.MigrateChannel(getSetting, func(k, v string) error { return st.SetSetting(ctx, k, v) }, run)
+	}
 	nodeLoc := func() *time.Location {
 		if loc, err := time.LoadLocation(st.SettingOr(ctx, "node.timezone", "")); err == nil && st.SettingOr(ctx, "node.timezone", "") != "" {
 			return loc

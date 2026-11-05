@@ -276,3 +276,38 @@ func TestWindowAndMode(t *testing.T) {
 		t.Fatal("window")
 	}
 }
+
+// Kanal aus der Alpha-Zeit: auf einer stabilen Version einmal auf den Standard zurueck, eine spaetere Wahl bleibt.
+func TestMigrateChannel(t *testing.T) {
+	s := map[string]string{SetChannel: "preview"}
+	get := func(k, d string) string {
+		if v, ok := s[k]; ok {
+			return v
+		}
+		return d
+	}
+	set := func(k, v string) error { s[k] = v; return nil }
+	MigrateChannel(get, set, "1.0.0")
+	if Channel(get, "1.0.0") != "stable" {
+		t.Fatalf("stable version: %q", Channel(get, "1.0.0"))
+	}
+	s[SetChannel] = "preview" // danach bewusst gewaehlt
+	MigrateChannel(get, set, "1.0.1")
+	if Channel(get, "1.0.1") != "preview" {
+		t.Fatal("a later choice must stay")
+	}
+	// Release-Candidate: preview bleibt
+	r := map[string]string{SetChannel: "preview"}
+	MigrateChannel(func(k, d string) string {
+		if v, ok := r[k]; ok {
+			return v
+		}
+		return d
+	}, func(k, v string) error { r[k] = v; return nil }, "1.0.1-rc.1")
+	if r[SetChannel] != "preview" {
+		t.Fatal("rc keeps preview")
+	}
+	if DefaultChannel("1.0.1-rc.1") != "preview" || DefaultChannel("1.0.1") != "stable" {
+		t.Fatal("default channel")
+	}
+}

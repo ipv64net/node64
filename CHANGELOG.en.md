@@ -5,6 +5,9 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Certificates: new DNS provider do.de (API token), now 27 providers.
+- Cluster: the "What is synced" switches now apply to the whole cluster – switching on or off on one node is adopted by all others automatically, a new node adopts the switches of the cluster.
+- Cluster: changes (e.g. notification channels) reach the other nodes faster; a nudge during a running sync was lost until the next round.
+- Updates: after an update the page no longer shows the version just installed as "new"; loading no longer aborts after 60 s on slow lines, errors are logged. The "release candidate" channel that was saved unintentionally in the alpha days is reset to "stable" once on stable versions.
 - Notifications: errors with your own SMTP server name the server and the step ("timeout" instead of "context deadline exceeded") and give a hint for port 465 without TLS or TLS against a server without TLS.
 
 ## 1.0.0 – 2026-11-04

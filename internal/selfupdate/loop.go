@@ -63,6 +63,26 @@ func Channel(get Getter, running string) string {
 	return "stable"
 }
 
+// DefaultChannel: Kanal ohne eigene Wahl (preview, solange die laufende Version eine Vorab-Version ist).
+func DefaultChannel(running string) string {
+	return Channel(func(_, d string) string { return d }, running)
+}
+
+const setChannelV1 = "updates.channel_v1" // Kanal aus der Alpha-Zeit einmal geprueft (MigrateChannel)
+
+// MigrateChannel (einmalig, ab 1.0): Bis 1.0 speicherte die Einstellungsseite den Kanal immer mit, vorgewaehlt war
+// bei Alpha-Versionen "preview". Heute heisst preview Release-Candidates; laeuft eine stabile Version, gilt wieder
+// der Standard (stable). Wer Release-Candidates will, waehlt sie neu.
+func MigrateChannel(get Getter, set func(key, value string) error, running string) {
+	if get(setChannelV1, "") != "" {
+		return
+	}
+	if DefaultChannel(running) == "stable" && get(SetChannel, "") == "preview" {
+		_ = set(SetChannel, "")
+	}
+	_ = set(setChannelV1, "1")
+}
+
 // Window: Zeitfenster fuer automatische Updates (Standard 03:00-05:00).
 func Window(get Getter) string {
 	w := get(SetWindow, "")

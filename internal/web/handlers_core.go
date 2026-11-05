@@ -502,6 +502,10 @@ func (s *Server) settingsUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = selfupdate.SaveMode(s.updateSet(ctx), mode)
 	if ch := r.PostFormValue("updates_channel"); containsString(selfupdate.Channels, ch) {
+		// nur eine eigene Wahl speichern; der Standard folgt der laufenden Version (RC -> preview, stabil -> stable)
+		if s.Updater != nil && ch == selfupdate.DefaultChannel(s.Updater.Status().Running) {
+			ch = ""
+		}
 		_ = s.Store.SetSetting(ctx, selfupdate.SetChannel, ch)
 	}
 	if win := strings.TrimSpace(r.PostFormValue("updates_window")); selfupdate.ValidWindow(win) {
