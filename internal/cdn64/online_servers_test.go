@@ -290,4 +290,13 @@ func TestOnlineHostServers(t *testing.T) {
 			t.Fatalf("page misses %q", want)
 		}
 	}
+	// Reiter Statusseiten (ohne Kontingent und ohne Server je Tunnel): Knopf und Dialog wie bei den Proxy-Hosts
+	rows := []hostRow{{Host: hs[0], Online: idx[hs[0].ID]}}
+	if rowsModal(rows) == nil || rowsModal([]hostRow{{Host: hs[0]}}) != nil {
+		t.Fatal("rowsModal")
+	}
+	body = renderHosts(t, listData{Kind: KindStatus, OnlineOn: true, Rows: rows, Modal: rowsModal(rows)})
+	if !strings.Contains(body, `data-bs-target="#cdn64-servers"`) || !strings.Contains(body, `id="cdn64-servers"`) {
+		t.Fatal("status pages: button without dialog")
+	}
 }

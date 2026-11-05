@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: the button for CDN64 servers and connections now opens its dialog under Status pages and Redirects too.
+
 ## 1.0.1 – 2026-11-05
 
 - Certificates: new DNS provider do.de (API token), now 27 providers.

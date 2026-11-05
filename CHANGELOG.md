@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Der Knopf für Server und Verbindungen von CDN64 öffnet seinen Dialog jetzt auch unter Statusseiten und Weiterleitungen.
+
 ## 1.0.1 – 2026-11-05
 
 - Zertifikate: neuer DNS-Anbieter do.de (API-Token), jetzt 27 Anbieter.

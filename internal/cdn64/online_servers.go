@@ -270,3 +270,14 @@ func (m *Module) pageHostServers(w http.ResponseWriter, r *http.Request, a serve
 	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.online.servers_saved", "list", strings.Join(last.Assigned, ", "), "n", last.Sessions))
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
+
+// rowsModal: Auswahl fuer den Dialog "Server und Verbindungen" aus der ersten Zeile mit Knopf (Server je Name, gleiche
+// Klasse fuer alle Zeilen); nil = keine Zeile mit Knopf.
+func rowsModal(rows []hostRow) *serversView {
+	for _, x := range rows {
+		if x.Online != nil && x.Online.Servers != nil && x.Online.Servers.Selectable {
+			return x.Online.Servers
+		}
+	}
+	return nil
+}

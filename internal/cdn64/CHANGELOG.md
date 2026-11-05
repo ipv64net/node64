@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.48.1 – 2026-11-05
+
+### Behoben
+- CDN64: Der Knopf für Server und Verbindungen in der Spalte CDN64 öffnet seinen Dialog jetzt auch in den Reitern
+  Statusseiten und Weiterleitungen (bisher nur unter Proxy-Hosts).
+
 ## 1.48.0 – 2026-11-03
 
 ### Neu

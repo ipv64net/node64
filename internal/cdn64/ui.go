@@ -325,18 +325,18 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		m.online.want.Store(true)
 		m.onlineKick()
 	}
-	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 && kind == KindProxy { // Kontingent nur unter den Proxy-Hosts
-		d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
-		d.Servers = m.onlineServers(r.Context(), rm.Data)
-		d.Modal = d.Servers
-		for _, x := range rows { // Server je Name: Auswahl wie die der Zeilen (gleiche Klasse)
-			if x.Online != nil && x.Online.Servers != nil && x.Online.Servers.Selectable {
-				d.Modal = x.Online.Servers
-				break
+	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
+		// Dialog fuer den Knopf in der Spalte CDN64: in jedem Reiter mit solchen Zeilen (auch Statusseiten, Weiterleitungen)
+		d.Modal = rowsModal(rows)
+		if kind == KindProxy { // Kontingent nur unter den Proxy-Hosts
+			d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
+			d.Servers = m.onlineServers(r.Context(), rm.Data)
+			if d.Modal == nil {
+				d.Modal = d.Servers
 			}
-		}
-		if d.OnlineOn {
-			d.Others = m.onlineOthers(r.Context())
+			if d.OnlineOn {
+				d.Others = m.onlineOthers(r.Context())
+			}
 		}
 	}
 	if m.edge != nil {
