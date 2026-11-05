@@ -20,8 +20,8 @@ Stand 2026-10-16 (Z0–Z5 fertig). Die Zertifikatsverwaltung gehört zum Kern vo
 - Standard ist Let's Encrypt.
 - Weitere Stellen lassen sich unter *ACME-Stellen* hinzufügen, siehe unten.
 
-**DNS-Anbieter (26):**
-- **Deutschsprachiger Raum:** ALL-INKL.COM, AutoDNS (InterNetX), checkdomain, Hetzner, INWX, IONOS, netcup,
+**DNS-Anbieter (27):**
+- **Deutschsprachiger Raum:** ALL-INKL.COM, AutoDNS (InterNetX), checkdomain, do.de, Hetzner, INWX, IONOS, netcup,
   Infomaniak.
 - **International:** Bunny DNS, ClouDNS, Cloudflare, deSEC, DigitalOcean, Duck DNS, Dynu, Gandi, GoDaddy,
   Hostinger, Hurricane Electric, Namecheap, OVHcloud, Porkbun.

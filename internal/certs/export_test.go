@@ -99,6 +99,7 @@ func TestMoreProviders(t *testing.T) {
 		"bunny":       {"key": "k"},
 		"checkdomain": {"token": "t"},
 		"cloudns":     {"auth_id": "1", "password": "pw"},
+		"dode":        {"token": "t"},
 		"dynu":        {"key": "k"},
 		"hostinger":   {"token": "t"},
 		"httpreq":     {"endpoint": "https://hook.example.org/acme"},
@@ -109,7 +110,7 @@ func TestMoreProviders(t *testing.T) {
 		"rfc2136":     {"nameserver": "192.168.1.1", "tsig_key": "acme.", "tsig_secret": "c2VjcmV0c2VjcmV0c2VjcmV0"},
 		"technitium":  {"url": "http://192.168.1.2:5380/", "token": "t"},
 	}
-	if n := len(Providers()); n != 26 {
+	if n := len(Providers()); n != 27 {
 		t.Fatalf("providers: %d", n)
 	}
 	for id, v := range vals {

@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Zertifikate: neuer DNS-Anbieter do.de (API-Token), jetzt 27 Anbieter.
+
 ## 1.0.0 – 2026-11-04
 
 - Erste stabile Version: Node64 ist öffentlich. Ab jetzt keine alpha/beta mehr, neue Versionen kommen als Release-Candidate und danach stabil.

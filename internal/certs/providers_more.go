@@ -13,6 +13,7 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/bunny"
 	"github.com/go-acme/lego/v4/providers/dns/checkdomain"
 	"github.com/go-acme/lego/v4/providers/dns/cloudns"
+	"github.com/go-acme/lego/v4/providers/dns/dode"
 	"github.com/go-acme/lego/v4/providers/dns/dynu"
 	"github.com/go-acme/lego/v4/providers/dns/hostinger"
 	"github.com/go-acme/lego/v4/providers/dns/httpreq"
@@ -78,6 +79,13 @@ func init() {
 			c := cloudns.NewDefaultConfig()
 			c.AuthID, c.SubAuthID, c.AuthPassword = v["auth_id"], v["sub_auth_id"], v["password"]
 			return cloudns.NewDNSProviderConfig(c)
+		})
+	register(ProviderInfo{ID: "dode", Name: "do.de", Docs: "https://www.do.de (API-Token)",
+		Fields: []Field{{Key: "token", Label: "API-Token", Secret: true}}},
+		func(v map[string]string) (challenge.Provider, error) {
+			c := dode.NewDefaultConfig()
+			c.Token = v["token"]
+			return dode.NewDNSProviderConfig(c)
 		})
 	register(ProviderInfo{ID: "dynu", Name: "Dynu", Docs: "https://www.dynu.com/ControlPanel/APICredentials",
 		Fields: []Field{{Key: "key", Label: "API-Key", Secret: true}}},

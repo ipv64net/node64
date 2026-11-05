@@ -14,6 +14,7 @@ var providerEN = map[string]string{
 	"https://developer.hosting.ionos.de (Präfix.Secret)":                                            "https://developer.hosting.ionos.de (prefix.secret)",
 	"https://kas.all-inkl.com (KAS-Login)":                                                          "https://kas.all-inkl.com (KAS login)",
 	"https://login.autodns.com (API-Benutzer)":                                                      "https://login.autodns.com (API user)",
+	"https://www.do.de (API-Token)":                                                                 "https://www.do.de (API token)",
 	"https://www.checkdomain.de (Konto → API)":                                                      "https://www.checkdomain.de (Account → API)",
 	"https://www.cloudns.net (API → Auth-ID oder Sub-Auth-ID)":                                      "https://www.cloudns.net (API → auth ID or sub auth ID)",
 	"POST <URL>/present und /cleanup mit {fqdn, value} (lego httpreq)":                              "POST <URL>/present and /cleanup with {fqdn, value} (lego httpreq)",
