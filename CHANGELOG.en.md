@@ -4,7 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
-- DNS64: mDNS bridge – names like printer.local and device names from your own network come via mDNS, also for devices in the VPN and other networks (switch in the settings, off by default). DNS64 detects the router's own suffix by itself.
+- DNS64: mDNS bridge – names like printer.local and device names from your own network come via mDNS, also for devices in the VPN and other networks (switch in the settings, off by default). With the switch on, DNS64 also detects the router's own suffix.
 - PROXY64: the button for CDN64 servers and connections now opens its dialog under Status pages and Redirects too.
 
 ## 1.0.1 – 2026-11-05

@@ -303,6 +303,12 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 		if s.Local.Addr() != "" && !fromRouter {
 			if resp, err := s.Local.Exchange(ctx, r); err == nil {
 				e.Upstream = "Router"
+				for _, rr := range resp.Answer { // Geraetename vom Router: seine eigene Endung lernen (mit mDNS-Bruecke)
+					if p, ok := rr.(*dns.PTR); ok && q.Qtype == dns.TypePTR {
+						s.Local.LearnPTR(q.Name, p.Ptr)
+						break
+					}
+				}
 				if q.Qtype == dns.TypePTR && (resp.Rcode == dns.RcodeNameError || len(resp.Answer) == 0) { // Router kennt das Geraet nicht
 					if m := s.Local.ExchangeMDNS(ctx, r); m != nil {
 						e.Upstream = "mDNS"

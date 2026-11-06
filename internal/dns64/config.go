@@ -10,9 +10,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 )
 
@@ -31,6 +33,7 @@ const (
 	setAllowNets = "dns64.allow_nets"     // weitere Client-Netze, eins je Zeile
 	setCanary    = "dns64.firefox_canary" // 1 = use-application-dns.net -> NXDOMAIN (Firefox schaltet sein DoH ab)
 	setMDNS      = "dns64.mdns"           // 1 = .local und unbekannte Geraete per mDNS im eigenen Netz fragen (je Node)
+	setMDNSDoms  = "dns64.mdns_domains"   // gelernte Endungen des Routers (je Node, JSON Endung -> zuletzt gesehen)
 	setDoH       = "dns64.doh"            // 1 = DoH fuer Geraete
 	setDoT       = "dns64.dot"
 	setDoQ       = "dns64.doq"
@@ -516,4 +519,17 @@ func b2s(b bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// mdnsDomains: gelernte Endungen des Routers ueber Neustarts behalten (sonst lernt DNS64 nach jedem Speichern der
+// Einstellungen von vorn).
+func (m *Module) mdnsDomains(ctx context.Context, l *localnet.Resolver) {
+	var d map[string]time.Time
+	if json.Unmarshal([]byte(m.core.SettingOr(ctx, setMDNSDoms, "{}")), &d) == nil {
+		l.LoadDomains(d)
+	}
+	l.SetOnDomains(func(d map[string]time.Time) {
+		b, _ := json.Marshal(d)
+		_ = m.core.SetSetting(context.Background(), setMDNSDoms, string(b))
+	})
 }

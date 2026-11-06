@@ -3728,7 +3728,7 @@
       "router_hint": "Namen wie fritz.box oder .lan gehen nur an diesen Server, nie ins Internet. IPv4 oder IPv6, optional mit Port. Automatisch: das Gateway.",
       "router_domains": "Erkannte Endung des Routers: {list} (geht wie .lan an den Router).",
       "mdns": ".local-Namen und Gerätenamen per mDNS im eigenen Netz auflösen",
-      "mdns_hint": "DNS64 fragt Namen wie drucker.local bei den Geräten selbst nach und gibt sie als normales DNS weiter – auch an Geräte in anderen Netzen und im VPN. Wirkt nur, wenn Node64 direkt im LAN hängt (Host-Netz oder macvlan).",
+      "mdns_hint": "DNS64 fragt Namen wie drucker.local bei den Geräten selbst nach und gibt sie als normales DNS weiter – auch an Geräte in anderen Netzen und im VPN. Außerdem lernt DNS64 eine eigene Endung des Routers (z. B. .zuhause). Wirkt nur, wenn Node64 direkt im LAN hängt (Host-Netz oder macvlan).",
       "mdns_probing": "Prüfung läuft …",
       "mdns_none": "Zurzeit antwortet kein Gerät – hängt Node64 hinter der Docker-Bridge?",
       "mdns_now": "Zurzeit antworten {n} Geräte.",

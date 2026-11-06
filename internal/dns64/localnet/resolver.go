@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -39,6 +40,9 @@ type Resolver struct {
 	probes sync.Map // Pruefnamen der Router-Suche, die beim eigenen DNS-Dienst ankamen (= der Kandidat sind wir selbst)
 
 	md mdnsState // mDNS-Bruecke und gelernte Endungen des Routers (mdns.go)
+
+	// IsBuiltin: Endung, die DNS64 ohnehin lokal behandelt (wird nicht gelernt); nil = keine
+	IsBuiltin func(name string) bool
 }
 
 // probeSuffix: Pruefname der Router-Suche. Kommt er beim eigenen DNS-Dienst an, ist der Kandidat diese Node selbst
@@ -76,7 +80,7 @@ type nameEntry struct {
 
 func New(static string, log *slog.Logger) *Resolver {
 	r := &Resolver{static: static, log: log, names: map[string]nameEntry{}}
-	r.md.kick, r.md.responders = make(chan struct{}, 1), -1
+	r.md.kick, r.md.responders, r.md.lim = make(chan struct{}, 1), -1, rate.NewLimiter(mdnsRate, mdnsBurst)
 	if static != "" {
 		r.addr, r.source = static, "config"
 	}

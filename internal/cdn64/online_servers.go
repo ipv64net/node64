@@ -204,6 +204,11 @@ func (m *Module) pageOnlineServers(w http.ResponseWriter, r *http.Request) {
 	if v := r.PostFormValue("host"); v != "" {
 		hid, herr = strconv.ParseInt(v, 10, 64)
 	}
+	if hid > 0 { // zurueck in den Reiter des Hosts (Statusseiten, Weiterleitungen ...)
+		if h, err := m.host(r.Context(), hid); err == nil && h != nil {
+			back = listPath(h.Kind)
+		}
+	}
 	c, _, cerr := m.onlineConf(r.Context())
 	var ids []int64
 	if hid > 0 {
@@ -216,7 +221,7 @@ func (m *Module) pageOnlineServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hid > 0 {
-		m.pageHostServers(w, r, a, hid, ids, n, ses)
+		m.pageHostServers(w, r, a, hid, ids, n, ses, back)
 		return
 	}
 	s, err := a.SetServers(r.Context(), c.Tunnel, n, ses)
@@ -242,8 +247,7 @@ func (m *Module) pageOnlineServers(w http.ResponseWriter, r *http.Request) {
 }
 
 // pageHostServers: Auswahl fuer alle Namen eines Proxy-Hosts (ids) setzen, Anzeige sofort, Abgleich gleich danach.
-func (m *Module) pageHostServers(w http.ResponseWriter, r *http.Request, a serversAPI, hostID int64, ids []int64, n, ses int) {
-	back := listPath(KindProxy)
+func (m *Module) pageHostServers(w http.ResponseWriter, r *http.Request, a serversAPI, hostID int64, ids []int64, n, ses int, back string) {
 	got := map[int64]*ipv64api.CDN64Servers{}
 	var last *ipv64api.CDN64Servers
 	for _, id := range ids {

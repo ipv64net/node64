@@ -4,7 +4,7 @@
 
 ### Behoben
 - CDN64: Der Knopf für Server und Verbindungen in der Spalte CDN64 öffnet seinen Dialog jetzt auch in den Reitern
-  Statusseiten und Weiterleitungen (bisher nur unter Proxy-Hosts).
+  Statusseiten und Weiterleitungen (bisher nur unter Proxy-Hosts) und führt nach dem Speichern in diesen Reiter zurück.
 
 ## 1.48.0 – 2026-11-03
 

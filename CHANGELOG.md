@@ -4,7 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
-- DNS64: mDNS-Brücke – Namen wie drucker.local und Gerätenamen aus dem eigenen Netz kommen per mDNS, auch für Geräte im VPN und in anderen Netzen (Schalter in den Einstellungen, Standard aus). Eine eigene Endung des Routers erkennt DNS64 selbst.
+- DNS64: mDNS-Brücke – Namen wie drucker.local und Gerätenamen aus dem eigenen Netz kommen per mDNS, auch für Geräte im VPN und in anderen Netzen (Schalter in den Einstellungen, Standard aus). Mit dem Schalter erkennt DNS64 auch eine eigene Endung des Routers.
 - PROXY64: Der Knopf für Server und Verbindungen von CDN64 öffnet seinen Dialog jetzt auch unter Statusseiten und Weiterleitungen.
 
 ## 1.0.1 – 2026-11-05

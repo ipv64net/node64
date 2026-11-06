@@ -3728,7 +3728,7 @@
       "router_hint": "Names like fritz.box or .lan only go to this server, never to the internet. IPv4 or IPv6, optionally with port. Automatic: the gateway.",
       "router_domains": "Detected router suffix: {list} (goes to the router like .lan).",
       "mdns": "Resolve .local names and device names via mDNS in your own network",
-      "mdns_hint": "DNS64 asks the devices themselves for names like printer.local and passes them on as normal DNS – also to devices in other networks and in the VPN. Only works if Node64 is directly in the LAN (host network or macvlan).",
+      "mdns_hint": "DNS64 asks the devices themselves for names like printer.local and passes them on as normal DNS – also to devices in other networks and in the VPN. DNS64 also learns the router's own suffix (e.g. .home-net). Only works if Node64 is directly in the LAN (host network or macvlan).",
       "mdns_probing": "Checking …",
       "mdns_none": "No device answers at the moment – is Node64 behind the Docker bridge?",
       "mdns_now": "{n} devices answer at the moment.",

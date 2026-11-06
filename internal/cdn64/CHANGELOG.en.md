@@ -4,7 +4,7 @@
 
 ### Fixed
 - CDN64: the button for servers and connections in the CDN64 column now opens its dialog in the Status pages and
-  Redirects tabs too (so far only under Proxy hosts).
+  Redirects tabs too (so far only under Proxy hosts) and returns to that tab after saving.
 
 ## 1.48.0 – 2026-11-03
 

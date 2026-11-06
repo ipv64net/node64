@@ -264,14 +264,20 @@ func TestOnlineHostServers(t *testing.T) {
 	e.m.g.Flash = func(_ http.ResponseWriter, _ *http.Request, kind, text string) { flash = kind + ": " + text }
 	e.m.g.T = func(_ *http.Request, key string, _ ...any) string { return key }
 	e.m.g.Audit = func(*http.Request, string, string, string) {}
+	var back string
 	post := func(body string) {
 		req := httptest.NewRequest("POST", "/cdn64/online/servers", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		e.m.pageOnlineServers(httptest.NewRecorder(), req)
+		rec := httptest.NewRecorder()
+		e.m.pageOnlineServers(rec, req)
+		back = rec.Header().Get("Location")
 	}
 	post("host=" + strconv.FormatInt(hs[0].ID, 10) + "&count=2&sessions=2")
 	if !strings.HasPrefix(flash, "success") || !slices.Equal(f.setHost, []int64{1}) || len(f.setCount) != 0 {
 		t.Fatalf("set host: %q %v %v", flash, f.setHost, f.setCount)
+	}
+	if back != listPath(hs[0].Kind) { // zurueck in den Reiter des Hosts
+		t.Fatalf("back: %q", back)
 	}
 	if r := e.m.onlineIndex(ctx, hl)[hs[0].ID]; r == nil || r.Servers == nil || r.Servers.Count != 2 || r.Servers.CurSessions != 2 {
 		t.Fatalf("remote not updated: %+v", r)

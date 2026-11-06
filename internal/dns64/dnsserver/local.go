@@ -57,6 +57,10 @@ func searchBase(name string) string {
 	return ""
 }
 
+// IsLocalName: name geht nur an den Router, nie ins Internet (fest eingebaute Endungen, einteilige Namen, private
+// Rueckwaertssuchen).
+func IsLocalName(name string) bool { return isLocalName(name) }
+
 func isLocalName(name string) bool {
 	if name == "" {
 		return false

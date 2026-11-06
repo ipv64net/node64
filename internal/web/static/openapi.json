@@ -1021,6 +1021,10 @@
           "firefox_canary": {
             "type": "boolean",
             "description": "use-application-dns.net mit NXDOMAIN beantworten (Firefox schaltet sein DoH ab), Standard an"
+          },
+          "mdns": {
+            "type": "boolean",
+            "description": "mDNS-Bruecke: .local-Namen und Geraetenamen per mDNS im eigenen Netz aufloesen, dazu die eigene Endung des Routers lernen (je Node), Standard aus"
           }
         }
       },
@@ -8467,6 +8471,22 @@
                     },
                     "localSource": {
                       "type": "string"
+                    },
+                    "mdns": {
+                      "type": "object",
+                      "description": "Stand der mDNS-Bruecke",
+                      "properties": {
+                        "on": {"type": "boolean"},
+                        "queries": {"type": "integer", "description": "Multicast-Anfragen seit Start"},
+                        "answered": {"type": "integer", "description": "davon beantwortet"},
+                        "responders": {"type": "integer", "description": "Geraete bei der letzten Pruefung, -1 = noch nicht geprueft"},
+                        "probed_at": {"type": "string", "format": "date-time"}
+                      }
+                    },
+                    "localDomains": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "description": "vom Router gelernte Endungen (nur mit mDNS-Bruecke)"
                     },
                     "count": {
                       "type": "integer"
