@@ -286,20 +286,39 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	}
 
 	ownNet := s.Local != nil && s.Local.Addr() != "" && s.acl.ownPTR(name, q.Qtype) // nur mit Router umleiten
-	if (isLocalName(name) || ownNet) && !tldQuery(name, q.Qtype) {
+	learned := s.Local != nil && s.Local.LearnedLocal(name)                         // Endung des Routers, z. B. .zuhause
+	if (isLocalName(name) || ownNet || learned) && !tldQuery(name, q.Qtype) {
 		if fwd != nil { // eigene Weiterleitung vor dem Router, ungefiltert wie alle lokalen Namen
 			return s.forward(r, fwd, e, querylog.StatusLocal)
 		}
 		e.Status = querylog.StatusLocal
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if s.Local != nil && localnet.MDNSName(name) { // .local: zuerst die Geraete im eigenen Netz (mDNS-Bruecke)
+			if resp := s.Local.ExchangeMDNS(ctx, r); resp != nil {
+				e.Upstream = "mDNS"
+				return resp
+			}
+		}
 		if s.Local.Addr() != "" && !fromRouter {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
 			if resp, err := s.Local.Exchange(ctx, r); err == nil {
 				e.Upstream = "Router"
+				if q.Qtype == dns.TypePTR && (resp.Rcode == dns.RcodeNameError || len(resp.Answer) == 0) { // Router kennt das Geraet nicht
+					if m := s.Local.ExchangeMDNS(ctx, r); m != nil {
+						e.Upstream = "mDNS"
+						return m
+					}
+				}
 				if resp.Rcode == dns.RcodeNameError {
 					markSearchSuffix(name, e)
 				}
 				return resp
+			}
+		}
+		if q.Qtype == dns.TypePTR && s.Local != nil { // ohne Router: Rueckwaertssuche nur per mDNS
+			if m := s.Local.ExchangeMDNS(ctx, r); m != nil {
+				e.Upstream = "mDNS"
+				return m
 			}
 		}
 		markSearchSuffix(name, e)

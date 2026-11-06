@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.32.0"
+	version   = "1.33.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -322,6 +322,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)
 	e.up.SetTop(cfg.UpCount)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
+	e.local.SetMDNS(cfg.MDNS)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
 		Records: m, Split: m.split, Forward: m.forwardFor, Rewrite: m.rewriteFor, Zone: m.zoneAnswer, Updates: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
 		Policy: m.policy, Canary: cfg.Canary}
@@ -334,7 +335,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.enc = m.startEncrypted(cfg, e.srv)
 	ectx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
-	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }, func(ctx context.Context) { m.runPublished(ctx, e, cfg) }} {
+	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.local.RunMDNS, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }, func(ctx context.Context) { m.runPublished(ctx, e, cfg) }} {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}

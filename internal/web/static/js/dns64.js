@@ -231,7 +231,9 @@
 				box.append(card);
 			});
 			var addr = (d.localDNS || "").replace(/:53$/, "").replace(/^\[(.*)\]$/, "$1");
-			$("local-dns").textContent = d.localDNS ? t(d.localSource === "auto" ? "router_auto" : "router_config", { addr: addr }) : t("router_none");
+			var local = d.localDNS ? t(d.localSource === "auto" ? "router_auto" : "router_config", { addr: addr }) : t("router_none");
+			if (d.mdns && d.mdns.on && d.mdns.responders >= 0) { local += " · " + (d.mdns.responders > 0 ? t("mdns_on", { n: d.mdns.responders }) : t("mdns_silent")); }
+			$("local-dns").textContent = local;
 		});
 	}
 

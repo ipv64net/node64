@@ -1,5 +1,11 @@
 # Changes – DNS64
 
+## 1.33.0 – 2026-11-06
+
+### New
+- mDNS bridge (Settings, switch “.local names and device names via mDNS”, off by default): DNS64 asks the devices in your own network for names like printer.local and passes them on as normal DNS – also to devices in other networks and in the VPN. If the router doesn't know a device, its name for the query log and statistics also comes via mDNS. One-shot queries with a short wait and a cache, no multicast into other networks. Settings and overview show how many devices answer. Only works if Node64 is directly in the LAN (host network or macvlan).
+- DNS64 detects the router's own suffix (e.g. .home-net) from the device names and sends such names to the router like .lan. It never learns public domains.
+
 ## 1.32.0 – 2026-11-03
 
 ### New

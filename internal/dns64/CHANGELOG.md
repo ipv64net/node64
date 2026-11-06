@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.33.0 – 2026-11-06
+
+### Neu
+- mDNS-Brücke (Einstellungen, Schalter „.local-Namen und Gerätenamen per mDNS“, Standard aus): Namen wie drucker.local fragt DNS64 bei den Geräten im eigenen Netz nach und gibt sie als normales DNS weiter – auch an Geräte in anderen Netzen und im VPN. Kennt der Router ein Gerät nicht, kommt sein Name für Abfrage-Log und Statistik ebenfalls per mDNS. Einmalige Anfragen mit kurzer Wartezeit und Cache, kein Multicast in andere Netze. Die Einstellungen und die Übersicht zeigen, wie viele Geräte antworten. Wirkt nur, wenn Node64 direkt im LAN hängt (Host-Netz oder macvlan).
+- Eigene Endung des Routers (z. B. .zuhause) erkennt DNS64 aus den Gerätenamen und schickt solche Namen wie .lan an den Router. Öffentliche Domains lernt es nie.
+
 ## 1.32.0 – 2026-11-03
 
 ### Neu

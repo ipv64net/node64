@@ -37,6 +37,8 @@ type Resolver struct {
 	names   map[string]nameEntry
 
 	probes sync.Map // Pruefnamen der Router-Suche, die beim eigenen DNS-Dienst ankamen (= der Kandidat sind wir selbst)
+
+	md mdnsState // mDNS-Bruecke und gelernte Endungen des Routers (mdns.go)
 }
 
 // probeSuffix: Pruefname der Router-Suche. Kommt er beim eigenen DNS-Dienst an, ist der Kandidat diese Node selbst
@@ -74,6 +76,7 @@ type nameEntry struct {
 
 func New(static string, log *slog.Logger) *Resolver {
 	r := &Resolver{static: static, log: log, names: map[string]nameEntry{}}
+	r.md.kick, r.md.responders = make(chan struct{}, 1), -1
 	if static != "" {
 		r.addr, r.source = static, "config"
 	}
@@ -222,15 +225,20 @@ func (r *Resolver) lookup(ctx context.Context, ip string) (string, bool) {
 	req := new(dns.Msg)
 	req.SetQuestion(arpa, dns.TypePTR)
 	resp, err := r.Exchange(ctx, req)
-	if err != nil {
-		return "", false
-	}
-	for _, rr := range resp.Answer {
-		if p, ok := rr.(*dns.PTR); ok {
-			return strings.TrimSuffix(p.Ptr, "."), true
+	if err == nil {
+		for _, rr := range resp.Answer {
+			if p, ok := rr.(*dns.PTR); ok {
+				name := strings.TrimSuffix(p.Ptr, ".")
+				r.learnDomain(addr, name)
+				return name, true
+			}
 		}
 	}
-	return "", true
+	// Router kennt keinen Namen (oder es gibt keinen): Geraete im eigenen Netz per mDNS fragen
+	if name := r.mdnsPTR(ctx, arpa); name != "" {
+		return name, true
+	}
+	return "", err == nil
 }
 
 // isSelf schickt einen Pruefnamen an addr; kommt er beim eigenen DNS-Dienst an, ist addr diese Node selbst.

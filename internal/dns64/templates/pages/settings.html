@@ -47,7 +47,9 @@
 						<div class="col-12">
 							<label class="form-label" for="router">{{.T "dns64.settings.router"}}{{.Doc "dns64#lokale-namen"}}</label>
 							<div class="input-group"><span class="input-group-text"><i class="bi bi-router"></i></span><input type="text" class="form-control font-monospace" id="router" name="router" value="{{$d.Cfg.Router}}" placeholder="{{.T "dns64.settings.router_auto"}}"></div>
-							<div class="form-text">{{if and $d.Running $d.Router}}{{.T "dns64.settings.router_now" "addr" $d.Router}} {{else if $d.Running}}{{.T "dns64.settings.router_none"}} {{end}}{{.T "dns64.settings.router_hint"}}</div>
+							<div class="form-text">{{if and $d.Running $d.Router}}{{.T "dns64.settings.router_now" "addr" $d.Router}} {{else if $d.Running}}{{.T "dns64.settings.router_none"}} {{end}}{{.T "dns64.settings.router_hint"}}{{with $d.Domains}} {{$.T "dns64.settings.router_domains" "list" (join . ", ")}}{{end}}</div>
+							<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="mdns" name="mdns" value="1"{{if $d.Cfg.MDNS}} checked{{end}}><label class="form-check-label" for="mdns">{{.T "dns64.settings.mdns"}}</label>{{.Doc "dns64#mdns"}}</div>
+							<div class="form-text mt-0">{{.T "dns64.settings.mdns_hint"}}{{if and $d.Running $d.MDNS.On}} {{if lt $d.MDNS.Responders 0}}{{.T "dns64.settings.mdns_probing"}}{{else if eq $d.MDNS.Responders 0}}<span class="text-warning-emphasis">{{.T "dns64.settings.mdns_none"}}</span>{{else}}<span class="text-success">{{.T "dns64.settings.mdns_now" "n" $d.MDNS.Responders}}</span>{{end}}{{end}}</div>
 						</div>
 						<div class="col-sm-6">
 							<label class="form-label" for="block_mode">{{.T "dns64.settings.block_mode"}}</label>

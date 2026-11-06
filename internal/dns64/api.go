@@ -294,11 +294,13 @@ func (m *Module) apiLists(w http.ResponseWriter, r *http.Request, e *engine) {
 
 func (m *Module) apiUpstreams(w http.ResponseWriter, r *http.Request, e *engine) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"mode":        e.up.Mode(),
-		"count":       e.up.Top(),
-		"servers":     e.up.Stats(),
-		"localDNS":    e.local.Addr(),
-		"localSource": e.local.Source(),
+		"mode":         e.up.Mode(),
+		"count":        e.up.Top(),
+		"servers":      e.up.Stats(),
+		"localDNS":     e.local.Addr(),
+		"localSource":  e.local.Source(),
+		"mdns":         e.local.MDNS(),
+		"localDomains": e.local.Domains(),
 	})
 }
 
@@ -439,7 +441,7 @@ func (m *Module) denylist() (*filter.Allowlist, error) {
 // ---- Export/Import (module.Exporter) ----
 
 var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setListHours,
-	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
+	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setMDNS, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
 	setNotifyUpstream, setNotifyLists, setACMEDom, setACMEPre, setACMEMail, setACMEStage}
 
 type exportData struct {
