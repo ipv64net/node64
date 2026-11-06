@@ -24,6 +24,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("PUT /api/honeypot/config", api(m.apiConfigPut))
 	mux.Handle("GET /api/honeypot/catalog", api(m.apiCatalog))
 	mux.Handle("GET /api/honeypot/live", api(m.apiLive))
+	mux.Handle("POST /api/honeypot/cert", api(m.apiCert))
 }
 
 // apiCatalog liefert den Dienste-Katalog mit Auswahl und Zustand je Port (catalog.go). Gespeichert wird ueber

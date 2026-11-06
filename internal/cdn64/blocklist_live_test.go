@@ -275,6 +275,19 @@ func TestBlocklistLiveToken(t *testing.T) {
 	if strings.Contains(logs.String(), tokDaily) {
 		t.Fatal("token in log")
 	}
+	// Freigabeliste allein laesst die eingeschalteten Listen; enabled allein laesst die Freigabeliste
+	rec = api("PUT", `{"allow":["192.0.2.7"]}`)
+	if rec.Code != 200 || e.m.core.SettingOr(ctx, setBlocklists, "") != "v64" || e.m.core.SettingOr(ctx, setBlockAllow, "") != "192.0.2.7" {
+		t.Fatalf("allow only: %d %s lists=%q", rec.Code, rec.Body, e.m.core.SettingOr(ctx, setBlocklists, ""))
+	}
+	rec = api("PUT", `{"enabled":[]}`)
+	if rec.Code != 200 || e.m.core.SettingOr(ctx, setBlocklists, "") != "" || e.m.core.SettingOr(ctx, setBlockAllow, "") != "192.0.2.7" {
+		t.Fatalf("enabled only: %d %s", rec.Code, rec.Body)
+	}
+	rec = api("PUT", `{}`)
+	if rec.Code != 200 || e.m.core.SettingOr(ctx, setBlockAllow, "") != "192.0.2.7" {
+		t.Fatalf("empty body: %d %s", rec.Code, rec.Body)
+	}
 }
 
 // tokenAPI: ipv64 mit zentralem API-Key, liefert das Listen-Token (OnlineAPI eingebettet: andere Aufrufe nicht noetig).

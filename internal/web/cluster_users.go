@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ipv64net/node64/internal/peer"
+	"github.com/ipv64net/node64/internal/store"
 	"github.com/ipv64net/node64/internal/usercluster"
 )
 
@@ -145,21 +146,39 @@ func (s *Server) apiGroupUsers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) userDelete(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "sso.title")
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	u, err := s.Store.UserByID(r.Context(), id)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	if u == nil || u.ID == currentUser(r).ID {
+	u, err := s.deleteOtherUser(r, id)
+	if errors.Is(err, errUserSelf) || errors.Is(err, errUserUnknown) {
 		s.flash(w, r, "danger", v.T("sso.user_self"))
 		http.Redirect(w, r, "/settings/login#users", http.StatusSeeOther)
 		return
 	}
-	if _, err := s.Store.DeleteUser(r.Context(), u.ID); err != nil {
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	s.audit(r, "user.delete", u.Username, "")
 	s.flash(w, r, "success", v.T("sso.user_deleted", "name", u.Username))
 	http.Redirect(w, r, "/settings/login#users", http.StatusSeeOther)
+}
+
+var (
+	errUserSelf    = errors.New("the own user cannot be deleted")
+	errUserUnknown = errors.New("unknown user")
+)
+
+// deleteOtherUser loescht einen anderen Benutzer dieser Node (Oberflaeche und API); den eigenen nie.
+func (s *Server) deleteOtherUser(r *http.Request, id int64) (*store.User, error) {
+	u, err := s.Store.UserByID(r.Context(), id)
+	switch {
+	case err != nil:
+		return nil, err
+	case u == nil:
+		return nil, errUserUnknown
+	case u.ID == currentUser(r).ID:
+		return nil, errUserSelf
+	}
+	if _, err := s.Store.DeleteUser(r.Context(), u.ID); err != nil {
+		return nil, err
+	}
+	s.audit(r, "user.delete", u.Username, "")
+	return u, nil
 }

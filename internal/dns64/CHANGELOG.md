@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.34.0 – 2026-11-06
+
+### Neu
+- Lokale API: dynamische Updates einer Zone per `PUT /api/dns64/zones/{id}` (Feld `dynamic`) ein- und ausschalten, den TSIG-Schlüssel mit `GET /api/dns64/zones/{id}/tsig` abrufen und mit `POST …/tsig` erneuern – wie auf der Seite. In Listen steht der Schlüssel weiterhin nie.
+- Lokale API: `POST /api/dns64/groups/unassign` nimmt ein Gerät per MAC und/oder IP aus seiner Gruppe (wie „Keine Gruppe“).
+- API-Doku: eigene Sperrliste (`/api/dns64/denylist`) ergänzt.
+
 ## 1.33.0 – 2026-11-06
 
 ### Neu

@@ -547,17 +547,25 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusUnprocessableEntity, "settings", v)
 		return
 	}
-	if err := s.Store.UpdateUserPrefs(r.Context(), v.User.ID, f["lang"], f["timezone"]); err != nil {
+	if err := s.saveUserPrefs(r, v.User, f["lang"], f["timezone"]); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	if f["timezone"] != "" {
-		_ = s.Store.SetSetting(r.Context(), SettingNodeTimezone, f["timezone"])
-	}
 	s.setCookie(w, r, langCookie, f["lang"], 365*24*3600)
-	s.audit(r, "settings.user", v.User.Username, "lang="+f["lang"]+" timezone="+f["timezone"])
 	s.flash(w, r, "success", s.I18n.T(f["lang"], "common.saved"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// saveUserPrefs speichert Sprache und Zeitzone eines Benutzers (Oberflaeche und API); die Zeitzone gilt auch fuer die Node.
+func (s *Server) saveUserPrefs(r *http.Request, u *store.User, lang, tz string) error {
+	if err := s.Store.UpdateUserPrefs(r.Context(), u.ID, lang, tz); err != nil {
+		return err
+	}
+	if tz != "" {
+		_ = s.Store.SetSetting(r.Context(), SettingNodeTimezone, tz)
+	}
+	s.audit(r, "settings.user", u.Username, "lang="+lang+" timezone="+tz)
+	return nil
 }
 
 func (s *Server) settingsPassword(w http.ResponseWriter, r *http.Request) {

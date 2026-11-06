@@ -74,11 +74,13 @@ func (m *Module) protection(ctx context.Context, days int) (*ipv64api.CDN64Prote
 // protectionRow: Zeile der Tabelle je Name.
 type protectionRow struct {
 	ipv64api.CDN64ProtectionHost
-	Blocked, Overload int64
-	Link              string // Host dieser Node bzw. Modus 3 auf ipv64.net ("" = kein Ziel)
-	Ext               bool   // Link geht nach ipv64.net
-	WAF               bool
-	JA4               string // off, count, block ("" = unbekannt)
+	Blocked  int64  `json:"blocked"`
+	Overload int64  `json:"overload"`
+	HostID   int64  `json:"host_id,omitempty"` // Host dieser Node (0 = keiner)
+	Link     string `json:"-"`                 // Host dieser Node bzw. Modus 3 auf ipv64.net ("" = kein Ziel)
+	Ext      bool   `json:"-"`                 // Link geht nach ipv64.net
+	WAF      bool   `json:"waf"`
+	JA4      string `json:"ja4"` // off, count, block ("" = unbekannt)
 }
 
 type protectionData struct {
@@ -152,7 +154,7 @@ func (m *Module) protectionRows(ctx context.Context, hosts []ipv64api.CDN64Prote
 	for _, h := range hosts {
 		x := protectionRow{CDN64ProtectionHost: h, Blocked: h.Blocked(), Overload: h.Overload()}
 		if id := local[strings.ToLower(h.FQDN)]; id > 0 {
-			x.Link = "/cdn64/hosts/" + strconv.FormatInt(id, 10)
+			x.HostID, x.Link = id, "/cdn64/hosts/"+strconv.FormatInt(id, 10)
 		} else if h.Mode == 3 {
 			x.Link, x.Ext = "https://ipv64.net/cdn64?edit="+strconv.FormatInt(h.ID, 10), true
 		}
@@ -216,7 +218,7 @@ func (m *Module) pageProtectionSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	waf, ja4 := r.PostFormValue("waf") == "1", r.PostFormValue("ja4")
-	if ja4 != "off" && ja4 != "count" && ja4 != "block" {
+	if !validJA4(ja4) {
 		http.Error(w, "invalid ja4", http.StatusBadRequest)
 		return
 	}
@@ -235,6 +237,8 @@ func (m *Module) pageProtectionSet(w http.ResponseWriter, r *http.Request) {
 	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.protection.saved", "name", h.Names[0]))
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
+
+func validJA4(v string) bool { return v == "off" || v == "count" || v == "block" }
 
 // onlineProtect setzt WAF und JA4 bei ipv64 fuer alle Namen des Hosts und holt danach den Stand.
 func (m *Module) onlineProtect(ctx context.Context, h *Host, waf bool, ja4 string) error {

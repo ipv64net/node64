@@ -1238,29 +1238,7 @@ func (m *Module) pagePVEAsCheckAll(w http.ResponseWriter, r *http.Request) {
 	if !(strings.HasPrefix(back, pvePath+"/") || strings.HasPrefix(back, dockerPath)) || strings.Contains(back, "//") {
 		back = pveKeyPath(sys.Kind, sys.ID, "")
 	}
-	nodes := r.PostFormValue("scope") == "nodes"
-	set, _ := m.pve.st.Settings(r.Context(), sys.ID)
-	added, failed := 0, 0
-	var firstErr error
-	if s := m.pveLast(sys.ID); s != nil {
-		for i := range s.Resources {
-			res := &s.Resources[i]
-			if res.Excluded() || (res.Type == proxmox.TypeNode) != nodes {
-				continue
-			}
-			if it := set.Item(res.Key()); it != nil && it.AsCheck && it.CheckToken != "" {
-				continue
-			}
-			if err := m.pveSetAsCheck(r, sys, res.Key(), true); err != nil {
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
-				continue
-			}
-			added++
-		}
-	}
+	added, failed, firstErr := m.pveAsCheckAll(r, sys, r.PostFormValue("scope") == "nodes")
 	switch {
 	case failed > 0:
 		msg := firstErr.Error()
@@ -1275,6 +1253,34 @@ func (m *Module) pagePVEAsCheckAll(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, "success", m.g.T(r, "pve.check.all_added", "count", added))
 	}
 	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+// pveAsCheckAll nimmt alle Nodes (nodes) bzw. alle Gaeste und Container des letzten Abrufs als Check auf, die es noch
+// nicht sind (Oberflaeche und API). firstErr ist der erste Fehler (die uebrigen werden trotzdem versucht).
+func (m *Module) pveAsCheckAll(r *http.Request, sys *proxmox.System, nodes bool) (added, failed int, firstErr error) {
+	set, _ := m.pve.st.Settings(r.Context(), sys.ID)
+	s := m.pveLast(sys.ID)
+	if s == nil {
+		return 0, 0, nil
+	}
+	for i := range s.Resources {
+		res := &s.Resources[i]
+		if res.Excluded() || (res.Type == proxmox.TypeNode) != nodes {
+			continue
+		}
+		if it := set.Item(res.Key()); it != nil && it.AsCheck && it.CheckToken != "" {
+			continue
+		}
+		if err := m.pveSetAsCheck(r, sys, res.Key(), true); err != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		added++
+	}
+	return added, failed, firstErr
 }
 
 // ---------------------------------------------------------------- Ein-/Ausschalten, Loeschen

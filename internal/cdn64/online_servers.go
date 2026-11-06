@@ -224,42 +224,62 @@ func (m *Module) pageOnlineServers(w http.ResponseWriter, r *http.Request) {
 		m.pageHostServers(w, r, a, hid, ids, n, ses, back)
 		return
 	}
-	s, err := a.SetServers(r.Context(), c.Tunnel, n, ses)
+	s, err := m.setTunnelServers(r.Context(), a, c.Tunnel, n, ses)
 	if err != nil {
 		m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.online.servers_failed", "error", err.Error()))
 		http.Redirect(w, r, back, http.StatusSeeOther)
 		return
 	}
 	m.g.Audit(r, "cdn64.online.servers", strconv.Itoa(n)+"x"+strconv.Itoa(ses), strings.Join(s.Assigned, ","))
-	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil { // Anzeige sofort, Abgleich gleich danach
+	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.online.servers_saved", "list", strings.Join(s.Assigned, ", "), "n", s.Sessions))
+	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+// setTunnelServers: Server und Verbindungen des eigenen Tunnels setzen, Anzeige sofort, Abgleich gleich danach.
+func (m *Module) setTunnelServers(ctx context.Context, a serversAPI, tunnel string, n, ses int) (*ipv64api.CDN64Servers, error) {
+	s, err := a.SetServers(ctx, tunnel, n, ses)
+	if err != nil {
+		return nil, err
+	}
+	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil {
 		ov := *rm.Data
 		ov.Tunnels = slices.Clone(ov.Tunnels)
 		for i := range ov.Tunnels {
-			if ov.Tunnels[i].ID == c.Tunnel {
+			if ov.Tunnels[i].ID == tunnel {
 				ov.Tunnels[i].Servers, ov.Tunnels[i].Sessions = s, s.Sessions
 			}
 		}
 		m.onlineSetRemote(&ov, nil)
 	}
 	m.onlineKick()
-	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.online.servers_saved", "list", strings.Join(s.Assigned, ", "), "n", s.Sessions))
+	return s, nil
+}
+
+// pageHostServers: Auswahl fuer alle Namen eines Proxy-Hosts (ids) setzen.
+func (m *Module) pageHostServers(w http.ResponseWriter, r *http.Request, a serversAPI, hostID int64, ids []int64, n, ses int, back string) {
+	last, err := m.setHostServers(r.Context(), a, ids, n, ses)
+	if err != nil {
+		m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.online.servers_failed", "error", err.Error()))
+		http.Redirect(w, r, back, http.StatusSeeOther)
+		return
+	}
+	m.g.Audit(r, "cdn64.online.servers", strconv.FormatInt(hostID, 10)+": "+strconv.Itoa(n)+"x"+strconv.Itoa(ses), strings.Join(last.Assigned, ","))
+	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.online.servers_saved", "list", strings.Join(last.Assigned, ", "), "n", last.Sessions))
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
-// pageHostServers: Auswahl fuer alle Namen eines Proxy-Hosts (ids) setzen, Anzeige sofort, Abgleich gleich danach.
-func (m *Module) pageHostServers(w http.ResponseWriter, r *http.Request, a serversAPI, hostID int64, ids []int64, n, ses int, back string) {
+// setHostServers: Auswahl fuer alle Namen eines Proxy-Hosts (ids) setzen, Anzeige sofort, Abgleich gleich danach;
+// liefert den Stand des letzten Namens.
+func (m *Module) setHostServers(ctx context.Context, a serversAPI, ids []int64, n, ses int) (*ipv64api.CDN64Servers, error) {
 	got := map[int64]*ipv64api.CDN64Servers{}
 	var last *ipv64api.CDN64Servers
 	for _, id := range ids {
-		s, err := a.SetHostServers(r.Context(), id, n, ses)
+		s, err := a.SetHostServers(ctx, id, n, ses)
 		if err != nil {
-			m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.online.servers_failed", "error", err.Error()))
-			http.Redirect(w, r, back, http.StatusSeeOther)
-			return
+			return nil, err
 		}
 		got[id], last = s, s
 	}
-	m.g.Audit(r, "cdn64.online.servers", strconv.FormatInt(hostID, 10)+": "+strconv.Itoa(n)+"x"+strconv.Itoa(ses), strings.Join(last.Assigned, ","))
 	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil {
 		ov := *rm.Data
 		ov.Hosts = slices.Clone(ov.Hosts)
@@ -271,8 +291,7 @@ func (m *Module) pageHostServers(w http.ResponseWriter, r *http.Request, a serve
 		m.onlineSetRemote(&ov, nil)
 	}
 	m.onlineKick()
-	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.online.servers_saved", "list", strings.Join(last.Assigned, ", "), "n", last.Sessions))
-	http.Redirect(w, r, back, http.StatusSeeOther)
+	return last, nil
 }
 
 // rowsModal: Auswahl fuer den Dialog "Server und Verbindungen" aus der ersten Zeile mit Knopf (Server je Name, gleiche

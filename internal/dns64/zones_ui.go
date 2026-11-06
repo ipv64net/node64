@@ -1,6 +1,7 @@
 package dns64
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -25,6 +26,8 @@ func (m *Module) zoneRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dns64/zones/{id}/zonefile", h(m.pageZoneFile))
 	mux.Handle("POST /dns64/zones/{id}/tsig", h(m.pageZoneTSIG))
 	mux.Handle("GET /api/dns64/zones/{id}/zonefile", h(m.pageZoneFile))
+	mux.Handle("GET /api/dns64/zones/{id}/tsig", h(m.apiZoneTSIG(false)))
+	mux.Handle("POST /api/dns64/zones/{id}/tsig", h(m.apiZoneTSIG(true)))
 }
 
 func (m *Module) pageZoneSave(w http.ResponseWriter, r *http.Request) {
@@ -91,22 +94,67 @@ func (m *Module) apiZones(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiZoneSave(w http.ResponseWriter, r *http.Request) {
-	var in Zone
+	var in struct {
+		Zone
+		Dynamic *bool `json:"dynamic"` // dynamische Updates (RFC 2136); fehlt = unveraendert
+	}
 	if !decode(w, r, &in) {
 		return
 	}
-	var err error
+	z, err := in.Zone, error(nil)
 	status := http.StatusCreated
 	if id := pathID(r); id > 0 {
-		in, err = m.UpdateZone(r.Context(), id, in)
+		z, err = m.UpdateZone(r.Context(), id, z)
 		status = http.StatusOK
 	} else {
-		in, err = m.AddZone(r.Context(), in)
+		z, err = m.AddZone(r.Context(), z)
+	}
+	if err == nil && in.Dynamic != nil { // erstes Einschalten erzeugt den Schluessel
+		err = m.SetZoneDynamic(r.Context(), z.ID, *in.Dynamic, false)
 	}
 	if err == nil {
-		m.audit(r, "dns64.zone."+map[bool]string{true: "add", false: "edit"}[status == http.StatusCreated], in.Name, "")
+		m.audit(r, "dns64.zone."+map[bool]string{true: "add", false: "edit"}[status == http.StatusCreated], z.Name, "")
+		if cur, ok := m.zoneByID(r.Context(), z.ID); ok {
+			z = cur
+		}
 	}
-	m.apiResult(w, r, err, status, in)
+	m.apiResult(w, r, err, status, z)
+}
+
+// zoneByID liefert eine Zone mit Schluessel.
+func (m *Module) zoneByID(ctx context.Context, id int64) (Zone, bool) {
+	zones, err := m.Zones(ctx)
+	if err != nil {
+		return Zone{}, false
+	}
+	for _, z := range zones {
+		if z.ID == id {
+			return z, true
+		}
+	}
+	return Zone{}, false
+}
+
+// apiZoneTSIG zeigt den Schluessel fuer dynamische Updates wie die Seite (GET) oder erzeugt einen neuen und schaltet
+// dynamische Updates ein (POST, der alte gilt sofort nicht mehr). Nur hier steht das Secret, in Listen nie.
+func (m *Module) apiZoneTSIG(renew bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := pathID(r)
+		if renew {
+			if err := m.SetZoneDynamic(r.Context(), id, true, true); err != nil {
+				m.apiResult(w, r, err, 0, nil)
+				return
+			}
+			m.audit(r, "dns64.zone.tsig", r.PathValue("id"), "")
+		}
+		z, ok := m.zoneByID(r.Context(), id)
+		if !ok {
+			m.apiResult(w, r, errNotFound, 0, nil)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"zone": z.Name, "dynamic": z.Dynamic, "algorithm": "hmac-sha256",
+			"tsig_name": z.TSIGName, "tsig_secret": z.TSIGSecret})
+	}
 }
 
 func (m *Module) apiZoneDelete(w http.ResponseWriter, r *http.Request) {

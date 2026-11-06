@@ -28,6 +28,7 @@ func (m *Module) pveAPIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) htt
 	mux.Handle("GET "+p+"/systems/{id}/settings", api(m.apiPVESettings))
 	mux.Handle("PUT "+p+"/systems/{id}/settings", api(m.apiPVESettingsPut))
 	mux.Handle("DELETE "+p+"/systems/{id}/settings", api(m.apiPVESettingsDelete))
+	mux.Handle("POST "+p+"/systems/{id}/ascheck-all", api(m.apiPVEAsCheckAll))
 	// Docker-Hosts (Kind docker): dieselben Handler unter /api/healthchecks/docker (die Liste nur mit Docker-Hosts)
 	const d = "/api/healthchecks/docker"
 	mux.Handle("GET "+d+"/systems", api(m.apiDockerSystems))
@@ -40,6 +41,9 @@ func (m *Module) pveAPIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) htt
 	mux.Handle("GET "+d+"/systems/{id}/settings", api(m.apiPVESettings))
 	mux.Handle("PUT "+d+"/systems/{id}/settings", api(m.apiPVESettingsPut))
 	mux.Handle("DELETE "+d+"/systems/{id}/settings", api(m.apiPVESettingsDelete))
+	mux.Handle("POST "+d+"/systems/{id}/ascheck-all", api(m.apiPVEAsCheckAll))
+	mux.Handle("POST "+d+"/probe", api(m.apiDockerProbe))
+	mux.Handle("POST "+d+"/enable", api(m.apiDockerEnable))
 }
 
 // pveSystemJSON ist ein System in der API (ohne Secret) mit seinem Zustand.
@@ -60,6 +64,7 @@ type pveSystemJSON struct {
 	Bad         int                  `json:"guests_bad"`
 	PBS         *proxmox.PBSInfo     `json:"pbs,omitempty"`      // nur Proxmox Backup Server: Datastores
 	Storages    []proxmox.PVEStorage `json:"storages,omitempty"` // nur Proxmox VE: Speicher
+	Credentials *dockerCredsJSON     `json:"credentials,omitempty"`
 }
 
 func (m *Module) pveJSON(ctx context.Context, sys *proxmox.System) pveSystemJSON {
@@ -71,10 +76,12 @@ func (m *Module) pveJSON(ctx context.Context, sys *proxmox.System) pveSystemJSON
 		out.LastPoll, out.Version, out.Cluster, out.Quorate, out.Address, out.PBS = &t, s.Version, s.Cluster, s.Quorate, s.Address, s.PBS
 		out.Storages = s.Storages
 	}
+	out.Credentials = dockerCredsOf(sys)
 	return out
 }
 
-// pveSystemIn ist der Body beim Anlegen/Aendern (Kind nur beim Anlegen und Testen: pve oder pbs).
+// pveSystemIn ist der Body beim Anlegen/Aendern (Kind nur beim Anlegen und Testen: pve oder pbs). Docker-Hosts nehmen
+// die Zugangsdaten entweder ganz als secret oder einzeln (private_key, cert, ca, generate_key; siehe dockerAPICreds).
 type pveSystemIn struct {
 	Kind      string   `json:"kind"`
 	Name      *string  `json:"name"`
@@ -84,6 +91,7 @@ type pveSystemIn struct {
 	PinSHA256 *string  `json:"pin_sha256"`
 	Interval  *int     `json:"interval"`
 	Enabled   *bool    `json:"enabled"`
+	dockerCredsIn
 }
 
 func (in pveSystemIn) apply(sys *proxmox.System) {
@@ -176,6 +184,10 @@ func (m *Module) apiDockerCreate(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(sys.Name) == "" {
 		sys.Name = "Docker"
 	}
+	if err := m.dockerAPIPrepare(r.Context(), nil, sys, in); err != nil {
+		m.pveAPIErr(w, err)
+		return
+	}
 	if err := m.pveSaveSystem(r, sys); err != nil {
 		m.pveAPIErr(w, err)
 		return
@@ -203,6 +215,10 @@ func (m *Module) apiPVECreate(w http.ResponseWriter, r *http.Request) {
 	if !pveKindIn(w, in.Kind, sys) {
 		return
 	}
+	if err := in.dockerCredsIn.only(sys); err != nil {
+		m.pveAPIErr(w, err)
+		return
+	}
 	in.apply(sys)
 	if strings.TrimSpace(sys.Name) == "" {
 		sys.Name = pveHostOf(sys.Kind, sys.Addresses)
@@ -225,7 +241,17 @@ func (m *Module) apiPVEUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
+	old := *sys
 	in.apply(sys)
+	if sys.IsDocker() {
+		if err := m.dockerAPIPrepare(r.Context(), &old, sys, in); err != nil {
+			m.pveAPIErr(w, err)
+			return
+		}
+	} else if err := in.dockerCredsIn.only(sys); err != nil {
+		m.pveAPIErr(w, err)
+		return
+	}
 	if err := m.pveSaveSystem(r, sys); err != nil {
 		m.pveAPIErr(w, err)
 		return
@@ -275,7 +301,11 @@ func (m *Module) apiPVEProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	in.apply(&sys)
 	if sys.IsDocker() {
-		m.pveAPIErr(w, &proxmox.FieldError{Field: "kind", Key: "pve.err.kind"}) // Docker-Hosts brauchen keinen Test
+		m.pveAPIErr(w, &proxmox.FieldError{Field: "kind", Key: "pve.err.kind"}) // Docker-Hosts: POST /api/healthchecks/docker/probe
+		return
+	}
+	if err := in.dockerCredsIn.only(&sys); err != nil {
+		m.pveAPIErr(w, err)
 		return
 	}
 	if sys.Secret == "" && old != nil {
@@ -386,7 +416,7 @@ func (m *Module) apiPVESettings(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiPVESettingsPut setzt die Einstellungen einer Ebene (?key=, leer = System). as_check legt den Check an bzw.
-// loescht ihn; check_token wird nicht uebernommen.
+// loescht ihn (name: eigener Name fuer einen neuen Check); check_token wird nicht uebernommen.
 func (m *Module) apiPVESettingsPut(w http.ResponseWriter, r *http.Request) {
 	sys := m.pveAPISystem(w, r)
 	if sys == nil {
@@ -400,6 +430,7 @@ func (m *Module) apiPVESettingsPut(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Muted         *bool            `json:"muted"`
 		AsCheck       *bool            `json:"as_check"`
+		Name          string           `json:"name"`           // nur mit as_check: Name des neuen Checks (leer = "System – Eintrag")
 		ExpectRunning json.RawMessage  `json:"expect_running"` // true, false, null (automatisch); fehlt = unveraendert
 		Rules         *proxmox.RuleSet `json:"rules"`
 	}
@@ -409,7 +440,7 @@ func (m *Module) apiPVESettingsPut(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	if in.AsCheck != nil && key != "" {
-		if err := m.pveSetAsCheck(r, sys, key, *in.AsCheck); err != nil {
+		if err := m.pveSetAsCheckNamed(r, sys, key, *in.AsCheck, strings.TrimSpace(in.Name)); err != nil {
 			var fe *proxmox.FieldError
 			if errors.As(err, &fe) {
 				m.pveAPIErr(w, err)
@@ -480,6 +511,31 @@ func (m *Module) apiPVESettingsDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	m.auditText(r, "proxmox.settings_reset", sys.Name+pveKeySuffix(key))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// apiPVEAsCheckAll nimmt alle Gaeste bzw. Container (?scope=nodes: alle Nodes) des letzten Abrufs als Check auf, die es
+// noch nicht sind – wie der Knopf „Alle als Check“. Antwort: added, failed und der erste Fehler.
+func (m *Module) apiPVEAsCheckAll(w http.ResponseWriter, r *http.Request) {
+	sys := m.pveAPISystem(w, r)
+	if sys == nil {
+		return
+	}
+	scope := r.URL.Query().Get("scope")
+	if scope != "" && scope != "nodes" && scope != "guests" {
+		writeErr(w, http.StatusBadRequest, "scope must be guests or nodes")
+		return
+	}
+	added, failed, err := m.pveAsCheckAll(r, sys, scope == "nodes")
+	out := map[string]any{"added": added, "failed": failed}
+	if err != nil {
+		var fe *proxmox.FieldError
+		if errors.As(err, &fe) {
+			out["error"], out["key"] = m.translator("en")(fe.Key), fe.Key
+		} else {
+			out["error"] = err.Error()
+		}
+	}
+	writeJSON(w, http.StatusOK, out) // jeder neue Check steht schon im Audit (check.create)
 }
 
 // pveNodeOf: Node eines Gasts laut letztem Snapshot.

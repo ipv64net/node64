@@ -1,5 +1,20 @@
 # Änderungen – PROXY64
 
+## 1.49.0 – 2026-11-06
+
+### Neu
+- API: alles, was die Oberfläche kann, geht jetzt auch über die lokale API – Docker-Abgleich einstellen
+  (`PUT /api/cdn64/docker`), automatische Sperre aufheben und freigeben in einem Aufruf (`POST /api/cdn64/release`),
+  Namen in DNS64 eintragen (`POST /api/cdn64/hosts/{id}/localdns`), CDN64 Statistik und Schutz WAF/JA4 je Host
+  (`GET /api/cdn64/protection`, `PUT /api/cdn64/hosts/{id}/protection`), CDN64-Server und Verbindungen je Host bzw. Tunnel
+  (`GET`/`PUT /api/cdn64/hosts/{id}/servers`, `/api/cdn64/online/servers`).
+- API: Zertifikat beim Anlegen eines Hosts auch selbst signiert oder von der eigenen CA (`source` self bzw. ca mit
+  `ca_id`), Nutzungsbedingungen von Let's Encrypt gleich mit annehmen (`accept_tos`).
+
+### Behoben
+- API: `PUT /api/cdn64/blocklists` nur mit der Freigabeliste schaltet die eingeschalteten Blocklisten nicht mehr aus;
+  fehlende Felder bleiben unverändert.
+
 ## 1.48.1 – 2026-11-05
 
 ### Behoben

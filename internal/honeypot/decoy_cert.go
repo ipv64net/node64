@@ -3,6 +3,7 @@ package honeypot
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/netip"
@@ -300,81 +301,123 @@ func decoyRecords(ctx context.Context, d decoyDNS, zone string, names []string, 
 	return out, nil
 }
 
-// pageCert legt ein Zertifikat fuer Koeder-Namen an (Weg der Verwaltung), waehlt es in der Einstellung und legt auf
-// Wunsch die DNS-Records an.
-func (m *Module) pageCert(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	back := func(kind, text string) {
-		m.g.Flash(w, r, kind, text)
-		http.Redirect(w, r, "/honeypot/settings#zertifikat", http.StatusSeeOther)
-	}
+// decoyErr ist ein Fehler beim Anlegen des Koeder-Zertifikats: Text-Schluessel (honeypot.err.… in der Form von
+// errText), Fehlercode und Status fuer die API.
+type decoyErr struct {
+	key    string
+	code   string
+	status int
+	err    error
+}
+
+// decoyResult ist das Ergebnis von createDecoyCert.
+type decoyResult struct {
+	Cert      *certs.Cert
+	Names     []string
+	Selected  bool        // in der Einstellung gewaehlt
+	DNSWanted bool        // Ziele fuer Records angegeben
+	DNS       []DNSResult // je Name und Typ
+	DNSErr    error       // Records nicht angelegt (z. B. kein Key)
+}
+
+// badInput: Pruefung mit Text-Schluessel honeypot.err.<code>|… (422).
+func badInput(key string) *decoyErr {
+	code, _, _ := strings.Cut(strings.TrimPrefix(key, "honeypot.err."), "|")
+	return &decoyErr{key: key, code: code, status: http.StatusUnprocessableEntity}
+}
+
+// createDecoyCert legt ein Zertifikat fuer Koeder-Namen an (Weg der Verwaltung), waehlt es in der Einstellung und
+// legt auf Wunsch die DNS-Records an (Seite und API).
+func (m *Module) createDecoyCert(ctx context.Context, domain, rawNames, rawTargets string) (decoyResult, *decoyErr) {
+	var res decoyResult
 	if m.certs == nil {
-		back("danger", m.g.T(r, "honeypot.cert.unavailable"))
-		return
+		return res, &decoyErr{key: "honeypot.cert.unavailable", code: "unavailable", status: http.StatusServiceUnavailable}
 	}
 	if !m.certs.DNSReady(ctx) {
-		back("danger", m.g.T(r, "honeypot.cert.nokey"))
-		return
+		return res, &decoyErr{key: "honeypot.cert.nokey", code: "no_key", status: http.StatusConflict}
 	}
-	domain := strings.ToLower(strings.TrimSpace(r.PostFormValue("cert_domain")))
+	domain = strings.ToLower(strings.TrimSpace(domain))
 	domains, err := m.certs.Domains(ctx)
 	if err != nil {
-		back("danger", m.g.T(r, "honeypot.cert.err_domains", "error", err.Error()))
-		return
+		return res, &decoyErr{key: "honeypot.cert.err_domains", code: "domains", status: http.StatusBadGateway, err: err}
 	}
 	if !slices.Contains(domains, domain) {
-		back("danger", m.errText(r, "honeypot.err.cert_domain"))
-		return
+		return res, badInput("honeypot.err.cert_domain")
 	}
-	names, bad := DecoyNames(r.PostFormValue("cert_names"), domain)
+	names, bad := DecoyNames(rawNames, domain)
 	if bad != "" {
-		back("danger", m.errText(r, bad))
-		return
+		return res, badInput(bad)
 	}
-	targets, bad := dnsTargets(r.PostFormValue("dns_target"))
+	targets, bad := dnsTargets(rawTargets)
 	if bad != "" {
-		back("danger", m.errText(r, bad))
-		return
+		return res, badInput(bad)
 	}
 	crt, err := m.certs.Create(ctx, certs.Request{Names: names, Source: certs.SourceIPv64})
 	var ve *certs.ValidationError
 	switch {
 	case errors.Is(err, certs.ErrTOS):
-		back("danger", m.g.T(r, "honeypot.cert.err_tos"))
-		return
+		return res, &decoyErr{key: "honeypot.cert.err_tos", code: "tos", status: http.StatusConflict}
 	case errors.Is(err, certs.ErrNoKey):
-		back("danger", m.g.T(r, "honeypot.cert.nokey"))
-		return
+		return res, &decoyErr{key: "honeypot.cert.nokey", code: "no_key", status: http.StatusConflict}
 	case errors.As(err, &ve):
-		back("danger", m.g.T(r, "honeypot.cert.err_create", "error", ve.Error()))
-		return
+		return res, &decoyErr{key: "honeypot.cert.err_create", code: "create", status: http.StatusUnprocessableEntity, err: ve}
 	case err != nil:
 		m.log.Error("honeypot: certificate not created", "err", err)
-		back("danger", m.g.T(r, "honeypot.cert.err_create", "error", err.Error()))
-		return
+		return res, &decoyErr{key: "honeypot.cert.err_create", code: "create", status: http.StatusInternalServerError, err: err}
 	}
+	res.Cert, res.Names, res.Selected, res.DNSWanted = crt, names, true, len(targets) > 0
 	c := m.loadConfig(ctx)
 	c.CertID = crt.ID
-	details := "cert=" + strconv.FormatInt(crt.ID, 10) + " names=" + strings.Join(names, ",")
-	msg, kind := m.g.T(r, "honeypot.cert.created", "names", strings.Join(names, ", ")), "success"
 	if _, err := m.SaveConfig(ctx, c); err != nil { // z. B. andere Einstellung inzwischen ungueltig: von Hand waehlen
 		m.log.Warn("honeypot: certificate created but not selected", "id", crt.ID, "err", err)
+		res.Selected = false
+	}
+	if res.DNSWanted {
+		if d := m.dnsRecords(ctx); d == nil {
+			res.DNSErr = errors.New("no ipv64 API key")
+		} else {
+			res.DNS, res.DNSErr = decoyRecords(ctx, d, domain, names, targets)
+		}
+	}
+	return res, nil
+}
+
+// decoyErrText: Meldung fuer die Seite.
+func (m *Module) decoyErrText(r *http.Request, e *decoyErr) string {
+	switch {
+	case strings.HasPrefix(e.key, "honeypot.err."):
+		return m.errText(r, e.key)
+	case e.err != nil:
+		return m.g.T(r, e.key, "error", e.err.Error())
+	}
+	return m.g.T(r, e.key)
+}
+
+// pageCert legt ein Zertifikat fuer Koeder-Namen an (Weg der Verwaltung), waehlt es in der Einstellung und legt auf
+// Wunsch die DNS-Records an.
+func (m *Module) pageCert(w http.ResponseWriter, r *http.Request) {
+	back := func(kind, text string) {
+		m.g.Flash(w, r, kind, text)
+		http.Redirect(w, r, "/honeypot/settings#zertifikat", http.StatusSeeOther)
+	}
+	res, e := m.createDecoyCert(r.Context(), r.PostFormValue("cert_domain"), r.PostFormValue("cert_names"), r.PostFormValue("dns_target"))
+	if e != nil {
+		back("danger", m.decoyErrText(r, e))
+		return
+	}
+	names, crt := res.Names, res.Cert
+	details := "cert=" + strconv.FormatInt(crt.ID, 10) + " names=" + strings.Join(names, ",")
+	msg, kind := m.g.T(r, "honeypot.cert.created", "names", strings.Join(names, ", ")), "success"
+	if !res.Selected {
 		msg, kind = m.g.T(r, "honeypot.cert.created_unselected", "names", strings.Join(names, ", ")), "warning"
 	}
-	if len(targets) > 0 {
-		var res []DNSResult
-		d := m.dnsRecords(ctx)
-		if d == nil {
-			err = errors.New("no ipv64 API key")
-		} else {
-			res, err = decoyRecords(ctx, d, domain, names, targets)
-		}
-		if err != nil {
-			msg += " " + m.g.T(r, "honeypot.cert.dns_failed", "error", err.Error())
+	if res.DNSWanted {
+		if res.DNSErr != nil {
+			msg += " " + m.g.T(r, "honeypot.cert.dns_failed", "error", res.DNSErr.Error())
 			kind = "warning"
 		} else {
 			var created, exists, failed []string
-			for _, x := range res {
+			for _, x := range res.DNS {
 				switch x.Result {
 				case "created":
 					created = append(created, x.Name+" "+x.Type)
@@ -400,4 +443,60 @@ func (m *Module) pageCert(w http.ResponseWriter, r *http.Request) {
 	m.log.Info("decoy certificate requested", "id", crt.ID, "names", strings.Join(names, ","), "by", m.g.Actor(r))
 	m.g.Audit(r, "honeypot.config", "cert", details)
 	back(kind, msg)
+}
+
+// apiCert ist POST /api/honeypot/cert: wie die Seite (Zertifikat ueber ipv64 DNS-01, Auswahl, Records auf Wunsch).
+func (m *Module) apiCert(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Domain     string   `json:"domain"`
+		Names      []string `json:"names"`       // Koeder-Namen (mail oder mail.<domain>), kein Wildcard
+		DNSTargets []string `json:"dns_targets"` // IPv4 und/oder IPv6 oder ein Name (CNAME); leer = keine Records
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	res, e := m.createDecoyCert(r.Context(), in.Domain, strings.Join(in.Names, ","), strings.Join(in.DNSTargets, ","))
+	if e != nil {
+		msg := e.key
+		if m.g.T != nil {
+			msg = m.decoyErrText(r, e)
+		} else if e.err != nil {
+			msg = e.err.Error()
+		}
+		apiJSON(w, e.status, map[string]string{"error": e.code, "message": msg})
+		return
+	}
+	type dnsJSON struct {
+		Name   string `json:"name"`
+		Type   string `json:"type"`
+		Result string `json:"result"` // created, exists, error
+		Error  string `json:"error,omitempty"`
+	}
+	out := struct {
+		CertID   int64     `json:"cert_id"`
+		Names    []string  `json:"names"`
+		Selected bool      `json:"selected"`
+		DNS      []dnsJSON `json:"dns"`
+		DNSError string    `json:"dns_error,omitempty"`
+	}{CertID: res.Cert.ID, Names: res.Names, Selected: res.Selected, DNS: []dnsJSON{}}
+	created := 0
+	for _, x := range res.DNS {
+		out.DNS = append(out.DNS, dnsJSON{Name: x.Name, Type: x.Type, Result: x.Result, Error: x.Error})
+		if x.Result == "created" {
+			created++
+		}
+	}
+	if res.DNSErr != nil {
+		out.DNSError = res.DNSErr.Error()
+	}
+	details := "cert=" + strconv.FormatInt(res.Cert.ID, 10) + " names=" + strings.Join(res.Names, ",")
+	if res.DNSWanted && res.DNSErr == nil {
+		details += " dns=" + strconv.Itoa(created)
+	}
+	m.log.Info("decoy certificate requested", "id", res.Cert.ID, "names", strings.Join(res.Names, ","), "via", "api", "by", m.g.Actor(r))
+	m.g.Audit(r, "honeypot.config", "cert", details)
+	apiJSON(w, http.StatusAccepted, out) // der Abruf laeuft im Hintergrund
 }

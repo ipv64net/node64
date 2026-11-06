@@ -1,5 +1,11 @@
 # Änderungen – Honeypot64
 
+## 0.20.0 – 2026-11-06
+
+### Neu
+- Lokale API für die Frühwarnung: eigene Netze auflisten, eintragen und entfernen, Treffer sofort abrufen (`/api/honeypot/watch`, `…/watch/check`, `…/watch/{id}`).
+- Lokale API: `POST /api/honeypot/cert` legt wie die Seite ein Zertifikat für Köder-Namen an, wählt es aus und legt auf Wunsch die DNS-Records bei ipv64 an.
+
 ## 0.19.0 – 2026-11-02
 
 ### Neu

@@ -1,5 +1,10 @@
 # Changes – DynDNS updater
 
+## 1.6.0 – 2026-11-06
+
+### New
+- Local API: `PUT /api/dyndns/cluster` selects the preferred node in the cluster (like on the page).
+
 ## 1.5.2 – 2026-11-02
 
 ### Changed

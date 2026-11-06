@@ -130,6 +130,14 @@ func (s *Server) linkStart(w http.ResponseWriter, r *http.Request) {
 
 // linkStatus wird von der Seite per JS abgefragt; solange ein Code offen ist, wird beim hub nachgefragt.
 func (s *Server) linkStatus(w http.ResponseWriter, r *http.Request) {
+	out := s.linkStatusJSON(r)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// linkStatusJSON: Stand der Verknuepfung per Code (Seite und API); bei offenem Code wird beim hub nachgefragt.
+func (s *Server) linkStatusJSON(r *http.Request) map[string]any {
 	st := s.Sync.State()
 	out := map[string]any{"linked": st.Linked, "connected": st.Connected, "code": st.PendingCode, "hub": st.Hub, "error": st.LastError, "requesting": st.Requesting}
 	if !st.Linked && st.PendingCode != "" && s.Linker != nil {
@@ -142,9 +150,7 @@ func (s *Server) linkStatus(w http.ResponseWriter, r *http.Request) {
 			s.audit(r, "sync.linked", "", "")
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(out)
+	return out
 }
 
 var (

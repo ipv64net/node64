@@ -122,6 +122,16 @@ func TestAPIAccountAndSettings(t *testing.T) {
 	if code, body := call(t, "PUT", srv.URL+"/api/dyndns/settings", map[string]any{"interval_minutes": 10, "notify_ip": false}); code != 200 || !strings.Contains(body, `"interval_minutes":10`) || !strings.Contains(body, `"notify_ip":false`) || !strings.Contains(body, `"keep_checks_days":30`) {
 		t.Fatalf("settings put: %d %s", code, body)
 	}
+	// bevorzugte Node: ohne Cluster nur "" (kleinste Kennung), fremde Kennung abgelehnt
+	if code, _ := call(t, "PUT", srv.URL+"/api/dyndns/cluster", map[string]any{}); code != 400 {
+		t.Fatalf("cluster without field: %d", code)
+	}
+	if code, _ := call(t, "PUT", srv.URL+"/api/dyndns/cluster", map[string]any{"preferred_node": "n-unknown"}); code != 422 {
+		t.Fatalf("cluster unknown node: %d", code)
+	}
+	if code, body := call(t, "PUT", srv.URL+"/api/dyndns/cluster", map[string]any{"preferred_node": ""}); code != 200 || !strings.Contains(body, `"preferred_node":""`) {
+		t.Fatalf("cluster reset: %d %s", code, body)
+	}
 	if code, _ := call(t, "GET", srv.URL+"/api/dyndns/account/names", nil); code != 409 {
 		t.Fatalf("names without key: %d", code)
 	}

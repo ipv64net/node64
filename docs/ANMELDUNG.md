@@ -4,6 +4,10 @@ Lokale Benutzer mit Passwort (optional mit App-2FA) bleiben immer die Grundlage.
 Wege richtest du unter **Einstellungen → Anmeldung** (`/settings/login`) ein. Jede Anmeldung steht im Audit-Log, mit
 dem Weg (`sso …`, `passkey`, `forward-auth …`).
 
+Diese Einstellungen (OIDC-Anbieter, Forward-Auth, Passkeys, verknüpfte Konten) sowie Passwort und 2FA gibt es bewusst
+nur in der Oberfläche, nicht über die lokale API: ein API-Key soll keinen Anmeldeweg schaffen oder ändern können.
+Benutzer auflisten, eigene Sprache/Zeitzone und andere Benutzer löschen gehen per API (`/api/users`).
+
 ## SSO über OpenID Connect
 
 Das geht mit jedem OIDC-Anbieter, etwa Authelia, Authentik, Keycloak, Pocket ID, Zitadel oder Kanidm.

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/proxmox"
 )
 
 // Statusseiten: JSON-API /api/status-pages (Anmeldung wie die uebrigen /api-Routen). Ein- und Ausgabe ist
@@ -20,6 +22,7 @@ func (m *Module) statusPagesAPIRoutes(mux *http.ServeMux, api func(http.HandlerF
 	mux.Handle("GET /api/status-pages/{id}", api(m.apiStatusPageGet))
 	mux.Handle("PUT /api/status-pages/{id}", api(m.apiStatusPageUpdate))
 	mux.Handle("DELETE /api/status-pages/{id}", api(m.apiStatusPageDelete))
+	mux.Handle("POST /api/status-pages/{id}/items", api(m.apiStatusItemsAdd))
 	mux.Handle("PUT /api/status-pages/{id}/logo", api(m.apiStatusLogoPut))
 	mux.Handle("DELETE /api/status-pages/{id}/logo", api(m.apiStatusLogoDelete))
 	mux.Handle("GET /api/status-pages/{id}/notices", api(m.apiStatusNotices))
@@ -139,6 +142,86 @@ func (m *Module) apiStatusPageUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	p.ID = old.ID
 	if err := m.saveStatusPage(r.Context(), &p); err != nil {
+		m.writeStatusErr(w, err)
+		return
+	}
+	m.auditText(r, "status_page.update", p.Title+" ("+p.Slug+")")
+	m.apiStatusPageOut(w, r, http.StatusOK, p.ID)
+}
+
+// apiStatusItemsAdd haengt Checks (tokens) und Nodes, Gaeste bzw. Container (resources: system_id und key) an eine
+// Gruppe an (group_id, 0 = erste) – wie „Hinzufuegen“ auf der Seite: fehlt der Check einer Ressource, wird er angelegt
+// wie mit „als Check fuehren“. Schon vorhandene Eintraege bleiben einmal.
+func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
+	p := m.apiStatusPage(w, r)
+	if p == nil {
+		return
+	}
+	var in struct {
+		GroupID   int64    `json:"group_id"`
+		Tokens    []string `json:"tokens"`
+		Resources []struct {
+			SystemID int64  `json:"system_id"`
+			Key      string `json:"key"`
+		} `json:"resources"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	ctx := r.Context()
+	bad := func(field, msg string) {
+		writeJSON(w, http.StatusUnprocessableEntity, statusAPIError{Error: msg, Field: field})
+	}
+	if len(p.Groups) == 0 {
+		p.Groups = []StatusGroup{{Items: []StatusItem{}}}
+	}
+	g := &p.Groups[0]
+	if in.GroupID != 0 {
+		g = nil
+		for i := range p.Groups {
+			if p.Groups[i].ID == in.GroupID {
+				g = &p.Groups[i]
+			}
+		}
+		if g == nil {
+			bad("group_id", "group not found")
+			return
+		}
+	}
+	for _, t := range in.Tokens {
+		if c, err := m.st.Check(ctx, t); err != nil || c == nil {
+			bad("tokens", "check not found: "+t)
+			return
+		}
+	}
+	vals := make([]string, 0, len(in.Resources))
+	for _, res := range in.Resources {
+		if !proxmox.ValidKey(res.Key) || res.Key == "" {
+			bad("resources", "invalid key: "+res.Key)
+			return
+		}
+		if _, err := m.pve.st.System(ctx, res.SystemID); err != nil {
+			bad("resources", "system not found: "+strconv.FormatInt(res.SystemID, 10))
+			return
+		}
+		vals = append(vals, strconv.FormatInt(res.SystemID, 10)+"|"+res.Key)
+	}
+	toks, err := m.statusResTokens(r, vals)
+	if err != nil {
+		var fe *proxmox.FieldError
+		if errors.As(err, &fe) {
+			writeJSON(w, http.StatusUnprocessableEntity, statusAPIError{Error: m.translator("en")(fe.Key), Field: "resources", Key: fe.Key})
+		} else {
+			bad("resources", err.Error())
+		}
+		return
+	}
+	if err := m.statusAddTokens(ctx, g, append(in.Tokens, toks...)); err != nil {
+		m.writeStatusErr(w, err)
+		return
+	}
+	if err := m.saveStatusPage(ctx, p); err != nil {
 		m.writeStatusErr(w, err)
 		return
 	}

@@ -90,9 +90,9 @@ func (m *Module) apiBlocklistsGet(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) apiBlocklistsPut(w http.ResponseWriter, r *http.Request) {
 	in := struct {
-		Enabled []string `json:"enabled"`
-		Allow   []string `json:"allow"`
-		Deny    []string `json:"deny"` // eigene Sperrliste: fehlt = unveraendert
+		Enabled []string `json:"enabled"` // fehlt = unveraendert, [] = alle aus
+		Allow   []string `json:"allow"`   // Freigabeliste: fehlt = unveraendert
+		Deny    []string `json:"deny"`    // eigene Sperrliste: fehlt = unveraendert
 
 		Token *string `json:"token"` // Listen-Token: fehlt = unveraendert, "" = loeschen
 	}{}
@@ -104,20 +104,37 @@ func (m *Module) apiBlocklistsPut(w http.ResponseWriter, r *http.Request) {
 		m.apiFail(w, ferr("token", "cdn64.bl.err_token"))
 		return
 	}
-	if (in.Token == nil && in.Deny == nil) || in.Enabled != nil || in.Allow != nil { // nur token und/oder deny: Listen bleiben
-		if err := m.blSave(r.Context(), in.Enabled, strings.Join(in.Allow, "\n")); err != nil {
+	if in.Enabled != nil { // Listen schalten (Freigabeliste fehlt = unveraendert)
+		allow := m.core.SettingOr(r.Context(), setBlockAllow, "")
+		if in.Allow != nil {
+			allow = strings.Join(in.Allow, "\n")
+		}
+		if err := m.blSave(r.Context(), in.Enabled, allow); err != nil {
 			m.apiFail(w, err)
 			return
 		}
-		m.g.Audit(r, "cdn64.blocklists", strings.Join(in.Enabled, ","), "allow="+strings.Join(in.Allow, ","))
+		m.g.Audit(r, "cdn64.blocklists", strings.Join(in.Enabled, ","), "allow="+strings.Join(strings.Fields(allow), ","))
+	}
+	var allow, deny *string // Freigabe-/Sperrliste allein: die eingeschalteten Listen bleiben
+	if in.Allow != nil && in.Enabled == nil {
+		s := strings.Join(in.Allow, "\n")
+		allow = &s
 	}
 	if in.Deny != nil {
-		deny := strings.Join(in.Deny, "\n")
-		if err := m.blListsSave(r.Context(), nil, &deny); err != nil {
+		s := strings.Join(in.Deny, "\n")
+		deny = &s
+	}
+	if allow != nil || deny != nil {
+		if err := m.blListsSave(r.Context(), allow, deny); err != nil {
 			m.apiFail(w, err)
 			return
 		}
-		m.g.Audit(r, "cdn64.denylist", strings.Join(in.Deny, ","), "")
+		if allow != nil {
+			m.g.Audit(r, "cdn64.allowlist", strings.Join(in.Allow, ","), "")
+		}
+		if deny != nil {
+			m.g.Audit(r, "cdn64.denylist", strings.Join(in.Deny, ","), "")
+		}
 	}
 	if in.Token != nil {
 		if err := m.blSetToken(r.Context(), *in.Token); err != nil {

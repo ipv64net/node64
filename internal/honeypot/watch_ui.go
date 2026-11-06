@@ -40,6 +40,7 @@ func (m *Module) watchRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /honeypot/watch", page(m.pageWatchAdd))
 	mux.Handle("POST /honeypot/watch/check", page(m.pageWatchCheck))
 	mux.Handle("POST /honeypot/watch/{id}/delete", page(m.pageWatchDelete))
+	m.watchAPIRoutes(mux, g)
 }
 
 // watchNetView ist ein Netz fuer die Seite.

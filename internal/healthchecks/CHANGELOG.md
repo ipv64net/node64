@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.53.0 – 2026-11-06
+
+### Neu
+- Lokale API: Alles aus dem Docker-Assistenten geht jetzt auch per API – Verbindung testen mit Fingerabdruck (`POST /api/healthchecks/docker/probe`), SSH-Schlüssel erzeugen (`generate_key`, der öffentliche Schlüssel steht in `credentials.public_key`), Zugangsdaten einzeln setzen oder entfernen (`private_key`, `cert`, `ca`) und den lokalen Docker-Host einrichten (`POST /api/healthchecks/docker/enable`).
+- Lokale API: „Alle als Check“ für Proxmox und Docker (`POST …/systems/{id}/ascheck-all`), eigener Name beim Aufnehmen als Check (`name` in den Einstellungen) und Nodes, Gäste oder Container direkt auf eine Statusseite (`POST /api/status-pages/{id}/items`, der Check wird bei Bedarf angelegt).
+
+### Geändert
+- Lokale API: Ein Docker-Host mit einer Adresse, die schon ein anderer Host hat, wird wie in der Oberfläche abgelehnt. Wechselt die Art der Verbindung, gelten Zugangsdaten und Pin der alten Art nicht mehr.
+
 ## 2.52.2 – 2026-11-05
 
 ### Behoben

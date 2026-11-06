@@ -27,6 +27,15 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/cdn64/hosts/{id}/enable", api(m.apiToggle))
 	mux.Handle("POST /api/cdn64/hosts/{id}/disable", api(m.apiToggle))
 	mux.Handle("GET /api/cdn64/docker", api(m.apiDocker))
+	mux.Handle("PUT /api/cdn64/docker", api(m.apiDockerPut))
+	mux.Handle("POST /api/cdn64/release", api(m.apiRelease))
+	mux.Handle("POST /api/cdn64/hosts/{id}/localdns", api(m.apiHostLocalDNS))
+	mux.Handle("GET /api/cdn64/protection", api(m.apiProtection))
+	mux.Handle("PUT /api/cdn64/hosts/{id}/protection", api(m.apiProtectionSet))
+	mux.Handle("GET /api/cdn64/online/servers", api(m.apiServersGet))
+	mux.Handle("PUT /api/cdn64/online/servers", api(m.apiServersPut))
+	mux.Handle("GET /api/cdn64/hosts/{id}/servers", api(m.apiServersGet))
+	mux.Handle("PUT /api/cdn64/hosts/{id}/servers", api(m.apiServersPut))
 	m.streamAPIRoutes(mux, api)
 	m.c4APIRoutes(mux, api)
 }
@@ -139,11 +148,13 @@ func (m *Module) apiGet(w http.ResponseWriter, r *http.Request) {
 
 // certRequest: Zertifikat beim Speichern gleich mit anfordern (optional).
 type certRequest struct {
-	Source      string `json:"source"` // auto (Standard), ipv64, alias, http
+	Source      string `json:"source"` // auto (Standard), ipv64, alias, http, dns, self, ca
 	AliasZone   string `json:"alias_zone"`
 	AliasPrefix string `json:"alias_prefix"`
 	DNSAccount  int64  `json:"dns_account"`
+	CAID        int64  `json:"ca_id"` // eigene CA (source=ca)
 	Staging     bool   `json:"staging"`
+	AcceptTOS   bool   `json:"accept_tos"` // Nutzungsbedingungen von Let's Encrypt annehmen (ACME-Wege)
 }
 
 // extras: was beim Speichern zusaetzlich passieren soll.
@@ -190,7 +201,21 @@ func (m *Module) afterSave(r *http.Request, h *Host, req *certRequest) string {
 	if req == nil || m.certs == nil {
 		return ""
 	}
-	c, err := m.requestCert(r.Context(), h.Names, req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount, req.Staging)
+	ctx := r.Context()
+	var c *certs.Cert
+	var err error
+	switch req.Source {
+	case "self", "ca": // selbst signiert bzw. eigene CA, ohne Let's-Encrypt-Konto
+		c, err = m.certs.Create(ctx, certs.Request{Names: h.Names, Source: req.Source, CAID: req.CAID})
+	default:
+		if acc := m.certs.Account(ctx); !acc.TOSAccepted && req.AcceptTOS {
+			if err := m.certs.SetAccount(ctx, acc.Email, true); err != nil {
+				return err.Error()
+			}
+			m.g.Audit(r, "cert.account", "", "accept_tos=true")
+		}
+		c, err = m.requestCert(ctx, h.Names, req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount, req.Staging)
+	}
 	if err != nil {
 		return certErrText(err)
 	}
@@ -327,9 +352,12 @@ func (m *Module) apiToggle(w http.ResponseWriter, r *http.Request) {
 	m.apiRow(w, r, h.ID, http.StatusOK)
 }
 
-// apiDocker: Stand des Abgleichs mit den Docker-Labels.
+// apiDocker: Stand des Abgleichs mit den Docker-Labels, dazu die Einstellungen.
 func (m *Module) apiDocker(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, m.dockerView(r.Context()))
+	writeJSON(w, http.StatusOK, struct {
+		dockerView
+		Settings dockerSettings `json:"settings"`
+	}{m.dockerView(r.Context()), m.dockerSettingsOf(r.Context())})
 }
 
 func (m *Module) apiCheck(w http.ResponseWriter, r *http.Request) {

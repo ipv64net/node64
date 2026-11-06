@@ -430,12 +430,21 @@ func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPag
 		return nil
 	}
 	toks, opErr := m.statusResTokens(r, r.PostForm["add_res"]) // Nodes, Gaeste, Container: fehlende Checks anlegen
+	if err := m.statusAddTokens(ctx, g, append(r.PostForm["add_tok"], toks...)); err != nil {
+		return err
+	}
+	return opErr
+}
+
+// statusAddTokens haengt die Checks (Token) an die Gruppe an, die es gibt und die dort noch fehlen (Reihenfolge wie
+// die Check-Liste).
+func (m *Module) statusAddTokens(ctx context.Context, g *StatusGroup, tokens []string) error {
 	list, err := m.st.Checks(ctx)
 	if err != nil {
 		return err
 	}
 	want := map[string]bool{}
-	for _, t := range append(r.PostForm["add_tok"], toks...) {
+	for _, t := range tokens {
 		want[t] = true
 	}
 	has := map[string]bool{}
@@ -447,7 +456,7 @@ func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPag
 			g.Items, has[c.Token] = append(g.Items, StatusItem{Token: c.Token}), true
 		}
 	}
-	return opErr
+	return nil
 }
 
 func containsStr(list []string, s string) bool {

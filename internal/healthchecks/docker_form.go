@@ -318,32 +318,16 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		}
 		d.KeyGen = strings.TrimSpace(k)
 	}
-	switch d.Conn {
-	case dockerConnSSH:
-		if d.KeyGen != "" {
-			creds.Key = d.KeyGen + "\n"
-		}
-		creds.Cert, creds.CA = "", ""
-		d.PubKey = proxmox.DockerSSHPublicKey(creds.Key)
-	case dockerConnTLS:
+	if d.Conn == dockerConnTLS {
 		d.F["ca"], d.F["cert"] = strings.TrimSpace(r.PostFormValue("ca")), strings.TrimSpace(r.PostFormValue("cert"))
-		if d.F["ca"] != "" {
-			creds.CA = d.F["ca"] + "\n"
-		}
-		if r.PostFormValue("ca_clear") == "on" {
-			creds.CA = ""
-		}
-		if d.F["cert"] != "" {
-			creds.Cert = d.F["cert"] + "\n"
-		}
-		if d.KeyGen != "" {
-			creds.Key = d.KeyGen + "\n"
-		}
-		if r.PostFormValue("cert_clear") == "on" {
-			creds.Cert, creds.Key, d.KeyGen = "", "", ""
-		}
-	default:
-		creds, d.KeyGen = proxmox.DockerCreds{}, ""
+	}
+	certClear := r.PostFormValue("cert_clear") == "on"
+	creds = dockerCredsFor(d.Conn, creds, d.KeyGen, d.F["ca"], d.F["cert"], r.PostFormValue("ca_clear") == "on", certClear)
+	switch {
+	case d.Conn == dockerConnSSH:
+		d.PubKey = proxmox.DockerSSHPublicKey(creds.Key)
+	case d.Conn != dockerConnTLS || certClear:
+		d.KeyGen = ""
 	}
 	sys.Secret = creds.Encode()
 	if sys.Secret == "" && old != nil && old.Secret != "" { // leer heisst beim Speichern sonst „behalten“
@@ -413,16 +397,12 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "pin_sha256", Key: "pve.err.pin_confirm"})
 		return
 	}
-	list, err := m.dockerSystems(ctx)
-	if err != nil {
+	if dup, err := m.dockerDuplicate(ctx, sys.ID, d.Address); err != nil {
 		m.fail(w, r, err)
 		return
-	}
-	for _, x := range list {
-		if x.ID != sys.ID && dockerSysHost(x) == d.Address {
-			m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "host", Key: "docker.err.duplicate"})
-			return
-		}
+	} else if dup {
+		m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "host", Key: "docker.err.duplicate"})
+		return
 	}
 	if sys.Name == "" {
 		sys.Name = d.F["host"]
@@ -445,6 +425,52 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 	m.auditText(r, map[bool]string{true: "proxmox.update", false: "proxmox.create"}[edit], sys.Name)
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, dockerSysPath(sys.ID), http.StatusSeeOther)
+}
+
+// dockerCredsFor setzt die Zugangsdaten passend zur Art der Verbindung (Formular und API): Eingaben ersetzen die
+// gespeicherten Teile, caClear entfernt die CA, certClear Zertifikat und Schluessel (TLS). SSH braucht nur den
+// Schluessel, TCP und der lokale Socket keine Zugangsdaten.
+func dockerCredsFor(conn string, creds proxmox.DockerCreds, key, ca, cert string, caClear, certClear bool) proxmox.DockerCreds {
+	switch conn {
+	case dockerConnSSH:
+		if key != "" {
+			creds.Key = key + "\n"
+		}
+		creds.Cert, creds.CA = "", ""
+	case dockerConnTLS:
+		if ca != "" {
+			creds.CA = ca + "\n"
+		}
+		if caClear {
+			creds.CA = ""
+		}
+		if cert != "" {
+			creds.Cert = cert + "\n"
+		}
+		if key != "" {
+			creds.Key = key + "\n"
+		}
+		if certClear {
+			creds.Cert, creds.Key = "", ""
+		}
+	default:
+		creds = proxmox.DockerCreds{}
+	}
+	return creds
+}
+
+// dockerDuplicate: ein anderer Docker-Host (nicht id) hat schon diese Adresse.
+func (m *Module) dockerDuplicate(ctx context.Context, id int64, addr string) (bool, error) {
+	list, err := m.dockerSystems(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, x := range list {
+		if x.ID != id && dockerSysHost(x) == addr {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // dockerPinOnly: im Test darf der Pin fehlen (er wird erst gezeigt und bestaetigt).

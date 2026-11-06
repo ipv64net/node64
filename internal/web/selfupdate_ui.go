@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ipv64net/node64/internal/selfupdate"
@@ -19,6 +21,8 @@ func (s *Server) updateRoutes() {
 	s.mux.Handle("GET /api/update", s.auth(s.apiUpdate))
 	s.mux.Handle("POST /api/update/check", s.auth(s.apiUpdateCheck))
 	s.mux.Handle("POST /api/update/apply", s.auth(s.apiUpdateApply))
+	s.mux.Handle("POST /api/update/reset", s.auth(s.apiUpdateReset))
+	s.mux.Handle("PUT /api/update/settings", s.auth(s.apiUpdateSettings))
 }
 
 // updateView: Zustand fuer die Einstellungen.
@@ -196,6 +200,71 @@ func (s *Server) apiUpdateApply(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "restarting", "version": ver})
 	}
+}
+
+// POST /api/update/reset: zurueck auf die Version aus dem Image (wie der Knopf in den Einstellungen); Node64 startet
+// danach neu (202).
+func (s *Server) apiUpdateReset(w http.ResponseWriter, r *http.Request) {
+	if s.Updater == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "self-update not available"})
+		return
+	}
+	if err := s.Updater.Reset(); err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	s.audit(r, "update.reset", "", "")
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restarting"})
+}
+
+// PUT /api/update/settings: Betriebsart, Kanal und Zeitfenster (wie Einstellungen › Updates). Fehlende Felder bleiben;
+// channel "auto" nimmt die eigene Wahl zurueck (folgt dann der laufenden Version, ein leerer Kanal wird nie gespeichert).
+func (s *Server) apiUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	if s.Updater == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "self-update not available"})
+		return
+	}
+	var in struct {
+		Mode    *string `json:"mode"`
+		Channel *string `json:"channel"`
+		Window  *string `json:"window"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	ctx := r.Context()
+	switch {
+	case in.Mode != nil && !containsString(selfupdate.Modes, *in.Mode):
+		writeErr(w, http.StatusUnprocessableEntity, "mode must be off, notify or auto")
+		return
+	case in.Channel != nil && *in.Channel != "auto" && !containsString(selfupdate.Channels, *in.Channel):
+		writeErr(w, http.StatusUnprocessableEntity, "channel must be stable, preview or auto")
+		return
+	case in.Window != nil && !selfupdate.ValidWindow(strings.TrimSpace(*in.Window)):
+		writeErr(w, http.StatusUnprocessableEntity, "window must look like 03:00-05:00")
+		return
+	}
+	var err error
+	if in.Mode != nil {
+		err = selfupdate.SaveMode(s.updateSet(ctx), *in.Mode)
+	}
+	if in.Channel != nil && err == nil {
+		if *in.Channel == "auto" {
+			err = s.Store.DeleteSetting(ctx, selfupdate.SetChannel)
+		} else {
+			err = s.Store.SetSetting(ctx, selfupdate.SetChannel, *in.Channel)
+		}
+	}
+	if in.Window != nil && err == nil {
+		err = s.Store.SetSetting(ctx, selfupdate.SetWindow, strings.TrimSpace(*in.Window))
+	}
+	if err != nil {
+		writeErr(w, 500, "database error")
+		return
+	}
+	v := s.updateViewOf(ctx)
+	s.audit(r, "settings.updates", "", fmt.Sprintf("mode=%s channel=%s", v.Mode, v.Channel))
+	writeJSON(w, http.StatusOK, v)
 }
 
 func containsString(list []string, s string) bool {

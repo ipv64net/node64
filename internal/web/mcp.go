@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,10 @@ func (s *Server) mcpRoutes() {
 	s.mux.Handle("POST /settings/mcp", s.auth(s.mcpSettingsSave))
 	s.mux.Handle("POST /settings/mcp/keys", s.auth(s.mcpKeyCreate))
 	s.mux.Handle("POST /settings/mcp/keys/{id}/delete", s.auth(s.mcpKeyDelete))
+	s.mux.Handle("GET /api/mcp", s.auth(s.apiMCPGet))
+	s.mux.Handle("PUT /api/mcp", s.auth(s.apiMCPPut))
+	s.mux.Handle("POST /api/mcp/keys", s.auth(s.apiMCPKeyCreate))
+	s.mux.Handle("DELETE /api/mcp/keys/{id}", s.auth(s.apiMCPKeyDelete))
 }
 
 func (s *Server) mcpEnabled(ctx context.Context) bool {
@@ -368,12 +373,7 @@ func (s *Server) mcpSettingsSave(w http.ResponseWriter, r *http.Request) {
 func (s *Server) mcpKeyCreate(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	name := strings.TrimSpace(r.PostFormValue("name"))
-	var scopes []string
-	for _, a := range r.PostForm["area"] {
-		if mcp.ValidArea(a) {
-			scopes = append(scopes, a+":read")
-		}
-	}
+	scopes := mcpScopes(r.PostForm["area"])
 	if name == "" || len(name) > 100 || len(scopes) == 0 {
 		v := s.view(r, "mcp.title")
 		s.flash(w, r, "danger", v.T("mcp.key_invalid"))
@@ -391,9 +391,20 @@ func (s *Server) mcpKeyCreate(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "mcp", v)
 }
 
-func (s *Server) mcpKeyDelete(w http.ResponseWriter, r *http.Request) {
+// mcpScopes: Leserechte der gewaehlten Bereiche (unbekannte fallen weg).
+func mcpScopes(areas []string) []string {
+	var scopes []string
+	for _, a := range areas {
+		if mcp.ValidArea(a) && !slices.Contains(scopes, a+":read") {
+			scopes = append(scopes, a+":read")
+		}
+	}
+	return scopes
+}
+
+// mcpKeyRevoke widerruft einen eigenen MCP-Schluessel (Oberflaeche und API); deleted = es gab ihn.
+func (s *Server) mcpKeyRevoke(r *http.Request, id int64) (deleted bool, err error) {
 	u := currentUser(r)
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	var name string
 	if keys, err := s.Store.MCPKeys(r.Context(), u.ID); err == nil {
 		for _, k := range keys {
@@ -402,7 +413,15 @@ func (s *Server) mcpKeyDelete(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	deleted, err := s.Store.DeleteMCPKey(r.Context(), u.ID, id)
+	if deleted, err = s.Store.DeleteMCPKey(r.Context(), u.ID, id); err == nil && deleted {
+		s.audit(r, "mcp.key_revoke", name, "")
+	}
+	return deleted, err
+}
+
+func (s *Server) mcpKeyDelete(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	deleted, err := s.mcpKeyRevoke(r, id)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -413,7 +432,98 @@ func (s *Server) mcpKeyDelete(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings/mcp#keys", http.StatusSeeOther)
 		return
 	}
-	s.audit(r, "mcp.key_revoke", name, "")
 	s.flash(w, r, "success", v.T("mcp.key_revoked"))
 	http.Redirect(w, r, "/settings/mcp#keys", http.StatusSeeOther)
+}
+
+// ---------------------------------------------------------------- API /api/mcp
+
+func mcpKeyJSON(k store.MCPKey) map[string]any {
+	out := map[string]any{"id": k.ID, "name": k.Name, "hint": k.Hint, "areas": k.ReadAreas(), "created_at": k.CreatedAt}
+	if !k.LastUsedAt.IsZero() {
+		out["last_used_at"], out["last_ip"] = k.LastUsedAt, k.LastIP
+	}
+	return out
+}
+
+// GET /api/mcp: Schalter, Bereiche und die eigenen Schluessel (ohne den Schluessel selbst).
+func (s *Server) apiMCPGet(w http.ResponseWriter, r *http.Request) {
+	keys, err := s.Store.MCPKeys(r.Context(), currentUser(r).ID)
+	if err != nil {
+		writeErr(w, 500, "database error")
+		return
+	}
+	outKeys := make([]map[string]any, 0, len(keys))
+	for _, k := range keys {
+		outKeys = append(outKeys, mcpKeyJSON(k))
+	}
+	b := mcpBackend{s}
+	areas := make([]map[string]any, 0, len(mcp.Areas))
+	for _, a := range mcp.Areas {
+		areas = append(areas, map[string]any{"name": a, "available": b.Available(a)})
+	}
+	writeJSON(w, 200, map[string]any{"enabled": s.mcpEnabled(r.Context()), "path": "/mcp", "rate_per_minute": mcpRate, "areas": areas, "keys": outKeys})
+}
+
+// PUT /api/mcp {enabled}: Schnittstelle ein- oder ausschalten.
+func (s *Server) apiMCPPut(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.Enabled == nil {
+		writeErr(w, http.StatusUnprocessableEntity, "enabled is required")
+		return
+	}
+	if err := s.Store.SetSetting(r.Context(), setMCPEnabled, map[bool]string{true: "1", false: "0"}[*in.Enabled]); err != nil {
+		writeErr(w, 500, "database error")
+		return
+	}
+	s.audit(r, "mcp.settings", "", fmt.Sprintf("enabled=%v", *in.Enabled))
+	s.apiMCPGet(w, r)
+}
+
+// POST /api/mcp/keys {name, areas}: neuer MCP-Schluessel (nur Leserechte); der Schluessel steht nur in dieser Antwort.
+func (s *Server) apiMCPKeyCreate(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name  string   `json:"name"`
+		Areas []string `json:"areas"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	name, scopes := strings.TrimSpace(in.Name), mcpScopes(in.Areas)
+	if name == "" || len(name) > 100 {
+		writeErr(w, http.StatusUnprocessableEntity, "name is required (max 100 characters)")
+		return
+	}
+	if len(scopes) == 0 || slices.ContainsFunc(in.Areas, func(a string) bool { return !mcp.ValidArea(a) }) {
+		writeErr(w, http.StatusUnprocessableEntity, "areas must list at least one known area: "+strings.Join(mcp.Areas, ", "))
+		return
+	}
+	key, k, err := s.Store.NewMCPKey(r.Context(), currentUser(r).ID, name, scopes)
+	if err != nil {
+		writeErr(w, 500, "database error")
+		return
+	}
+	s.audit(r, "mcp.key_create", name, k.Hint+" "+strings.Join(k.ReadAreas(), ","))
+	out := mcpKeyJSON(*k)
+	out["key"] = key
+	writeJSON(w, http.StatusCreated, out)
+}
+
+// DELETE /api/mcp/keys/{id}: eigenen MCP-Schluessel widerrufen.
+func (s *Server) apiMCPKeyDelete(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	deleted, err := s.mcpKeyRevoke(r, id)
+	switch {
+	case err != nil:
+		writeErr(w, 500, "database error")
+	case !deleted:
+		writeErr(w, http.StatusNotFound, "unknown MCP key")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

@@ -1,5 +1,20 @@
 # Changes – PROXY64
 
+## 1.49.0 – 2026-11-06
+
+### New
+- API: everything the interface can do now also works via the local API – Docker sync settings
+  (`PUT /api/cdn64/docker`), lift an automatic block and allow the address in one call (`POST /api/cdn64/release`),
+  add names to DNS64 (`POST /api/cdn64/hosts/{id}/localdns`), CDN64 statistics and WAF/JA4 protection per host
+  (`GET /api/cdn64/protection`, `PUT /api/cdn64/hosts/{id}/protection`), CDN64 servers and connections per host or tunnel
+  (`GET`/`PUT /api/cdn64/hosts/{id}/servers`, `/api/cdn64/online/servers`).
+- API: certificate when creating a host also self-signed or from your own CA (`source` self or ca with `ca_id`),
+  accept the Let's Encrypt terms in the same call (`accept_tos`).
+
+### Fixed
+- API: `PUT /api/cdn64/blocklists` with only the allow list no longer switches off the enabled blocklists; missing
+  fields stay unchanged.
+
 ## 1.48.1 – 2026-11-05
 
 ### Fixed

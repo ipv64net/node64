@@ -77,6 +77,7 @@ func (m *Module) groupRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/dns64/groups/{id}/move", plain(m.apiGroupMove))
 	mux.Handle("POST /api/dns64/groups/{id}/members", plain(m.apiMemberAdd))
 	mux.Handle("DELETE /api/dns64/groups/members/{id}", plain(m.apiMemberDelete))
+	mux.Handle("POST /api/dns64/groups/unassign", plain(m.apiUnassign))
 	mux.Handle("GET /api/dns64/devices", plain(m.apiDevices))
 	mux.Handle("PUT /api/dns64/groups/{id}/rules", plain(m.apiGroupRules))
 	mux.Handle("POST /api/dns64/groups/{id}/domains", plain(m.apiGroupDomainAdd))
@@ -291,6 +292,26 @@ func (m *Module) apiMemberDelete(w http.ResponseWriter, r *http.Request) {
 	x, err := m.RemoveMember(r.Context(), pathID(r))
 	if err == nil {
 		m.audit(r, "dns64.group.member.remove", strconv.FormatInt(x.GroupID, 10), x.Kind+" "+x.Value)
+	}
+	m.apiResult(w, r, err, 0, nil)
+}
+
+// apiUnassign nimmt ein Geraet per MAC und/oder IP aus seiner Gruppe (wie "Keine Gruppe" auf der Seite).
+func (m *Module) apiUnassign(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		MAC string `json:"mac"`
+		IP  string `json:"ip"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if strings.TrimSpace(in.MAC) == "" && strings.TrimSpace(in.IP) == "" {
+		writeErr(w, http.StatusBadRequest, "mac or ip required")
+		return
+	}
+	err := m.UnassignDevice(r.Context(), in.MAC, in.IP)
+	if err == nil {
+		m.audit(r, "dns64.group.member.remove", "", strings.TrimSpace(in.MAC+" "+in.IP))
 	}
 	m.apiResult(w, r, err, 0, nil)
 }

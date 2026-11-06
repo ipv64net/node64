@@ -215,3 +215,5 @@ Fehler eines Werkzeugs (z. B. Check nicht gefunden, Modul gestoppt) kommen als W
 - **2026-10-21:** Der Schalter `mcp.enabled` zieht mit Export/Import der Konfiguration um; MCP-Schlüssel nie (auch
   nicht mit Passwort). Die Audit-Einträge der Aufrufe (`mcp.call`) folgen der Aufbewahrung des Audit-Logs
   (`audit.keep_days`, Standard 365 Tage).
+- **2026-11-06:** Schalter und Schlüssel auch über die lokale API: `GET`/`PUT /api/mcp`, `POST /api/mcp/keys`
+  (Schlüssel nur in dieser Antwort), `DELETE /api/mcp/keys/{id}`. Die MCP-Werkzeuge selbst bleiben nur lesend.

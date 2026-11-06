@@ -404,3 +404,54 @@ func TestModuleDecoyCert(t *testing.T) {
 		t.Fatalf("views: %+v", v)
 	}
 }
+
+// Anlegen ueber die API: gleicher Weg wie die Seite, Records je Name im Ergebnis, Fehler mit Code.
+func TestAPIDecoyCert(t *testing.T) {
+	m, _ := modTest(t, modFreePort(t))
+	var audit []auditEntry
+	m.g = testGuards(&audit)
+	fc := &fakeCerts{domains: []string{"decoy.example"}, dns: true}
+	m.certs = fc
+	d := &fakeDNS{}
+	m.dnsrec = d
+	post := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "/api/honeypot/cert", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		m.apiCert(w, r)
+		return w
+	}
+	for body, want := range map[string]string{`{"domain":"other.example","names":["mail"]}`: `"error":"cert_domain"`,
+		`{"domain":"decoy.example","names":["*.decoy.example"]}`:                 `"error":"cert_wildcard"`,
+		`{"domain":"decoy.example","names":["mail"],"dns_targets":["10.0.0.1"]}`: `"error":"cert_dns"`} {
+		if w := post(body); w.Code != 422 || !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("%s: %d %s", body, w.Code, w.Body)
+		}
+	}
+	if w := post(`{"domain":"decoy.example","unknown":1}`); w.Code != 400 {
+		t.Fatalf("unknown field: %d", w.Code)
+	}
+	if len(fc.reqs) != 0 {
+		t.Fatalf("angelegt trotz Fehler: %+v", fc.reqs)
+	}
+	w := post(`{"domain":"decoy.example","names":["mail","vpn"],"dns_targets":["93.184.215.14"]}`)
+	if w.Code != 202 || !strings.Contains(w.Body.String(), `"selected":true`) || !strings.Contains(w.Body.String(), `"result":"created"`) {
+		t.Fatalf("create: %d %s", w.Code, w.Body)
+	}
+	if len(fc.reqs) != 1 || fc.reqs[0].Source != certs.SourceIPv64 || len(d.add) != 2 {
+		t.Fatalf("req %+v dns %v", fc.reqs, d.add)
+	}
+	if c := m.loadConfig(context.Background()); c.CertID != fc.list[0].ID {
+		t.Fatalf("nicht ausgewaehlt: %d", c.CertID)
+	}
+	if a := audit[len(audit)-1]; a.action != "honeypot.config" || !strings.Contains(a.details, "dns=2") {
+		t.Fatalf("audit: %+v", a)
+	}
+	fc.err = certs.ErrTOS
+	if w := post(`{"domain":"decoy.example","names":["portal"]}`); w.Code != 409 || !strings.Contains(w.Body.String(), `"error":"tos"`) {
+		t.Fatalf("tos: %d %s", w.Code, w.Body)
+	}
+	m.certs = nil
+	if w := post(`{"domain":"decoy.example","names":["portal"]}`); w.Code != 503 {
+		t.Fatalf("no certs: %d", w.Code)
+	}
+}

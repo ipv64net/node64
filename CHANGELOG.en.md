@@ -6,6 +6,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 - DNS64: mDNS bridge – names like printer.local and device names from your own network come via mDNS, also for devices in the VPN and other networks (switch in the settings, off by default). With the switch on, DNS64 also detects the router's own suffix.
 - PROXY64: the button for CDN64 servers and connections now opens its dialog under Status pages and Redirects too.
+- Local API: everything the interface can do now works via the API too – e.g. CDN64 protection, CDN64 servers and connections, local DNS and Docker sync (PROXY64), "All as check", Docker connection test and SSH keys (Healthchecks), dynamic zones with TSIG (DNS64), preferred node (DynDNS), early warning and decoy certificate (Honeypot64), DNS check (certificates), update settings, MCP, users, e-mail/SMS via ipv64 and linking by code. Sign-in methods (password, 2FA, passkeys, SSO, forward auth) deliberately stay in the interface.
+- PROXY64: changing the allow list via the API no longer switches off the blocklists; missing fields stay unchanged.
 
 ## 1.0.1 – 2026-11-05
 

@@ -30,6 +30,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/dyndns/history", api(m.apiHistory))
 	mux.Handle("GET /api/dyndns/settings", api(m.apiSettingsGet))
 	mux.Handle("PUT /api/dyndns/settings", api(m.apiSettingsPut))
+	mux.Handle("PUT /api/dyndns/cluster", api(m.apiClusterPut))
 	mux.Handle("GET /api/dyndns/account/names", api(m.apiAccountNames))
 	mux.Handle("POST /api/dyndns/targets/from-account", api(m.apiFromAccount))
 	mux.Handle("POST /api/dyndns/targets/{id}/token", api(m.apiTargetToken))
@@ -337,6 +338,24 @@ func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "dyndns.settings", "settings", "")
 	writeJSON(w, http.StatusOK, m.getSettings(r.Context()))
+}
+
+// apiClusterPut waehlt die bevorzugte Node im Cluster ("" = die mit der kleinsten Kennung), wie die Seite.
+func (m *Module) apiClusterPut(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Preferred *string `json:"preferred_node"`
+	}
+	if err := readJSON(r, &in); err != nil || in.Preferred == nil {
+		writeErr(w, http.StatusBadRequest, "invalid json: preferred_node required")
+		return
+	}
+	id := strings.TrimSpace(*in.Preferred)
+	if err := m.setPreferred(r.Context(), id); err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	m.audit(r, "dyndns.cluster", "preferred", id)
+	writeJSON(w, http.StatusOK, map[string]string{"preferred_node": m.core.SettingOr(r.Context(), SetPreferred, "")})
 }
 
 // pickJSON ist ein waehlbarer Name aus dem Account (ohne Token).

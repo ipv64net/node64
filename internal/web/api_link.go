@@ -28,6 +28,9 @@ import (
 func (s *Server) apiLinkRoutes() {
 	s.mux.Handle("GET /api/link", s.auth(s.apiLinkGet))
 	s.mux.Handle("POST /api/link/apikey", s.auth(s.apiLinkAPIKey))
+	s.mux.Handle("POST /api/link/start", s.auth(s.apiLinkStart))
+	s.mux.Handle("GET /api/link/status", s.auth(s.apiLinkStatus))
+	s.mux.Handle("POST /api/link/cancel", s.auth(s.apiLinkCancel))
 	s.mux.Handle("POST /api/link/unlink", s.auth(s.apiLinkUnlink))
 	s.mux.Handle("GET /api/link/conflicts", s.auth(s.apiConflicts))
 	s.mux.Handle("POST /api/link/conflicts/{id}", s.auth(s.apiConflictResolve))
@@ -82,6 +85,48 @@ func (s *Server) apiLinkGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, s.linkJSON(r.Context()))
+}
+
+// apiLinkStart holt einen Code beim hub (wie /link/start); der Code wird im Portal von ipv64.net eingegeben, danach
+// meldet GET /api/link/status linked=true.
+func (s *Server) apiLinkStart(w http.ResponseWriter, r *http.Request) {
+	if s.Sync == nil || s.Linker == nil {
+		writeErr(w, http.StatusServiceUnavailable, "linking not available")
+		return
+	}
+	if s.Sync.State().Linked {
+		writeErr(w, http.StatusConflict, "already linked")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	code, exp, err := s.Linker.LinkStart(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	s.audit(r, "sync.link_start", "", "")
+	writeJSON(w, http.StatusCreated, map[string]any{"code": code, "expires_at": exp.UTC(), "hub": s.Sync.State().Hub})
+}
+
+// apiLinkStatus: Stand der Verknuepfung per Code; fragt bei offenem Code beim hub nach (wie die Seite).
+func (s *Server) apiLinkStatus(w http.ResponseWriter, r *http.Request) {
+	if s.Sync == nil {
+		writeErr(w, http.StatusServiceUnavailable, "sync not available")
+		return
+	}
+	writeJSON(w, 200, s.linkStatusJSON(r))
+}
+
+// apiLinkCancel verwirft einen offenen Code (wie /link/cancel).
+func (s *Server) apiLinkCancel(w http.ResponseWriter, r *http.Request) {
+	if s.Linker == nil {
+		writeErr(w, http.StatusServiceUnavailable, "linking not available")
+		return
+	}
+	s.Linker.LinkCancel()
+	s.audit(r, "sync.link_cancel", "", "")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // apiLinkAPIKey verknuepft mit einem Klick ueber den zentralen ipv64-API-Key (wie /link/apikey).

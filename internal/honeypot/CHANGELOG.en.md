@@ -1,5 +1,11 @@
 # Changes – Honeypot64
 
+## 0.20.0 – 2026-11-06
+
+### New
+- Local API for the early warning: list, add and remove your own networks, fetch hits right away (`/api/honeypot/watch`, `…/watch/check`, `…/watch/{id}`).
+- Local API: `POST /api/honeypot/cert` creates a certificate for decoy names like the page does, selects it and creates the DNS records at ipv64 if wanted.
+
 ## 0.19.0 – 2026-11-02
 
 ### New

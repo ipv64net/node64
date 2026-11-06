@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/certs"
 )
@@ -30,6 +32,9 @@ func (s *Server) certRoutes() {
 	s.mux.Handle("POST /api/certs/dns-accounts", s.auth(s.apiDNSAccountSave))
 	s.mux.Handle("PUT /api/certs/dns-accounts/{id}", s.auth(s.apiDNSAccountSave))
 	s.mux.Handle("DELETE /api/certs/dns-accounts/{id}", s.auth(s.apiDNSAccountDelete))
+	s.mux.Handle("GET /api/certs/dns-check", s.auth(s.apiDNSCheckGet))
+	s.mux.Handle("PUT /api/certs/dns-check", s.auth(s.apiDNSCheckPut))
+	s.mux.Handle("POST /api/certs/dns-check/run", s.auth(s.apiDNSCheckRun))
 	s.mux.Handle("GET /api/certs/{id}", s.auth(s.apiCertGet))
 	s.mux.Handle("PUT /api/certs/{id}", s.auth(s.apiCertUpdate))
 	s.mux.Handle("DELETE /api/certs/{id}", s.auth(s.apiCertDelete))
@@ -92,6 +97,9 @@ func (s *Server) apiCertCreate(w http.ResponseWriter, r *http.Request) {
 	var req certs.Request
 	if !decodeJSON(w, r, &req) {
 		return
+	}
+	if req.Source == "" || req.Source == "auto" { // wie die Seite: ipv64 DNS-01, wenn alle Namen im Account liegen, sonst HTTP-01
+		req.Source = s.Certs.AutoSource(r.Context(), req.Names)
 	}
 	c, err := s.Certs.Create(r.Context(), req)
 	if err != nil {
@@ -339,4 +347,57 @@ func (s *Server) apiDNSAccountDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "cert.dns.delete", strconv.FormatInt(id, 10), "name="+a.Name)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// apiDNSCheckGet liefert die eigenen Resolver der DNS-01-Pruefung (leer = nur die eingebauten).
+func (s *Server) apiDNSCheckGet(w http.ResponseWriter, r *http.Request) {
+	list := s.Certs.CheckResolvers(r.Context())
+	if list == nil {
+		list = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"resolvers": list})
+}
+
+// apiDNSCheckPut speichert die eigenen Resolver (IP-Adressen oder https://, tls://, quic://, hoechstens 10).
+func (s *Server) apiDNSCheckPut(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Resolvers []string `json:"resolvers"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	list, err := certs.ParseCheckResolvers(strings.Join(in.Resolvers, " "))
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error(), "field": "resolvers"})
+		return
+	}
+	if err := s.Certs.SetCheckResolvers(r.Context(), list); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.audit(r, "cert.dnscheck", "", fmt.Sprintf("resolvers=%d", len(list)))
+	s.apiDNSCheckGet(w, r)
+}
+
+// dnsPathJSON ist ein gepruefter Weg der DNS-01-Pruefung.
+type dnsPathJSON struct {
+	Name   string `json:"name"`
+	Direct bool   `json:"direct"` // Nameserver von ipv64 direkt (sonst oeffentlicher Resolver)
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// apiDNSCheckRun prueft wie die Seite, welche Wege der DNS-01-Pruefung von hier gehen (hoechstens 30 Sekunden).
+func (s *Server) apiDNSCheckRun(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	res := s.Certs.CheckDNSPaths(ctx)
+	out := make([]dnsPathJSON, 0, len(res))
+	direct, public := false, false
+	for _, x := range res {
+		out = append(out, dnsPathJSON{Name: x.Name, Direct: x.Direct, OK: x.OK, Detail: x.Detail})
+		direct = direct || x.Direct && x.OK
+		public = public || !x.Direct && x.OK
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"paths": out, "direct_ok": direct, "public_ok": public, "ok": direct || public})
 }

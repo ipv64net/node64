@@ -1,6 +1,7 @@
 package cdn64
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strings"
@@ -73,21 +74,30 @@ func (m *Module) pageNetListsSave(w http.ResponseWriter, r *http.Request) {
 
 // pageRelease hebt eine automatische Sperre auf und traegt die Adresse in die Freigabeliste ein.
 func (m *Module) pageRelease(w http.ResponseWriter, r *http.Request) {
-	ip := strings.TrimSpace(r.PostFormValue("ip"))
-	ok := false
-	switch r.FormValue("from") {
-	case "honeypot":
-		ok = m.hpUnblock(ip)
-	case "ban":
-		ok = m.lim.unban(ip)
-	}
-	if ok {
-		if err := m.blAllowAdd(r.Context(), ip); err != nil {
+	ip, from := strings.TrimSpace(r.PostFormValue("ip")), r.FormValue("from")
+	if from != "" { // die Seite nennt immer die Herkunft
+		if ok, err := m.release(r.Context(), ip, from); err != nil {
 			m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.sec.err_nets"))
-		} else {
-			m.g.Audit(r, "cdn64.release", ip, r.FormValue("from"))
+		} else if ok {
+			m.g.Audit(r, "cdn64.release", ip, from)
 			m.g.Flash(w, r, "success", m.g.T(r, "cdn64.sec.released", "ip", ip))
 		}
 	}
 	http.Redirect(w, r, "/cdn64/access#sperrliste", http.StatusSeeOther)
+}
+
+// release hebt die automatische Sperre einer Adresse auf (from: honeypot, ban, "" = beide) und traegt sie in die
+// Freigabeliste ein; false = keine solche Sperre.
+func (m *Module) release(ctx context.Context, ip, from string) (bool, error) {
+	ok := false
+	if from == "" || from == "honeypot" {
+		ok = m.hpUnblock(ip)
+	}
+	if from == "" || from == "ban" {
+		ok = m.lim.unban(ip) || ok
+	}
+	if !ok {
+		return false, nil
+	}
+	return true, m.blAllowAdd(ctx, ip)
 }

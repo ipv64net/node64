@@ -3,7 +3,7 @@
   "info": {
     "title": "Node64 – lokale API",
     "version": "1.2.0",
-    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log.\n\nZu viele ungültige API-Keys von einer Adresse: 429 mit Retry-After (5 Versuche, dann einer je 30 s). Audit-Einträge per API-Key tragen die Herkunft api:<Key-Name>."
+    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log.\n\nZu viele ungültige API-Keys von einer Adresse: 429 mit Retry-After (5 Versuche, dann einer je 30 s). Audit-Einträge per API-Key tragen die Herkunft api:<Key-Name>.\n\n**Nur in der Oberfläche (bewusst):** Passwort, 2FA, Passkeys, das Verknüpfen von SSO-Identitäten und die Anmelde-Konfiguration (OIDC-Anbieter, Forward-Auth). Ein API-Key soll keinen Anmeldeweg schaffen oder ändern können."
   },
   "servers": [
     {
@@ -1951,7 +1951,7 @@
           },
           "request_certificate": {
             "type": "object",
-            "description": "Optional: gleich ein Zertifikat für alle Domains anfordern (läuft im Hintergrund). Scheitert das, ist der Host trotzdem gespeichert und die Antwort enthält certificate_error.",
+            "description": "Optional: gleich ein Zertifikat für alle Domains anfordern (läuft im Hintergrund). Scheitert das, ist der Host trotzdem gespeichert und die Antwort enthält certificate_error. self = selbst signiert, ca = eigene CA (ca_id), beide ohne Let's-Encrypt-Konto.",
             "properties": {
               "source": {
                 "type": "string",
@@ -1960,7 +1960,9 @@
                   "ipv64",
                   "alias",
                   "http",
-                  "dns"
+                  "dns",
+                  "self",
+                  "ca"
                 ]
               },
               "alias_zone": {
@@ -1974,6 +1976,14 @@
               },
               "dns_account": {
                 "type": "integer"
+              },
+              "ca_id": {
+                "type": "integer",
+                "description": "eigene CA (source=ca)"
+              },
+              "accept_tos": {
+                "type": "boolean",
+                "description": "Nutzungsbedingungen von Let's Encrypt annehmen (ACME-Wege), solange das Konto sie noch nicht angenommen hat"
               }
             }
           },
@@ -2303,6 +2313,10 @@
       "StreamInput": {
         "type": "object",
         "properties": {
+          "online_name": {
+            "type": "string",
+            "description": "Portmapper: Port über CDN64 unter diesem Namen (Modus 3), \"\" = nur lokal"
+          },
           "name": {
             "type": "string"
           },
@@ -2499,6 +2513,23 @@
       "CDNAdvanced": {
         "type": "object",
         "properties": {
+          "maintenance": {
+            "type": "boolean",
+            "description": "Wartungsmodus (nur Proxy-Hosts): Wartungsseite (503) statt Ziel"
+          },
+          "maintenance_style": {
+            "type": "string",
+            "enum": [
+              "matrix",
+              "gear",
+              "custom"
+            ],
+            "description": "Wartungsseite, Standard matrix"
+          },
+          "maintenance_html": {
+            "type": "string",
+            "description": "eigenes HTML (custom), höchstens 64 KB"
+          },
           "request_headers": {
             "type": "array",
             "items": {
@@ -2670,6 +2701,57 @@
       "CDNAccessListInput": {
         "type": "object",
         "properties": {
+          "login_page": {
+            "type": "boolean",
+            "description": "Anmeldung über eine Login-Seite statt des Browser-Dialogs"
+          },
+          "auth": {
+            "type": "string",
+            "enum": [
+              "",
+              "authentik",
+              "authelia",
+              "oauth2-proxy",
+              "custom"
+            ],
+            "description": "Anmeldedienst (Forward-Auth); \"\" = Benutzer der Liste"
+          },
+          "forward": {
+            "type": "object",
+            "description": "Einstellung des Anmeldedienstes",
+            "properties": {
+              "address": {
+                "type": "string",
+                "description": "Prüf-Adresse, z. B. http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"
+              },
+              "headers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Antwort-Header, die ans Ziel gehen"
+              },
+              "callback": {
+                "type": "string",
+                "description": "Pfad des Rückwegs auf dem Host"
+              }
+            }
+          },
+          "pass_user": {
+            "type": "boolean",
+            "description": "Remote-User, -Email, -Groups, -Name an das Ziel"
+          },
+          "add_key": {
+            "type": "string",
+            "description": "Name eines neuen Zugangsschlüssels; der Schlüssel steht einmal in der Antwort"
+          },
+          "remove_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "zu löschende Zugangsschlüssel (Anfang/hint)"
+          },
           "name": {
             "type": "string"
           },
@@ -3120,6 +3202,27 @@
       "CDNHoneypotSettings": {
         "type": "object",
         "properties": {
+          "route": {
+            "type": "object",
+            "description": "welche Abweisungen an den Honeypot gehen; fehlt = Standard (alles außer geo)",
+            "properties": {
+              "blocklist": {
+                "type": "boolean"
+              },
+              "honeypot": {
+                "type": "boolean"
+              },
+              "exploit": {
+                "type": "boolean"
+              },
+              "ai_bot": {
+                "type": "boolean"
+              },
+              "geo": {
+                "type": "boolean"
+              }
+            }
+          },
           "decoy": {
             "type": "boolean",
             "description": "Anfragen ohne passenden Host an den Web-Köder von Honeypot64"
@@ -4824,7 +4927,7 @@
       },
       "PVESystem": {
         "type": "object",
-        "description": "Proxmox-VE-System (Einzel-Node oder Cluster) bzw. Docker-Host (kind docker) mit Zustand; das Token-Secret wird nie ausgegeben. Docker: addresses = [unix:///var/run/docker.sock], ohne token_id/pin_sha256; guests = Container.",
+        "description": "Proxmox-VE-System (Einzel-Node oder Cluster), Proxmox Backup Server (kind pbs) bzw. Docker-Host (kind docker) mit Zustand; Secret und private Schlüssel werden nie ausgegeben. Docker: addresses = eine Adresse (unix://, tcp://, https:// oder ssh://), ohne token_id; pin_sha256 nur bei https/ssh; guests = Container.",
         "properties": {
           "id": {
             "type": "integer"
@@ -4833,9 +4936,10 @@
             "type": "string",
             "enum": [
               "pve",
+              "pbs",
               "docker"
             ],
-            "description": "pve = Proxmox VE, docker = Docker-Host (Container als Gäste, Key docker/<name>)"
+            "description": "pve = Proxmox VE, pbs = Proxmox Backup Server, docker = Docker-Host (Container als Gäste, Key docker/<name>)"
           },
           "name": {
             "type": "string"
@@ -4924,13 +5028,85 @@
           },
           "guests_bad": {
             "type": "integer"
+          },
+          "pbs": {
+            "type": "object",
+            "description": "nur Proxmox Backup Server: datastores (store, total, used, avail, estimated_full, error, mount_status, backend, dedup, groups, snapshots, last_backup …), services, update, failed_tasks"
+          },
+          "storages": {
+            "type": "array",
+            "description": "nur Proxmox VE: Speicher aus der letzten Abfrage",
+            "items": {
+              "type": "object",
+              "properties": {
+                "storage": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                },
+                "shared": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "total": {
+                  "type": "integer"
+                },
+                "used": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "credentials": {
+            "$ref": "#/components/schemas/DockerCredentials"
+          }
+        }
+      },
+      "DockerCredentials": {
+        "type": "object",
+        "description": "Nur Docker-Hosts per SSH bzw. TLS: welche Zugangsdaten gespeichert sind (nie die privaten Schlüssel selbst).",
+        "properties": {
+          "key": {
+            "type": "boolean",
+            "description": "privater Schlüssel (SSH bzw. TLS-Client) gespeichert"
+          },
+          "cert": {
+            "type": "boolean",
+            "description": "TLS-Client-Zertifikat gespeichert"
+          },
+          "ca": {
+            "type": "boolean",
+            "description": "CA des Docker-Daemons gespeichert"
+          },
+          "public_key": {
+            "type": "string",
+            "description": "SSH: Zeile für ~/.ssh/authorized_keys auf dem Docker-Host",
+            "example": "ssh-ed25519 AAAA… node64"
           }
         }
       },
       "PVESystemInput": {
         "type": "object",
-        "description": "Anlegen bzw. Teiländerung. secret ist beim Anlegen nötig; beim Ändern behält ein leeres Secret das gespeicherte.",
+        "description": "Anlegen bzw. Teiländerung. secret ist beim Anlegen nötig (Proxmox); beim Ändern behält ein leeres Secret das gespeicherte. Docker-Hosts: Zugangsdaten entweder ganz als secret (JSON {key, cert, ca} oder privater SSH-Schlüssel als PEM) oder einzeln mit private_key, cert, ca, generate_key – nicht genannte Teile bleiben dann gespeichert; wechselt die Art der Verbindung (z. B. ssh → https), gelten Zugangsdaten und Pin der alten Art nicht mehr. Eine Adresse, die schon ein anderer Docker-Host hat, wird abgelehnt (422, key docker.err.duplicate).",
         "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pve",
+              "pbs"
+            ],
+            "default": "pve",
+            "description": "nur beim Anlegen und Testen (Proxmox); Docker-Hosts über /healthchecks/docker"
+          },
           "name": {
             "type": "string"
           },
@@ -4957,6 +5133,88 @@
           "enabled": {
             "type": "boolean",
             "default": true
+          },
+          "private_key": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "nur Docker: privater SSH- bzw. TLS-Client-Schlüssel (PEM); leer = unverändert"
+          },
+          "cert": {
+            "type": "string",
+            "description": "nur Docker (https): TLS-Client-Zertifikat (PEM); \"\" = Zertifikat und Schlüssel entfernen"
+          },
+          "ca": {
+            "type": "string",
+            "description": "nur Docker (https): CA des Docker-Daemons (PEM); \"\" = entfernen (dann Pin bzw. System-CA)"
+          },
+          "generate_key": {
+            "type": "boolean",
+            "description": "nur Docker (ssh): neuen ed25519-Schlüssel erzeugen und speichern; der öffentliche steht danach in credentials.public_key"
+          }
+        }
+      },
+      "DockerProbe": {
+        "type": "object",
+        "description": "Ergebnis von „Verbindung testen“ für Docker-Hosts.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "gesehener Host-Key (SSH) bzw. Zertifikat (TLS), 64 hex – als pin_sha256 verwendbar"
+          },
+          "fingerprint_display": {
+            "type": "string",
+            "description": "zum Vergleichen: SSH wie ssh-keygen (SHA256:…), TLS mit Doppelpunkten"
+          },
+          "trusted": {
+            "type": "boolean",
+            "description": "TLS: Zertifikat von der CA bzw. System-CA bestätigt (kein Pin nötig)"
+          },
+          "need_confirm": {
+            "type": "boolean",
+            "description": "nur der Fingerabdruck wurde gelesen (Schlüssel bzw. Zertifikat nicht benutzt): mit ihm als pin_sha256 erneut testen"
+          },
+          "pin_differs": {
+            "type": "boolean",
+            "description": "gesehener Fingerabdruck passt nicht zum angegebenen Pin"
+          },
+          "info": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "os": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "ncpu": {
+                "type": "integer"
+              },
+              "mem_total": {
+                "type": "integer"
+              }
+            }
+          },
+          "containers": {
+            "type": "integer"
+          },
+          "running": {
+            "type": "integer"
+          },
+          "warning": {
+            "type": "string"
+          },
+          "public_key": {
+            "type": "string",
+            "description": "SSH: öffentlicher Teil des benutzten Schlüssels (authorized_keys)"
           }
         }
       },
@@ -5323,6 +5581,10 @@
           "as_check": {
             "type": "boolean"
           },
+          "name": {
+            "type": "string",
+            "description": "nur mit as_check true: Name des neuen Checks (leer = „System – Eintrag“); ein schon geführter Check behält seinen Namen"
+          },
           "expect_running": {
             "type": [
               "boolean",
@@ -5498,12 +5760,12 @@
           },
           "dynamic": {
             "type": "boolean",
-            "readOnly": true,
-            "description": "dynamische Updates (RFC 2136) an (auf der Seite einschaltbar)"
+            "description": "dynamische Updates (RFC 2136) mit TSIG; beim ersten Einschalten entsteht der Schlüssel (GET/POST /dns64/zones/{id}/tsig). Fehlt das Feld beim Ändern, bleibt der Schalter."
           },
           "tsig_name": {
             "type": "string",
-            "readOnly": true
+            "readOnly": true,
+            "description": "Name des Schlüssels (node64-<zone>); den Schlüssel selbst liefert nur /dns64/zones/{id}/tsig"
           }
         },
         "required": [
@@ -8725,6 +8987,111 @@
         }
       }
     },
+    "/dns64/denylist": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Sperrliste (gilt samt Subdomains)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "type": "string"
+                      },
+                      "addedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Domain sperren",
+        "description": "Eine gleiche Freigabe fällt dabei weg.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string",
+                    "example": "ads.example.com"
+                  }
+                },
+                "required": [
+                  "domain"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`domain` (normalisiert)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltiger Domainname"
+          },
+          "503": {
+            "description": "Sperrliste nicht geladen"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Sperre entfernen",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Entfernt"
+          },
+          "400": {
+            "description": "Ungueltiger Domainname"
+          }
+        }
+      }
+    },
     "/dns64/settings": {
       "get": {
         "tags": [
@@ -9145,6 +9512,66 @@
               "application/x-apple-aspen-config": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/cluster": {
+      "put": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Bevorzugte Node im Cluster wählen",
+        "description": "`preferred_node`: Kennung einer Node im DynDNS-Bereich des Clusters, \"\" = die mit der kleinsten Kennung. Stand in GET /dyndns/status (`cluster`).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "preferred_node": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "preferred_node"
+                ]
+              },
+              "example": {
+                "preferred_node": ""
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "preferred_node": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Feld fehlt"
+          },
+          "422": {
+            "description": "Keine Node des Bereichs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -11167,6 +11594,1743 @@
         }
       }
     },
+    "/update": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Selbst-Update: Version, Einstellungen, letztes Prüfergebnis",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Laufende Version, Herkunft, Einstellungen (Mode, Channel, Chosen, Window, Modes, Channels) und letztes Prüfergebnis (Latest)"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Selbst-Update nicht verfügbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update/settings": {
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Update-Einstellungen (Betriebsart, Kanal, Zeitfenster)",
+        "description": "Wie Einstellungen › Updates. Fehlende Felder bleiben. `channel: auto` nimmt die eigene Wahl zurück (folgt dann der laufenden Version).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "notify",
+                      "auto"
+                    ]
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "stable",
+                      "preview",
+                      "auto"
+                    ]
+                  },
+                  "window": {
+                    "type": "string",
+                    "description": "Zeitfenster für automatische Updates, z. B. `03:00-05:00`"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Laufende Version, Herkunft, Einstellungen (Mode, Channel, Chosen, Window, Modes, Channels) und letztes Prüfergebnis (Latest)"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Selbst-Update nicht verfügbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültiger Wert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update/check": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Jetzt nach Updates suchen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Laufende Version, Herkunft, Einstellungen (Mode, Channel, Chosen, Window, Modes, Channels) und letztes Prüfergebnis (Latest)"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Prüfung fehlgeschlagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update/apply": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Neueste Version des Kanals installieren (startet neu)",
+        "responses": {
+          "202": {
+            "description": "Installation läuft im Hintergrund",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "restarting"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "schon aktuell oder Update läuft bereits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Prüfung fehlgeschlagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update/reset": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Zurück auf die Version aus dem Image (startet neu)",
+        "responses": {
+          "202": {
+            "description": "Neustart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "restarting"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Benutzer dieser Node (ohne Passwort-Hash und Geheimnisse)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "uid": {
+                        "type": "string",
+                        "description": "Kennung im Cluster"
+                      },
+                      "username": {
+                        "type": "string"
+                      },
+                      "lang": {
+                        "type": "string"
+                      },
+                      "timezone": {
+                        "type": "string"
+                      },
+                      "totp": {
+                        "type": "boolean",
+                        "description": "2FA eingerichtet"
+                      },
+                      "self": {
+                        "type": "boolean",
+                        "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "last_login_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Angemeldeter Benutzer bzw. Inhaber des API-Keys",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "uid": {
+                      "type": "string",
+                      "description": "Kennung im Cluster"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "lang": {
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "totp": {
+                      "type": "boolean",
+                      "description": "2FA eingerichtet"
+                    },
+                    "self": {
+                      "type": "boolean",
+                      "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "last_login_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Eigene Sprache und Zeitzone",
+        "description": "Fehlende Felder bleiben. Die Zeitzone gilt auch für die Node.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lang": {
+                    "type": "string",
+                    "enum": [
+                      "de",
+                      "en"
+                    ]
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "description": "IANA, z. B. Europe/Berlin"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "uid": {
+                      "type": "string",
+                      "description": "Kennung im Cluster"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "lang": {
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "totp": {
+                      "type": "boolean",
+                      "description": "2FA eingerichtet"
+                    },
+                    "self": {
+                      "type": "boolean",
+                      "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "last_login_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "unbekannte Sprache oder Zeitzone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "delete": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Anderen Benutzer löschen",
+        "description": "Den eigenen nie (409). Mit eingeschaltetem Cluster-Bereich „Benutzer“ auch auf den anderen Nodes.",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "eigener Benutzer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "KI-Schnittstelle (MCP): Schalter, Bereiche, eigene Schlüssel",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "rate_per_minute": {
+                      "type": "integer"
+                    },
+                    "areas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "hint": {
+                            "type": "string"
+                          },
+                          "areas": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "last_used_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "last_ip": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "MCP ein- oder ausschalten",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "wie GET"
+          },
+          "422": {
+            "description": "enabled fehlt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/keys": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "MCP-Schlüssel anlegen (nur Leserechte) – der Schlüssel steht nur in dieser Antwort",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "1–100 Zeichen"
+                  },
+                  "areas": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Bereiche aus GET /mcp"
+                  }
+                },
+                "required": [
+                  "name",
+                  "areas"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "hint": {
+                          "type": "string"
+                        },
+                        "areas": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "last_used_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "last_ip": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "description": "mcp64_…"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Name oder Bereiche ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/keys/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "delete": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Eigenen MCP-Schlüssel widerrufen",
+        "responses": {
+          "204": {
+            "description": "widerrufen"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64/channels": {
+      "get": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "E-Mail-, SMS- und App-Kanäle bei ipv64 (auch unbestätigte)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Kanal bei ipv64 (wie die API v2 von ipv64.net)",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "ipv64_mail",
+                          "ipv64_sms",
+                          "app"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "default": {
+                        "type": "boolean"
+                      },
+                      "verified": {
+                        "type": "boolean",
+                        "description": "per Code bestätigt"
+                      },
+                      "lang": {
+                        "type": "string"
+                      },
+                      "notify_down": {
+                        "type": "boolean"
+                      },
+                      "notify_up": {
+                        "type": "boolean"
+                      },
+                      "config": {
+                        "type": "object",
+                        "description": "nicht geheime Werte (E-Mail-Adresse bzw. Nummer)"
+                      },
+                      "last_error": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "E-Mail- oder SMS-Kanal bei ipv64 anlegen",
+        "description": "Danach unbestätigt: Code mit `verify/send` schicken, mit `verify` bestätigen.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "ipv64_mail",
+                      "ipv64_sms"
+                    ],
+                    "description": "nur beim Anlegen"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "1–100 Zeichen"
+                  },
+                  "lang": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Felder des Typs, z. B. `{\"email\": \"…\"}` bzw. `{\"number\": \"+49 …\"}`; unbekannte Felder: 422"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "default": {
+                    "type": "boolean"
+                  },
+                  "notify_down": {
+                    "type": "boolean"
+                  },
+                  "notify_up": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Kanal bei ipv64 (wie die API v2 von ipv64.net)",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "ipv64_mail",
+                        "ipv64_sms",
+                        "app"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "per Code bestätigt"
+                    },
+                    "lang": {
+                      "type": "string"
+                    },
+                    "notify_down": {
+                      "type": "boolean"
+                    },
+                    "notify_up": {
+                      "type": "boolean"
+                    },
+                    "config": {
+                      "type": "object",
+                      "description": "nicht geheime Werte (E-Mail-Adresse bzw. Nummer)"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Eingabe ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64/channels/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal bei ipv64",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Kanal bei ipv64 (wie die API v2 von ipv64.net)",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "ipv64_mail",
+                        "ipv64_sms",
+                        "app"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "per Code bestätigt"
+                    },
+                    "lang": {
+                      "type": "string"
+                    },
+                    "notify_down": {
+                      "type": "boolean"
+                    },
+                    "notify_up": {
+                      "type": "boolean"
+                    },
+                    "config": {
+                      "type": "object",
+                      "description": "nicht geheime Werte (E-Mail-Adresse bzw. Nummer)"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal bei ipv64 ändern",
+        "description": "Fehlende Felder bleiben. Neue Adresse bzw. Nummer: wieder unbestätigt.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "ipv64_mail",
+                      "ipv64_sms"
+                    ],
+                    "description": "nur beim Anlegen"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "1–100 Zeichen"
+                  },
+                  "lang": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Felder des Typs, z. B. `{\"email\": \"…\"}` bzw. `{\"number\": \"+49 …\"}`; unbekannte Felder: 422"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "default": {
+                    "type": "boolean"
+                  },
+                  "notify_down": {
+                    "type": "boolean"
+                  },
+                  "notify_up": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Kanal bei ipv64 (wie die API v2 von ipv64.net)",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "ipv64_mail",
+                        "ipv64_sms",
+                        "app"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "per Code bestätigt"
+                    },
+                    "lang": {
+                      "type": "string"
+                    },
+                    "notify_down": {
+                      "type": "boolean"
+                    },
+                    "notify_up": {
+                      "type": "boolean"
+                    },
+                    "config": {
+                      "type": "object",
+                      "description": "nicht geheime Werte (E-Mail-Adresse bzw. Nummer)"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Eingabe ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal bei ipv64 löschen",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64/channels/{id}/test": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Testnachricht (nur bestätigte Kanäle)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64/channels/{id}/verify/send": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Bestätigungscode an Adresse bzw. Nummer schicken",
+        "responses": {
+          "202": {
+            "description": "geschickt"
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "zu viele Codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64/channels/{id}/verify": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal mit dem Code bestätigen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Kanal bei ipv64 (wie die API v2 von ipv64.net)",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "ipv64_mail",
+                        "ipv64_sms",
+                        "app"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    },
+                    "verified": {
+                      "type": "boolean",
+                      "description": "per Code bestätigt"
+                    },
+                    "lang": {
+                      "type": "string"
+                    },
+                    "notify_down": {
+                      "type": "boolean"
+                    },
+                    "notify_up": {
+                      "type": "boolean"
+                    },
+                    "config": {
+                      "type": "object",
+                      "description": "nicht geheime Werte (E-Mail-Adresse bzw. Nummer)"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key hinterlegt (PUT /ipv64/key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Code falsch oder abgelaufen (`code: invalid_code`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler von ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/start": {
+      "post": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Verknüpfen per Code: Code beim hub holen",
+        "description": "Den Code im Portal von ipv64.net eingeben, danach meldet GET /link/status `linked: true`. Ohne Code geht es mit POST /link/apikey.",
+        "responses": {
+          "201": {
+            "description": "Code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hub": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "schon verknüpft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "hub nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Verknüpfung nicht verfügbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/status": {
+      "get": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Stand der Verknüpfung per Code (fragt bei offenem Code beim hub nach)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "hub": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "requesting": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/cancel": {
+      "post": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Offenen Code verwerfen",
+        "responses": {
+          "204": {
+            "description": "verworfen"
+          },
+          "503": {
+            "description": "Verknüpfung nicht verfügbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/acme": {
+      "post": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "ACME-Konto clusterweit wählen (bei abweichenden Konten, siehe GET /group `acme_accounts`)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "thumbprint": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "thumbprint"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chosen": {
+                      "type": "string"
+                    },
+                    "dropped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "thumbprint": {
+                            "type": "string"
+                          },
+                          "node_id": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekanntes Konto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "thumbprint fehlt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "nicht verfügbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/users": {
+      "post": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Gleichnamigen Benutzer clusterweit wählen (siehe GET /group `user_conflicts`)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uid": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "chosen": {
+                      "type": "string"
+                    },
+                    "dropped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "uid": {
+                            "type": "string"
+                          },
+                          "node_id": {
+                            "type": "string"
+                          },
+                          "own": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannte Version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "uid fehlt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "nicht verfügbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/keys": {
       "get": {
         "tags": [
@@ -12007,13 +14171,15 @@
                   "source": {
                     "type": "string",
                     "enum": [
+                      "auto",
                       "ipv64",
                       "alias",
                       "http",
                       "dns",
                       "ca",
                       "self"
-                    ]
+                    ],
+                    "description": "leer oder auto = wie die Seite: ipv64, wenn alle Namen im ipv64-Account liegen, sonst http"
                   },
                   "alias_zone": {
                     "type": "string"
@@ -14060,6 +16226,149 @@
         }
       }
     },
+    "/certs/dns-check": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Eigene Resolver der DNS-01-Prüfung",
+        "description": "Leer = nur die eingebauten (Nameserver von ipv64 direkt, öffentliche Resolver).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resolvers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Eigene Resolver der DNS-01-Prüfung speichern",
+        "description": "IP-Adressen (Port 53) oder https://, tls://, quic:// URLs, höchstens 10. Leere Liste = nur die eingebauten.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resolvers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "example": {
+                "resolvers": [
+                  "192.168.1.1",
+                  "https://dns.quad9.net/dns-query"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resolvers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ungültiger Eintrag (`field` resolvers)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/dns-check/run": {
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "DNS-01-Prüfung testen: welche Wege gehen von hier",
+        "description": "Wie „Prüfen“ auf der Seite, höchstens 30 Sekunden. Ein Weg genügt.",
+        "responses": {
+          "200": {
+            "description": "Ergebnis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "direct": {
+                            "type": "boolean",
+                            "description": "Nameserver von ipv64 direkt (sonst öffentlicher Resolver)"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "detail": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "direct_ok": {
+                      "type": "boolean"
+                    },
+                    "public_ok": {
+                      "type": "boolean"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/certs/dns-accounts": {
       "get": {
         "tags": [
@@ -15038,14 +17347,15 @@
                     "type": "array",
                     "items": {
                       "type": "string"
-                    }
+                    },
+                    "description": "eingeschaltete Listen; fehlt = unverändert, [] = alle aus"
                   },
                   "allow": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     },
-                    "description": "Freigabeliste (wird zusammen mit enabled gesetzt)"
+                    "description": "Freigabeliste (IPs/Netze); fehlt = unverändert. Allein gesendet bleiben die eingeschalteten Listen."
                   },
                   "deny": {
                     "type": "array",
@@ -15536,6 +17846,1297 @@
         }
       }
     },
+    "/cdn64/docker": {
+      "get": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Docker-Abgleich: Stand, Container und Einstellungen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "host": {
+                      "type": "string",
+                      "description": "Docker-API wie benutzt"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "synced": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "containers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      },
+                      "description": "Container mit node64.proxy.*- bzw. traefik.*-Labels"
+                    },
+                    "settings": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "description": "Proxy-Hosts aus Docker-Labels (node64.proxy.*)"
+                        },
+                        "traefik": {
+                          "type": "boolean",
+                          "description": "auch traefik.*-Labels lesen (Standard an)"
+                        },
+                        "docker_host": {
+                          "type": "string",
+                          "description": "Docker-API dieser Node (unix:// oder tcp:// zu einem docker-socket-proxy, kein ssh://); \"\" = Standard"
+                        },
+                        "certificate": {
+                          "type": "string",
+                          "description": "Zertifikat für neue Docker-Hosts: \"\" (keins), auto, ipv64, http, dns:<Zugang>"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Docker-Abgleich einstellen (fehlende Felder bleiben)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "Proxy-Hosts aus Docker-Labels (node64.proxy.*)"
+                      },
+                      "traefik": {
+                        "type": "boolean",
+                        "description": "auch traefik.*-Labels lesen (Standard an)"
+                      },
+                      "docker_host": {
+                        "type": "string",
+                        "description": "Docker-API dieser Node (unix:// oder tcp:// zu einem docker-socket-proxy, kein ssh://); \"\" = Standard"
+                      },
+                      "certificate": {
+                        "type": "string",
+                        "description": "Zertifikat für neue Docker-Hosts: \"\" (keins), auto, ipv64, http, dns:<Zugang>"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "accept_tos": {
+                        "type": "boolean",
+                        "description": "Nutzungsbedingungen von Let's Encrypt annehmen (nötig mit certificate, solange das Konto sie noch nicht angenommen hat)"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK, wie GET"
+          },
+          "422": {
+            "description": "docker_host bzw. certificate ungültig, Nutzungsbedingungen nicht angenommen (field docker_cert)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/release": {
+      "post": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Automatische Sperre aufheben und die Adresse in die Freigabeliste eintragen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ip"
+                ],
+                "properties": {
+                  "ip": {
+                    "type": "string",
+                    "description": "IP bzw. /64"
+                  },
+                  "from": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "honeypot",
+                      "ban"
+                    ],
+                    "description": "Sperre des Honeypots, des DoS-Schutzes oder beide (leer)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNBlocklists"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "keine automatische Sperre für diese Adresse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "from ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/localdns": {
+      "post": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Namen des Hosts als eigene Einträge in DNS64 eintragen (Heimnetz direkt statt über das Internet)",
+        "description": "IPv4 nur A, IPv6 nur AAAA, nur im Heimnetz erreichbare Adressen. Vorhandene Einträge (gleicher Typ oder CNAME) bleiben, Wildcards und Hauptdomains werden ausgelassen. Ohne Adressen nimmt PROXY64 die vorgeschlagenen wie auf der Seite.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ipv4": {
+                    "type": "string"
+                  },
+                  "ipv6": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "\"name typ\" schon vorhanden"
+                    },
+                    "excluded": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ipv4": {
+                      "type": "string"
+                    },
+                    "ipv6": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Host unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DNS64 aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Adresse ungültig (field ip)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/protection": {
+      "get": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64 Statistik: was die CDN64-Server für die Namen des Kontos abgewehrt haben, je Name mit WAF/JA4",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                1,
+                7,
+                30
+              ],
+              "default": 7
+            },
+            "description": "1 = heute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "days": {
+                      "type": "integer"
+                    },
+                    "ja4_global": {
+                      "type": "string",
+                      "description": "count = Startphase (nur zählen), block"
+                    },
+                    "totals": {
+                      "type": "object",
+                      "description": "blocked_list, blocked_acl, blocked_flood, blocked_limit, blocked_waf, blocked_ja4, ja4_hits, blocked_ips, conns, conns_v4"
+                    },
+                    "daily": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "ja4_top": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ja4": {
+                            "type": "string"
+                          },
+                          "hits": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "hosts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Name bei ipv64"
+                          },
+                          "fqdn": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "integer"
+                          },
+                          "host_id": {
+                            "type": "integer",
+                            "description": "Host dieser Node (fehlt = keiner)"
+                          },
+                          "blocked": {
+                            "type": "integer"
+                          },
+                          "overload": {
+                            "type": "integer"
+                          },
+                          "waf": {
+                            "type": "boolean"
+                          },
+                          "ja4": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "off",
+                              "count",
+                              "block"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account verbunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/protection": {
+      "put": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64-Schutz (WAF, JA4) der Server für alle Namen des Hosts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "waf": {
+                    "type": "boolean",
+                    "description": "Muster-WAF (Modus 2/3); fehlt = wie bisher"
+                  },
+                  "ja4": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "count",
+                      "block"
+                    ],
+                    "description": "Angriffs-Werkzeuge (JA4); fehlt = wie bisher"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "waf": {
+                      "type": "boolean"
+                    },
+                    "ja4": {
+                      "type": "string"
+                    },
+                    "names": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "fqdn": {
+                            "type": "string"
+                          },
+                          "waf": {
+                            "type": "boolean"
+                          },
+                          "ja4": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Host unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account bzw. Name nicht bei CDN64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ja4 ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/servers": {
+      "get": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64-Server und Verbindungen je Server der Namen des Hosts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Server und Verbindungen je Server (Felder von ipv64)",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "description": "zugeteilte Server"
+                    },
+                    "choice": {
+                      "type": "integer",
+                      "description": "gewählt (0 = Höchstwert bzw. alle, auch künftige)"
+                    },
+                    "max": {
+                      "type": "integer"
+                    },
+                    "all": {
+                      "type": "boolean"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "selectable": {
+                      "type": "boolean",
+                      "description": "Anzahl wählbar (Klasse)"
+                    },
+                    "assigned": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "active": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "gerade im DNS"
+                    },
+                    "sessions": {
+                      "type": "integer"
+                    },
+                    "sessions_max": {
+                      "type": "integer"
+                    },
+                    "replaced": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Failover: ausgefallen → Ersatz"
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Anzahlen, 0 = alle (auch künftige); leer = fest"
+                    },
+                    "session_options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Verbindungen je Server; leer = fest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Host unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account bzw. Name nicht bei CDN64 (code not_online) bzw. Portal mit Server je Name (code not_configured)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Klasse darf nicht wählen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "count fehlt oder ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64-Server und Verbindungen je Server für alle Namen des Hosts setzen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "count"
+                ],
+                "properties": {
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Server (0 = alle, auch künftige; nur Klassen ohne Obergrenze)"
+                  },
+                  "sessions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Verbindungen je Server; fehlt = wie bisher"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Server und Verbindungen je Server (Felder von ipv64)",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "description": "zugeteilte Server"
+                    },
+                    "choice": {
+                      "type": "integer",
+                      "description": "gewählt (0 = Höchstwert bzw. alle, auch künftige)"
+                    },
+                    "max": {
+                      "type": "integer"
+                    },
+                    "all": {
+                      "type": "boolean"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "selectable": {
+                      "type": "boolean",
+                      "description": "Anzahl wählbar (Klasse)"
+                    },
+                    "assigned": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "active": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "gerade im DNS"
+                    },
+                    "sessions": {
+                      "type": "integer"
+                    },
+                    "sessions_max": {
+                      "type": "integer"
+                    },
+                    "replaced": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Failover: ausgefallen → Ersatz"
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Anzahlen, 0 = alle (auch künftige); leer = fest"
+                    },
+                    "session_options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Verbindungen je Server; leer = fest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Host unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account bzw. Name nicht bei CDN64 (code not_online) bzw. Portal mit Server je Name (code not_configured)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Klasse darf nicht wählen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "count fehlt oder ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/online/servers": {
+      "get": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64-Server des eigenen Tunnels (Portal ohne Server je Name)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Server und Verbindungen je Server (Felder von ipv64)",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "description": "zugeteilte Server"
+                    },
+                    "choice": {
+                      "type": "integer",
+                      "description": "gewählt (0 = Höchstwert bzw. alle, auch künftige)"
+                    },
+                    "max": {
+                      "type": "integer"
+                    },
+                    "all": {
+                      "type": "boolean"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "selectable": {
+                      "type": "boolean",
+                      "description": "Anzahl wählbar (Klasse)"
+                    },
+                    "assigned": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "active": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "gerade im DNS"
+                    },
+                    "sessions": {
+                      "type": "integer"
+                    },
+                    "sessions_max": {
+                      "type": "integer"
+                    },
+                    "replaced": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Failover: ausgefallen → Ersatz"
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Anzahlen, 0 = alle (auch künftige); leer = fest"
+                    },
+                    "session_options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Verbindungen je Server; leer = fest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Host unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account bzw. Name nicht bei CDN64 (code not_online) bzw. Portal mit Server je Name (code not_configured)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Klasse darf nicht wählen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "count fehlt oder ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64-Server des eigenen Tunnels setzen (Portal ohne Server je Name)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "count"
+                ],
+                "properties": {
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Server (0 = alle, auch künftige; nur Klassen ohne Obergrenze)"
+                  },
+                  "sessions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Verbindungen je Server; fehlt = wie bisher"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Server und Verbindungen je Server (Felder von ipv64)",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "description": "zugeteilte Server"
+                    },
+                    "choice": {
+                      "type": "integer",
+                      "description": "gewählt (0 = Höchstwert bzw. alle, auch künftige)"
+                    },
+                    "max": {
+                      "type": "integer"
+                    },
+                    "all": {
+                      "type": "boolean"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "selectable": {
+                      "type": "boolean",
+                      "description": "Anzahl wählbar (Klasse)"
+                    },
+                    "assigned": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "active": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "gerade im DNS"
+                    },
+                    "sessions": {
+                      "type": "integer"
+                    },
+                    "sessions_max": {
+                      "type": "integer"
+                    },
+                    "replaced": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Failover: ausgefallen → Ersatz"
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Anzahlen, 0 = alle (auch künftige); leer = fest"
+                    },
+                    "session_options": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "wählbare Verbindungen je Server; leer = fest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Host unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account bzw. Name nicht bei CDN64 (code not_online) bzw. Portal mit Server je Name (code not_configured)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Klasse darf nicht wählen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "count fehlt oder ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/online/pause": {
+      "post": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "CDN64 für die Namen des Hosts pausieren bzw. fortsetzen (DNS direkt zum Server, Einstellungen bleiben)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paused": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "gesetzt"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account bzw. Name nicht bei CDN64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/online/names/{rid}/pause": {
+      "post": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Pause eines Namens, den diese Node nicht verwaltet (Modus 3 von ipv64.net, andere Nodes)",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID des Namens bei ipv64 (GET /cdn64/online)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paused": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "gesetzt"
+          },
+          "400": {
+            "description": "ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Name unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/cdn64/hosts/{id}/online": {
       "post": {
         "tags": [
@@ -15563,9 +19164,10 @@
                   "mode": {
                     "type": "integer",
                     "enum": [
-                      1
+                      1,
+                      2
                     ],
-                    "description": "1 = durchreichen (Standard)"
+                    "description": "1 = durchreichen (Standard), 2 = auf den CDN64-Servern beenden (Zertifikat dort)"
                   },
                   "healthcheck": {
                     "type": "boolean",
@@ -16037,6 +19639,43 @@
           },
           "404": {
             "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/unassign": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gerät aus seiner Gruppe nehmen (per MAC und/oder IP)",
+        "description": "Wie „Keine Gruppe“ auf der Seite: entfernt die Zuordnungen mit dieser MAC bzw. IP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mac": {
+                    "type": "string",
+                    "example": "aa:bb:cc:dd:ee:ff"
+                  },
+                  "ip": {
+                    "type": "string",
+                    "example": "192.168.1.20"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Entfernt"
+          },
+          "400": {
+            "description": "Weder mac noch ip"
           }
         }
       }
@@ -16636,6 +20275,108 @@
         }
       }
     },
+    "/status-pages/{id}/items": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID der Statusseite"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Einträge hinzufügen",
+        "description": "Wie „Hinzufügen“ auf der Seite: hängt Checks (tokens) und Nodes, Gäste bzw. Container (resources) an eine Gruppe an. Fehlt der Check einer Ressource, wird er angelegt wie mit „als Check führen“. Schon vorhandene Einträge bleiben einmal.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "group_id": {
+                    "type": "integer",
+                    "description": "Gruppe (0 bzw. fehlt = erste)"
+                  },
+                  "tokens": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Check-Tokens"
+                  },
+                  "resources": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "system_id": {
+                          "type": "integer"
+                        },
+                        "key": {
+                          "type": "string",
+                          "example": "docker/web",
+                          "description": "node/<name>, qemu/<vmid>, lxc/<vmid> bzw. docker/<name>"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "tokens": [
+                  "hc_abc"
+                ],
+                "resources": [
+                  {
+                    "system_id": 1,
+                    "key": "qemu/100"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "unbekannter Check, ungültige Ressource bzw. Gruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/status-pages/{id}/notices": {
       "parameters": [
         {
@@ -17179,34 +20920,20 @@
           "Healthchecks"
         ],
         "summary": "Docker-Host anlegen",
-        "description": "Mit erreichbarem Socket richtet Node64 den lokalen Host automatisch ein; nach dem Entfernen nur noch hiermit bzw. über die Seite. Ohne addresses: NODE64_DOCKER_HOST bzw. unix:///var/run/docker.sock. Kein Token, kein Secret.",
+        "description": "Ohne addresses: NODE64_DOCKER_HOST bzw. unix:///var/run/docker.sock (den lokalen Host richtet auch POST /healthchecks/docker/enable ein). Aus der Ferne: ssh://user@host[:22] (privater Schlüssel nötig, z. B. generate_key, und pin_sha256 = Host-Key aus POST /healthchecks/docker/probe), https://host:2376 (optional Client-Zertifikat, CA bzw. Pin) oder tcp://host:2375 (z. B. docker-socket-proxy, ohne Zugangsdaten). Kein Token.",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "example": "Docker"
-                  },
-                  "addresses": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "example": [
-                      "unix:///var/run/docker.sock"
-                    ]
-                  },
-                  "interval": {
-                    "type": "integer",
-                    "description": "Sekunden (15–300, Standard 30)"
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  }
-                }
+                "$ref": "#/components/schemas/PVESystemInput"
+              },
+              "example": {
+                "name": "nas",
+                "addresses": [
+                  "ssh://node64@10.0.0.9:22"
+                ],
+                "pin_sha256": "SHA256:…",
+                "generate_key": true
               }
             }
           }
@@ -17573,7 +21300,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "leer = System, sonst node/<name>, qemu/<vmid>, lxc/<vmid>"
+            "description": "leer = System, sonst node/<name>, qemu/<vmid>, lxc/<vmid> bzw. docker/<name>"
           }
         ],
         "requestBody": {
@@ -17672,6 +21399,270 @@
         }
       }
     },
+    "/healthchecks/proxmox/systems/{id}/ascheck-all": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Systems"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Alle als Check aufnehmen",
+        "description": "Wie der Knopf „Alle als Check“: jeder Gast (bzw. mit scope=nodes jeder Node) aus der letzten Abfrage, der noch nicht als Check geführt wird, bekommt einen Check (ohne Vorlagen). Schon geführte bleiben; ein zweiter Aufruf legt nichts doppelt an.",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "guests",
+                "nodes"
+              ],
+              "default": "guests"
+            },
+            "description": "guests = alle Gäste bzw. Container, nodes = alle Nodes"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "integer",
+                      "description": "neu angelegte Checks"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "erster Fehler (nur bei failed > 0)"
+                    },
+                    "key": {
+                      "type": "string",
+                      "description": "i18n-Schlüssel des ersten Fehlers"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "scope ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/docker/systems/{id}/ascheck-all": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Docker-Hosts"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Alle als Check aufnehmen",
+        "description": "Wie der Knopf „Alle als Check“: jeder Container aus der letzten Abfrage (ohne Label node64.nomonitor), der noch nicht als Check geführt wird, bekommt einen Check vom Typ docker.",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "guests",
+                "nodes"
+              ],
+              "default": "guests"
+            },
+            "description": "guests = alle Gäste bzw. Container, nodes = alle Nodes"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "integer",
+                      "description": "neu angelegte Checks"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "erster Fehler (nur bei failed > 0)"
+                    },
+                    "key": {
+                      "type": "string",
+                      "description": "i18n-Schlüssel des ersten Fehlers"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "scope ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/docker/probe": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Docker-Host testen",
+        "description": "Wie „Verbindung testen“ im Assistenten: Verbindung, Version, Container, /info. Ohne pin_sha256 liest der Test bei ssh:// bzw. nicht bestätigtem https:// nur den Fingerabdruck (need_confirm, Schlüssel und Zertifikat werden nicht benutzt); danach mit fingerprint als pin_sha256 erneut testen. Mit system_id gelten die gespeicherten Zugangsdaten – nur für dieselbe Adresse und denselben Pin (sonst 422 pve.err.secret_reenter, Zugangsdaten neu mitschicken). Speichert nichts (generate_key: 422).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PVESystemInput"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "system_id": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerProbe"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben (field, key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/docker/enable": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Lokalen Docker-Host einrichten bzw. einschalten",
+        "description": "Wie der Knopf der leeren Übersicht: richtet den lokalen Socket (NODE64_DOCKER_HOST bzw. unix:///var/run/docker.sock) als Docker-Host ein bzw. schaltet ihn wieder ein – nur wenn der Socket antwortet. Schon eingerichtet: unverändert zurück.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Socket nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthchecks/proxmox/systems": {
       "get": {
         "tags": [
@@ -17702,11 +21693,13 @@
               "type": "string",
               "enum": [
                 "pve",
+                "pbs",
                 "docker",
                 "all"
               ],
               "default": "pve"
-            }
+            },
+            "description": "leer = Proxmox VE und Backup Server, pve bzw. pbs nur diese Art"
           }
         ]
       },
@@ -17776,7 +21769,7 @@
           "Healthchecks"
         ],
         "summary": "Verbindung testen",
-        "description": "Holt Zertifikat (Fingerabdruck), Version, Cluster, Nodes und Gäste. Mit system_id und ohne secret wird das gespeicherte Secret benutzt. Für Docker-Hosts nicht nötig (422).",
+        "description": "Holt Zertifikat (Fingerabdruck), Version, Cluster, Nodes und Gäste. Mit system_id und ohne secret wird das gespeicherte Secret benutzt. kind pve (Standard) oder pbs. Docker-Hosts: POST /healthchecks/docker/probe (hier 422).",
         "requestBody": {
           "required": true,
           "content": {
@@ -18158,7 +22151,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "leer = System, sonst node/<name>, qemu/<vmid>, lxc/<vmid>"
+            "description": "leer = System, sonst node/<name>, qemu/<vmid>, lxc/<vmid> bzw. docker/<name>"
           }
         ],
         "requestBody": {
@@ -18496,6 +22489,531 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Honeypot64Catalog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/watch": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Frühwarnung: eigene Netze, DynDNS-IPs, Grenzen und Treffer",
+        "description": "Liste live von ipv64 (zentraler API-Key), Zustand des Abrufs und letzte Treffer lokal (`state`).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "max": {
+                          "type": "integer"
+                        },
+                        "min_prefix_v4": {
+                          "type": "integer"
+                        },
+                        "min_prefix_v6": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "networks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "cidr": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "dyndns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ip": {
+                            "type": "string"
+                          },
+                          "domain": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "full": {
+                      "type": "boolean"
+                    },
+                    "running": {
+                      "type": "boolean"
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kein ipv64-API-Key (`no_key`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Netz (oder einzelne IP) bei ipv64 eintragen",
+        "description": "Öffentliche Netze; eine IP wird /32 bzw. /128. `label` höchstens 64 Zeichen. Fehler von ipv64 (4xx) kommen mit Status und Code durch.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cidr": {
+                    "type": "string",
+                    "example": "203.0.113.0/24"
+                  },
+                  "label": {
+                    "type": "string",
+                    "example": "Büro"
+                  }
+                },
+                "required": [
+                  "cidr"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Eingetragen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "cidr": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "verified": {
+                      "type": "boolean"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kein Key oder schon eingetragen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Grenze erreicht (`limit_reached`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ungültig (`invalid_cidr`, `not_public`, `label`, `prefix_too_large`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/watch/check": {
+      "post": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Treffer der Frühwarnung sofort abrufen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "new_hits": {
+                      "type": "integer"
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kein ipv64-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/watch/{id}": {
+      "delete": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Netz bei ipv64 entfernen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Entfernt"
+          },
+          "400": {
+            "description": "Ungültige ID"
+          },
+          "404": {
+            "description": "Schon weg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kein ipv64-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Code, z. B. no_key, invalid_cidr, not_public, label, prefix_too_large, duplicate, limit_reached"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/cert": {
+      "post": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Zertifikat für Köder-Namen anlegen (wie auf der Seite)",
+        "description": "Namen unter einer ipv64-Domain des Accounts (Präfix oder ganzer Name, kein Wildcard, nicht die Domain selbst, höchstens 20). Ausgestellt über ipv64 DNS-01, danach in der Einstellung gewählt (`cert_id`). Mit `dns_targets` (IPv4 und/oder IPv6 oder ein Name für CNAME) legt das Modul die Records bei ipv64 an; vorhandene bleiben unberührt (`exists`). Die Namen stehen danach öffentlich in den CT-Logs.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string",
+                    "example": "decoy.ipv64.net"
+                  },
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "mail",
+                      "vpn"
+                    ]
+                  },
+                  "dns_targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "203.0.113.10"
+                    ]
+                  }
+                },
+                "required": [
+                  "domain",
+                  "names"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Angelegt, Abruf läuft im Hintergrund",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cert_id": {
+                      "type": "integer"
+                    },
+                    "names": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "selected": {
+                      "type": "boolean"
+                    },
+                    "dns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "result": {
+                            "type": "string",
+                            "enum": [
+                              "created",
+                              "exists",
+                              "error"
+                            ]
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "dns_error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kein API-Key bzw. Nutzungsbedingungen nicht angenommen (`no_key`, `tos`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ungültig (`cert_domain`, `cert_wildcard`, `cert_apex`, `cert_name`, `cert_names`, `cert_many`, `cert_dns`, `create`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Zertifikatsverwaltung fehlt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -19478,6 +23996,112 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/zones/{id}/tsig": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Schlüssel für dynamische Updates (TSIG) anzeigen",
+        "description": "Wie auf der Seite. Ohne bisher eingeschaltete dynamische Updates sind Name und Schlüssel leer.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schlüssel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "zone": {
+                      "type": "string"
+                    },
+                    "dynamic": {
+                      "type": "boolean"
+                    },
+                    "algorithm": {
+                      "type": "string",
+                      "example": "hmac-sha256"
+                    },
+                    "tsig_name": {
+                      "type": "string",
+                      "example": "node64-home.lan"
+                    },
+                    "tsig_secret": {
+                      "type": "string",
+                      "description": "Schlüssel (Base64) – nur hier, nie in Listen, Export oder Cluster"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Neuen TSIG-Schlüssel erzeugen",
+        "description": "Schaltet dynamische Updates ein; der alte Schlüssel gilt sofort nicht mehr.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Neuer Schlüssel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "zone": {
+                      "type": "string"
+                    },
+                    "dynamic": {
+                      "type": "boolean"
+                    },
+                    "algorithm": {
+                      "type": "string",
+                      "example": "hmac-sha256"
+                    },
+                    "tsig_name": {
+                      "type": "string",
+                      "example": "node64-home.lan"
+                    },
+                    "tsig_secret": {
+                      "type": "string",
+                      "description": "Schlüssel (Base64) – nur hier, nie in Listen, Export oder Cluster"
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden"
