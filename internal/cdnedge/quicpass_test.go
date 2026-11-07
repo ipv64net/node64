@@ -72,7 +72,11 @@ func TestQUICPassthroughMode1(t *testing.T) {
 			case tunnel.KindTLS:
 				ne.ServeConn(&remoteConn{Stream: st, ra: net.TCPAddrFromAddrPort(ap)}, 443)
 			case tunnel.KindQUIC:
-				ne.ServeQUICStream(st, ap)
+				var attach func(func([]byte)) *tunnel.DatagramFlow
+				if h.Flow != 0 {
+					attach = func(recv func([]byte)) *tunnel.DatagramFlow { return tunnel.AcceptDatagrams(st, h.Flow, recv) }
+				}
+				ne.ServeQUICFlow(st, ap, "", attach)
 			default:
 				_ = st.Close()
 			}
@@ -124,6 +128,9 @@ func TestQUICPassthroughMode1(t *testing.T) {
 		if resp.ProtoMajor != 3 || string(b) != "node HTTP/3.0 from 127.0.0.1:"+lport {
 			t.Fatalf("http3: %s %q (local %s)", resp.Proto, b, local)
 		}
+	}
+	if dc := tunnel.DatagramStats(); dc.Sent < 4 || dc.Received < 4 { // beide Richtungen als QUIC-Datagramme
+		t.Fatalf("datagrams: %+v", dc)
 	}
 	if st := s.stats.of("h1.test"); st.BytesIn.Load() == 0 || st.BytesOut.Load() == 0 || st.Conns.Load() < 2 {
 		t.Fatalf("stats: in %d out %d conns %d", st.BytesIn.Load(), st.BytesOut.Load(), st.Conns.Load())

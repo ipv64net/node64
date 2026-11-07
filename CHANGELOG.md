@@ -8,6 +8,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - PROXY64: Der Knopf für Server und Verbindungen von CDN64 öffnet seinen Dialog jetzt auch unter Statusseiten und Weiterleitungen.
 - Lokale API: Alles, was die Oberfläche kann, geht jetzt auch über die API – u. a. CDN64-Schutz, CDN64-Server und Verbindungen, lokales DNS und Docker-Abgleich (PROXY64), „Alle als Check“, Docker-Verbindungstest und SSH-Schlüssel (Healthchecks), dynamische Zonen mit TSIG (DNS64), bevorzugte Node (DynDNS), Frühwarnung und Köder-Zertifikat (Honeypot64), DNS-Prüfung (Zertifikate), Update-Einstellungen, MCP, Benutzer, E-Mail/SMS über ipv64 und Verknüpfen per Code. Anmeldewege (Passwort, 2FA, Passkeys, SSO, Forward-Auth) bleiben bewusst in der Oberfläche.
 - PROXY64: Ändern der Freigabeliste über die API schaltet die Blocklisten nicht mehr aus; fehlende Felder bleiben unverändert.
+- PROXY64: Schnellerer Upload über HTTP/3 in CDN64 Modus 1 – Besucher-Pakete gehen als QUIC-Datagramme durch den Tunnel, ein verlorenes Paket hält die anderen nicht mehr auf (mit CDN64-Servern ab cdn64-edge 0.21.0).
 
 ## 1.0.1 – 2026-11-05
 

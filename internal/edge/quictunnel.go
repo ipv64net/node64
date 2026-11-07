@@ -38,6 +38,12 @@ func (e *Edge) ServeQUICStream(c net.Conn, client netip.AddrPort) {
 // ServeQUICStreamFor wie ServeQUICStream fuer den Namen, fuer den der CDN64-Server durchreicht ("" = beliebig): ein
 // Handshake mit anderem SNI wird abgewiesen.
 func (e *Edge) ServeQUICStreamFor(c net.Conn, client netip.AddrPort, host string) {
+	e.ServeQUICFlow(c, client, host, nil)
+}
+
+// ServeQUICFlow wie ServeQUICStreamFor; attach (nil = nur der Stream) meldet den Datagramm-Fluss des Streams an
+// (tunnel.AcceptDatagrams): Pakete kommen und gehen dann als QUIC-Datagramme, der Stream bleibt fuer zu grosse.
+func (e *Edge) ServeQUICFlow(c net.Conn, client netip.AddrPort, host string, attach func(recv func([]byte)) *tunnel.DatagramFlow) {
 	e.mu.Lock()
 	closed := e.closed
 	e.mu.Unlock()
@@ -53,7 +59,7 @@ func (e *Edge) ServeQUICStreamFor(c net.Conn, client netip.AddrPort, host string
 	if host != "" {
 		host = routedName(host)
 	}
-	go vq.serve(c, client, host)
+	go vq.serve(c, client, host, attach)
 }
 
 // SetTunnelHTTP3 setzt die Abfrage, ob HTTP/3 ueber den Tunnel geht (alle verbundenen CDN64-Server koennen es).
@@ -138,9 +144,13 @@ func (e *Edge) admitQUIC(qc *quic.Conn, f *vflow) {
 }
 
 // serve: Datagramme aus dem Stream an den HTTP/3-Server, bis der Stream endet.
-func (v *virtQUIC) serve(c net.Conn, client netip.AddrPort, host string) {
+func (v *virtQUIC) serve(c net.Conn, client netip.AddrPort, host string, attach func(recv func([]byte)) *tunnel.DatagramFlow) {
 	key := client.String()
+	addr := net.UDPAddrFromAddrPort(client)
 	f := &vflow{c: c, host: host, ip: client.Addr(), pc: v.pc, pending: true}
+	if attach != nil {
+		f.dg = attach(func(p []byte) { v.pc.push(p, addr) })
+	}
 	v.pc.mu.Lock()
 	old := v.pc.flows[key]
 	v.pc.flows[key] = f
@@ -161,22 +171,30 @@ func (v *virtQUIC) serve(c net.Conn, client netip.AddrPort, host string) {
 		}
 		v.pc.mu.Unlock()
 		_ = c.Close()
+		if f.dg != nil {
+			f.dg.Close()
+		}
 		f.end()
 	}()
-	addr := net.UDPAddrFromAddrPort(client)
 	buf := make([]byte, tunnel.MaxDatagram)
 	for {
 		n, err := tunnel.ReadDatagram(c, buf)
-		if err != nil {
+		if err != nil || !v.pc.push(append([]byte(nil), buf[:n]...), addr) {
 			return
-		}
-		select { // voll: verwerfen wie UDP (QUIC wiederholt), damit ein Besucher die anderen nicht aufhaelt
-		case v.pc.in <- vpkt{data: append([]byte(nil), buf[:n]...), addr: addr}:
-		case <-v.pc.done:
-			return
-		default:
 		}
 	}
+}
+
+// push: Paket eines Besuchers an den HTTP/3-Server; voll: verwerfen wie UDP (QUIC wiederholt), damit ein Besucher
+// die anderen nicht aufhaelt. false = geschlossen.
+func (p *virtPacketConn) push(b []byte, addr net.Addr) bool {
+	select {
+	case p.in <- vpkt{data: b, addr: addr}:
+	case <-p.done:
+		return false
+	default:
+	}
+	return true
 }
 
 // ---------------------------------------------------------------- virtuelle PacketConn
@@ -192,6 +210,7 @@ type vflow struct {
 	host string     // Name, fuer den der CDN64-Server durchreicht ("" = beliebig)
 	ip   netip.Addr // Besucher
 	pc   *virtPacketConn
+	dg   *tunnel.DatagramFlow // Pakete als QUIC-Datagramme (nil = nur der Stream)
 
 	st       sync.Mutex
 	pending  bool   // Handshake noch nicht fertig (zaehlt bei quicPending*)
@@ -260,7 +279,7 @@ type virtPacketConn struct {
 }
 
 func newVirtPacketConn() *virtPacketConn {
-	return &virtPacketConn{in: make(chan vpkt, 1024), done: make(chan struct{}), flows: map[string]*vflow{}, wake: make(chan struct{}, 1),
+	return &virtPacketConn{in: make(chan vpkt, 4096), done: make(chan struct{}), flows: map[string]*vflow{}, wake: make(chan struct{}, 1),
 		pending: map[netip.Addr]int{}, pendingMx: quicPendingMax}
 }
 
@@ -365,6 +384,9 @@ func (p *virtPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	f := p.flows[addr.String()]
 	p.mu.Unlock()
 	if f == nil {
+		return len(b), nil
+	}
+	if f.dg != nil && f.dg.Send(b) { // zu gross bzw. Verbindung zu: Stream
 		return len(b), nil
 	}
 	f.mu.Lock()

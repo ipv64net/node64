@@ -81,6 +81,8 @@ type Header struct {
 	Port   int    `json:"port"`           // Port beim Server (443/80)
 	Edge   string `json:"edge,omitempty"` // Name des Servers
 	Ray    string `json:"ray,omitempty"`  // Anfrage-ID fuer Logs (G9)
+	// Flow: KindQUIC - Pakete auch als QUIC-Datagramme mit dieser Nummer (datagram.go; 0 = nur der Stream)
+	Flow uint32 `json:"flow,omitempty"`
 }
 
 // ClientAddr ist die Besucher-Adresse als net.Addr (nil, wenn ungueltig).

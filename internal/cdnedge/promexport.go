@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/metrics"
+	"github.com/ipv64net/node64/internal/tunnel"
 )
 
 // Prometheus-Schnittstelle (nur fuer den Betreiber): eigener Port metrics_listen, nur fuer die Adressen in
@@ -397,6 +398,10 @@ func (s *Server) writeMetrics(_ context.Context, w *metrics.Writer) {
 	if qd := s.qd.Load(); qd != nil {
 		w.Gauge("cdn64_edge_quic_passthrough", "QUIC visitors passed through to nodes (mode 1, HTTP/3)", float64(qd.open()), srv...)
 	}
+	dc := tunnel.DatagramStats() // HTTP/3-Besucher als QUIC-Datagramme durch den Tunnel (sent = zur Node)
+	w.Counter("cdn64_edge_quic_datagrams_total", "Visitor QUIC packets as tunnel datagrams (mode 1, HTTP/3)", float64(dc.Sent), lbl("direction", "sent")...)
+	w.Counter("cdn64_edge_quic_datagrams_total", "Visitor QUIC packets as tunnel datagrams (mode 1, HTTP/3)", float64(dc.Received), lbl("direction", "received")...)
+	w.Counter("cdn64_edge_quic_datagrams_too_large_total", "Visitor QUIC packets too large for a datagram, sent in the stream", float64(dc.TooLarge), srv...)
 
 	// Drossel
 	load, capacity, throttled := s.bw.fairStatus()

@@ -371,11 +371,18 @@ func (s *Server) open(ctx context.Context, id string, h tunnel.Header) (net.Conn
 }
 
 func (s *Server) openPeer(ctx context.Context, p *tunnel.Peer, h tunnel.Header) (net.Conn, error) {
+	c, _, err := s.openPeerFlow(ctx, p, h, nil)
+	return c, err
+}
+
+// openPeerFlow wie openPeer; mit recv bekommt ein QUIC-Besucher (KindQUIC) dazu einen Datagramm-Fluss, wenn die
+// Verbindung zur Node Datagramme kann (fl = nil: nur der Stream).
+func (s *Server) openPeerFlow(ctx context.Context, p *tunnel.Peer, h tunnel.Header, recv func([]byte)) (net.Conn, *tunnel.DatagramFlow, error) {
 	if p == nil {
-		return nil, errors.New("tunnel not connected")
+		return nil, nil, errors.New("tunnel not connected")
 	}
 	h.Edge, h.Ray = s.cfg.Name, ray()
-	st, err := tunnel.OpenStream(ctx, p, h)
+	st, fl, err := tunnel.OpenStreamFlow(ctx, p, h, recv)
 	for tried := map[*tunnel.Peer]bool{p: true}; err != nil && ctx.Err() == nil; { // andere Verbindung desselben Tunnels
 		s.mu.Lock()
 		next := leastLoaded(s.peers[p.Tunnel], tried, 0)
@@ -384,14 +391,14 @@ func (s *Server) openPeer(ctx context.Context, p *tunnel.Peer, h tunnel.Header) 
 			break
 		}
 		tried[next] = true
-		st, err = tunnel.OpenStream(ctx, next, h)
+		st, fl, err = tunnel.OpenStreamFlow(ctx, next, h, recv)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s.streams.Add(1)
 	s.total.Add(1)
-	return &counted{Stream: st, n: &s.streams}, nil
+	return &counted{Stream: st, n: &s.streams}, fl, nil
 }
 
 type counted struct {

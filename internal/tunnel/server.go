@@ -93,7 +93,7 @@ func (s *Server) ServeQUIC(addr string) (net.Addr, error) {
 			if err != nil {
 				return
 			}
-			go s.handshake(&quicSession{c})
+			go s.handshake(&quicSession{c: c})
 		}
 	}()
 	return ln.Addr(), nil
@@ -132,7 +132,7 @@ func (s *Server) ServeTCPConn(c net.Conn) { s.serveTLS(tls.Server(c, tlsConfigFo
 
 // ServeQUICConn nimmt eine QUIC-Verbindung mit der ALPN des Tunnels an, die ein gemeinsamer Listener angenommen hat
 // (G1: UDP 443 neben HTTP/3). Kehrt sofort zurueck.
-func (s *Server) ServeQUICConn(c *quic.Conn) { go s.handshake(&quicSession{c}) }
+func (s *Server) ServeQUICConn(c *quic.Conn) { go s.handshake(&quicSession{c: c}) }
 
 func (s *Server) serveTLS(tc *tls.Conn) {
 	_ = tc.SetDeadline(time.Now().Add(s.authTimeout()))
@@ -264,16 +264,32 @@ func (s *Server) Close() {
 
 // OpenStream oeffnet auf der Session einer Node einen Daten-Stream und schreibt den Kopf.
 func OpenStream(ctx context.Context, p *Peer, h Header) (Stream, error) {
-	st, err := p.Session.OpenStream(ctx)
+	st, _, err := OpenStreamFlow(ctx, p, h, nil)
+	return st, err
+}
+
+// OpenStreamFlow wie OpenStream; mit recv (KindQUIC) und einer Session mit QUIC-Datagrammen bekommt der Stream dazu
+// einen Datagramm-Fluss (Header.Flow, datagram.go), recv dessen Pakete. fl = nil: nur der Stream.
+func OpenStreamFlow(ctx context.Context, p *Peer, h Header, recv func([]byte)) (st Stream, fl *DatagramFlow, err error) {
+	st, err = p.Session.OpenStream(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	if qs, ok := p.Session.(*quicSession); ok && recv != nil {
+		if m := qs.datagrams(); m != nil {
+			fl = m.add(0, recv)
+			h.Flow = fl.ID()
+		}
 	}
 	_ = st.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if err := WriteHeader(st, h); err != nil {
 		_ = st.Close()
-		return nil, err
+		if fl != nil {
+			fl.Close()
+		}
+		return nil, nil, err
 	}
 	_ = st.SetWriteDeadline(time.Time{})
 	p.Streams.Add(1)
-	return &countedStream{Stream: st, n: &p.Streams}, nil
+	return &countedStream{Stream: st, n: &p.Streams}, fl, nil
 }

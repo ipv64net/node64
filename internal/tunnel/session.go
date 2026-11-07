@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,10 +33,10 @@ type Session interface {
 
 // QUICConfig: Wachhalten alle 10 s (Router-Zeitlimits fuer UDP oft 30 s), nach 30 s ohne Antwort tot - so merkt
 // der Server einen weggefallenen Tunnel schnell und nimmt den Nachbarn; kleine Startpakete mit Path-MTU-Discovery
-// (DS-Lite, PPPoE, IPv6-Tunnel; G4); Fenster fuer hohen Durchsatz.
+// (DS-Lite, PPPoE, IPv6-Tunnel; G4); Fenster fuer hohen Durchsatz; Datagramme fuer HTTP/3-Besucher (datagram.go).
 func QUICConfig() *quic.Config {
 	return &quic.Config{KeepAlivePeriod: 10 * time.Second, MaxIdleTimeout: 30 * time.Second, HandshakeIdleTimeout: 10 * time.Second,
-		MaxIncomingStreams: 10000, InitialStreamReceiveWindow: 512 << 10, MaxStreamReceiveWindow: 6 << 20, MaxConnectionReceiveWindow: 15 << 20}
+		MaxIncomingStreams: 10000, InitialStreamReceiveWindow: 512 << 10, MaxStreamReceiveWindow: 6 << 20, MaxConnectionReceiveWindow: 15 << 20, EnableDatagrams: true}
 }
 
 func yamuxConfig() *yamux.Config {
@@ -52,14 +53,18 @@ func yamuxConfig() *yamux.Config {
 
 // ---------------------------------------------------------------- QUIC
 
-type quicSession struct{ c *quic.Conn }
+type quicSession struct {
+	c      *quic.Conn
+	dgOnce sync.Once
+	dg     *dgMux // Datagramme der Besucher (KindQUIC), erst beim ersten Fluss
+}
 
 func (s *quicSession) OpenStream(ctx context.Context) (Stream, error) {
 	st, err := s.c.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &quicStream{Stream: st, s: s.c}, nil
+	return &quicStream{Stream: st, s: s.c, qs: s}, nil
 }
 
 func (s *quicSession) AcceptStream(ctx context.Context) (Stream, error) {
@@ -67,7 +72,7 @@ func (s *quicSession) AcceptStream(ctx context.Context) (Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &quicStream{Stream: st, s: s.c}, nil
+	return &quicStream{Stream: st, s: s.c, qs: s}, nil
 }
 
 func (s *quicSession) Close(reason string) error { return s.c.CloseWithError(0, reason) }
@@ -79,7 +84,8 @@ func (s *quicSession) Done() <-chan struct{}     { return s.c.Context().Done() }
 
 type quicStream struct {
 	*quic.Stream
-	s *quic.Conn
+	s  *quic.Conn
+	qs *quicSession
 }
 
 func (q *quicStream) Close() error {

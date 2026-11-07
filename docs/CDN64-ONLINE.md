@@ -794,6 +794,11 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   reichen Modus-1-QUIC roh durch den Tunnel (Stream `quic`), TLS endet in der Node; Alt-Svc nur, wenn alle
   verbundenen Server die Fähigkeit `quic` melden. Live seit 2026-10-18 (cdn64-edge 0.10.x, node64-test 0.11.100-h3):
   pfsense.ipv64.de über alle vier Server-Adressen per HTTP/3 von hub2 (~90 ms), Zertifikat der Node (TLS endet dort).
+  **Datagramme (2026-11-07, PROXY64 1.50.0 + cdn64-edge 0.21.0):** Im Stream hielt ein verlorenes Tunnel-Paket alle
+  folgenden auf, der Upload über HTTP/3 brach ein (Speedtest; ohne QUIC sauber). Jetzt je Besucher ein Fluss
+  (`Header.Flow`, `internal/tunnel/datagram.go`), Pakete als QUIC-Datagramme (RFC 9221). Der Server schickt zuerst
+  über den Stream und schaltet um, sobald die Node per Datagramm antwortet; alte Nodes, TCP-Ausweichweg, Weg über
+  den Nachbarn und zu große Pakete bleiben beim Stream. Zähler `cdn64_edge_quic_datagrams_total`.
 - **TCP-/UDP-Streams (Portmapper Modus 1/2):** gebaut 2026-10-21 (PROXY64 1.24.0, cdn64-edge 0.15.0), siehe 8.3.
 - **Fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,

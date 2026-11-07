@@ -457,7 +457,7 @@ func (c *Client) connect(ctx context.Context, e Edge, slot int, useTCP bool, pre
 			} else {
 				var qc *quic.Conn
 				if qc, err = quic.DialAddr(dctx, addr, c.tlsConfig(e), QUICConfig()); err == nil {
-					sess = &quicSession{qc}
+					sess = &quicSession{c: qc}
 				}
 			}
 			cancel()

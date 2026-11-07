@@ -1,6 +1,6 @@
 # CDN64-Server: Prometheus (nur für den Betreiber)
 
-Stand 2026-11-05 (cdn64-edge 0.20.5). Die CDN64-Server srv07 bis srv10 liefern ihre Zahlen auf einem eigenen Port – nicht
+Stand 2026-11-07 (cdn64-edge 0.21.0). Die CDN64-Server srv07 bis srv10 liefern ihre Zahlen auf einem eigenen Port – nicht
 öffentlich: nur für die eingetragenen Adressen und nur mit Bearer-Token. Code: `internal/cdnedge/promexport.go`.
 
 ## Zugang
@@ -105,6 +105,8 @@ Alle Zeilen tragen `server` (srv07 bis srv10). Zähler (`_total`) zählen seit d
 | `cdn64_edge_guard_rejected_total` | `reason` (blocklist, max_conns, conns, conn_rate) | vom Schutz abgewiesene Verbindungen |
 | `cdn64_edge_blocklist_entries` | | Einträge der Blocklisten (Spamhaus DROP) |
 | `cdn64_edge_quic_passthrough` | | durchgereichte HTTP/3-Besucher (Modus 1) |
+| `cdn64_edge_quic_datagrams_total` | `direction` (sent = zur Node, received) | Pakete der HTTP/3-Besucher als QUIC-Datagramme durch den Tunnel (ab 0.21.0; ältere Nodes: alles im Stream) |
+| `cdn64_edge_quic_datagrams_too_large_total` | | Pakete, die nicht in ein Datagramm passten und im Stream gingen |
 | `cdn64_edge_load_mbit`, `cdn64_edge_capacity_mbit` | | Durchsatz gerade, Kapazität der fairen Drossel |
 | `cdn64_edge_throttled_accounts`, `cdn64_edge_account_throttle_mbit` | `account_id` | faire Drossel gerade |
 | `cdn64_edge_account_rate_mbit` | `account_id` | Durchsatz der Accounts mit Klassen-Limit |

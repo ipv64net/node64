@@ -183,7 +183,11 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 			_ = st.Close()
 			return
 		}
-		m.edge.ServeQUICStreamFor(c, netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()), h.Host)
+		var attach func(func([]byte)) *tunnel.DatagramFlow
+		if h.Flow != 0 { // Server ab cdn64-edge 0.21: Pakete als QUIC-Datagramme statt nur im Stream
+			attach = func(recv func([]byte)) *tunnel.DatagramFlow { return tunnel.AcceptDatagrams(st, h.Flow, recv) }
+		}
+		m.edge.ServeQUICFlow(c, netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()), h.Host, attach)
 	case tunnel.KindTCP, tunnel.KindUDP: // Portmapper Modus 1/2: an den Stream der Node
 		m.onlinePortStream(c, h)
 	default:

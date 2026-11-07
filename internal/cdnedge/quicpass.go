@@ -31,7 +31,7 @@ const (
 	qpPendPkts  = 8                // so viele Datagramme warten hoechstens auf den Namen
 	qpPendAge   = 3 * time.Second  // danach an quic-go
 	qpFlowIdle  = 60 * time.Second // ruhiger Fluss: Stream zu
-	qpFlowQueue = 512              // Datagramme in Richtung Node, die warten duerfen (hoechstens qpMaxDgram gross)
+	qpFlowQueue = 1024             // Datagramme in Richtung Node, die warten duerfen (hoechstens qpMaxDgram gross)
 	qpMaxDgram  = 1500             // groessere Datagramme gibt es bei QUIC praktisch nicht: verwerfen
 	qpProveIn   = 10 * time.Second // so lange darf ein Besucher brauchen, um seine Adresse nachzuweisen
 	qpMinCID    = 4                // kuerzere IDs der Node taugen nicht als Nachweis
@@ -321,12 +321,14 @@ func (f *qflow) run(re *route, sni string) {
 	f.setRel(release)
 	defer f.dropRel()
 	var conn net.Conn
-	counted := true // gezaehlt und begrenzt wird beim Server mit dem Tunnel
+	var dg *tunnel.DatagramFlow // Pakete als QUIC-Datagramme (tunnel/datagram.go), sobald die Node so antwortet
+	counted := true             // gezaehlt und begrenzt wird beim Server mit dem Tunnel
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	if p := s.peerFor(re.Tunnels); p != nil && tunnel.HasCap(p.Caps, tunnel.CapQUIC) {
-		ts, err := s.openPeer(ctx, p, tunnel.Header{Kind: tunnel.KindQUIC, Client: client, Host: sni, Port: 443})
+		ts, fl, err := s.openPeerFlow(ctx, p, tunnel.Header{Kind: tunnel.KindQUIC, Client: client, Host: sni, Port: 443},
+			func(b []byte) { f.fromNode(b, re, true) })
 		if err == nil {
-			conn = ts
+			conn, dg = ts, fl
 		}
 	} else if p == nil {
 		if pc := s.dialPeer(ctx, tunnel.KindQUIC, sni, 443, client, nil); pc != nil {
@@ -344,30 +346,16 @@ func (f *qflow) run(re *route, sni string) {
 	if counted {
 		st.conn(f.addr.Addr())
 	}
-	go func() { // Node -> Besucher
+	if dg != nil {
+		defer dg.Close()
+	}
+	go func() { // Node -> Besucher (Stream; Datagramme kommen ueber fromNode direkt)
 		defer f.close()
 		buf := make([]byte, tunnel.MaxDatagram)
 		for {
 			n, err := tunnel.ReadDatagram(conn, buf)
-			if err != nil {
+			if err != nil || !f.fromNode(buf[:n], re, counted) {
 				return
-			}
-			if !f.proven.Load() { // vor dem Nachweis: ID der Node merken, Antwort begrenzen (gefaelschter Absender)
-				if id := nodeSCID(buf[:n]); len(id) >= qpMinCID && (f.scid.Load() == nil || !bytes.Equal(*f.scid.Load(), id)) {
-					id = append([]byte(nil), id...)
-					f.scid.Store(&id)
-				}
-				if f.out.Load()+int64(n) > qpFree+qpAmp*f.in.Load() {
-					continue
-				}
-			}
-			if _, err := f.d.c.WriteToUDPAddrPort(buf[:n], f.addr); err != nil && errors.Is(err, net.ErrClosed) {
-				return
-			}
-			f.out.Add(int64(n))
-			if counted {
-				st.BytesOut.Add(int64(n))
-				s.bw.take(re.UserID, n)
 			}
 		}
 	}()
@@ -376,8 +364,10 @@ func (f *qflow) run(re *route, sni string) {
 		case <-f.done:
 			return
 		case p := <-f.q:
-			if err := tunnel.WriteDatagram(conn, p); err != nil {
-				return
+			if dg == nil || !dg.Answered() || !dg.Send(p) { // Datagramm erst, wenn die Node den Fluss kennt; zu gross: Stream
+				if err := tunnel.WriteDatagram(conn, p); err != nil {
+					return
+				}
 			}
 			if counted {
 				st.BytesIn.Add(int64(len(p)))
@@ -385,6 +375,29 @@ func (f *qflow) run(re *route, sni string) {
 			}
 		}
 	}
+}
+
+// fromNode: Paket der Node an den Besucher (aus dem Stream oder als Datagramm); false = UDP-Port zu.
+func (f *qflow) fromNode(p []byte, re *route, counted bool) bool {
+	n := len(p)
+	if !f.proven.Load() { // vor dem Nachweis: ID der Node merken, Antwort begrenzen (gefaelschter Absender)
+		if id := nodeSCID(p); len(id) >= qpMinCID && (f.scid.Load() == nil || !bytes.Equal(*f.scid.Load(), id)) {
+			id = append([]byte(nil), id...)
+			f.scid.Store(&id)
+		}
+		if f.out.Load()+int64(n) > qpFree+qpAmp*f.in.Load() {
+			return true
+		}
+	}
+	if _, err := f.d.c.WriteToUDPAddrPort(p, f.addr); err != nil && errors.Is(err, net.ErrClosed) {
+		return false
+	}
+	f.out.Add(int64(n))
+	if counted {
+		f.st.BytesOut.Add(int64(n))
+		f.d.s.bw.take(re.UserID, n)
+	}
+	return true
 }
 
 // open: Anzahl durchgereichter QUIC-Besucher (fuer /health).

@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.50.0 – 2026-11-07
+
+### Improved
+- CDN64 mode 1: HTTP/3 visitors now pass through the tunnel as QUIC datagrams instead of inside a stream. Until now one
+  lost packet in the tunnel held up all the following ones; the visitor took that for congestion, and above all the
+  upload (e.g. in a speed test) collapsed. Now every packet travels on its own and the visitor retransmits by itself –
+  like on the normal internet. Needs CDN64 servers from cdn64-edge 0.21.0; with older servers, over the TCP fallback
+  and for oversized packets it stays with the stream. Larger queue for HTTP/3 visitors in the node.
+
 ## 1.49.0 – 2026-11-06
 
 ### New
