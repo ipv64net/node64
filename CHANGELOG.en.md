@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.3.0 – 2026-11-08
+
 - PROXY64: block common exploits no longer blocks sign-ins – OAuth/OIDC (Home Assistant, Keycloak, Authelia, Nextcloud) and WebDAV pass, real attacks are still blocked; addresses on the allow list are exempt.
 - PROXY64: behind another proxy (e.g. Traefik, HAProxy) the real visitor address arrives via PROXY protocol v1/v2 – only from listed addresses.
 - Sign-in: SSO accepts ID tokens with every signing algorithm the provider lists – RSA, EC, EdDSA and HS256 with the client secret (e.g. Authentik without a signing key) (#46).

@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.3.0 – 2026-11-08
+
 - PROXY64: Block Common Exploits sperrt keine Anmeldungen mehr – OAuth/OIDC (Home Assistant, Keycloak, Authelia, Nextcloud) und WebDAV gehen durch, echte Angriffe werden weiter geblockt; Adressen der Freigabeliste sind ausgenommen.
 - PROXY64: Hinter einem anderen Proxy (z. B. Traefik, HAProxy) kommt die echte Besucher-Adresse per PROXY protocol v1/v2 an – nur von eingetragenen Adressen.
 - Anmeldung: SSO nimmt ID-Tokens mit allen Signaturverfahren an, die der Anbieter nennt – RSA, EC, EdDSA und HS256 mit dem Client-Secret (z. B. Authentik ohne Signing Key) (#46).
