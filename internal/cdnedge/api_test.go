@@ -192,7 +192,8 @@ func TestBandwidth(t *testing.T) {
 	}
 	// Nachbar nutzt 0,75 MB/s: hier bleiben 0,25 MB/s
 	slept = 0
-	w.setPeer(map[int]float64{1: 750000})
+	w.setPeer("B", map[int]float64{1: 500000}) // zwei Nachbarn zusammen 0,75 MB/s
+	w.setPeer("C", map[int]float64{1: 250000})
 	for i := 0; i < 5; i++ {
 		w.take(1, 100000)
 	}

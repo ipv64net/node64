@@ -3383,6 +3383,14 @@
                 "total": {
                   "type": "integer",
                   "description": "Streams seit dem Start"
+                },
+                "rtt_ms": {
+                  "type": "number",
+                  "description": "Laufzeit zum Server (ms)"
+                },
+                "loss_pct": {
+                  "type": "number",
+                  "description": "Paketverlust der Node zu diesem Server in den letzten 30 s in Prozent (Download der Besucher); -1 = unbekannt (TCP-Ausweichweg, zu wenig Verkehr, noch keine Messung)"
                 }
               }
             }

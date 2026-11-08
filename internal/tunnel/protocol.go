@@ -70,7 +70,13 @@ type Welcome struct {
 
 // Control: weitere Nachrichten auf dem Steuer-Stream.
 type Control struct {
-	Type string `json:"type"` // "goaway": Server startet neu, laufende Streams duerfen enden
+	Type string `json:"type"` // "goaway": Server startet neu, laufende Streams duerfen enden; "stats": Messwerte der Node
+	// stats (Node -> Server, alle 30 s): RTT und gesendete bzw. verlorene Pakete der Node seit Beginn der Verbindung
+	// (Senderichtung der Node = Download der Besucher); aeltere Server ignorieren die Nachricht
+	RTTms float64 `json:"rtt_ms,omitempty"`
+	Sent  uint64  `json:"sent,omitempty"`
+	Lost  uint64  `json:"lost,omitempty"`
+	Loss  bool    `json:"loss,omitempty"` // Sent/Lost gemessen (QUIC)
 }
 
 // Header steht am Anfang jedes Daten-Streams (vom Server geschrieben).

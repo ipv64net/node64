@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Der CDN64-Selbsttest zeigt je Server Laufzeit und Paketverlust deiner Leitung und warnt ab 0,5 %, dass die Leitung den Download über CDN64 bremst; die Node meldet die Werte an die CDN64-Server.
 - DNS64: Keine falsche Warnung mehr über fehlende Portfreigaben (`-p`) bei Docker mit Macvlan oder IPvlan, z. B. Unraid `br0`/`bond0` (#23, danke an @sangandi).
 - DNS64: Im Modus „der Reihe nach“ wird ein ausgefallener Upstream übersprungen statt bei jeder Anfrage erneut gefragt und im Hintergrund wieder aufgenommen; REFUSED führt zum nächsten Upstream (#37).
 - PROXY64: Im Wartungsmodus greift die Zugriffsliste jetzt vor der Wartungsseite – eigenes HTML ist nicht mehr ohne Anmeldung abrufbar (#33).

@@ -1313,7 +1313,7 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	if m.g.T == nil {
 		return "{}"
 	}
-	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf",
+	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf", "link_rtt", "link_loss", "loss_warn",
 		"skipped", "untrusted", "dns_ok", "dns_wait", "done", "partial", "failed", "hint_lan", "check_created", "check_failed", "working",
 		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint", "via_quic", "via_quic443", "via_tls",
 		"pause_confirm"}

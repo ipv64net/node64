@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.51.0 – 2026-11-08
+
+### Neu
+- CDN64: Paketverlust und Laufzeit je Tunnel-Verbindung werden gemessen. Der Selbsttest zeigt je Server die Laufzeit
+  und den Paketverlust deiner Leitung (Download der Besucher) und warnt ab 0,5 %, dass die Leitung den Download über
+  CDN64 bremst. Die Node meldet die Werte alle 30 s an die CDN64-Server (ab cdn64-edge 0.22.0), damit ipv64 bei einer
+  Meldung sofort sieht, ob Verlust auf der Leitung die Ursache ist. Neuer Prometheus-Wert
+  `node64_cdn64_online_edge_loss_ratio`, in `/api/cdn64/online` das Feld `loss_pct` je Server.
+
 ## 1.50.1 – 2026-11-08
 
 ### Behoben

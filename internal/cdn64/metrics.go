@@ -78,6 +78,9 @@ func (m *Module) onlineMetrics(ctx context.Context, w *metrics.Writer) {
 			if e.Connected {
 				w.Gauge("node64_cdn64_online_edge_rtt_seconds", "Round trip time of the tunnel", e.RTTms/1000, "edge", e.Name, "transport", e.Transport)
 				w.Gauge("node64_cdn64_online_edge_streams", "Open visitor streams through the tunnel", float64(e.Streams), "edge", e.Name)
+				if e.LossPct >= 0 { // Paketverlust der Node zu diesem Server (Download der Besucher), letzte 30 s
+					w.Gauge("node64_cdn64_online_edge_loss_ratio", "Share of packets lost from the node to this server in the last 30 s (visitor downloads)", e.LossPct/100, "edge", e.Name)
+				}
 			}
 			w.Counter("node64_cdn64_online_edge_streams_total", "Visitor streams since node start", float64(e.Total), "edge", e.Name)
 			w.Counter("node64_cdn64_online_edge_reconnects_total", "Tunnel reconnects since node start", float64(e.Reconnects), "edge", e.Name)

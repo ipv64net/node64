@@ -1,6 +1,6 @@
 # CDN64-Server: Prometheus (nur für den Betreiber)
 
-Stand 2026-11-07 (cdn64-edge 0.21.0). Die CDN64-Server srv07 bis srv10 liefern ihre Zahlen auf einem eigenen Port – nicht
+Stand 2026-11-08 (cdn64-edge 0.22.0). Die CDN64-Server srv07 bis srv10 liefern ihre Zahlen auf einem eigenen Port – nicht
 öffentlich: nur für die eingetragenen Adressen und nur mit Bearer-Token. Code: `internal/cdnedge/promexport.go`.
 
 ## Zugang
@@ -88,6 +88,10 @@ Alle Zeilen tragen `server` (srv07 bis srv10). Zähler (`_total`) zählen seit d
 | `cdn64_edge_goroutines`, `cdn64_edge_memory_heap_bytes`, `cdn64_edge_memory_sys_bytes` | | Go-Laufzeit |
 | `cdn64_edge_tunnels` | | Tunnel mit mindestens einer Verbindung |
 | `cdn64_edge_tunnel_connections` | `transport` (quic, tcp) | Tunnel-Verbindungen der Nodes (tcp = Ausweichweg, auch über 443) |
+| `cdn64_edge_tunnel_rtt_seconds` | `tunnel`, `slot`, `account_id` | Laufzeit je Tunnel-Verbindung aus Sicht des Servers (ab 0.22.0; höchstens 300 Verbindungen, die mit Verlust zuerst) |
+| `cdn64_edge_tunnel_node_rtt_seconds` | `tunnel`, `slot`, `account_id` | dieselbe Laufzeit, wie die Node sie misst (ab PROXY64 1.51.0) |
+| `cdn64_edge_tunnel_loss_ratio` | `tunnel`, `slot`, `account_id`, `direction` | Anteil verlorener Pakete im letzten Intervall (30 s): `node_to_edge` = Download der Besucher (meldet die Node ab PROXY64 1.51.0), `edge_to_node` = Upload; fehlt bei TCP, zu wenig Verkehr (unter 200 Paketen) bzw. älterer Node |
+| `cdn64_edge_tunnel_lossy_connections` | `direction` | Tunnel-Verbindungen mit mindestens 1 % Verlust im letzten Intervall |
 | `cdn64_edge_streams`, `cdn64_edge_streams_total` | | Besucher-Streams durch Tunnel (gerade / gesamt) |
 | `cdn64_edge_hosts` | `mode` (1, 2, 3) | eingeschaltete Namen |
 | `cdn64_edge_accounts` | | Accounts mit mindestens einem Namen |
@@ -135,10 +139,12 @@ sum by (server, transport) (cdn64_edge_tunnel_connections)
 sum(rate(cdn64_edge_requests_total{status="5xx"}[5m])) / sum(rate(cdn64_edge_requests_total[5m]))
 # Abweisungen durch den Schutz je Grund
 sum by (reason) (rate(cdn64_edge_guard_rejected_total[5m]))
+# Tunnel-Verbindungen mit Verlust (Download der Besucher), schlimmste zuerst
+topk(20, max by (tunnel, account_id) (cdn64_edge_tunnel_loss_ratio{direction="node_to_edge"}))
 # Uptime (Stunden)
 (time() - cdn64_edge_start_time_seconds) / 3600
 ```
 
 Alarme (Vorschlag): `cdn64_edge_config_age_seconds > 300`, `cdn64_edge_peer_up == 0` für 2 min,
-`cdn64_edge_certificate_min_days < 10`, `max(cdn64_edge_letsencrypt_week) > 40`, `cdn64_edge_throttled_accounts > 0`
+`cdn64_edge_certificate_min_days < 10`, `cdn64_edge_tunnel_loss_ratio{direction="node_to_edge"} > 0.01` für 10 min (Kunden-Leitung verliert Pakete, Download über CDN64 bremst), `max(cdn64_edge_letsencrypt_week) > 40`, `cdn64_edge_throttled_accounts > 0`
 für 15 min, `up == 0`.

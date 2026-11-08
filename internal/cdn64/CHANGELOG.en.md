@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.51.0 – 2026-11-08
+
+### New
+- CDN64: packet loss and round trip time are measured per tunnel connection. The self-test shows the round trip time
+  and the packet loss of your line (visitor downloads) per server and warns from 0.5 % that the line slows down
+  downloads via CDN64. The node reports the values to the CDN64 servers every 30 s (from cdn64-edge 0.22.0), so ipv64
+  can see right away whether loss on the line is the cause. New Prometheus value `node64_cdn64_online_edge_loss_ratio`,
+  field `loss_pct` per server in `/api/cdn64/online`.
+
 ## 1.50.1 – 2026-11-08
 
 ### Fixed

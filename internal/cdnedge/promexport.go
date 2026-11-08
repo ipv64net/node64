@@ -255,14 +255,19 @@ func (s *Server) writeMetrics(_ context.Context, w *metrics.Writer) {
 
 	// Tunnel der Nodes
 	byTransport := map[string]int{}
+	var links []tunnelLink
 	s.mu.Lock()
 	ids := len(s.peers)
-	for _, l := range s.peers {
+	for id, l := range s.peers {
 		for _, p := range l {
 			byTransport[p.Session.Transport()]++
+			links = append(links, tunnelLink{Tunnel: id, Slot: p.Slot, p: p})
 		}
 	}
 	s.mu.Unlock()
+	for i := range links { // Link sperrt den Peer: ausserhalb von s.mu
+		links[i].Rep = links[i].p.Link()
+	}
 	w.Gauge("cdn64_edge_tunnels", "Tunnels with at least one connection", float64(ids), srv...)
 	for _, t := range []string{"quic", "tcp"} { // tcp = Ausweichweg (TLS ueber TCP, auch Port 443)
 		if _, ok := byTransport[t]; !ok {
@@ -277,6 +282,7 @@ func (s *Server) writeMetrics(_ context.Context, w *metrics.Writer) {
 	for _, t := range keys {
 		w.Gauge("cdn64_edge_tunnel_connections", "Tunnel connections by transport", float64(byTransport[t]), lbl("transport", t)...)
 	}
+	s.linkMetrics(w, lbl, links)
 	w.Gauge("cdn64_edge_streams", "Open visitor streams through tunnels", float64(s.streams.Load()), srv...)
 	w.Counter("cdn64_edge_streams_total", "Visitor streams since start", float64(s.total.Load()), srv...)
 
@@ -456,11 +462,12 @@ func (s *Server) writeMetrics(_ context.Context, w *metrics.Writer) {
 	}
 
 	// Nachbar (Raten jede Sekunde)
-	if len(s.cfg.Peers) > 0 {
-		s.bw.mu.Lock()
-		at := s.bw.peerAt
-		s.bw.mu.Unlock()
-		w.Gauge("cdn64_edge_peer_up", "1 neighbour server reported its rates in the last 5 s", metrics.Bool(!at.IsZero() && time.Since(at) < 5*time.Second), srv...)
+	if len(s.cfg.Peers) > 0 { // je Nachbar aus der Konfiguration (der Name meldet er beim Senden)
+		seen := s.bw.peerSeen()
+		for _, p := range s.cfg.Peers {
+			at := seen[p.Name]
+			w.Gauge("cdn64_edge_peer_up", "1 = neighbour server reported its rates in the last 5 s", metrics.Bool(!at.IsZero() && time.Since(at) < 5*time.Second), lbl("peer", p.Name)...)
+		}
 	}
 
 	// Portmapper (Modus 3)

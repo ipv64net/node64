@@ -392,15 +392,18 @@ func (s *Server) apiReport(ctx context.Context) {
 
 // ---------------------------------------------------------------- Raten mit dem Nachbarn (Bandbreite)
 
-// rateLoop schickt dem Nachbarn jede Sekunde die eigenen Raten der Accounts mit Limit (nur wenn es welche gibt).
+// rateLoop schickt allen Nachbarn jede Sekunde die eigenen Raten der Accounts mit Limit (bis 0.21 nur dem ersten:
+// mit mehr als zwei Servern sahen die uebrigen keine Raten und rechneten die Grenze eines Accounts allein).
 func (s *Server) rateLoop(ctx context.Context) {
 	if len(s.cfg.Peers) == 0 || s.cfg.PeerSecret == "" {
 		return
 	}
-	var conn net.Conn
+	conns := make([]net.Conn, len(s.cfg.Peers))
 	defer func() {
-		if conn != nil {
-			conn.Close()
+		for _, c := range conns {
+			if c != nil {
+				c.Close()
+			}
 		}
 	}()
 	t := time.NewTicker(time.Second)
@@ -412,36 +415,50 @@ func (s *Server) rateLoop(ctx context.Context) {
 		case <-t.C:
 		}
 		r := s.bw.rates() // auch leer jede Sekunde: der Nachbar sieht so, dass dieser Server da ist (peer_up)
-		if conn == nil {
-			p := s.cfg.Peers[0]
-			h, _, _ := net.SplitHostPort(p.Addr)
-			d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{ServerName: h, RootCAs: s.peerRoots, MinVersion: tls.VersionTLS13}}
-			c, err := d.DialContext(ctx, "tcp", p.Addr)
-			if err != nil {
-				continue
-			}
-			hb, _ := json.Marshal(peerHello{Secret: s.cfg.PeerSecret, Kind: "rates", From: s.cfg.Name})
-			if _, err := c.Write(append(hb, '\n')); err != nil {
-				c.Close()
-				continue
-			}
-			conn = c
-		}
 		m := map[string]float64{}
 		for uid, v := range r {
 			m[strconv.Itoa(uid)] = v
 		}
 		b, _ := json.Marshal(m)
-		_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		if _, err := conn.Write(append(b, '\n')); err != nil {
-			conn.Close()
-			conn = nil
+		b = append(b, '\n')
+		var wg sync.WaitGroup
+		for i, p := range s.cfg.Peers { // parallel: ein langsamer Nachbar haelt die anderen nicht auf
+			wg.Add(1)
+			go func(i int, addr string) {
+				defer wg.Done()
+				conns[i] = s.sendRates(ctx, conns[i], addr, b)
+			}(i, p.Addr)
 		}
+		wg.Wait()
 	}
 }
 
-// readRates: Raten vom Nachbarn (eine JSON-Zeile je Sekunde), bis die Verbindung endet.
-func (s *Server) readRates(r *bufio.Reader) {
+// sendRates schreibt eine Zeile Raten an einen Nachbarn (Verbindung bei Bedarf neu); nil = gerade nicht erreichbar.
+func (s *Server) sendRates(ctx context.Context, conn net.Conn, addr string, line []byte) net.Conn {
+	if conn == nil {
+		h, _, _ := net.SplitHostPort(addr)
+		d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{ServerName: h, RootCAs: s.peerRoots, MinVersion: tls.VersionTLS13}}
+		c, err := d.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return nil
+		}
+		hb, _ := json.Marshal(peerHello{Secret: s.cfg.PeerSecret, Kind: "rates", From: s.cfg.Name})
+		if _, err := c.Write(append(hb, '\n')); err != nil {
+			c.Close()
+			return nil
+		}
+		conn = c
+	}
+	_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write(line); err != nil {
+		conn.Close()
+		return nil
+	}
+	return conn
+}
+
+// readRates: Raten eines Nachbarn (eine JSON-Zeile je Sekunde), bis die Verbindung endet.
+func (s *Server) readRates(r *bufio.Reader, from string) {
 	for {
 		line, err := r.ReadSlice('\n')
 		if err != nil {
@@ -457,6 +474,6 @@ func (s *Server) readRates(r *bufio.Reader) {
 				out[uid] = v
 			}
 		}
-		s.bw.setPeer(out)
+		s.bw.setPeer(from, out)
 	}
 }

@@ -28,7 +28,16 @@ type Session interface {
 	RemoteAddr() net.Addr
 	Transport() string // "quic" | "tcp"
 	RTT() time.Duration
+	Stats() LinkStats
 	Done() <-chan struct{}
+}
+
+// LinkStats: Zahlen einer Tunnel-Verbindung seit ihrem Beginn (Sent/Lost: gesendete und verlorene Pakete dieser
+// Seite; nur QUIC, beim TCP-Ausweichweg HasLoss false).
+type LinkStats struct {
+	RTT        time.Duration
+	Sent, Lost uint64
+	HasLoss    bool
 }
 
 // QUICConfig: Wachhalten alle 10 s (Router-Zeitlimits fuer UDP oft 30 s), nach 30 s ohne Antwort tot - so merkt
@@ -80,7 +89,11 @@ func (s *quicSession) LocalAddr() net.Addr       { return s.c.LocalAddr() }
 func (s *quicSession) RemoteAddr() net.Addr      { return s.c.RemoteAddr() }
 func (s *quicSession) Transport() string         { return "quic" }
 func (s *quicSession) RTT() time.Duration        { return s.c.ConnectionStats().SmoothedRTT }
-func (s *quicSession) Done() <-chan struct{}     { return s.c.Context().Done() }
+func (s *quicSession) Stats() LinkStats {
+	st := s.c.ConnectionStats()
+	return LinkStats{RTT: st.SmoothedRTT, Sent: st.PacketsSent, Lost: st.PacketsLost, HasLoss: true}
+}
+func (s *quicSession) Done() <-chan struct{} { return s.c.Context().Done() }
 
 type quicStream struct {
 	*quic.Stream
@@ -159,6 +172,7 @@ func (y *yamuxSession) Done() <-chan struct{} {
 }
 
 func (y *yamuxSession) RTT() time.Duration { return time.Duration(y.rtt.Load()) }
+func (y *yamuxSession) Stats() LinkStats   { return LinkStats{RTT: y.RTT()} } // TCP: Verluste wiederholt der Kernel
 
 // yamuxStream: Close von yamux schliesst nur die eigene Richtung (FIN); fuer "ganz zu" zusaetzlich Lesen beenden.
 type yamuxStream struct{ *yamux.Stream }

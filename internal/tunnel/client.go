@@ -55,14 +55,17 @@ const MaxSessions = 8
 
 // EdgeStatus ist der Zustand des Tunnels zu einem Server (Anzeige in der Node).
 type EdgeStatus struct {
-	Name       string    `json:"name"`
-	Host       string    `json:"host"`
-	Connected  bool      `json:"connected"`
-	Transport  string    `json:"transport,omitempty"` // quic | tcp
-	Via        string    `json:"via,omitempty"`       // quic | quic443 | tls (Weg zum Server, nur verbunden)
-	Addr       string    `json:"addr,omitempty"`      // Adresse des Servers
-	Since      time.Time `json:"since,omitzero"`      // verbunden seit bzw. getrennt seit
-	RTTms      float64   `json:"rtt_ms,omitempty"`
+	Name      string    `json:"name"`
+	Host      string    `json:"host"`
+	Connected bool      `json:"connected"`
+	Transport string    `json:"transport,omitempty"` // quic | tcp
+	Via       string    `json:"via,omitempty"`       // quic | quic443 | tls (Weg zum Server, nur verbunden)
+	Addr      string    `json:"addr,omitempty"`      // Adresse des Servers
+	Since     time.Time `json:"since,omitzero"`      // verbunden seit bzw. getrennt seit
+	RTTms     float64   `json:"rtt_ms,omitempty"`
+	// LossPct: verlorene Pakete der Node zu diesem Server (Download der Besucher) in Prozent, letzte 30 s ueber alle
+	// verbundenen QUIC-Verbindungen; -1 = unbekannt (TCP-Ausweichweg, zu wenig Verkehr)
+	LossPct    float64   `json:"loss_pct"`
 	Streams    int64     `json:"streams"`    // offene Besucher-Streams
 	Total      int64     `json:"total"`      // Streams seit dem Start
 	Reconnects int       `json:"reconnects"` // Neuverbindungen seit dem Start
@@ -95,7 +98,9 @@ type edgeState struct {
 	streams atomic.Int64
 	total   atomic.Int64
 	sess    Session
-	off     bool // Slot ueber der Grenze des Servers: aus
+	off     bool   // Slot ueber der Grenze des Servers: aus
+	dSent   uint64 // gesendete bzw. verlorene Pakete im letzten Messintervall (reportLink)
+	dLost   uint64
 }
 
 // NewClient legt den Client an (Run startet ihn).
@@ -247,6 +252,7 @@ func (c *Client) Status() []EdgeStatus {
 		}
 		x := base.EdgeStatus
 		x.Streams, x.Total, x.Reconnects, x.Sessions, x.Wanted, x.Slots, x.Standby = 0, 0, 0, 0, 0, len(slots), e.Standby
+		var ds, dl uint64
 		for _, s := range slots {
 			if s.Since.After(x.Changed) {
 				x.Changed = s.Since
@@ -256,10 +262,15 @@ func (c *Client) Status() []EdgeStatus {
 			x.Reconnects += s.Reconnects
 			if s.Connected {
 				x.Sessions++
+				ds, dl = ds+s.dSent, dl+s.dLost
 			}
 			if !s.off {
 				x.Wanted++
 			}
+		}
+		x.LossPct = -1
+		if ds >= minLossPackets {
+			x.LossPct = float64(dl) * 100 / float64(ds)
 		}
 		x.Via = via(x)
 		out = append(out, x)
@@ -528,9 +539,10 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string, slot int)
 	if ctx.Err() != nil { // waehrend des Handschlags beendet (Slot entfernt): nicht als verbunden melden
 		return ctx.Err()
 	}
-	c.update(ctx, edge, slot, func(s *edgeState) { s.Caps = w.Caps })
+	c.update(ctx, edge, slot, func(s *edgeState) { s.Caps, s.dSent, s.dLost = w.Caps, 0, 0 })
 	_ = ctrl.SetDeadline(time.Time{})
-	go func() { // Steuer-Nachrichten des Servers
+	go c.reportLink(context.WithoutCancel(ctx), sess, ctrl, edge, slot) // Messwerte an den Server (linkstats.go)
+	go func() {                                                         // Steuer-Nachrichten des Servers
 		var m Control
 		for readMsg(br, &m) == nil {
 			if m.Type == "goaway" {

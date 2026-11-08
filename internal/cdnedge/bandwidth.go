@@ -19,11 +19,10 @@ type bandwidth struct {
 	mu       sync.Mutex
 	limit    map[int]float64 // Bytes/s je Account
 	b        map[int]*bucket
-	peer     map[int]float64 // Rate beim Nachbarn
-	peerAt   time.Time
-	capacity float64         // Bytes/s dieses Servers (0 = keine faire Drossel)
-	fair     map[int]float64 // gerade gedrosselte Accounts: Bytes/s
-	total    float64         // zuletzt gemessen, alle Accounts
+	peers    map[string]peerRates // Raten je Nachbar (alle Server teilen sich die Grenze eines Accounts)
+	capacity float64              // Bytes/s dieses Servers (0 = keine faire Drossel)
+	fair     map[int]float64      // gerade gedrosselte Accounts: Bytes/s
+	total    float64              // zuletzt gemessen, alle Accounts
 	now      func() time.Time
 	sleep    func(time.Duration)
 }
@@ -39,7 +38,7 @@ type bucket struct {
 }
 
 func newBandwidth() *bandwidth {
-	return &bandwidth{limit: map[int]float64{}, b: map[int]*bucket{}, peer: map[int]float64{}, fair: map[int]float64{}, now: time.Now, sleep: time.Sleep}
+	return &bandwidth{limit: map[int]float64{}, b: map[int]*bucket{}, peers: map[string]peerRates{}, fair: map[int]float64{}, now: time.Now, sleep: time.Sleep}
 }
 
 // setLimits aus der Konfiguration von ipv64 (Mbit/s; 0 = frei).
@@ -54,11 +53,38 @@ func (w *bandwidth) setLimits(mbit map[int]int) {
 	}
 }
 
-// setPeer: Raten des Nachbarn (gilt 3 s).
-func (w *bandwidth) setPeer(r map[int]float64) {
+// peerRates: zuletzt gemeldete Raten eines Nachbarn.
+type peerRates struct {
+	r  map[int]float64
+	at time.Time
+}
+
+// setPeer: Raten eines Nachbarn (gelten 3 s).
+func (w *bandwidth) setPeer(from string, r map[int]float64) {
 	w.mu.Lock()
-	w.peer, w.peerAt = r, w.now()
+	w.peers[from] = peerRates{r: r, at: w.now()}
 	w.mu.Unlock()
+}
+
+// peerRate: Summe der aktuellen Raten der Nachbarn fuer einen Account (unter mu).
+func (w *bandwidth) peerRate(uid int, now time.Time) (sum float64, any bool) {
+	for _, p := range w.peers {
+		if now.Sub(p.at) < 3*time.Second {
+			sum, any = sum+p.r[uid], true
+		}
+	}
+	return sum, any
+}
+
+// peerSeen: wann sich jeder Nachbar zuletzt gemeldet hat.
+func (w *bandwidth) peerSeen() map[string]time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := make(map[string]time.Time, len(w.peers))
+	for n, p := range w.peers {
+		out[n] = p.at
+	}
+	return out
 }
 
 // take verbucht n Bytes und wartet, wenn der Account sein Limit ueberschreitet.
@@ -89,8 +115,8 @@ func (w *bandwidth) take(uid, n int) {
 	allowed := math.Inf(1)
 	if ok {
 		allowed = lim
-		if now.Sub(w.peerAt) < 3*time.Second {
-			allowed = max(lim-w.peer[uid], lim/10)
+		if pr, ok := w.peerRate(uid, now); ok {
+			allowed = max(lim-pr, lim/10)
 		}
 	}
 	if fok {

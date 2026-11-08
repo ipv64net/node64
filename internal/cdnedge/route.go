@@ -683,7 +683,7 @@ func (s *Server) servePeer(ln net.Listener) {
 				return
 			}
 			if h.Kind == "rates" { // Bandbreite: Raten des Nachbarn
-				s.readRates(br)
+				s.readRates(br, h.From)
 				_ = c.Close()
 				return
 			}

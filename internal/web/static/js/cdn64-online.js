@@ -131,9 +131,16 @@
 		return api("POST", "/api/cdn64/online/tunnel").then(function (v) {
 			var up = v.edges.filter(function (e) { return e.connected; });
 			var tcp = up.some(function (e) { return e.transport === "tcp"; });
+			var num = function (x) { return (Math.round(x * 10) / 10).toLocaleString(document.documentElement.lang || undefined); };
+			var lossy = 0;
 			v.edges.forEach(function (e) {
 				if (e.connected) {
-					s.line(t("direct", { edge: e.name, transport: t("via_" + (e.via || (e.transport === "tcp" ? "tls" : "quic"))) }), "text-success");
+					var link = "";
+					if (e.rtt_ms > 0) { // RTT und Paketverlust der Node zu diesem Server (Verlust erst nach 30 s Messung)
+						link = " · " + (e.loss_pct >= 0 ? t("link_loss", { rtt: Math.round(e.rtt_ms), loss: num(e.loss_pct) }) : t("link_rtt", { rtt: Math.round(e.rtt_ms) }));
+					}
+					if (e.loss_pct >= 0.5) { lossy = Math.max(lossy, e.loss_pct); }
+					s.line(t("direct", { edge: e.name, transport: t("via_" + (e.via || (e.transport === "tcp" ? "tls" : "quic"))) }) + link, "text-success");
 				} else {
 					s.line(up.length ? t("peer", { edge: e.name }) : t("down", { edge: e.name }));
 				}
@@ -148,6 +155,7 @@
 			} else {
 				s.ok();
 				if (v.udp_buffer_low) { s.line(t("udp_buf", { n: v.udp_buffer }), "text-body-secondary font-monospace small"); }
+				if (lossy) { s.warn(); s.line(t("loss_warn", { loss: num(lossy) }), "text-warning-emphasis"); }
 			}
 			return v;
 		}, s.failed);

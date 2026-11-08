@@ -27,6 +27,8 @@ type Peer struct {
 	Streams atomic.Int64 // offene Daten-Streams (Auswahl der am wenigsten belasteten Verbindung)
 	ctrl    Stream
 	wmu     sync.Mutex
+	lmu     sync.Mutex // link
+	link    linkState  // Verlust und RTT (linkstats.go)
 }
 
 // GoAway kuendigt der Node einen Neustart an (sie verbindet sich danach neu, laufende Streams duerfen enden).
@@ -229,13 +231,20 @@ func (s *Server) handshake(sess Session) {
 			s.log().Warn("tunnel closed: node opened a stream", "tunnel", h.Tunnel, "slot", h.Slot)
 		}
 	}()
-	// Steuer-Stream lesen, bis die Verbindung endet (die Node schickt derzeit nichts mehr)
+	// Steuer-Stream lesen, bis die Verbindung endet (die Node meldet dort ihre Messwerte)
 	go func() {
-		var m Control
-		for readMsg(br, &m) == nil {
+		for {
+			var m Control
+			if readMsg(br, &m) != nil {
+				break
+			}
+			if m.Type == "stats" {
+				p.nodeStats(m)
+			}
 		}
 		_ = sess.Close("control closed")
 	}()
+	go p.measureLink()
 	<-sess.Done()
 	s.mu.Lock()
 	if s.slots[k] == p {

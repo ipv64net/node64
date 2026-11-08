@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: the CDN64 self-test shows the round trip time and packet loss of your line per server and warns from 0.5 % that the line slows down downloads via CDN64; the node reports the values to the CDN64 servers.
 - DNS64: no more false warning about unpublished ports (`-p`) with Docker macvlan or ipvlan, e.g. Unraid `br0`/`bond0` (#23, thanks to @sangandi).
 - DNS64: in "in order" mode a failed upstream is skipped instead of being asked again on every query and is resumed in the background; REFUSED leads to the next upstream (#37).
 - PROXY64: in maintenance mode the access list now applies before the maintenance page – custom HTML can no longer be fetched without signing in (#33).
