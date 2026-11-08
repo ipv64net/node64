@@ -406,7 +406,7 @@ func TestNameTakenByOtherOwner(t *testing.T) {
 }
 
 func TestExploitRules(t *testing.T) {
-	block := []string{"/?a=http://evil", "/?x=../../etc/passwd", "/?GLOBALS[x]=1", "/?q=base64_decode(abc)", "/?q=viagra", "/wp-config.php"}
+	block := []string{"/?a=http://evil.example/shell.txt?", "/?x=../../etc/passwd", "/?GLOBALS[x]=1", "/?q=base64_decode(abc)", "/?q=viagra", "/wp-config.php"}
 	pass := []string{"/", "/?page=2", "/search?q=union+station", "/static/app.js", "/?redirect=/dashboard", "/environment"}
 	for _, p := range block {
 		r := httptest.NewRequest("GET", "http://x"+p, nil)

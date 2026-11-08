@@ -136,3 +136,77 @@ func TestPortmapUDPAmplification(t *testing.T) {
 		t.Fatalf("visitor got %d bytes for 1 byte sent (limit %d)", got, udpFree+udpAmp)
 	}
 }
+
+// UDP-Download (z. B. durch WireGuard): der Besucher schickt nur kleine ACKs, das Ziel ein Vielfaches davon. In der
+// laufenden Sitzung kommt der Download vollstaendig an (vorher bremste das Zehnfache auf wenige KB/s).
+func TestPortmapUDPDownload(t *testing.T) {
+	old := udpEstAge
+	udpEstAge = 200 * time.Millisecond
+	defer func() { udpEstAge = old }()
+	back, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer back.Close()
+	sent := make(chan int, 1)
+	go func() { // nach dem ersten Paket 1,5 s lang je Millisekunde 1200 Bytes an den Absender
+		b := make([]byte, 2048)
+		_, from, err := back.ReadFromUDP(b)
+		if err != nil {
+			return
+		}
+		go func() { // weitere ACKs lesen
+			for {
+				if _, _, err := back.ReadFromUDP(b); err != nil {
+					return
+				}
+			}
+		}()
+		big, total := make([]byte, 1200), 0
+		for end := time.Now().Add(1500 * time.Millisecond); time.Now().Before(end); time.Sleep(time.Millisecond) {
+			if _, err := back.WriteToUDP(big, from); err == nil {
+				total += len(big)
+			}
+		}
+		sent <- total
+	}()
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	s := startEdge(t, &Config{Name: "A", ListenHTTP: freeAddr(t), TLSCert: cf, TLSKey: kf, DataDir: t.TempDir(), PortRange: "1024-65535"}, pool)
+	s.targetOK = func(a netip.Addr) bool { return a.IsLoopback() }
+	listen := freeListenPort(t, "udp")
+	s.applyConfig(&apiConfig{Hosts: []apiHost{{ID: 1, Name: "d.test", Mode: 3, UserID: 1,
+		Target:   &apiTarget{Addrs: []string{"127.0.0.1"}, Port: 80, Scheme: "http"},
+		Mappings: []apiMapping{{Listen: listen, Transport: "udp", Port: port(back.LocalAddr().String())}}}}})
+	c, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: listen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() { // ACKs: 60 Bytes alle 20 ms
+		ack := make([]byte, 60)
+		for {
+			_, _ = c.Write(ack)
+			select {
+			case <-stop:
+				return
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	}()
+	got := 0
+	b := make([]byte, 2048)
+	for {
+		_ = c.SetReadDeadline(time.Now().Add(700 * time.Millisecond))
+		n, err := c.Read(b)
+		if err != nil {
+			break
+		}
+		got += n
+	}
+	total := <-sent
+	if got < total/2 { // Loopback verliert wenig; vorher kam nur ~32 KB + 10 x ACKs an
+		t.Fatalf("download: visitor got %d of %d bytes", got, total)
+	}
+}

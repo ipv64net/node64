@@ -48,7 +48,12 @@ const (
 	udpNewPerSec   = 200             // neue Sitzungen je Port und Sekunde (gefaelschte Absender)
 	udpFree        = 32 << 10        // so viele Bytes darf das Ziel einem Besucher immer schicken ...
 	udpAmp         = 10              // ... danach hoechstens das Zehnfache dessen, was vom Besucher kam
-	tcpIdle        = time.Hour       // TCP ohne Daten in beide Richtungen: trennen (ruhende Verbindungen binden nichts)
+	// Laufende Sitzung (Besucher sendet nach der ersten Antwort weiter, udpEstPkts Pakete, nach udpEstAge): weite
+	// Grenze. Ein Download (z. B. durch WireGuard) schickt dem Besucher 30- bis ueber 500-mal so viel, wie als ACKs
+	// zurueckkommt; mit dem Zehnfachen brach er nach wenigen Sekunden auf wenige Mbit/s ein.
+	udpAmpEst  = 1024
+	udpEstPkts = 3
+	tcpIdle    = time.Hour // TCP ohne Daten in beide Richtungen: trennen (ruhende Verbindungen binden nichts)
 )
 
 type portmapper struct {
@@ -419,21 +424,28 @@ type udpPort struct {
 	aclLast netip.AddrPort // zuletzt nach der Liste abgewiesener Absender (je Absender einmal zaehlen, nicht je Datagramm)
 }
 
+// udpEstAge: so alt muss eine Sitzung sein, bevor die weite Grenze gilt (Tests kuerzer).
+var udpEstAge = 2 * time.Second
+
 type udpSess struct {
-	mu      sync.Mutex
-	up      net.Conn // nil, solange die Verbindung zum Ziel entsteht
-	queue   [][]byte
-	dead    bool
-	gen     string // Stand des Ziels: aendert er sich (DynDNS), neue Sitzung
-	tport   int
-	st      *hostStat
-	uid     int
-	free    bool         // ueber den Nachbarn: der zaehlt und begrenzt
-	last    atomic.Int64 // Unix-Nanosekunden der letzten Aktivitaet
-	in, out atomic.Int64 // Bytes vom bzw. zum Besucher
-	release func()
-	untrack func()
-	once    sync.Once
+	mu       sync.Mutex
+	up       net.Conn // nil, solange die Verbindung zum Ziel entsteht
+	queue    [][]byte
+	dead     bool
+	gen      string // Stand des Ziels: aendert er sich (DynDNS), neue Sitzung
+	tport    int
+	st       *hostStat
+	uid      int
+	free     bool         // ueber den Nachbarn: der zaehlt und begrenzt
+	last     atomic.Int64 // Unix-Nanosekunden der letzten Aktivitaet
+	in, out  atomic.Int64 // Bytes vom bzw. zum Besucher
+	born     time.Time
+	answered atomic.Bool  // das Ziel hat dem Besucher schon geantwortet
+	after    atomic.Int32 // Pakete des Besuchers seit der ersten Antwort
+	est      atomic.Bool  // laufende Sitzung: weite Grenze (udpAmpEst)
+	release  func()
+	untrack  func()
+	once     sync.Once
 }
 
 func (u *udpPort) close() {
@@ -497,6 +509,9 @@ func (u *udpPort) serve() {
 			continue
 		}
 		s.last.Store(time.Now().UnixNano())
+		if s.answered.Load() && !s.est.Load() && s.after.Add(1) >= udpEstPkts && time.Since(s.born) >= udpEstAge {
+			s.est.Store(true) // der Besucher sendet nach den Antworten weiter: laufende Sitzung
+		}
 		s.mu.Lock()
 		up := s.up
 		if up == nil && !s.dead && len(s.queue) < udpQueue {
@@ -569,7 +584,7 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	if why != "" {
 		return nil
 	}
-	s = &udpSess{gen: targetGen(re), tport: tport, st: st, uid: re.UserID, release: release}
+	s = &udpSess{gen: targetGen(re), tport: tport, st: st, uid: re.UserID, release: release, born: time.Now()}
 	s.last.Store(time.Now().UnixNano())
 	u.mu.Lock()
 	if old := u.sess[from]; old != nil { // gleichzeitig angelegt: die vorhandene nehmen
@@ -614,7 +629,9 @@ func (u *udpPort) connect(from netip.AddrPort, s *udpSess, re *route, tport int)
 	u.back(from, s, up)
 }
 
-// back: Antworten des Ziels an den Besucher (hoechstens udpFree + udpAmp x Eingang).
+// back: Antworten des Ziels an den Besucher (hoechstens udpFree + udpAmp x Eingang, in laufender Sitzung udpAmpEst x).
+// Ohne Nachweis der Absender-Adresse (bei beliebigem UDP nicht moeglich) bremst die enge Grenze Reflexion mit wenigen
+// gefaelschten Paketen; die weite haelt auch dauerhafte Angriffe unter extremen Verstaerkern (z. B. memcached).
 func (u *udpPort) back(to netip.AddrPort, s *udpSess, up net.Conn) {
 	buf := make([]byte, 64<<10)
 	for {
@@ -627,10 +644,15 @@ func (u *udpPort) back(to netip.AddrPort, s *udpSess, up net.Conn) {
 			continue
 		}
 		s.last.Store(time.Now().UnixNano())
-		if s.out.Load()+int64(n) > udpFree+udpAmp*s.in.Load() {
+		amp := int64(udpAmp)
+		if s.est.Load() {
+			amp = udpAmpEst
+		}
+		if s.out.Load()+int64(n) > udpFree+amp*s.in.Load() {
 			continue // mehr Antwort als Anfrage: gefaelschter Absender, verwerfen
 		}
 		if _, err := u.pc.WriteToUDPAddrPort(buf[:n], to); err == nil {
+			s.answered.Store(true)
 			s.out.Add(int64(n))
 			if !s.free {
 				s.st.BytesOut.Add(int64(n))

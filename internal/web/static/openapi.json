@@ -1707,6 +1707,11 @@
           },
           "default_html": {
             "type": "string"
+          },
+          "proxy_protocol": {
+            "type": "string",
+            "description": "Adressen bzw. Netze vorgeschalteter Proxys (z. B. Traefik mit proxyProtocol), die auf den Ports 80/443 einen PROXY-Kopf (v1/v2) mit der echten Besucher-Adresse schicken dürfen; durch Leerzeichen oder Komma getrennt, leer = aus. Von anderen Adressen wird kein Kopf gelesen.",
+            "example": "172.18.0.0/16"
           }
         }
       },

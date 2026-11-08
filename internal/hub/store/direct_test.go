@@ -28,8 +28,8 @@ func TestReverdictDirectNode(t *testing.T) {
 				switch {
 				case strings.HasPrefix(q, "SELECT userid, policy"):
 					return fakeResult{cols: []string{"userid", "policy", "state", "name", "interval_sec", "incident_id", "down_since", "type", "target", "critical", "channels",
-						"notify_down", "notify_up", "notify_degraded", "execution", "paused", "nodes", "node_id"},
-						rows: [][]driver.Value{{int64(7), "all", "up", "Web", int64(60), nil, nil, "http", "https://x/", int64(0), "", int64(1), int64(1), int64(0), "local", int64(0), tc.nodes, "a"}}}
+						"notify_down", "notify_up", "notify_degraded", "execution", "paused", "nodes", "node_id", "params"},
+						rows: [][]driver.Value{{int64(7), "all", "up", "Web", int64(60), nil, nil, "http", "https://x/", int64(0), "", int64(1), int64(1), int64(0), "local", int64(0), tc.nodes, "a", "{}"}}}
 				case strings.Contains(q, "FROM hc2_check_states"):
 					var rows [][]driver.Value
 					for _, n := range measuringNodes(splitList(tc.nodes), "a") {
@@ -96,5 +96,74 @@ func TestDueRemindersDirectNode(t *testing.T) {
 	}
 	if len(list[1].Channels) != 2 || list[1].Duration != 30*time.Minute {
 		t.Fatalf("online reminder: %+v", list[1])
+	}
+}
+
+// Push-Checks melden nur beim Push: 10 min nach dem letzten Push ist der Zustand noch aktuell (kein "wird nicht mehr
+// geprueft"), ein HTTP-Check mit 60 s Intervall dagegen nicht mehr.
+func TestReverdictPushFresh(t *testing.T) {
+	now := time.Now().UTC()
+	for _, tc := range []struct {
+		name, ctype, params string
+		age                 time.Duration
+		wantUnchecked       bool
+	}{
+		{"push, 10 min after the push", "push", `{"period_seconds":3600}`, 10 * time.Minute, false},
+		{"push, weekly period", "push", `{"period_seconds":604800,"grace_seconds":3600}`, 6 * 24 * time.Hour, false},
+		{"push, long overdue", "push", `{"period_seconds":900,"grace_seconds":0}`, 50 * time.Minute, true},
+		{"http, 10 min old", "http", `{}`, 10 * time.Minute, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
+				switch {
+				case strings.HasPrefix(q, "SELECT userid, policy"):
+					return fakeResult{cols: []string{"userid", "policy", "state", "name", "interval_sec", "incident_id", "down_since", "type", "target", "critical", "channels",
+						"notify_down", "notify_up", "notify_degraded", "execution", "paused", "nodes", "node_id", "params"},
+						rows: [][]driver.Value{{int64(7), "all", "up", "Backup", int64(60), nil, nil, tc.ctype, "", int64(0), "", int64(1), int64(1), int64(0), "local", int64(0), "a", "a", tc.params}}}
+				case strings.Contains(q, "FROM hc2_check_states"):
+					u := now.Add(-tc.age)
+					return fakeResult{cols: []string{"source", "state", "last_status", "last_reason", "last_message", "last_latency_ms", "updated_at", "since"},
+						rows: [][]driver.Value{{"node:a", "up", "up", "", "", 0.0, u.Format(TimeFormat), u.Add(-time.Hour).Format(TimeFormat)}}}
+				case strings.HasPrefix(q, "SELECT online, last_seen"):
+					return fakeResult{cols: []string{"online", "last_seen"}, rows: [][]driver.Value{{int64(1), now.Format(TimeFormat)}}}
+				case strings.HasPrefix(q, "SELECT name FROM hc2_nodes"):
+					return fakeResult{cols: []string{"name"}, rows: [][]driver.Value{{"Box"}}}
+				case strings.HasPrefix(q, "SELECT"):
+					return fakeResult{cols: []string{"x"}}
+				}
+				return fakeResult{affected: 1}
+			})
+			var got []OverallEvent
+			s.OnOverall = func(e OverallEvent) { got = append(got, e) }
+			if err := s.Reverdict(context.Background(), "tok"); err != nil {
+				t.Fatal(err)
+			}
+			unchecked := len(got) == 1 && got[0].Kind == "unchecked"
+			if unchecked != tc.wantUnchecked {
+				t.Fatalf("events %+v, want unchecked=%v", got, tc.wantUnchecked)
+			}
+		})
+	}
+}
+
+func TestFreshWindow(t *testing.T) {
+	for _, tc := range []struct {
+		ctype  string
+		iv     int
+		params string
+		want   time.Duration
+	}{
+		{"http", 60, `{}`, 5 * time.Minute},
+		{"http", 600, `{}`, 30 * time.Minute},
+		{"push", 60, `{}`, 3 * (3600 + 600) * time.Second},
+		{"push", 60, `{"period_seconds":120,"grace_seconds":0}`, 6 * time.Minute},
+		{"push", 60, `{"period_seconds":60,"grace_seconds":0}`, 5 * time.Minute},
+	} {
+		if got := freshWindow(tc.ctype, tc.iv, []byte(tc.params)); got != tc.want {
+			t.Errorf("%s %d %s: %v, want %v", tc.ctype, tc.iv, tc.params, got, tc.want)
+		}
+	}
+	if !strings.Contains(freshSQL, "c.type = 'push'") || !strings.Contains(freshSQL, "3600") || !strings.Contains(freshSQL, "600), c.interval_sec), 300)") {
+		t.Errorf("freshSQL: %s", freshSQL)
 	}
 }

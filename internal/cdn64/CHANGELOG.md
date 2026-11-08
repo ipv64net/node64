@@ -1,5 +1,18 @@
 # Änderungen – PROXY64
 
+## 1.52.0 – 2026-11-08
+
+### Neu
+- Hinter einem anderen Proxy (z. B. Traefik, HAProxy) kommt die echte Besucher-Adresse per PROXY protocol v1/v2 an –
+  nur von eingetragenen Adressen (Einstellungen → Ports → Gemeinsamer Eingang), auch per API (`PUT /api/edge`,
+  `proxy_protocol`).
+
+### Behoben
+- Block Common Exploits sperrt keine Anmeldungen mehr: OAuth/OIDC mit `redirect_uri=https://…` (Home Assistant,
+  Keycloak, Authelia, Nextcloud) und WebDAV gehen durch. Neu erkannt werden Path-Traversal, Log4Shell, Befehle in
+  Parametern und weitere SQL-Muster. Adressen der Freigabeliste sind ausgenommen, die greifende Regel steht im
+  Debug-Log.
+
 ## 1.51.0 – 2026-11-08
 
 ### Neu

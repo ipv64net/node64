@@ -228,6 +228,8 @@
     "expired": "Die Anmeldung ist abgelaufen oder ungültig. Bitte erneut versuchen.",
     "denied": "Der SSO-Anbieter hat die Anmeldung abgelehnt ({error}).",
     "failed": "Die Anmeldung über SSO ist fehlgeschlagen.",
+    "alg": "Der SSO-Anbieter signiert das ID-Token mit {alg}, erlaubt sind {allowed}. Wähle beim Anbieter einen Signaturschlüssel (RSA oder EC), der in seiner Discovery angegeben ist.",
+    "alg_secret": "Der SSO-Anbieter signiert das ID-Token mit {alg} (mit dem Client-Secret). Trage das Client-Secret in Node64 ein oder wähle beim Anbieter einen Signaturschlüssel (RSA oder EC).",
     "not_linked": "Das SSO-Konto „{name}“ ist mit keinem Benutzer dieser Node verknüpft. Melde dich lokal an und verknüpfe es unter Einstellungen → Anmeldung."
   },
   "login": {
@@ -487,7 +489,7 @@
       "cache_assets_hint": "Bilder, CSS, JS und Schriften im Speicher halten.",
       "block_exploits": "Block Common Exploits",
       "limits_on": "Schutz vor Überlastung aktiv: Grenzen je IP-Adresse (Verbindungen, Anfragen), Sperre bei Dauerbeschuss und eine Platzgrenze beim Ziel",
-      "block_exploits_hint": "Typische Angriffe (SQL- und Datei-Injection, .git/.env) mit 403 abweisen.",
+      "block_exploits_hint": "Typische Angriffe (SQL- und Datei-Injection, Path-Traversal, Log4Shell, .git/.env) mit 403 abweisen. Anmeldungen per OAuth/OIDC (z. B. Home Assistant, Keycloak, Authelia) und WebDAV bleiben frei; Adressen der Freigabeliste sind ausgenommen.",
       "websockets": "WebSockets",
       "websockets_hint": "Für Dienste mit Live-Verbindung (z. B. Home Assistant).",
       "enabled": "Eingeschaltet",
@@ -1559,6 +1561,8 @@
     "edge_public": "HTTPS-Port von außen",
     "edge_public_hint": "Nur nötig, wenn der Router einen anderen Port weiterleitet (z. B. 443 → 8443). Leer = wie HTTPS-Port.",
     "edge_http3": "HTTP/3 (QUIC) anbieten",
+      "edge_pp": "PROXY protocol annehmen von",
+      "edge_pp_hint": "Steht PROXY64 hinter einem anderen Proxy, der TCP bzw. TLS nur durchreicht (z. B. Traefik mit proxyProtocol, HAProxy send-proxy), trage hier dessen Adresse oder Netz ein. Nur von dort liest Node64 auf den Ports 80/443 einen PROXY-Kopf (v1/v2) mit der echten Besucher-Adresse – für Zugriffslisten, Logs, Honeypot und Bremsen. Mehrere durch Leerzeichen oder Komma trennen, leer = aus. Beendet der Proxy selbst TLS und schickt X-Forwarded-For, trage ihn stattdessen beim Proxy-Host unter „Vertrauenswürdige Proxys davor“ ein.",
     "edge_default": "Unbekannte Namen",
     "edge_default_404": "Neutrale Seite „404“",
     "edge_default_close": "Verbindung schließen",

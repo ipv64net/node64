@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -289,7 +290,15 @@ func orDefault(s, def string) string {
 }
 
 // shortErr kuerzt die oft verschachtelten Go-Netzfehler auf den Kern.
+// errDenied: Text fuer eine vom Netz verbotene Verbindung (siehe shortErr).
+const errDenied = "connection refused by a firewall (permission denied) – the target network or router rejects this address/port, e.g. no IPv6 port forwarding for this host"
+
 func shortErr(err error) string {
+	if errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) {
+		// connect: EACCES = ICMP "administratively prohibited" aus dem Zielnetz (z. B. Router ohne Freigabe fuer diese
+		// IPv6-Adresse), EPERM = eigene Firewall; "permission denied" allein versteht niemand
+		return errDenied
+	}
 	s := err.Error()
 	for _, sep := range []string{": dial tcp", ": Get \"", ": Head \"", ": Post \""} {
 		if i := strings.Index(s, sep); i > 0 {

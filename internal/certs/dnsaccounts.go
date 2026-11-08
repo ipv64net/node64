@@ -210,5 +210,6 @@ func (m *Manager) dnsProvider(ctx context.Context, id int64) (challenge.Provider
 	if m.provider != nil {
 		return m.provider(a.Provider, vals)
 	}
+	m.useLegoDNS() // Zone und CNAME ueber oeffentliche Resolver statt Split-DNS des Systems (node64#45)
 	return buildProvider(a.Provider, vals)
 }

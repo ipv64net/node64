@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,12 +28,12 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	var policy, state, name, ctype, target, channels string
 	var intervalSec, critical, nd, nu, ndeg, paused int
 	var incident sql.NullInt64
-	var downSince sql.NullString
+	var downSince, params sql.NullString
 	var execution, nodesCol string
 	var ownerNode sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution, paused, nodes, node_id
+	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution, paused, nodes, node_id, params
 		FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
-		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution, &paused, &nodesCol, &ownerNode)
+		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution, &paused, &nodesCol, &ownerNode, &params)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -52,10 +53,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	}
 	var srcs []src
 	now := time.Now().UTC()
-	fresh := time.Duration(intervalSec) * 3 * time.Second
-	if fresh < 5*time.Minute {
-		fresh = 5 * time.Minute
-	}
+	fresh := freshWindow(ctype, intervalSec, []byte(params.String))
 	for rows.Next() {
 		var x src
 		var st, ls, reason, msg sql.NullString
@@ -440,14 +438,34 @@ func inList(list []string, v string) bool {
 	return false
 }
 
-// UncheckedSweep bewertet Checks neu, fuer die seit mehr als 3 Intervallen (mind. 5 min) keine Messstelle mehr
+// freshWindow: so lange gilt der Zustand einer Messstelle als aktuell - 3 Intervalle, mind. 5 min. Push-Checks melden
+// nur, wenn gepusht wird (bzw. die Frist ablaeuft): 3 x (Periode + Kulanz) wie in der Node (healthchecks.staleAt),
+// sonst hiesse jeder Push-Check ~5 min nach dem Push "wird nicht mehr geprueft".
+func freshWindow(ctype string, intervalSec int, params []byte) time.Duration {
+	every := time.Duration(intervalSec) * time.Second
+	if ctype == string(checks.TypePush) {
+		period, grace := checks.PushWindow(params)
+		every = time.Duration(period+grace) * time.Second
+	}
+	if w := 3 * every; w > 5*time.Minute {
+		return w
+	}
+	return 5 * time.Minute
+}
+
+// freshSQL: dasselbe Fenster in Sekunden als SQL-Ausdruck fuer hc2_checks c (fehlende Push-Werte = Standard).
+var freshSQL = "GREATEST(3 * IF(c.type = 'push', COALESCE(NULLIF(CAST(JSON_UNQUOTE(JSON_EXTRACT(c.params, '$.period_seconds')) AS UNSIGNED), 0), " +
+	strconv.Itoa(checks.DefaultPushPeriod) + ") + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(c.params, '$.grace_seconds')) AS UNSIGNED), " +
+	strconv.Itoa(checks.DefaultPushGrace) + "), c.interval_sec), 300)"
+
+// UncheckedSweep bewertet Checks neu, fuer die seit mehr als 3 Intervallen (mind. 5 min; Push: freshWindow) keine Messstelle mehr
 // gemeldet hat, z. B. weil die einzige messende Node offline ist. Ohne neue Messungen liefe sonst keine Bewertung,
 // und der Check bliebe beim letzten Zustand stehen. Auch reine Online-Checks (ohne Push): misst ipv64 sie nicht mehr,
 // etwa weil das Tageskontingent aufgebraucht ist, steht das am Check. Nur der Housekeeper, einmal je Minute.
 func (s *Store) UncheckedSweep(ctx context.Context) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT c.token FROM hc2_checks c WHERE c.deleted_at IS NULL AND c.paused = 0 AND (c.execution IN ('local','both') OR c.type <> 'push')
 		AND c.state NOT IN ('pending','paused')
-		AND NOT EXISTS (SELECT 1 FROM hc2_check_states st WHERE st.token = c.token AND st.updated_at > UTC_TIMESTAMP(3) - INTERVAL GREATEST(3 * c.interval_sec, 300) SECOND)
+		AND NOT EXISTS (SELECT 1 FROM hc2_check_states st WHERE st.token = c.token AND st.updated_at > UTC_TIMESTAMP(3) - INTERVAL `+freshSQL+` SECOND)
 		LIMIT 500`)
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)

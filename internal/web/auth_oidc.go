@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -271,9 +272,24 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, _ := tok.Extra("id_token").(string)
-	idt, err := p.Verifier(&oidc.Config{ClientID: o.ClientID}).Verify(cctx, raw)
+	verifier, allowed, err := oidcVerifier(p, o)
+	if err != nil {
+		s.log.Warn("oidc discovery unreadable", "err", err)
+		fail(back, "sso.unreachable")
+		return
+	}
+	idt, err := verifier.Verify(cctx, raw)
 	if err != nil || idt.Nonce != f.nonce {
-		s.log.Warn("oidc id token rejected", "err", err)
+		alg := oidcTokenAlg(raw)
+		s.log.Warn("oidc id token rejected", "err", err, "alg", alg, "allowed", strings.Join(allowed, ","))
+		if alg != "" && !slices.Contains(allowed, alg) { // Signaturverfahren passt nicht: sagen, was zu tun ist
+			key := "sso.alg"
+			if oidcHMACAlgs[alg] && o.Secret == "" {
+				key = "sso.alg_secret"
+			}
+			fail(back, key, "alg", alg, "allowed", strings.Join(allowed, ", "))
+			return
+		}
 		fail(back, "sso.failed")
 		return
 	}

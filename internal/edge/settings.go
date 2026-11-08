@@ -12,6 +12,7 @@ const (
 	SetDefault    = "edge.default"
 	SetDefaultURL = "edge.default_url"
 	SetDefaultPg  = "edge.default_html"
+	SetProxyProto = "edge.proxy_protocol"
 )
 
 // LoadConfig liest die Einstellungen (fehlende bzw. ungueltige Werte = Standard).
@@ -26,7 +27,10 @@ func LoadConfig(get func(key, def string) string) Config {
 	}
 	c := Config{Bind: get(SetBind, d.Bind), HTTPPort: num(SetHTTPPort, d.HTTPPort), HTTPSPort: num(SetHTTPSPort, d.HTTPSPort),
 		PublicPort: num(SetPublicPort, d.PublicPort), HTTP3: get(SetHTTP3, "1") == "1", Default: get(SetDefault, d.Default),
-		DefaultURL: get(SetDefaultURL, ""), DefaultPage: get(SetDefaultPg, "")}
+		DefaultURL: get(SetDefaultURL, ""), DefaultPage: get(SetDefaultPg, ""), ProxyProtocol: get(SetProxyProto, "")}
+	if _, err := parseTrustedNets(c.ProxyProtocol); err != nil {
+		c.ProxyProtocol = "" // ungueltig gespeichert: aus statt alle Einstellungen verwerfen
+	}
 	if c.Validate() != nil {
 		c.Default, c.DefaultURL, c.DefaultPage = DefaultNotFound, "", "" // nur die Standardseite ist ungueltig
 		if c.Validate() != nil {
@@ -43,5 +47,6 @@ func (c Config) Settings() map[string]string {
 		h3 = "1"
 	}
 	return map[string]string{SetBind: c.Bind, SetHTTPPort: strconv.Itoa(c.HTTPPort), SetHTTPSPort: strconv.Itoa(c.HTTPSPort),
-		SetPublicPort: strconv.Itoa(c.PublicPort), SetHTTP3: h3, SetDefault: c.Default, SetDefaultURL: c.DefaultURL, SetDefaultPg: c.DefaultPage}
+		SetPublicPort: strconv.Itoa(c.PublicPort), SetHTTP3: h3, SetDefault: c.Default, SetDefaultURL: c.DefaultURL, SetDefaultPg: c.DefaultPage,
+		SetProxyProto: c.ProxyProtocol}
 }

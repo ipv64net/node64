@@ -162,10 +162,11 @@ type Manager struct {
 	lpDone chan struct{}
 	reg    map[string]bool // ACME-Konto bei der Stelle angemeldet (je Verzeichnis)
 
-	acme   sync.Mutex // ein Abruf gleichzeitig
-	base   context.Context
-	cancel context.CancelFunc
-	bg     sync.WaitGroup
+	acme     sync.Mutex // ein Abruf gleichzeitig
+	legoOnce sync.Once  // Weiterleiter fuer lego (legodns.go)
+	base     context.Context
+	cancel   context.CancelFunc
+	bg       sync.WaitGroup
 
 	// austauschbar fuer Tests
 	txtVisible func(ctx context.Context, zone, fqdn, value string) error

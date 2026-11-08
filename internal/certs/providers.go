@@ -54,7 +54,7 @@ func register(info ProviderInfo, build func(v map[string]string) (challenge.Prov
 }
 
 func init() {
-	register(ProviderInfo{ID: "cloudflare", Name: "Cloudflare", Docs: "https://dash.cloudflare.com/profile/api-tokens (Zone:DNS:Edit)",
+	register(ProviderInfo{ID: "cloudflare", Name: "Cloudflare", Docs: "https://dash.cloudflare.com/profile/api-tokens (Zone:Zone:Read + Zone:DNS:Edit)",
 		Fields: []Field{{Key: "token", Label: "API-Token", Secret: true}}},
 		func(v map[string]string) (challenge.Provider, error) {
 			c := cloudflare.NewDefaultConfig()

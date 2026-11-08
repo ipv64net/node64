@@ -228,6 +228,8 @@
     "expired": "The sign-in expired or is invalid. Please try again.",
     "denied": "The SSO provider declined the sign-in ({error}).",
     "failed": "Sign-in via SSO failed.",
+    "alg": "The SSO provider signs the ID token with {alg}; allowed are {allowed}. Choose a signing key (RSA or EC) at the provider that its discovery document lists.",
+    "alg_secret": "The SSO provider signs the ID token with {alg} (using the client secret). Enter the client secret in Node64 or choose a signing key (RSA or EC) at the provider.",
     "not_linked": "The SSO account “{name}” is not linked to any user of this node. Sign in locally and link it under Settings → Sign-in."
   },
   "login": {
@@ -487,7 +489,7 @@
       "cache_assets_hint": "Keep images, CSS, JS and fonts in memory.",
       "block_exploits": "Block common exploits",
       "limits_on": "Overload protection active: limits per IP address (connections, requests), ban on sustained floods and a slot limit at the target",
-      "block_exploits_hint": "Reject typical attacks (SQL and file injection, .git/.env) with 403.",
+      "block_exploits_hint": "Reject typical attacks (SQL and file injection, path traversal, Log4Shell, .git/.env) with 403. Sign-ins via OAuth/OIDC (e.g. Home Assistant, Keycloak, Authelia) and WebDAV stay allowed; addresses on the allow list are exempt.",
       "websockets": "WebSockets",
       "websockets_hint": "For services with live connections (e.g. Home Assistant).",
       "enabled": "Enabled",
@@ -1559,6 +1561,8 @@
     "edge_public": "HTTPS port from outside",
     "edge_public_hint": "Only needed if the router forwards a different port (e.g. 443 → 8443). Empty = same as HTTPS port.",
     "edge_http3": "Offer HTTP/3 (QUIC)",
+      "edge_pp": "Accept PROXY protocol from",
+      "edge_pp_hint": "If PROXY64 sits behind another proxy that only passes TCP or TLS through (e.g. Traefik with proxyProtocol, HAProxy send-proxy), enter its address or network here. Only from there Node64 reads a PROXY header (v1/v2) with the real visitor address on ports 80/443 – for access lists, logs, the honeypot and rate limits. Separate several with spaces or commas, empty = off. If the proxy terminates TLS itself and sends X-Forwarded-For, add it under “Trusted proxies in front” (Advanced) of the proxy host instead.",
     "edge_default": "Unknown names",
     "edge_default_404": "Neutral \"404\" page",
     "edge_default_close": "Close connection",

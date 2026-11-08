@@ -56,6 +56,9 @@ type Config struct {
 	DefaultURL string `json:"default_url"` // Ziel bei DefaultRedirect (http/https)
 	// DefaultHTML: eigene Seite bei DefaultHTML (hoechstens 64 KB)
 	DefaultPage string `json:"default_html"`
+	// ProxyProtocol: Adressen bzw. Netze vorgeschalteter Proxys (z. B. Traefik), die auf 80/443 einen PROXY-Kopf
+	// (v1/v2) mit der echten Besucher-Adresse schicken duerfen; durch Leerzeichen/Komma getrennt, "" = aus (proxyproto.go)
+	ProxyProtocol string `json:"proxy_protocol"`
 }
 
 // DefaultConfig: 80/443 auf allen Adressen, HTTP/3 an, unbekannte Namen bekommen 404.
@@ -87,6 +90,9 @@ func (c *Config) Validate() error {
 		if _, err := netip.ParseAddr(strings.Trim(c.Bind, "[]")); err != nil {
 			return fmt.Errorf("bind address %q invalid", c.Bind)
 		}
+	}
+	if _, err := parseTrustedNets(c.ProxyProtocol); err != nil {
+		return err
 	}
 	switch c.Default {
 	case "":
@@ -670,6 +676,7 @@ func (e *Edge) startLocked(name string) error {
 		if err != nil {
 			return err
 		}
+		ln = proxyListen(ln, e.cfg.ProxyProtocol) // vorgeschalteter Proxy mit PROXY-Kopf: echte Besucher-Adresse
 		srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10, ErrorLog: errLog}
 		if name == "http" {
 			srv.Handler = http.HandlerFunc(e.serveHTTP)

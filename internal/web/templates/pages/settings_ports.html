@@ -98,6 +98,9 @@
 					<div class="form-text mb-2">{{$.T "ports.edge_public_hint"}}</div>
 					<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="edge_h3" name="http3"{{if .Config.HTTP3}} checked{{end}}>
 						<label class="form-check-label" for="edge_h3">{{$.T "ports.edge_http3"}}</label></div>
+					<label class="form-label" for="edge_pp">{{$.T "ports.edge_pp"}}</label>
+					<input class="form-control form-control-sm font-monospace" id="edge_pp" name="proxy_protocol" value="{{.Config.ProxyProtocol}}" placeholder="192.168.1.10 172.18.0.0/16" autocomplete="off">
+					<div class="form-text mb-2">{{$.T "ports.edge_pp_hint"}}</div>
 					<label class="form-label" for="edge_default">{{$.T "ports.edge_default"}}</label>
 					<select class="form-select form-select-sm mb-2" id="edge_default" name="default">
 						<option value="404"{{if eq .Config.Default "404"}} selected{{end}}>{{$.T "ports.edge_default_404"}}</option>

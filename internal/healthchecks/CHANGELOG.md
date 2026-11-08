@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.53.1 – 2026-11-08
+
+### Behoben
+- Weist das Ziel-Netz eine Verbindung ab (z. B. keine IPv6-Freigabe im Router), sagt die Meldung das jetzt, statt nur
+  „permission denied“ (HTTP, TCP, Zertifikat).
+
 ## 2.53.0 – 2026-11-06
 
 ### Neu

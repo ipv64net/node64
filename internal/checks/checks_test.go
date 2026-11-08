@@ -7,9 +7,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -408,5 +410,18 @@ func TestPingTimeout(t *testing.T) {
 	}
 	if got := pingTimeout(context.Background(), 300*time.Millisecond); got != 200*time.Millisecond {
 		t.Fatalf("short: %v", got)
+	}
+}
+
+// Vom Netz verbotene Verbindung (ICMP "administratively prohibited" bzw. eigene Firewall): verstaendlicher Text.
+func TestShortErrDenied(t *testing.T) {
+	for _, e := range []error{syscall.EACCES, syscall.EPERM} {
+		err := &url.Error{Op: "Get", URL: "https://x.test/", Err: &net.OpError{Op: "dial", Net: "tcp6", Err: os.NewSyscallError("connect", e)}}
+		if got := shortErr(err); got != errDenied {
+			t.Errorf("%v: %q", e, got)
+		}
+	}
+	if got := shortErr(&net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}); got == errDenied {
+		t.Errorf("refused must stay refused: %q", got)
 	}
 }

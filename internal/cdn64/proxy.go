@@ -623,13 +623,16 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			page(sw, http.StatusLoopDetected)
 			return
 		}
-		if h.BlockExploits && blocked(r) {
-			*reject = rejExploit
-			st.blocked.Add(1)
-			if !m.hpDivert(sw, r, client, rejExploit) {
-				page(sw, http.StatusForbidden)
+		if h.BlockExploits && !m.bl.exempt(client) { // Freigabeliste geht vor (auch eigene Netze, Forum 5048)
+			if rule := exploitHit(r); rule != "" {
+				m.log.Debug("exploit blocked", "host", hostOnly(r.Host), "rule", rule, "path", trunc(r.URL.Path, 200), "client", client.String())
+				*reject = rejExploit
+				st.blocked.Add(1)
+				if !m.hpDivert(sw, r, client, rejExploit) {
+					page(sw, http.StatusForbidden)
+				}
+				return
 			}
-			return
 		}
 		if maxBody > 0 {
 			if r.ContentLength > maxBody {

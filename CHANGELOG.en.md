@@ -4,6 +4,12 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: block common exploits no longer blocks sign-ins – OAuth/OIDC (Home Assistant, Keycloak, Authelia, Nextcloud) and WebDAV pass, real attacks are still blocked; addresses on the allow list are exempt.
+- PROXY64: behind another proxy (e.g. Traefik, HAProxy) the real visitor address arrives via PROXY protocol v1/v2 – only from listed addresses.
+- Sign-in: SSO accepts ID tokens with every signing algorithm the provider lists – RSA, EC, EdDSA and HS256 with the client secret (e.g. Authentik without a signing key) (#46).
+- Certificates: wildcards like `*.sub.domain.tld` with Cloudflare and other DNS providers work even with your own internal zone for the subdomain (split DNS) – the provider's zone is determined via public resolvers (#45).
+- Healthchecks: if the target network rejects a connection (e.g. no IPv6 port forwarding on the router), the message now says so instead of just "permission denied".
+
 ## 1.2.0 – 2026-11-08
 
 - PROXY64: the CDN64 self-test shows the round trip time and packet loss of your line per server and warns from 0.5 % that the line slows down downloads via CDN64; the node reports the values to the CDN64 servers.
