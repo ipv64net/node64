@@ -1,6 +1,6 @@
 # Änderungen – DNS64
 
-## 1.35.0 – 2026-11-09
+## 1.35.0 – 2026-11-08
 
 ### Neu
 - Mehrere Blocklisten auf einmal hinzufügen (eine URL je Zeile, optional „Name | URL“); die eigene Sperrliste als Textfeld bearbeiten, doppelte und ungültige Zeilen werden gemeldet (#19).

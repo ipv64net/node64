@@ -1,6 +1,6 @@
 # Changes – PROXY64
 
-## 1.53.0 – 2026-11-09
+## 1.53.0 – 2026-11-08
 
 ### New
 - Path at the target of a proxy host – e.g. `/rezepte` in front of every request, the address in the browser stays; redirects and cookie paths of the target are written back (#43).

@@ -1,6 +1,6 @@
 # Änderungen – PROXY64
 
-## 1.53.0 – 2026-11-09
+## 1.53.0 – 2026-11-08
 
 ### Neu
 - Pfad beim Ziel eines Proxy-Hosts – z. B. `/rezepte` vor jede Anfrage, die Adresse im Browser bleibt; Weiterleitungen und Cookie-Pfade des Ziels werden zurückgeschrieben (#43).

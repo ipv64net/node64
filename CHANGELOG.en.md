@@ -4,7 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
-## 1.4.0 – 2026-11-09
+## 1.4.0 – 2026-11-08
 
 - DNS64: add several blocklists at once and edit your own blocklist as a text field (#19); allow lists from the web that win over every blocklist.
 - DNS64: block services with a click – about 40 services such as TikTok, YouTube, Discord or ChatGPT, per group and in schedules (#19).

@@ -1,6 +1,6 @@
 # Changes – Healthchecks
 
-## 2.54.0 – 2026-11-09
+## 2.54.0 – 2026-11-08
 
 ### New
 - Pick a device from DNS64 when creating a check (IP and name, ping suggested); under DNS64 → Groups the heart icon creates a ping check right away (#20).

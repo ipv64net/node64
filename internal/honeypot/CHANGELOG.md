@@ -1,6 +1,6 @@
 # Änderungen – Honeypot64
 
-## 0.21.0 – 2026-11-09
+## 0.21.0 – 2026-11-08
 
 ### Neu
 - Web-Profil FortiGate (SSL-VPN): Pfade, Kopfzeilen und Antworten wie FortiOS, erfasst Anmeldungen an SSL-VPN und Verwaltung. Auf Port 10443 ist es jetzt Standard – bestehende Sensoren antworten dort als FortiGate statt wie nginx (#36).

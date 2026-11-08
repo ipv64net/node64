@@ -1,6 +1,6 @@
 # Changes – Honeypot64
 
-## 0.21.0 – 2026-11-09
+## 0.21.0 – 2026-11-08
 
 ### New
 - Web profile FortiGate (SSL VPN): paths, headers and answers like FortiOS, records logins to the SSL VPN and the management. It is now the default on port 10443 – existing sensors answer there as a FortiGate instead of nginx (#36).

@@ -1,6 +1,6 @@
 # Changes – DNS64
 
-## 1.35.0 – 2026-11-09
+## 1.35.0 – 2026-11-08
 
 ### New
 - Add several blocklists at once (one URL per line, optionally "name | URL"); edit your own blocklist as a text field, duplicate and invalid lines are reported (#19).
