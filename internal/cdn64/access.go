@@ -40,8 +40,9 @@ type AccessUser struct {
 // AccessRule ist eine IP-Regel.
 type AccessRule struct {
 	Action string `json:"action"` // allow | deny
-	CIDR   string `json:"cidr"`   // Adresse oder Netz
+	CIDR   string `json:"cidr"`   // Adresse oder Netz, "all", "self"/"self4"/"self6" oder ein DNS-Name (access_dyn.go)
 	prefix netip.Prefix
+	dyn    string // dynamische Regel (dynRule), "" = fest
 }
 
 // AccessList ist eine Zugriffsliste.
@@ -77,7 +78,9 @@ func (a *AccessList) public() *AccessList {
 
 func (a *AccessList) prepare() {
 	for i := range a.Rules {
-		a.Rules[i].prefix, _ = parsePrefix(a.Rules[i].CIDR)
+		if a.Rules[i].dyn = dynRule(a.Rules[i].CIDR); a.Rules[i].dyn == "" {
+			a.Rules[i].prefix, _ = parsePrefix(a.Rules[i].CIDR)
+		}
 	}
 }
 
@@ -100,10 +103,18 @@ func parsePrefix(s string) (netip.Prefix, error) {
 	return netip.PrefixFrom(a, a.BitLen()), nil
 }
 
-// ipAllowed: erster passender Eintrag entscheidet; "all" passt auf alles.
-func (a *AccessList) ipAllowed(ip netip.Addr) bool {
+// ipAllowed: erster passender Eintrag entscheidet; "all" passt auf alles (dynamische Regeln nur mit d).
+func (a *AccessList) ipAllowed(ip netip.Addr) bool { return a.ipAllowedDyn(ip, nil) }
+
+func (a *AccessList) ipAllowedDyn(ip netip.Addr, d *dynAddrs) bool {
 	ip = ip.Unmap()
 	for _, r := range a.Rules {
+		if r.dyn != "" {
+			if d.matches(r.dyn, r.CIDR, ip) {
+				return r.Action == "allow"
+			}
+			continue
+		}
 		if r.CIDR == "all" || r.CIDR == "*" || r.prefix.Contains(ip) {
 			return r.Action == "allow"
 		}
@@ -116,7 +127,8 @@ func (a *AccessList) ipAllowed(ip netip.Addr) bool {
 // guard prueft Anfragen gegen eine Liste (eine Instanz je Liste, mit Cache fuer erfolgreiche Anmeldungen).
 type guard struct {
 	list  *AccessList
-	fwd   *fwdAuth // Anmeldedienst (nil = keiner)
+	fwd   *fwdAuth  // Anmeldedienst (nil = keiner)
+	dyn   *dynAddrs // dynamische Regeln (self, DNS-Namen; nil = keine)
 	mu    sync.Mutex
 	cache map[[32]byte]time.Time // sha256(user:pass) -> gueltig bis
 }
@@ -182,7 +194,7 @@ type verdict struct {
 func (g *guard) decide(r *http.Request, ip netip.Addr, key []byte) verdict {
 	a := g.list
 	hasRules := len(a.Rules) > 0
-	ipOK := !hasRules || a.ipAllowed(ip)
+	ipOK := !hasRules || a.ipAllowedDyn(ip, g.dyn)
 	if len(a.Users) == 0 && len(a.Keys) == 0 && g.fwd == nil { // nur IP-Regeln
 		if ipOK {
 			return verdict{ok: true}
@@ -409,6 +421,10 @@ func (m *Module) saveAccessList(ctx context.Context, a *AccessList, users []User
 		if r.Action != "allow" && r.Action != "deny" {
 			return &FieldError{Field: "rules", Key: "cdn64.err.acl_rule", Name: r.Action + " " + r.CIDR}
 		}
+		if dynRule(r.CIDR) != "" { // eigene oeffentliche Adresse bzw. DNS-Name (access_dyn.go)
+			rules = append(rules, AccessRule{Action: r.Action, CIDR: strings.ToLower(r.CIDR)})
+			continue
+		}
 		p, err := parsePrefix(r.CIDR)
 		if err != nil {
 			return &FieldError{Field: "rules", Key: "cdn64.err.acl_rule", Name: r.Action + " " + r.CIDR}
@@ -500,7 +516,9 @@ func (m *Module) guards(ctx context.Context) map[int64]*guard {
 		return out
 	}
 	for _, a := range list {
-		out[a.ID] = newGuard(a)
+		g := newGuard(a)
+		g.dyn = m.dyn
+		out[a.ID] = g
 	}
 	return out
 }

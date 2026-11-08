@@ -1,5 +1,16 @@
 # Changes – DNS64
 
+## 1.35.0 – 2026-11-09
+
+### New
+- Add several blocklists at once (one URL per line, optionally "name | URL"); edit your own blocklist as a text field, duplicate and invalid lines are reported (#19).
+- Allow lists from the web: add, switch on/off and reload them like blocklists; they win over every blocklist, also for groups with their own list selection. In a cluster, older nodes accept the setting only after their update.
+- Device groups: label and up to 10 tags per device, filter by tag and search; synced in the cluster (#24).
+- Block services with a click – about 40 services such as TikTok, YouTube, Instagram, Discord, WhatsApp, Steam or ChatGPT, per group and in schedules (#19).
+- Own records from Docker labels: containers with `node64.dns.name` (optionally `node64.dns.ip` or `container`) get records on this node that follow address changes and disappear after removal (switch in the settings, #18).
+- Query log: custom records show the answer they delivered (e.g. → 10.10.78.16) or NODATA (#50).
+- Client names in the query log, top clients and device list: from the device group first, then your own PTR/A records, only then from the router (#49).
+
 ## 1.34.1 – 2026-11-08
 
 ### Fixed

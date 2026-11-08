@@ -117,6 +117,89 @@ func (a *Allowlist) Remove(domain string) error {
 	return a.saveLocked()
 }
 
+// ReplaceResult beschreibt das Ersetzen einer Liste aus einem Textfeld.
+type ReplaceResult struct {
+	Total      int      `json:"total"`      // Eintraege danach
+	Added      int      `json:"added"`      // neu
+	Removed    int      `json:"removed"`    // nicht mehr enthalten
+	Duplicates int      `json:"duplicates"` // doppelte Zeilen (zusammengefasst)
+	Invalid    []string `json:"invalid"`    // ungueltige Zeilen (hoechstens 20)
+}
+
+// Replace setzt die Liste auf die Domains aus lines (eine je Zeile, "#" leitet einen Kommentar ein, "*." und ein
+// Zeitstempel nach Tab werden ignoriert). Vorhandene Eintraege behalten ihr Datum. Ungueltige Zeilen werden
+// gemeldet und nicht uebernommen; sind alle Zeilen ungueltig, bleibt die Liste unveraendert.
+func (a *Allowlist) Replace(lines []string) (ReplaceResult, error) {
+	var res ReplaceResult
+	res.Invalid = []string{}
+	next := map[string]bool{}
+	bad := 0
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if i := strings.IndexByte(line, '#'); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		if i := strings.IndexAny(line, "\t "); i >= 0 {
+			line = line[:i]
+		}
+		if line == "" {
+			continue
+		}
+		d, ok := normalizeDomain(strings.TrimPrefix(line, "*."))
+		if !ok {
+			bad++
+			if len(res.Invalid) < 20 {
+				res.Invalid = append(res.Invalid, line)
+			}
+			continue
+		}
+		if next[d] {
+			res.Duplicates++
+			continue
+		}
+		next[d] = true
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(next) == 0 && bad > 0 {
+		res.Total = len(a.set)
+		return res, ErrInvalidDomain
+	}
+	now := time.Now().UTC()
+	set := make(map[string]time.Time, len(next))
+	for d := range next {
+		if t, ok := a.set[d]; ok {
+			set[d] = t
+		} else {
+			set[d] = now
+			res.Added++
+		}
+	}
+	for d := range a.set {
+		if !next[d] {
+			res.Removed++
+		}
+	}
+	a.set = set
+	res.Total = len(set)
+	return res, a.saveLocked()
+}
+
+// Text liefert die Eintraege fuer ein Textfeld (eine Domain je Zeile, alphabetisch).
+func (a *Allowlist) Text() string {
+	if a == nil {
+		return ""
+	}
+	a.mu.RLock()
+	out := make([]string, 0, len(a.set))
+	for d := range a.set {
+		out = append(out, d)
+	}
+	a.mu.RUnlock()
+	sort.Strings(out)
+	return strings.Join(out, "\n")
+}
+
 func (a *Allowlist) List() []AllowEntry {
 	a.mu.RLock()
 	out := make([]AllowEntry, 0, len(a.set))

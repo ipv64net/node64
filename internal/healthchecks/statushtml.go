@@ -137,6 +137,7 @@ type stItem struct {
 	Bars      template.HTML
 	BarsLabel string
 	FirstDay  string
+	FirstHour string // Stundenbalken (Zeitraum 24 h): erste Stunde "2006-01-02T15" in der Zeitzone der Node
 	NoData    string // title fuer "–" (keine Daten)
 }
 
@@ -448,7 +449,11 @@ func (p *stPage) group(g StatusViewGroup, total int) stGroup {
 		}
 		if p.Layout == "list" && len(it.Bars) > 0 {
 			si.Bars, si.BarsLabel = p.bars(it.Bars)
-			si.FirstDay = it.Bars[0].Day
+			if len(it.Bars[0].Day) == len("2006-01-02T15") {
+				si.FirstHour = it.Bars[0].Day
+			} else {
+				si.FirstDay = it.Bars[0].Day
+			}
 		}
 		sg.Items = append(sg.Items, si)
 	}
@@ -518,11 +523,20 @@ func (p *stPage) bars(days []StatusViewDay) (template.HTML, string) {
 		}
 		b.WriteString("<" + c + ` title="` + html.EscapeString(t) + `"></` + c + ">")
 	}
+	if len(days) > 0 && len(days[0].Day) == len("2006-01-02T15") {
+		return template.HTML(b.String()), p.T("hc.status.pub.bars.aria_h", "hours", len(days), "count", bad)
+	}
 	return template.HTML(b.String()), p.T("hc.status.pub.bars.aria", "days", len(days), "count", bad)
 }
 
-// day formatiert "2006-01-02" fuer die Anzeige.
+// day formatiert "2006-01-02" (bzw. "2006-01-02T15" bei Stundenbalken) fuer die Anzeige.
 func (p *stPage) day(s string) string {
+	if h, err := time.Parse("2006-01-02T15", s); err == nil {
+		if p.Lang == "de" {
+			return h.Format("02.01. 15:00")
+		}
+		return h.Format("Jan 2, 15:00")
+	}
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
 		return s

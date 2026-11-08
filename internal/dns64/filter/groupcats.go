@@ -44,8 +44,14 @@ var categorySets = func() map[string]*DomainSet {
 	return out
 }()
 
-// GroupCategory liefert die Domains einer eingebauten Kategorie (nil = keine bzw. ueber eine Blockliste).
-func GroupCategory(key string) *DomainSet { return categorySets[key] }
+// GroupCategory liefert die Domains einer eingebauten Kategorie bzw. eines Dienstes ("svc:<id>"; nil = keine bzw.
+// ueber eine Blockliste).
+func GroupCategory(key string) *DomainSet {
+	if s := serviceSets[key]; s != nil {
+		return s
+	}
+	return categorySets[key]
+}
 
 // DomainSet ist eine Menge von Domains, die jeweils samt Subdomains gelten.
 type DomainSet struct{ m map[string]bool }

@@ -12,15 +12,21 @@ var m = Math.max(1, Math.round(ms / 6e4));
 return m < 60 ? fmt(L.dm, {m: m}) : m < 1440 ? fmt(L.dh, {h: Math.floor(m / 60), m: m % 60}) : fmt(L.dd, {d: Math.floor(m / 1440), h: Math.floor(m % 1440 / 60)});
 }
 function set(t) { return t && t.slice(0, 4) != '0001'; }
-var DT = new Intl.DateTimeFormat(lg, {dateStyle: 'medium', timeStyle: 'short'}), TM = new Intl.DateTimeFormat(lg, {timeStyle: 'short'}), DY = new Intl.DateTimeFormat(lg, {dateStyle: 'medium', timeZone: 'UTC'});
+var DT = new Intl.DateTimeFormat(lg, {dateStyle: 'medium', timeStyle: 'short'}), TM = new Intl.DateTimeFormat(lg, {timeStyle: 'short'}), DY = new Intl.DateTimeFormat(lg, {dateStyle: 'medium', timeZone: 'UTC'}), HR = new Intl.DateTimeFormat(lg, {dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC'});
 function ft(s, f) { var x = new Date(s); return isNaN(x) ? '' : (f ? TM : DT).format(x); }
 d.querySelectorAll('time[datetime]').forEach(function (t) { var x = ft(t.getAttribute('datetime'), t.dataset.f); if (x) t.textContent = x; });
 // Tooltip je Tag erst beim Darueberfahren (spart Bytes bei vielen Eintraegen)
 d.addEventListener('mouseover', function (e) {
 var i = e.target, p = i.parentNode;
-if (i.title || !p.classList || !p.classList.contains('bars') || !p.dataset.s) return;
-var t = new Date(p.dataset.s + 'T00:00:00Z');
-t.setUTCDate(t.getUTCDate() + [].indexOf.call(p.children, i));
+if (i.title || !p.classList || !p.classList.contains('bars') || !(p.dataset.s || p.dataset.h)) return;
+var t, k = [].indexOf.call(p.children, i);
+if (p.dataset.h) { // Stundenbalken: Stunden in der Zeitzone der Node (als UTC gerechnet, damit der Browser nicht umrechnet)
+t = new Date(p.dataset.h + ':00:00Z'); t.setUTCHours(t.getUTCHours() + k);
+i.title = HR.format(t) + ': ' + (L.b[i.tagName.toLowerCase()] || '');
+return;
+}
+t = new Date(p.dataset.s + 'T00:00:00Z');
+t.setUTCDate(t.getUTCDate() + k);
 i.title = DY.format(t) + ': ' + (L.b[i.tagName.toLowerCase()] || '');
 });
 // Gruppen: eigene Auf-/Zuklapp-Wahl ueberlebt das Neuladen (Schluessel enthaelt den Problemzustand)

@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.54.0 – 2026-11-09
+
+### New
+- Pick a device from DNS64 when creating a check (IP and name, ping suggested); under DNS64 → Groups the heart icon creates a ping check right away (#20).
+- Status pages: selectable period – 24 hours with hourly bars, 7, 30, 60 or 90 days.
+
 ## 2.53.1 – 2026-11-08
 
 ### Fixed

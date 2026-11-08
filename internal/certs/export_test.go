@@ -110,7 +110,7 @@ func TestMoreProviders(t *testing.T) {
 		"rfc2136":     {"nameserver": "192.168.1.1", "tsig_key": "acme.", "tsig_secret": "c2VjcmV0c2VjcmV0c2VjcmV0"},
 		"technitium":  {"url": "http://192.168.1.2:5380/", "token": "t"},
 	}
-	if n := len(Providers()); n != 27 {
+	if n := len(Providers()); n != 35 { // 27 + 8 aus providers_extra.go (#39)
 		t.Fatalf("providers: %d", n)
 	}
 	for id, v := range vals {

@@ -4,6 +4,18 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- DNS64: Mehrere Blocklisten auf einmal und die eigene Sperrliste als Textfeld (#19); Freigabe-Listen aus dem Netz, die jede Blockliste schlagen.
+- DNS64: Dienste per Klick sperren – rund 40 Dienste wie TikTok, YouTube, Discord oder ChatGPT, je Gruppe und im Zeitplan (#19).
+- DNS64: Bezeichnung und Tags je Gerät in Gruppen, mit Filter und Suche (#24).
+- DNS64: Eigene Einträge aus Docker-Labels (`node64.dns.name`), folgen Adressänderungen und verschwinden mit dem Container (#18).
+- DNS64: Abfrage-Log zeigt bei eigenen Einträgen die Antwort bzw. NODATA (#50); Client-Namen kommen aus Gruppe, dann eigenen PTR-/A-Einträgen, dann vom Router (#49).
+- PROXY64: Pfad beim Ziel (#43), Locations können sperren oder fest antworten, „nur Locations erlauben“ (#11), „Erweitert“ je Location.
+- PROXY64: Eigene Fehlerseite je Host, optional auch für 5xx des Ziels (#38); Zugriffslisten mit `allow self` und DNS-Namen (#32); Wartungs- und Fehlerseite kommen in CDN64 Modus 2 an; Tabellen im Dark Mode lesbar.
+- Healthchecks: Gerät aus DNS64 als Check übernehmen (#20); Statusseiten mit 24 h, 7, 30, 60 oder 90 Tagen.
+- Zertifikate: 8 weitere DNS-Anbieter, u. a. LuaDNS, hosting.de, Netlify – jetzt 35 (#39).
+- Honeypot64: Web-Profil FortiGate (SSL-VPN), Standard auf Port 10443 (#36).
+- Sicherheit: aktualisierte Abhängigkeiten und Go 1.27.3 (Schwachstellen in klauspost/compress, crypto/x509 und go-pkcs12 behoben); Sicherheitsprüfungen im Build mit govulncheck, gosec, CodeQL und Trivy (#27).
+
 ## 1.3.0 – 2026-11-08
 
 - PROXY64: Block Common Exploits sperrt keine Anmeldungen mehr – OAuth/OIDC (Home Assistant, Keycloak, Authelia, Nextcloud) und WebDAV gehen durch, echte Angriffe werden weiter geblockt; Adressen der Freigabeliste sind ausgenommen.

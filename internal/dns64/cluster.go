@@ -57,7 +57,7 @@ type ClusterHook func(ctx context.Context, item, id string, deleted bool)
 
 var clusterKeys = map[string][]string{
 	ItemSettings: {setUpstreams, setUpMode, setUpCount, setBlockMode, setCacheSize, setAnonymize, setRetention, setCanary, setNotifyUpstream, setNotifyLists},
-	ItemLists:    {setLists, setListHours},
+	ItemLists:    {setLists, setListHours, setAllowLst},
 }
 
 // SetCluster verbindet DNS64 mit dem Cluster und merkt sich den Ausgangsstand (ohne Meldung; vorhandene Eintraege
@@ -193,9 +193,10 @@ type clGroup struct {
 }
 
 type clMember struct {
-	Kind  string `json:"kind"`
-	Value string `json:"value"`
-	Label string `json:"label,omitempty"`
+	Kind  string   `json:"kind"`
+	Value string   `json:"value"`
+	Label string   `json:"label,omitempty"`
+	Tags  []string `json:"tags,omitempty"`
 }
 
 func recordKey(name, typ, value string) string {
@@ -276,7 +277,7 @@ func (m *Module) clCurrent(ctx context.Context, item string) (map[string]string,
 			if item == ItemMembers {
 				mem := []clMember{}
 				for _, x := range g.Members {
-					mem = append(mem, clMember{x.Kind, x.Value, x.Label})
+					mem = append(mem, clMember{x.Kind, x.Value, x.Label, x.Tags})
 				}
 				slices.SortFunc(mem, func(a, b clMember) int { return strings.Compare(a.Kind+a.Value, b.Kind+b.Value) })
 				out[g.UID] = jsonString(mem)
@@ -691,7 +692,8 @@ func (m *Module) clApplyMembers(ctx context.Context, uid string, data json.RawMe
 		if _, err := w.ExecContext(ctx, `DELETE FROM dns64_group_members WHERE kind = ? AND value = ?`, x.Kind, x.Value); err != nil {
 			return err
 		}
-		if _, err := w.ExecContext(ctx, `INSERT INTO dns64_group_members (group_id, kind, value, label, created_at) VALUES (?,?,?,?,?)`, id, x.Kind, x.Value, x.Label, now); err != nil {
+		tags, _ := groups.NormalizeTags(x.Tags)
+		if _, err := w.ExecContext(ctx, `INSERT INTO dns64_group_members (group_id, kind, value, label, tags, created_at) VALUES (?,?,?,?,?,?)`, id, x.Kind, x.Value, x.Label, strings.Join(tags, ","), now); err != nil {
 			return err
 		}
 	}

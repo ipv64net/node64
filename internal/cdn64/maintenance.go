@@ -3,7 +3,9 @@ package cdn64
 import (
 	_ "embed"
 	"html"
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -23,6 +25,10 @@ const (
 
 // MaintStyles: Auswahl im Formular (Standard zuerst).
 var MaintStyles = []string{MaintMatrix, MaintGear, MaintCustom}
+
+// keepPage: Kopf an den CDN64-Server (Modus 2), die 5xx-Seite der Node nicht durch seine eigene zu ersetzen
+// (internal/cdnedge/errorpage.go) - Wartungsseite und eigene Fehlerseite sollen beim Besucher ankommen.
+const keepPage = "CDN64-Error-Page"
 
 const (
 	maintMaxHTML    = 64 << 10 // eigenes HTML hoechstens 64 KB
@@ -56,6 +62,77 @@ func (a *Advanced) normalizeMaint(kind string) error {
 	return nil
 }
 
+// normalizeErrPage prueft die eigene Fehlerseite (nur Proxy-Hosts; ohne Seite nichts zu ersetzen).
+func (a *Advanced) normalizeErrPage(kind string) error {
+	if kind != KindProxy {
+		a.ErrorHTML, a.ErrorOverride = "", false
+		return nil
+	}
+	if len(a.ErrorHTML) > maintMaxHTML || !utf8.ValidString(a.ErrorHTML) {
+		return ferr("error_html", "cdn64.err.error_html_size")
+	}
+	if strings.TrimSpace(a.ErrorHTML) == "" {
+		a.ErrorHTML, a.ErrorOverride = "", false
+	}
+	return nil
+}
+
+// errPageFor: eigene Fehlerseite fuer einen Status ("" = keine bzw. Status ohne eigene Seite).
+func errPageFor(a *Advanced, status int, host string) string {
+	if a == nil || a.ErrorHTML == "" || status < 500 || status > 599 {
+		return ""
+	}
+	s := strings.ReplaceAll(a.ErrorHTML, "{{STATUS}}", strconv.Itoa(status))
+	return strings.ReplaceAll(s, "{{HOST}}", html.EscapeString(host))
+}
+
+// hostPage: Fehlerseite eines Proxy-Hosts - eigene Seite bei 502/503/504 von PROXY64, sonst die neutrale.
+func hostPage(w http.ResponseWriter, r *http.Request, a *Advanced, status int) {
+	body := ""
+	if status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout {
+		body = errPageFor(a, status, hostOnly(r.Host))
+	}
+	if body == "" {
+		page(w, status)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(keepPage, "off")
+	w.WriteHeader(status)
+	if r.Method != http.MethodHead {
+		_, _ = io.WriteString(w, body)
+	}
+}
+
+// overrideErr ersetzt eine 5xx-Antwort des Ziels durch die eigene Fehlerseite (Status bleibt).
+func overrideErr(a *Advanced, resp *http.Response) {
+	if !a.ErrorOverride || resp.StatusCode < 500 || resp.StatusCode > 599 {
+		return
+	}
+	host := ""
+	if resp.Request != nil {
+		host = hostOnly(resp.Request.Host)
+	}
+	body := errPageFor(a, resp.StatusCode, host)
+	if body == "" {
+		return
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	resp.Body = io.NopCloser(strings.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	resp.TransferEncoding = nil
+	for _, k := range []string{"Content-Encoding", "Content-Range", "Etag", "Last-Modified", "Content-Disposition", "Content-Security-Policy"} {
+		resp.Header.Del(k)
+	}
+	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+	resp.Header.Set("Cache-Control", "no-store")
+	resp.Header.Set(keepPage, "off")
+}
+
 // maintPage liefert die Seite fuer einen Stil; {{HOST}} wird durch den angefragten Namen ersetzt (eigenes HTML bleibt
 // unveraendert).
 func maintPage(style, custom, host string) string {
@@ -75,6 +152,7 @@ func serveMaint(w http.ResponseWriter, r *http.Request, a *Advanced) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("Retry-After", maintRetryAfter)
 	h.Set("X-Robots-Tag", "noindex")
+	h.Set(keepPage, "off")
 	w.WriteHeader(http.StatusServiceUnavailable)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write([]byte(maintPage(a.MaintenanceStyle, a.MaintenanceHTML, hostOnly(r.Host))))

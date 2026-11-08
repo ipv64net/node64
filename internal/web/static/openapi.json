@@ -932,6 +932,13 @@
               "$ref": "#/components/schemas/DNS64List"
             }
           },
+          "allow_lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DNS64List"
+            },
+            "description": "Freigabe-Listen aus dem Netz (Domains, die keine Blockliste sperrt; gelten fuer alle Geraete und Gruppen, die eigene Sperrliste geht vor). Ein- und ausschalten per PUT /dns64/settings mit der ganzen Liste."
+          },
           "list_hours": {
             "type": "integer"
           },
@@ -1025,6 +1032,15 @@
           "mdns": {
             "type": "boolean",
             "description": "mDNS-Bruecke: .local-Namen und Geraetenamen per mDNS im eigenen Netz aufloesen, dazu die eigene Endung des Routers lernen (je Node), Standard aus"
+          },
+          "docker": {
+            "type": "boolean",
+            "description": "Eigene Eintraege aus Docker-Labels node64.dns.name (Namen, Komma) und node64.dns.ip (Adressen oder container), nur diese Node, Abgleich jede Minute (je Node), Standard aus"
+          },
+          "docker_ip": {
+            "type": "string",
+            "description": "Adressen fuer Docker-Eintraege ohne Label node64.dns.ip (IPv4/IPv6, Komma); leer = LAN-Adresse der Node (im Docker-Bridge-Netz unbekannt)",
+            "example": "192.168.1.5, fd00::5"
           }
         }
       },
@@ -1176,7 +1192,8 @@
             "type": "string"
           },
           "clientName": {
-            "type": "string"
+            "type": "string",
+            "description": "Name des Clients: Bezeichnung in einer Geraetegruppe, sonst eigener PTR-Eintrag, sonst Router/DHCP bzw. mDNS"
           },
           "domain": {
             "type": "string"
@@ -1197,7 +1214,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>, forward:<Domain>, rewrite:<Ziel>"
+            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>, forward:<Domain>, rewrite:<Ziel>, answer:<Werte> (eigener Eintrag: gelieferte Antwort, z. B. answer:10.0.0.5, 10.0.0.6; nur answer: = NODATA)"
           },
           "rcode": {
             "type": "string"
@@ -2517,6 +2534,90 @@
           "access_list_id": {
             "type": "integer",
             "description": "0 = wie der Host"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "",
+              "block",
+              "respond"
+            ],
+            "description": "\"\" = an das Ziel (Standard), block = sperren (Fehlerseite), respond = feste Antwort; block und respond brauchen kein Ziel"
+          },
+          "status": {
+            "type": "integer",
+            "description": "block: 400-499 (Standard 403), respond: 200-599 (Standard 200)"
+          },
+          "body": {
+            "type": "string",
+            "description": "respond: Inhalt, höchstens 64 KB"
+          },
+          "content_type": {
+            "type": "string",
+            "description": "respond: Standard text/plain; charset=utf-8"
+          },
+          "advanced": {
+            "type": "object",
+            "description": "eigene Werte der Location (nur Aktion \"\"); nicht gesetzte gelten vom Host, Kopfzeilen zusätzlich zu denen des Hosts (gleicher Name: die der Location)",
+            "properties": {
+              "timeout_seconds": {
+                "type": "integer",
+                "description": "bis zur Antwort des Ziels, 0 = wie der Host"
+              },
+              "max_body_mb": {
+                "type": "integer",
+                "description": "0 = wie der Host, -1 = unbegrenzt"
+              },
+              "buffering": {
+                "type": "string",
+                "enum": [
+                  "",
+                  "on",
+                  "off"
+                ],
+                "description": "\"\" = wie der Host, off = sofort weiterreichen (Streaming, ActiveSync)"
+              },
+              "request_headers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+              "request_remove": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "response_headers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+              "response_remove": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -2539,6 +2640,22 @@
           "maintenance_html": {
             "type": "string",
             "description": "eigenes HTML (custom), höchstens 64 KB"
+          },
+          "error_html": {
+            "type": "string",
+            "description": "eigene Fehlerseite (nur Proxy-Hosts) statt der neutralen Seite bei 502/503/504 von PROXY64, höchstens 64 KB; {{STATUS}} und {{HOST}} werden ersetzt, leer = neutrale Seite"
+          },
+          "error_override": {
+            "type": "boolean",
+            "description": "auch 5xx-Antworten des Ziels durch error_html ersetzen (der Statuscode bleibt)"
+          },
+          "target_path": {
+            "type": "string",
+            "description": "nur Proxy-Hosts: Pfad, der vor jede Anfrage gesetzt wird (z. B. /rezepte: /suppe → /rezepte/suppe beim Ziel); Weiterleitungen und Cookie-Pfade des Ziels werden zurückgeschrieben, \"\" = unverändert"
+          },
+          "only_locations": {
+            "type": "boolean",
+            "description": "nur Proxy-Hosts: nur die Locations beantworten, alle anderen Pfade 404 (braucht mindestens eine Location)"
           },
           "request_headers": {
             "type": "array",
@@ -2693,7 +2810,7 @@
                 },
                 "cidr": {
                   "type": "string",
-                  "description": "IP, Netz oder all"
+                  "description": "IP, Netz oder all; dynamisch: self (eigene öffentliche IPv4 und IPv6-/64), self4, self6 oder ein DNS-Name (z. B. DynDNS, wird jede Minute neu aufgelöst, IPv6 als /64)"
                 }
               }
             }
@@ -2801,7 +2918,7 @@
                 },
                 "cidr": {
                   "type": "string",
-                  "description": "IP, Netz oder all"
+                  "description": "IP, Netz oder all; dynamisch: self (eigene öffentliche IPv4 und IPv6-/64), self4, self6 oder ein DNS-Name (z. B. DynDNS, wird jede Minute neu aufgelöst, IPv6 als /64)"
                 }
               }
             }
@@ -3597,6 +3714,13 @@
           },
           "label": {
             "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "eigene Tags zum Ordnen und Filtern (hoechstens 10, je hoechstens 24 Zeichen), keine Wirkung auf die Regeln"
           }
         },
         "required": [
@@ -3640,13 +3764,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "social",
-                "games",
-                "streaming",
-                "gambling",
-                "adult"
-              ]
+              "description": "Kategorie (social, games, streaming, gambling, adult) oder Dienst \"svc:<id>\" (Liste: GET /dns64/services)"
             }
           },
           "domains": {
@@ -3812,13 +3930,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "social",
-                "games",
-                "streaming",
-                "gambling",
-                "adult"
-              ]
+              "description": "Kategorie (social, games, streaming, gambling, adult) oder Dienst \"svc:<id>\" (Liste: GET /dns64/services)"
             }
           },
           "enabled": {
@@ -3902,11 +4014,13 @@
           "days": {
             "type": "integer",
             "enum": [
+              1,
+              7,
               30,
               60,
               90
             ],
-            "description": "Tagesbalken"
+            "description": "Zeitraum der Balken: 1 = 24 Stunden (Stundenbalken), sonst Tage (Tagesbalken)"
           },
           "show_uptime": {
             "type": "boolean"
@@ -8653,7 +8767,7 @@
         "tags": [
           "DNS64"
         ],
-        "summary": "Eigene Blockliste hinzufuegen (an)",
+        "summary": "Eigene Blockliste(n) hinzufuegen (an)",
         "requestBody": {
           "required": true,
           "content": {
@@ -8666,30 +8780,92 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "urls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "eine URL je Eintrag, optional \"Name | URL\""
                   }
-                },
-                "required": [
-                  "url"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Neuer Stand",
+            "description": "Neuer Stand (bzw. bei urls das Ergebnis je URL)",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DNS64Settings"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DNS64Settings"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "added": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "duplicates": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "invalid": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
           },
           "400": {
             "description": "Ungueltig oder doppelt"
+          },
+          "422": {
+            "description": "urls: keine Liste hinzugekommen (doppelt bzw. ungueltig)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "duplicates": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "invalid": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Eine Liste mit {name, url} oder mehrere auf einmal mit {urls: [\"https://…\", \"Name | https://…\"]}. Bei urls antwortet die API mit dem Ergebnis je URL (201, oder 422 wenn keine hinzukam)."
       },
       "delete": {
         "tags": [
@@ -9005,6 +9181,246 @@
         }
       }
     },
+    "/dns64/allowlists": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigabe-Listen mit Stand",
+        "description": "Domains, die keine Blockliste sperrt (gelten fuer alle Geraete und Gruppen; die eigene Sperrliste geht vor). Ohne laufenden DNS-Dienst nur die Einstellungen.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/DNS64ListStatus"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigabe-Liste(n) hinzufuegen (an)",
+        "description": "Wie POST /dns64/lists: {name, url} oder {urls: [...]}. Formate: Domain je Zeile, hosts oder Adblock (||example.com^ und @@||example.com^).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "urls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Neuer Stand (bzw. bei urls das Ergebnis je URL)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DNS64Settings"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "added": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "duplicates": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "invalid": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltig oder doppelt"
+          },
+          "422": {
+            "description": "urls: keine Liste hinzugekommen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "duplicates": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "invalid": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigabe-Liste entfernen",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/services": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Dienste zum Sperren per Klick",
+        "description": "Kategorien und Dienste fuer die Regeln und Zeitplaene einer Gruppe. Einen Dienst sperrt man mit seinem key (\"svc:<id>\") in categories (PUT /dns64/groups/{id}/rules bzw. Zeitplan \"cats\").",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "ai",
+                        "social",
+                        "messenger",
+                        "streaming",
+                        "games",
+                        "dating"
+                      ]
+                    },
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "example": "svc:tiktok"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/dns64/denylist": {
       "get": {
         "tags": [
@@ -9106,6 +9522,98 @@
           },
           "400": {
             "description": "Ungueltiger Domainname"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Sperrliste ersetzen (Textfeld)",
+        "description": "Setzt die ganze Sperrliste auf die angegebenen Domains (je samt Subdomains; \"*.\" am Anfang und Kommentare mit # werden ignoriert). Vorhandene Eintraege behalten ihr Datum, ungueltige werden gemeldet. Sind alle ungueltig, bleibt die Liste unveraendert (422).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domains": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "domains"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ersetzt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer"
+                    },
+                    "added": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "invalid": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "ungueltige Zeilen (hoechstens 20)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "keine gueltige Domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer"
+                    },
+                    "added": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "invalid": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "ungueltige Zeilen (hoechstens 20)"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -19722,6 +20230,141 @@
             "description": "Nicht gefunden"
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Bezeichnung und Tags eines Geraets in einer Gruppe aendern",
+        "description": "Fehlende Felder bleiben; Art und Wert lassen sich nicht aendern (dafuer loeschen und neu anlegen).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Geaendert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64GroupMember"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          },
+          "422": {
+            "description": "Zu viele bzw. zu lange Tags"
+          }
+        }
+      }
+    },
+    "/dns64/docker": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eintraege aus Docker-Labels: Stand des Abgleichs",
+        "description": "Container mit dem Label `node64.dns.name` und ihre Eintraege (Kommentar `Docker: <Container>`, nur diese Node). `problem`: no_ip, bad_ip, bad_name, taken (Name hat schon einen anderen Eintrag), failed. Einschalten mit `docker` in PUT /dns64/settings.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "host": {
+                      "type": "string",
+                      "description": "Docker-API, z. B. unix:///var/run/docker.sock"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "synced": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "containers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "container": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "names": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "addrs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "problem": {
+                            "type": "string",
+                            "enum": [
+                              "no_ip",
+                              "bad_ip",
+                              "bad_name",
+                              "taken",
+                              "failed"
+                            ]
+                          },
+                          "problem_name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/dns64/devices": {
@@ -19790,13 +20433,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "enum": [
-                        "social",
-                        "games",
-                        "streaming",
-                        "gambling",
-                        "adult"
-                      ]
+                      "description": "Kategorie (social, games, streaming, gambling, adult) oder Dienst \"svc:<id>\" (Liste: GET /dns64/services)"
                     }
                   },
                   "safesearch": {

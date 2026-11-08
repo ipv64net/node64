@@ -32,6 +32,8 @@
 						<div class="form-text" data-types="docker">{{.T "hc.docker.target_hint"}}</div>
 						<div class="form-text" data-types="whois">{{.T "hc.whois.target_hint"}}</div>
 						<datalist id="hc-containers">{{range $d.Containers}}<option value="{{.Name}}">{{.Image}} · {{.Status}}</option>{{end}}</datalist>
+						{{if $d.Devices}}<div class="input-group input-group-sm mt-2" data-hide-types="push docker whois"><span class="input-group-text"><i class="bi bi-laptop"></i>&nbsp;{{.T "hc.form.device"}}</span><select class="form-select" id="hc-device" aria-label="{{.T "hc.form.device"}}"><option value="">{{.T "hc.form.device_pick"}}</option>{{range $d.Devices}}<option value="{{.IP}}" data-name="{{.Name}}">{{if .Name}}{{.Name}} – {{end}}{{.IP}}</option>{{end}}</select></div>
+						<div class="form-text" data-hide-types="push docker whois">{{.T "hc.form.device_hint"}}</div>{{end}}
 					</div>
 					<div class="col-12" data-types="push">
 						<div class="alert alert-info small mb-0">{{.T "hc.form.push_hint"}}</div>

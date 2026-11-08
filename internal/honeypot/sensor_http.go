@@ -170,7 +170,7 @@ var (
 	sensorUserKeys = []string{"log", "pma_username", "username", "user", "login", "email", "uname", "usr",
 		"usernamefld", "luci_username", "j_username", "account", "user_name", "userid", "login_username"}
 	sensorPassKeys = []string{"pwd", "pma_password", "password", "pass", "passwd", "pw",
-		"passwordfld", "luci_password", "j_password", "credential", "psd", "login_password", "user_password"}
+		"passwordfld", "luci_password", "j_password", "credential", "secretkey", "psd", "login_password", "user_password"}
 )
 
 // sensorHTTPCreds findet Zugangsdaten: Basic-Auth, Formular oder JSON im Body, Passwort in der Abfrage.

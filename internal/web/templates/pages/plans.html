@@ -24,7 +24,7 @@
 	<tbody>
 	{{$group := ""}}
 	{{range $row := $d.Rows}}{{$g := index $row 0}}{{$k := index $row 1}}
-		{{if ne $g $group}}{{$group = $g}}<tr class="table-light">
+		{{if ne $g $group}}{{$group = $g}}<tr class="table-group">
 			<td class="small fw-semibold"><i class="bi {{index $d.Icons $g}} text-primary me-1"></i> {{$.T (print "plans.group." $g)}}</td>
 			{{range $d.Plans}}<td class="text-center{{if eq .Key $d.CurrentKey}} table-primary{{else if eq .Key $d.PopularKey}} bg-warning-subtle{{end}}">{{if index (index $d.Groups .Key) $g}}<i class="bi {{index $d.Icons $g}} text-success" title="{{$.T "plans.included"}}"></i>{{else}}<i class="bi bi-dash text-body-secondary"></i>{{end}}</td>{{end}}
 		</tr>{{end}}

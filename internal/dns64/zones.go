@@ -127,6 +127,26 @@ func (m *Module) deviceFor(ip netip.Addr) string {
 	return best
 }
 
+// labelFor: Name, den das Geraet in einer Gruppe hat (Mitglied mit Namen, per MAC oder IP), "" = keiner.
+func (m *Module) labelFor(ip netip.Addr) string {
+	t := m.devs.Load()
+	if t == nil {
+		return ""
+	}
+	mac := m.grp.MAC(ip)
+	best, label := "", ""
+	for slug, list := range *t {
+		for _, x := range list {
+			if (x.Kind == groups.KindMAC && mac != "" && x.Value == mac) || (x.Kind == groups.KindIP && x.Value == ip.String()) {
+				if best == "" || slug < best { // stabil bei mehreren Namen, wie deviceFor
+					best, label = slug, x.Label
+				}
+			}
+		}
+	}
+	return label
+}
+
 // zoneFor: die laengste Zone, zu der name gehoert.
 func (t *zoneTable) zoneFor(name string) (Zone, bool) {
 	for s := name; ; {

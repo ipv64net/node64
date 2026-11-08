@@ -27,6 +27,7 @@ const (
 	setUpCount   = "dns64.upstream_count" // fastest: so viele Upstreams gleichzeitig
 	setLists     = "dns64.lists"          // JSON []listSetting
 	setListHours = "dns64.list_hours"     // Aktualisierung der Blocklisten
+	setAllowLst  = "dns64.allow_lists"    // JSON []listSetting: Freigabe-Listen aus dem Netz
 	setBlockMode = "dns64.block_mode"     // zero | nxdomain
 	setCacheSize = "dns64.cache_size"
 	setAnonymize = "dns64.anonymize"      // off | mask | hide
@@ -82,6 +83,7 @@ type config struct {
 	UpCount   int               `json:"upstream_count"` // fastest: 1..6 gleichzeitig
 	Upstreams []upstreamSetting `json:"upstreams"`
 	Lists     []listSetting     `json:"lists"`
+	AllowLst  []listSetting     `json:"allow_lists"` // Freigabe-Listen (Domains, die keine Blockliste sperrt)
 	ListHours int               `json:"list_hours"`
 	BlockMode string            `json:"block_mode"`
 	CacheSize int               `json:"cache_size"`
@@ -89,6 +91,8 @@ type config struct {
 	AllowNets []string          `json:"allow_nets"`
 	Canary    bool              `json:"firefox_canary"` // Firefox nutzt DNS64 statt seines eigenen DoH
 	MDNS      bool              `json:"mdns"`           // mDNS-Bruecke: .local und Geraetenamen aus dem eigenen Netz
+	Docker    bool              `json:"docker"`         // Eintraege aus Docker-Labels node64.dns.* (docker.go, je Node)
+	DockerIP  string            `json:"docker_ip"`      // Adressen fuer Docker-Eintraege ohne Label node64.dns.ip ("" = LAN-Adresse)
 	DoH       bool              `json:"doh"`
 	DoT       bool              `json:"dot"`
 	DoQ       bool              `json:"doq"`
@@ -139,6 +143,8 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		AllowNets:   splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
 		Canary:      m.core.SettingOr(ctx, setCanary, "1") == "1",
 		MDNS:        m.core.SettingOr(ctx, setMDNS, "") == "1",
+		Docker:      m.core.SettingOr(ctx, setDocker, "") == "1",
+		DockerIP:    m.core.SettingOr(ctx, setDockerIP, ""),
 		DoH:         m.core.SettingOr(ctx, setDoH, "0") == "1",
 		DoT:         m.core.SettingOr(ctx, setDoT, "0") == "1",
 		DoQ:         m.core.SettingOr(ctx, setDoQ, "0") == "1",
@@ -158,6 +164,10 @@ func (m *Module) loadConfig(ctx context.Context) config {
 	c.Upstreams = mergeUpstreams(c.Upstreams)
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setLists, "")), &c.Lists)
 	c.Lists = mergeLists(c.Lists)
+	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setAllowLst, "")), &c.AllowLst)
+	if c.AllowLst == nil {
+		c.AllowLst = []listSetting{} // JSON: [] statt null
+	}
 	return c
 }
 
@@ -274,11 +284,16 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 	}
 	ups, _ := json.Marshal(c.Upstreams)
 	lists, _ := json.Marshal(c.Lists)
+	if c.AllowLst == nil {
+		c.AllowLst = []listSetting{}
+	}
+	allowLists, _ := json.Marshal(c.AllowLst)
 	for k, v := range map[string]string{
-		setPort: strconv.Itoa(c.Port), setBind: c.Bind, setRouter: c.Router, setRetention: strconv.Itoa(c.Retention),
+		setAllowLst: string(allowLists),
+		setPort:     strconv.Itoa(c.Port), setBind: c.Bind, setRouter: c.Router, setRetention: strconv.Itoa(c.Retention),
 		setUpMode: c.UpMode, setUpCount: strconv.Itoa(c.UpCount), setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
-		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary), setMDNS: b2s(c.MDNS),
+		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary), setMDNS: b2s(c.MDNS), setDocker: b2s(c.Docker), setDockerIP: c.DockerIP,
 		setDoH: b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
 		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setCertID: strconv.FormatInt(c.CertID, 10), setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
 		setACMEDom: c.ACMEDomain, setACMEPre: c.ACMEPrefix, setACMEMail: c.ACMEEmail, setACMEStage: b2s(c.ACMEStaging),
@@ -305,6 +320,10 @@ func errCfg(key string, args ...any) error { return &cfgError{Key: key, Args: ar
 func (c *config) validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return errCfg("err_port")
+	}
+	c.DockerIP = strings.Join(dockerSplit(c.DockerIP), ", ")
+	if !validDockerIP(c.DockerIP) {
+		return errCfg("err_docker_ip")
 	}
 	c.Bind = strings.Trim(strings.TrimSpace(c.Bind), "[]")
 	if c.Bind != "" && net.ParseIP(c.Bind) == nil {
@@ -407,7 +426,26 @@ func (c *config) validate() error {
 			return err
 		}
 	}
+	if len(c.AllowLst) > filter.MaxLists {
+		return errCfg("err_list_max", "n", filter.MaxLists)
+	}
+	for _, l := range c.AllowLst {
+		if err := checkListURL(l.URL); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// activeAllowLists sind die eingeschalteten Freigabe-Listen.
+func (c config) activeAllowLists() []filter.List {
+	out := []filter.List{}
+	for _, l := range c.AllowLst {
+		if l.Enabled {
+			out = append(out, l.List)
+		}
+	}
+	return out
 }
 
 func parsePrefix(s string) (netip.Prefix, error) {

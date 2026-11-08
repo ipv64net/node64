@@ -86,7 +86,7 @@
 					</div>
 					<div class="col-6">
 						<label class="form-label" for="sp-days">{{.T "hc.status.days"}}</label>
-						<select class="form-select" id="sp-days" name="days">{{range $d.DaysOpts}}<option value="{{.}}"{{if eq . $p.Days}} selected{{end}}>{{$.T "hc.status.days_n" "n" .}}</option>{{end}}</select>
+						<select class="form-select" id="sp-days" name="days">{{range $d.DaysOpts}}<option value="{{.}}"{{if eq . $p.Days}} selected{{end}}>{{if eq . 1}}{{$.T "hc.status.days_24h"}}{{else}}{{$.T "hc.status.days_n" "n" .}}{{end}}</option>{{end}}</select>
 					</div>
 					<div class="col-6">
 						<label class="form-label" for="sp-refresh">{{.T "hc.status.refresh"}}</label>

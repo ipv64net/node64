@@ -1,6 +1,7 @@
 package cdn64
 
 import (
+	"errors"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -46,9 +47,19 @@ type Advanced struct {
 	Maintenance      bool   `json:"maintenance,omitempty"`
 	MaintenanceStyle string `json:"maintenance_style,omitempty"` // matrix (Standard), gear oder custom
 	MaintenanceHTML  string `json:"maintenance_html,omitempty"`  // eigenes HTML (custom), hoechstens 64 KB
+
+	// Eigene Fehlerseite (maintenance.go, nur Proxy-Hosts): statt der neutralen Seite bei 502/503/504 von PROXY64
+	// selbst (Ziel nicht erreichbar, ueberlastet); ErrorOverride ersetzt auch 5xx-Antworten des Ziels (Status bleibt)
+	ErrorHTML     string `json:"error_html,omitempty"` // hoechstens 64 KB, {{STATUS}} und {{HOST}} werden ersetzt
+	ErrorOverride bool   `json:"error_override,omitempty"`
+
+	// Ziel des Hosts (nur Proxy-Hosts): Pfad, der vor jede Anfrage gesetzt wird (/suppe -> /rezepte/suppe, #43);
+	// "" = unveraendert. OnlyLocations: nur die Locations beantworten, alle anderen Pfade 404 (#11)
+	TargetPath    string `json:"target_path,omitempty"`
+	OnlyLocations bool   `json:"only_locations,omitempty"`
 }
 
-// Location ist ein Pfad mit eigenem Ziel (Custom Location).
+// Location ist ein Pfad mit eigenem Ziel (Custom Location), gesperrt oder mit fester Antwort.
 type Location struct {
 	Path         string `json:"path"`         // Praefix, z. B. /api
 	Scheme       string `json:"scheme"`       // http | https
@@ -57,6 +68,133 @@ type Location struct {
 	ForwardPath  string `json:"forward_path"` // ersetzt den Praefix beim Ziel ("" = unveraendert)
 	WebSockets   bool   `json:"websockets"`
 	AccessListID int64  `json:"access_list_id"` // 0 = wie der Host
+
+	// Aktion (#11): "" = an das Ziel, block = sperren (Status 400-499, Standard 403), respond = feste Antwort (Status
+	// 200-599, Standard 200, Inhalt hoechstens 64 KB) - beide ohne Ziel
+	Action      string `json:"action,omitempty"`
+	Status      int    `json:"status,omitempty"`
+	Body        string `json:"body,omitempty"`
+	ContentType string `json:"content_type,omitempty"` // Standard text/plain; charset=utf-8
+
+	Advanced *LocationAdvanced `json:"advanced,omitempty"` // eigene Werte; nil = wie der Host
+}
+
+// Aktionen einer Location.
+const (
+	LocProxy   = ""
+	LocBlock   = "block"
+	LocRespond = "respond"
+)
+
+// maxLocBody: hoechstens so gross ist die feste Antwort einer Location.
+const maxLocBody = 64 << 10
+
+// LocationAdvanced: "Erweitert" je Location (Forum 4974). Nicht gesetzte Werte kommen vom Host; die Kopfzeilen gelten
+// zusaetzlich zu denen des Hosts (gleicher Name: die der Location).
+type LocationAdvanced struct {
+	TimeoutSeconds  int      `json:"timeout_seconds,omitempty"` // bis zur Antwort des Ziels, 0 = wie der Host
+	MaxBodyMB       int      `json:"max_body_mb,omitempty"`     // 0 = wie der Host, -1 = unbegrenzt
+	Buffering       string   `json:"buffering,omitempty"`       // "" = wie der Host, on = puffern, off = sofort weiterreichen
+	RequestHeaders  []Header `json:"request_headers,omitempty"`
+	RequestRemove   []string `json:"request_remove,omitempty"`
+	ResponseHeaders []Header `json:"response_headers,omitempty"`
+	ResponseRemove  []string `json:"response_remove,omitempty"`
+}
+
+// empty: nichts Eigenes gesetzt.
+func (a *LocationAdvanced) empty() bool {
+	return a == nil || a.TimeoutSeconds == 0 && a.MaxBodyMB == 0 && a.Buffering == "" && len(a.RequestHeaders) == 0 && len(a.RequestRemove) == 0 &&
+		len(a.ResponseHeaders) == 0 && len(a.ResponseRemove) == 0
+}
+
+// normalize prueft die Werte einer Location (Kopfzeilen wie beim Host).
+func (a *LocationAdvanced) normalize(path string) error {
+	if a.TimeoutSeconds < 0 || a.TimeoutSeconds > 86400 || a.MaxBodyMB < -1 || a.MaxBodyMB > 1<<20 ||
+		a.Buffering != "" && a.Buffering != "on" && a.Buffering != "off" {
+		return &FieldError{Field: "locations", Key: "cdn64.err.location_limits", Name: path}
+	}
+	tmp := Advanced{RequestHeaders: a.RequestHeaders, RequestRemove: a.RequestRemove, ResponseHeaders: a.ResponseHeaders, ResponseRemove: a.ResponseRemove}
+	if err := tmp.normalize(); err != nil {
+		var fe *FieldError
+		if errors.As(err, &fe) {
+			return &FieldError{Field: "locations", Key: fe.Key, Name: fe.Name}
+		}
+		return err
+	}
+	a.RequestHeaders, a.RequestRemove, a.ResponseHeaders, a.ResponseRemove = tmp.RequestHeaders, tmp.RequestRemove, tmp.ResponseHeaders, tmp.ResponseRemove
+	return nil
+}
+
+// effective: Optionen des Hosts mit den eigenen Werten der Location (fuer den Proxy dieser Location).
+func (l *Location) effective(host *Advanced) Advanced {
+	a := *host
+	la := l.Advanced
+	if la.empty() {
+		return a
+	}
+	if la.TimeoutSeconds > 0 {
+		a.TimeoutSeconds = la.TimeoutSeconds
+	}
+	switch {
+	case la.MaxBodyMB < 0:
+		a.MaxBodyMB = 0
+	case la.MaxBodyMB > 0:
+		a.MaxBodyMB = la.MaxBodyMB
+	}
+	switch la.Buffering {
+	case "on":
+		a.NoBuffering = false
+	case "off":
+		a.NoBuffering = true
+	}
+	a.RequestHeaders = mergeHeaders(host.RequestHeaders, la.RequestHeaders)
+	a.ResponseHeaders = mergeHeaders(host.ResponseHeaders, la.ResponseHeaders)
+	a.RequestRemove = append(append([]string{}, host.RequestRemove...), la.RequestRemove...)
+	a.ResponseRemove = append(append([]string{}, host.ResponseRemove...), la.ResponseRemove...)
+	return a
+}
+
+// mergeHeaders: Kopfzeilen des Hosts, gleichnamige durch die der Location ersetzt.
+func mergeHeaders(host, own []Header) []Header {
+	if len(own) == 0 {
+		return host
+	}
+	out := make([]Header, 0, len(host)+len(own))
+	for _, h := range host {
+		dup := false
+		for _, o := range own {
+			if strings.EqualFold(h.Name, o.Name) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, h)
+		}
+	}
+	return append(out, own...)
+}
+
+// cleanTargetPath: Pfad beim Ziel ("" = keiner), mit fuehrendem und ohne abschliessenden Schraegstrich; false =
+// ungueltig (Leerzeichen, ? oder #, Backslash, Punkt-Segmente, zu lang).
+func cleanTargetPath(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", true
+	}
+	s = "/" + strings.Trim(s, "/")
+	if s == "/" {
+		return "", true
+	}
+	if strings.ContainsAny(s, " ?#\\") || len(s) > 200 {
+		return "", false
+	}
+	for _, seg := range strings.Split(s, "/") {
+		if seg == "." || seg == ".." {
+			return "", false
+		}
+	}
+	return s, true
 }
 
 // Cloudflare-Netze (Stand 2026, https://www.cloudflare.com/ips/) als Vorlage fuer vertrauenswuerdige Proxys.
@@ -126,6 +264,11 @@ func (a *Advanced) normalize() error {
 		nets = append(nets, p.String())
 	}
 	a.TrustedProxies = nets
+	tp, ok := cleanTargetPath(a.TargetPath)
+	if !ok {
+		return &FieldError{Field: "target_path", Key: "cdn64.err.location_path", Name: a.TargetPath}
+	}
+	a.TargetPath = tp
 	return nil
 }
 

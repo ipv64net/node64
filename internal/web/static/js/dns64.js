@@ -138,6 +138,12 @@
 	function loadDeny() {
 		return api("denylist").then(function (list) {
 			denied = new Set(list.map(function (e) { return e.domain; }));
+			// Textfeld "als Liste bearbeiten" auf dem Stand halten, solange niemand darin tippt
+			var ta = document.querySelector('form[action="/dns64/denylist/save"] textarea');
+			if (ta && !ta.dataset.dirty) {
+				ta.value = Array.from(denied).sort().join("\n");
+				if (!ta.dataset.watch) { ta.dataset.watch = "1"; ta.addEventListener("input", function () { ta.dataset.dirty = "1"; }); }
+			}
 			var ul = $("deny-list");
 			if (!ul) { return; }
 			ul.replaceChildren();
@@ -407,6 +413,7 @@
 				else if (details === "canary") { details = t("reason_canary"); }
 				else if (details === "bypass:icloud") { details = t("reason_bypass_icloud", { group: r.group || "" }); }
 				else if (details.indexOf("cat:") === 0) { details = t("reason_cat", { cat: t("cat." + details.slice(4)), group: r.group || "" }); }
+				else if (details.indexOf("answer:") === 0) { details = details.length > 7 ? "→ " + details.slice(7) : t("reason_nodata"); }
 				if (!details && r.upstream) { details = t("via", { name: r.upstream }); }
 				if (r.rcode && r.rcode !== "NOERROR") { details = (details ? details + " · " : "") + r.rcode; }
 				var st = el("td");
@@ -436,19 +443,23 @@
 
 	// loadLists traegt Domains, Stand und Status in die Zeilen der Listen-Tabelle ein (Zeile per data-url)
 	function loadLists() {
-		return api("lists").then(function (lists) {
-			lists.forEach(function (l) {
-				var tr = Array.prototype.find.call(document.querySelectorAll("tr[data-url]"), function (x) { return x.getAttribute("data-url") === l.url; });
-				if (!tr) { return; }
-				var loaded = l.updatedAt && l.updatedAt.indexOf("0001") !== 0;
-				tr.querySelector(".l-rules").textContent = nf.format(l.rules);
-				tr.querySelector(".l-updated").textContent = loaded ? ago(new Date(l.updatedAt)) : "–";
-				var status = tr.querySelector(".l-status");
-				status.replaceChildren();
-				if (l.error) { status.append(el("span", { "class": "badge text-bg-danger text-wrap", title: l.error }, t("error") + ": " + l.error)); }
-				else if (loaded) { status.append(el("span", { "class": "badge text-bg-success" }, t("active"))); }
-				else { status.append(el("span", { "class": "badge text-bg-secondary" }, t("loading"))); }
-			});
+		var allow = document.querySelector("tr[data-aurl]") ? api("allowlists").then(function (lists) { fillLists(lists, "data-aurl"); }) : Promise.resolve();
+		return Promise.all([api("lists").then(function (lists) { fillLists(lists, "data-url"); }), allow]);
+	}
+
+	// fillLists: Blocklisten (data-url) bzw. Freigabe-Listen (data-aurl) in ihre Tabellenzeilen
+	function fillLists(lists, attr) {
+		lists.forEach(function (l) {
+			var tr = Array.prototype.find.call(document.querySelectorAll("tr[" + attr + "]"), function (x) { return x.getAttribute(attr) === l.url; });
+			if (!tr || l.enabled === false) { return; } // ausgeschaltete Freigabe-Liste: Abzeichen "aus" bleibt
+			var loaded = l.updatedAt && l.updatedAt.indexOf("0001") !== 0;
+			tr.querySelector(".l-rules").textContent = nf.format(l.rules);
+			tr.querySelector(".l-updated").textContent = loaded ? ago(new Date(l.updatedAt)) : "–";
+			var status = tr.querySelector(".l-status");
+			status.replaceChildren();
+			if (l.error) { status.append(el("span", { "class": "badge text-bg-danger text-wrap", title: l.error }, t("error") + ": " + l.error)); }
+			else if (loaded) { status.append(el("span", { "class": "badge text-bg-success" }, t("active"))); }
+			else { status.append(el("span", { "class": "badge text-bg-secondary" }, t("loading"))); }
 		});
 	}
 
@@ -614,6 +625,51 @@
 		$("page-next").addEventListener("click", function () { state.page += 1; loadLog(); });
 		Promise.allSettled([loadAllow(), loadDeny()]).then(loadLog);
 		every(3000, function () { return state.live && state.page === 0 ? loadLog() : Promise.resolve(); });
+	}
+
+	if (kind === "groups") {
+		// Tags: Farbe aus dem Namen (gleicher Tag = gleiche Farbe), Filter und Suche ueber die Geraete aller Gruppen
+		var hue = function (name) { var h = 0; for (var i = 0; i < name.length; i++) { h = (h * 31 + name.toLowerCase().charCodeAt(i)) % 360; } return h; };
+		document.querySelectorAll("[data-tag-color]").forEach(function (x) {
+			var h = hue(x.getAttribute("data-tag-color"));
+			if (x.classList.contains("tag-dot")) { x.style.cssText = "display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:hsl(" + h + ",65%,50%)"; }
+			else { x.style.cssText = "background:hsla(" + h + ",65%,50%,.18);color:inherit;border:1px solid hsla(" + h + ",65%,45%,.6)"; }
+		});
+		var tagSel = "", search = "";
+		var applyFilter = function () {
+			document.querySelectorAll("tr[data-member]").forEach(function (tr) {
+				var tags = (tr.getAttribute("data-tags") || "").split("|");
+				var ok = (!tagSel || tags.indexOf(tagSel) >= 0) && (!search || (tr.getAttribute("data-search") || "").toLowerCase().indexOf(search) >= 0);
+				tr.classList.toggle("d-none", !ok);
+				var edit = tr.nextElementSibling;
+				if (!ok && edit && edit.hasAttribute("data-member-edit")) { edit.classList.remove("show"); }
+			});
+		};
+		document.querySelectorAll("#tag-filter [data-tag]").forEach(function (b) {
+			b.addEventListener("click", function () {
+				tagSel = b.getAttribute("data-tag").toLowerCase();
+				document.querySelectorAll("#tag-filter [data-tag]").forEach(function (x) { x.classList.toggle("active", x === b); });
+				applyFilter();
+			});
+		});
+		if ($("member-search")) { $("member-search").addEventListener("input", function () { search = this.value.trim().toLowerCase(); applyFilter(); }); }
+		// Dienste: Suche und "alle" je Art
+		document.querySelectorAll("[data-services]").forEach(function (box) {
+			var q = box.querySelector("[data-service-search]");
+			if (q) {
+				q.addEventListener("input", function () {
+					var v = q.value.trim().toLowerCase();
+					box.querySelectorAll("[data-service-name]").forEach(function (x) { x.classList.toggle("d-none", v !== "" && x.getAttribute("data-service-name").toLowerCase().indexOf(v) < 0); });
+				});
+			}
+			box.querySelectorAll("[data-service-all]").forEach(function (b) {
+				b.addEventListener("click", function () {
+					var boxes = b.closest("[data-service-group]").querySelectorAll("input[type=checkbox]");
+					var all = Array.prototype.every.call(boxes, function (c) { return c.checked; });
+					boxes.forEach(function (c) { c.checked = !all; });
+				});
+			});
+		});
 	}
 
 	if (kind === "lists" && $("allow-form")) {

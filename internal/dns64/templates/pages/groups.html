@@ -43,6 +43,14 @@
 		</div>
 	</div>
 	<div class="col-xl-8 d-flex flex-column gap-3">
+		{{if $d.Tags}}<div class="card" id="tag-filter">
+			<div class="card-body py-2 d-flex flex-wrap align-items-center gap-2 small">
+				<i class="bi bi-tags text-body-secondary"></i>
+				<button type="button" class="btn btn-sm btn-outline-secondary py-0 active" data-tag="">{{.T "dns64.groups.all"}}</button>
+				{{range $d.Tags}}<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-tag="{{.}}"><span class="tag-dot" data-tag-color="{{.}}"></span> {{.}}</button>{{end}}
+				<input type="search" class="form-control form-control-sm ms-auto" style="max-width:14rem" id="member-search" placeholder="{{.T "dns64.groups.member_search"}}" aria-label="{{.T "dns64.groups.member_search"}}">
+			</div>
+		</div>{{end}}
 		{{range $i, $g := $d.Groups}}
 		<div class="card">
 			<div class="card-header d-flex flex-wrap align-items-center gap-2">
@@ -85,14 +93,26 @@
 			</div>
 			{{if $g.Members}}<div class="table-responsive">
 				<table class="table table-sm align-middle mb-0 small table-stack">
-					<thead><tr><th class="ps-3">{{$.T "dns64.groups.kind"}}</th><th>{{$.T "dns64.groups.value"}}</th><th>{{$.T "dns64.groups.label"}}</th><th></th></tr></thead>
+					<thead><tr><th class="ps-3">{{$.T "dns64.groups.kind"}}</th><th>{{$.T "dns64.groups.value"}}</th><th>{{$.T "dns64.groups.label"}}</th><th>{{$.T "dns64.groups.tags"}}</th><th></th></tr></thead>
 					<tbody>
-					{{range $g.Members}}<tr>
+					{{range $g.Members}}<tr data-member data-tags="{{.TagAttr}}" data-search="{{.Value}} {{.Label}} {{.TagList}}">
 						<td class="ps-3"><span class="badge text-bg-{{if eq .Kind "mac"}}primary{{else if eq .Kind "net"}}secondary{{else}}info{{end}}">{{$.T (print "dns64.groups.kind_" .Kind)}}</span></td>
 						<td class="font-monospace text-break">{{.Value}}</td>
 						<td>{{.Label}}</td>
-						<td class="text-end pe-3"><form method="post" action="/dns64/groups/members/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-x-lg"></i></button></form></td>
-					</tr>{{end}}
+						<td>{{range .Tags}}<span class="badge fw-normal me-1 member-tag" data-tag-color="{{.}}">{{.}}</span>{{end}}</td>
+						<td class="text-end pe-3 text-nowrap">
+							<button class="btn btn-sm btn-outline-secondary py-0" type="button" data-bs-toggle="collapse" data-bs-target="#me-{{.ID}}" aria-expanded="false" aria-controls="me-{{.ID}}" title="{{$.T "dns64.groups.member_edit"}}"><i class="bi bi-pencil"></i></button>
+							<form method="post" action="/dns64/groups/members/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-x-lg"></i></button></form>
+						</td>
+					</tr>
+					<tr class="collapse" id="me-{{.ID}}" data-member-edit><td colspan="5" class="ps-3 pe-3">
+						<form method="post" action="/dns64/groups/members/{{.ID}}/edit" class="row g-2 align-items-center">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<div class="col-sm-4"><input type="text" class="form-control form-control-sm" name="label" value="{{.Label}}" placeholder="{{$.T "dns64.groups.label_ph"}}" aria-label="{{$.T "dns64.groups.label"}}" maxlength="60"></div>
+							<div class="col-sm-6"><input type="text" class="form-control form-control-sm" name="tags" value="{{.TagList}}" placeholder="{{$.T "dns64.groups.tags_ph"}}" aria-label="{{$.T "dns64.groups.tags"}}" maxlength="300" list="tag-list"></div>
+							<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button></div>
+						</form>
+					</td></tr>{{end}}
 					</tbody>
 				</table>
 			</div>{{end}}
@@ -103,13 +123,15 @@
 						<option value="mac">{{$.T "dns64.groups.kind_mac"}}</option><option value="ip">{{$.T "dns64.groups.kind_ip"}}</option><option value="net">{{$.T "dns64.groups.kind_net"}}</option></select></div>
 					<div class="col-sm-4"><input type="text" class="form-control form-control-sm font-monospace" name="value" placeholder="aa:bb:cc:dd:ee:ff, 192.168.1.20, fd00::/64" aria-label="{{$.T "dns64.groups.value"}}" required maxlength="64"></div>
 					<div class="col-sm-3"><input type="text" class="form-control form-control-sm" name="label" placeholder="{{$.T "dns64.groups.label_ph"}}" aria-label="{{$.T "dns64.groups.label"}}" maxlength="60"></div>
+					<div class="col-sm-9 offset-sm-3 order-sm-last"><input type="text" class="form-control form-control-sm" name="tags" placeholder="{{$.T "dns64.groups.tags_ph"}}" aria-label="{{$.T "dns64.groups.tags"}}" maxlength="300" list="tag-list"></div>
 					<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
 				</form>
 			</div>
 			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom") $g.SafeSearch $g.Bypass $g.Schedules}} open{{end}}>
 				<summary class="small fw-semibold">{{$.T "dns64.groups.rules"}}{{$.Doc "dns64#gruppen-regeln"}}
 					{{if eq $g.ListsMode "custom"}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.lists_custom_n" "n" (len $g.Lists)}}</span>{{end}}
-					{{range $g.Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}
+					{{range $g.CatKeys}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}
+					{{range $g.ServiceNames}}<span class="badge text-bg-danger fw-normal"><i class="bi bi-slash-circle"></i> {{.}}</span> {{end}}
 					{{with $g.Domains}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.domains_n" "n" (len .)}}</span>{{end}}
 					{{if $g.SafeSearch}}<span class="badge text-bg-info fw-normal">SafeSearch</span>{{end}}
 					{{if $g.Bypass}}<span class="badge text-bg-dark fw-normal">{{$.T "dns64.groups.bypass_short"}}</span>{{end}}
@@ -129,6 +151,15 @@
 								{{range $c := $d.Cats}}<div class="form-check"><input class="form-check-input" type="checkbox" name="cats" value="{{$c}}" id="c-{{$g.ID}}-{{$c}}"{{if $g.HasCat $c}} checked{{end}}><label class="form-check-label" for="c-{{$g.ID}}-{{$c}}">{{$.T (print "dns64.groups.cat." $c)}}</label></div>{{end}}
 							</div>
 							<div class="form-text mt-0 mb-2">{{$.T "dns64.groups.cats_hint"}}</div>
+							<details class="mb-2" data-services{{if $g.ServiceNames}} open{{end}}>
+								<summary class="fw-semibold">{{$.T "dns64.groups.services"}}{{$.Doc "dns64#dienste-sperren"}}{{with $g.ServiceNames}} <span class="badge text-bg-danger fw-normal">{{len .}}</span>{{end}}</summary>
+								<input type="search" class="form-control form-control-sm my-2" placeholder="{{$.T "dns64.groups.services_search"}}" aria-label="{{$.T "dns64.groups.services_search"}}" data-service-search>
+								{{range $sg := $d.Svc}}<div class="mb-2" data-service-group>
+									<div class="d-flex align-items-center gap-2"><span class="text-body-secondary">{{$.T (print "dns64.groups.svc." $sg.Key)}}</span><button type="button" class="btn btn-link btn-sm p-0" data-service-all>{{$.T "dns64.groups.services_all"}}</button></div>
+									<div class="d-flex flex-wrap gap-2">{{range $sg.Services}}{{$k := print "svc:" .ID}}<div class="form-check form-check-inline me-0" data-service-name="{{.Name}}"><input class="form-check-input" type="checkbox" name="cats" value="{{$k}}" id="s-{{$g.ID}}-{{.ID}}"{{if $g.HasCat $k}} checked{{end}}><label class="form-check-label" for="s-{{$g.ID}}-{{.ID}}">{{.Name}}</label></div>{{end}}</div>
+								</div>{{end}}
+								<div class="form-text mt-0">{{$.T "dns64.groups.services_hint"}}</div>
+							</details>
 							<div class="fw-semibold mb-1">{{$.T "dns64.groups.protect"}}</div>
 							<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
 								<div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="safesearch" value="1" id="ss-{{$g.ID}}"{{if $g.SafeSearch}} checked{{end}}><label class="form-check-label" for="ss-{{$g.ID}}">{{$.T "dns64.groups.safesearch"}}</label>{{$.Doc "dns64#safesearch"}}</div>
@@ -169,7 +200,7 @@
 								<b>{{if .Label}}{{.Label}}{{else}}–{{end}}</b>
 								<span>{{$sc := .}}{{range $i, $day := $d.Week}}{{if $sc.HasDay $day}}<span class="badge text-bg-light fw-normal">{{$.T (print "dns64.groups.day." $day)}}</span> {{end}}{{end}}</span>
 								<span class="font-monospace">{{.Start}}–{{.End}}</span>
-								{{if eq .Action "off"}}<span class="badge text-bg-danger">{{$.T "dns64.groups.action_off"}}</span>{{else}}{{range .Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}{{end}}
+								{{if eq .Action "off"}}<span class="badge text-bg-danger">{{$.T "dns64.groups.action_off"}}</span>{{else}}{{range .CatKeys}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}{{range .ServiceNames}}<span class="badge text-bg-danger fw-normal">{{.}}</span> {{end}}{{end}}
 								<form method="post" action="/dns64/groups/schedules/{{.ID}}/toggle" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit">{{if .Enabled}}{{$.T "dns64.groups.sched_off"}}{{else}}{{$.T "dns64.groups.sched_on"}}{{end}}</button></form>
 								<form method="post" action="/dns64/groups/schedules/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-x-lg"></i></button></form>
 							</li>{{end}}
@@ -180,7 +211,8 @@
 							<div class="col-md-5 d-flex flex-wrap gap-2">{{range $day := $d.Week}}<div class="form-check form-check-inline me-0"><input class="form-check-input" type="checkbox" name="days" value="{{$day}}" id="d-{{$g.ID}}-{{$day}}"{{if le $day 5}} checked{{end}}><label class="form-check-label" for="d-{{$g.ID}}-{{$day}}">{{$.T (print "dns64.groups.day." $day)}}</label></div>{{end}}</div>
 							<div class="col-md-4 d-flex align-items-center gap-1"><input type="time" class="form-control form-control-sm" name="start" value="21:00" required aria-label="{{$.T "dns64.groups.from"}}"><span>–</span><input type="time" class="form-control form-control-sm" name="end" value="07:00" required aria-label="{{$.T "dns64.groups.to"}}"></div>
 							<div class="col-md-3"><select class="form-select form-select-sm" name="action" aria-label="{{$.T "dns64.groups.kind"}}"><option value="off">{{$.T "dns64.groups.action_off"}}</option><option value="cats">{{$.T "dns64.groups.action_cats"}}</option></select></div>
-							<div class="col-md-7 d-flex flex-wrap gap-2">{{range $c := $d.Cats}}<div class="form-check form-check-inline me-0"><input class="form-check-input" type="checkbox" name="cats" value="{{$c}}" id="sc-{{$g.ID}}-{{$c}}"><label class="form-check-label" for="sc-{{$g.ID}}-{{$c}}">{{$.T (print "dns64.groups.cat." $c)}}</label></div>{{end}}</div>
+							<div class="col-md-7 d-flex flex-wrap gap-2">{{range $c := $d.Cats}}<div class="form-check form-check-inline me-0"><input class="form-check-input" type="checkbox" name="cats" value="{{$c}}" id="sc-{{$g.ID}}-{{$c}}"><label class="form-check-label" for="sc-{{$g.ID}}-{{$c}}">{{$.T (print "dns64.groups.cat." $c)}}</label></div>{{end}}
+								<details class="w-100"><summary class="text-body-secondary">{{$.T "dns64.groups.services"}}</summary><div class="d-flex flex-wrap gap-2 mt-1">{{range $sg := $d.Svc}}{{range $sg.Services}}<div class="form-check form-check-inline me-0"><input class="form-check-input" type="checkbox" name="cats" value="svc:{{.ID}}" id="ss-{{$g.ID}}-{{.ID}}"><label class="form-check-label" for="ss-{{$g.ID}}-{{.ID}}">{{.Name}}</label></div>{{end}}{{end}}</div></details></div>
 							<div class="col-md-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
 						</form>
 						<div class="form-text">{{$.T "dns64.groups.schedules_hint"}}</div>
@@ -202,7 +234,7 @@
 					<tbody>
 					{{range $d.Devices}}<tr>
 						<td class="ps-3">{{if .Name}}{{.Name}}{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
-						<td class="font-monospace text-break">{{.IP}}</td>
+						<td class="font-monospace text-break">{{.IP}}{{if $d.HC}} <a class="btn btn-sm btn-link p-0 ms-1" href="/healthchecks/new?type=icmp&amp;target={{.IP}}&amp;name={{if .Name}}{{.Name}}{{else}}{{.IP}}{{end}}" title="{{$.T "dns64.groups.as_check"}}" aria-label="{{$.T "dns64.groups.as_check"}}"><i class="bi bi-heart-pulse"></i></a>{{end}}</td>
 						<td class="font-monospace">{{if .MAC}}{{.MAC}}{{else}}<span class="text-body-tertiary" title="{{$.T "dns64.groups.no_mac"}}">–</span>{{end}}</td>
 						<td class="text-end">{{.Queries}}</td>
 						<td class="text-nowrap">{{$.Ago .Last}}</td>
@@ -222,5 +254,6 @@
 		</div>
 	</div>
 </div>
+{{with $d.Tags}}<datalist id="tag-list">{{range .}}<option value="{{.}}"></option>{{end}}</datalist>{{end}}
 {{end}}
 {{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

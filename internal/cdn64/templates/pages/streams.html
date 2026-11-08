@@ -22,7 +22,7 @@
 			<th class="text-end">{{.T "cdn64.streams.col.conns"}}</th><th class="text-end">{{.T "cdn64.streams.col.traffic"}}</th><th class="text-end pe-3"></th></tr></thead>
 		<tbody>
 		{{range $d.Names}}{{$n := index .Row.Names 0}}
-		<tr class="table-light{{if not .Row.Enabled}} opacity-50{{end}}" data-stream-name="{{.Row.ID}}">
+		<tr class="table-group{{if not .Row.Enabled}} opacity-50{{end}}" data-stream-name="{{.Row.ID}}">
 			<td class="ps-3" colspan="3"><i class="bi bi-cloud-arrow-up text-primary"></i> <span class="font-monospace fw-semibold text-break">{{$n}}</span>
 				<span class="badge text-bg-light" title="{{$.T "cdn64.streamnames.no_http"}}">{{$.T "cdn64.streams.name_badge"}}</span>
 				{{if not .Row.Enabled}}<span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span>{{end}}</td>
@@ -39,7 +39,7 @@
 		{{range .Streams}}{{template "stream_row" (dict "V" $ "S" .)}}{{else}}
 		<tr><td class="ps-4 text-body-secondary" colspan="7">{{$.T "cdn64.streams.name_noport"}} <a href="/cdn64/streams/new?online_name={{$n}}">{{$.T "cdn64.streams.add_port"}}</a></td></tr>{{end}}
 		{{end}}
-		{{if and $d.Names $d.Local}}<tr class="table-light"><td class="ps-3" colspan="7"><i class="bi bi-house"></i> {{.T "cdn64.streams.group_local"}}</td></tr>{{end}}
+		{{if and $d.Names $d.Local}}<tr class="table-group"><td class="ps-3" colspan="7"><i class="bi bi-house"></i> {{.T "cdn64.streams.group_local"}}</td></tr>{{end}}
 		{{range $d.Local}}{{template "stream_row" (dict "V" $ "S" .)}}{{end}}
 		</tbody>
 	</table>

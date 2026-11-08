@@ -126,6 +126,8 @@ type Manager struct {
 	log      *slog.Logger
 	Allow    *Allowlist
 	Deny     *Allowlist // eigene Sperrliste (nil = keine)
+	Release  *Manager   // Freigabe-Listen aus dem Netz (nil = keine); gelten fuer alle Geraete und Gruppen
+	release  bool       // dieser Manager haelt Freigabe-Listen (jede Regel = Freigabe)
 
 	cur       atomic.Pointer[Matcher]
 	notGlobal atomic.Uint64 // complement of the lists for devices without a group (zero value = all lists)
@@ -163,6 +165,39 @@ func NewManager(dir string, lists []List, interval time.Duration, allow *Allowli
 	return m, nil
 }
 
+// NewReleaseManager laedt Freigabe-Listen (Domains, die keine Blockliste sperren soll) wie NewManager;
+// lists = nil heisst keine. Jede Regel einer Liste zaehlt als Freigabe, auch Ausnahmen (@@||example.com^).
+func NewReleaseManager(dir string, lists []List, interval time.Duration, client *http.Client, log *slog.Logger) (*Manager, error) {
+	if lists == nil {
+		lists = []List{}
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	if interval <= 0 {
+		interval = defaultInterval
+	}
+	if len(lists) > MaxLists {
+		lists = lists[:MaxLists]
+	}
+	m := &Manager{dir: dir, lists: lists, interval: interval, client: client, log: log, release: true}
+	m.status = make([]ListStatus, len(m.lists))
+	for i, l := range m.lists {
+		m.status[i].List = l
+	}
+	m.rebuild()
+	return m, nil
+}
+
+// Released: name steht in einer der Freigabe-Listen (list = deren Name).
+func (m *Manager) Released(name string) (list string, ok bool) {
+	if m == nil || len(m.lists) == 0 {
+		return "", false
+	}
+	ok, list = m.cur.Load().Match(name)
+	return list, ok
+}
+
 // ReleasedPrefix marks the reason of a released domain that a list would block ("released:<list>").
 const ReleasedPrefix = "released:"
 
@@ -185,6 +220,11 @@ func (m *Manager) CheckMask(name string, mask uint64) (blocked bool, reason stri
 	blocked, list := m.cur.Load().MatchMask(name, mask)
 	if blocked && m.Allow.Contains(name) {
 		return false, ReleasedPrefix + list // UI: "freigegeben (sonst: <list>)"
+	}
+	if blocked {
+		if _, ok := m.Release.Released(name); ok { // Freigabe-Liste schlaegt Blockliste (nicht die eigene Sperrliste)
+			return false, ReleasedPrefix + list
+		}
 	}
 	return blocked, list
 }
@@ -358,7 +398,7 @@ func (m *Manager) rebuild() {
 		if fi, err := f.Stat(); err == nil {
 			mtimes[i] = fi.ModTime()
 		}
-		counts[i], err = mt.load(i, f)
+		counts[i], err = mt.loadAs(i, f, m.release)
 		f.Close()
 		if err != nil {
 			m.log.Warn("blocklist parse error", "list", m.lists[i].Name, "err", err)
@@ -376,5 +416,9 @@ func (m *Manager) rebuild() {
 
 	// The old matcher can be large; hand the memory back promptly.
 	debug.FreeOSMemory()
+	if m.release {
+		m.log.Info("allow lists loaded", "domains", mt.Size(), "took", time.Since(start).Round(time.Millisecond))
+		return
+	}
 	m.log.Info("blocklists loaded", "domains", mt.Size(), "took", time.Since(start).Round(time.Millisecond))
 }

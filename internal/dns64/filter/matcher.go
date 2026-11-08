@@ -41,7 +41,10 @@ func (m *Matcher) hash(s string) uint64 { return maphash.String(m.seed, s) }
 
 // load reads one list (index idx < MaxLists) into the matcher and returns the number of rules no list
 // before it had.
-func (m *Matcher) load(idx int, r io.Reader) (int, error) {
+func (m *Matcher) load(idx int, r io.Reader) (int, error) { return m.loadAs(idx, r, false) }
+
+// loadAs wie load; release = Freigabe-Liste: auch Ausnahmen (@@||example.com^) zaehlen als Eintrag der Liste.
+func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 	bit := uint64(1) << uint(idx)
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -50,6 +53,9 @@ func (m *Matcher) load(idx int, r io.Reader) (int, error) {
 		domain, kind := parseLine(sc.Text())
 		if kind == ruleNone {
 			continue
+		}
+		if release && kind == ruleAllow {
+			kind = ruleWildcard
 		}
 		h := m.hash(domain)
 		switch kind {

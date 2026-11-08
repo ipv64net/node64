@@ -22,6 +22,9 @@ var providerEN = map[string]string{
 	"https://manager.infomaniak.com/v3/infomaniak-api (Bereich domain)":                             "https://manager.infomaniak.com/v3/infomaniak-api (scope domain)",
 	"https://ap.www.namecheap.com/settings/tools/apiaccess/ (IP freigeben)":                         "https://ap.www.namecheap.com/settings/tools/apiaccess/ (whitelist the IP)",
 	"dynamische Updates mit TSIG-Schlüssel (z. B. tsig-keygen)":                                     "dynamic updates with a TSIG key (e.g. tsig-keygen)",
+	"https://secure.hosting.de (Profil → API-Keys)":                                                 "https://secure.hosting.de (Profile → API keys)",
+	"https://www.variomedia.de (Kundenbereich → API)":                                               "https://www.variomedia.de (Customer area → API)",
+	"https://www.spaceship.com/application/api-manager/ (Rechte: DNS records)":                      "https://www.spaceship.com/application/api-manager/ (permissions: DNS records)",
 	// Felder
 	"API-Token":                              "API token",
 	"Kundennummer":                           "Customer number",
@@ -50,6 +53,9 @@ var providerEN = map[string]string{
 	"TSIG-Secret (Base64)":                "TSIG secret (Base64)",
 	"TSIG-Algorithmus":                    "TSIG algorithm",
 	"URL (z. B. http://192.168.1.2:5380)": "URL (e.g. http://192.168.1.2:5380)",
+	"E-Mail":                              "E-mail",
+	"Zone (leer = automatisch)":           "Zone (empty = automatic)",
+	"Kontoname (S123456)":                 "Account name (S123456)",
 }
 
 func textEN(s string) string {

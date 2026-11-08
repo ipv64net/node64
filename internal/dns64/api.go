@@ -51,6 +51,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	// Einstellungen und eigene Eintraege gehen auch, wenn der DNS-Dienst gerade nicht laeuft
 	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /api/dns64/settings", plain(m.apiSettings))
+	mux.Handle("GET /api/dns64/docker", plain(m.apiDocker))
 	mux.Handle("POST /api/dns64/pause", api(func(w http.ResponseWriter, r *http.Request, _ *engine) { m.apiPause(w, r) }))
 	mux.Handle("POST /api/dns64/resume", api(func(w http.ResponseWriter, r *http.Request, _ *engine) { m.apiResume(w, r) }))
 	mux.Handle("PUT /api/dns64/settings", plain(m.apiSettingsPut))
@@ -222,7 +223,7 @@ func (m *Module) apiTop(w http.ResponseWriter, r *http.Request, e *engine) {
 		for i, it := range items {
 			ips[i] = it.Name
 		}
-		names := e.local.Hostnames(r.Context(), ips)
+		names := m.clientNames(r.Context(), e, ips)
 		for i := range items {
 			items[i].Hostname = names[items[i].Name]
 		}
@@ -246,7 +247,7 @@ func (m *Module) apiTopList(w http.ResponseWriter, r *http.Request, e *engine) {
 		for i, it := range items {
 			ips[i] = it.Name
 		}
-		names := e.local.Hostnames(r.Context(), ips)
+		names := m.clientNames(r.Context(), e, ips)
 		for i := range items {
 			items[i].Hostname = names[items[i].Name]
 		}
@@ -280,7 +281,7 @@ func (m *Module) apiLog(w http.ResponseWriter, r *http.Request, e *engine) {
 			ips = append(ips, row.Client)
 		}
 	}
-	names := e.local.Hostnames(r.Context(), ips)
+	names := m.clientNames(r.Context(), e, ips)
 	for i := range rows {
 		rows[i].ClientName = names[rows[i].Client]
 	}
@@ -441,7 +442,7 @@ func (m *Module) denylist() (*filter.Allowlist, error) {
 // ---- Export/Import (module.Exporter) ----
 
 var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setListHours,
-	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setMDNS, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
+	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setMDNS, setDocker, setDockerIP, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
 	setNotifyUpstream, setNotifyLists, setACMEDom, setACMEPre, setACMEMail, setACMEStage}
 
 type exportData struct {

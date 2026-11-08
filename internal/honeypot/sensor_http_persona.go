@@ -13,7 +13,7 @@ import (
 )
 
 // HTTP-Profile (sensor_persona.go): Webserver (nginx, Apache) beantworten Pfade mit den neutralen Koedern wie bisher;
-// Anwendungen (Proxmox VE, Webmin, Home Assistant, Grafana, NAS, Elasticsearch) antworten mit Kopfzeilen, Status und
+// Anwendungen (Proxmox VE, Webmin, Home Assistant, Grafana, NAS, Elasticsearch, FortiGate) antworten mit Kopfzeilen, Status und
 // API-Format wie das Original, wenn man nicht angemeldet ist. Seiten nur schlicht (Titel und neutrales Formular,
 // keine Logos, kein nachgebautes JavaScript). Erfasst wird unabhaengig davon in serveHTTP.
 
@@ -22,7 +22,7 @@ func sensorWebServer(persona string) bool { return persona == PersonaNginx || pe
 
 // sensorPersonaPage: Koeder-Name fuer die Statistik, wenn eine Anwendung ihre Startseite bzw. Anmeldung zeigt.
 var sensorPersonaPage = map[string]string{PersonaPVE: "pve", PersonaWebmin: "webmin", PersonaHA: "homeassistant", PersonaGrafana: "grafana",
-	PersonaNAS: "nas", PersonaElastic: "elastic"}
+	PersonaNAS: "nas", PersonaElastic: "elastic", PersonaForti: "sslvpn"}
 
 // sensorHTTPHeaders setzt die Kopfzeilen des Profils, die jede Antwort traegt.
 func sensorHTTPHeaders(h http.Header, persona string, id *sensorIdent) {
@@ -56,6 +56,11 @@ func sensorHTTPHeaders(h http.Header, persona string, id *sensorIdent) {
 		h.Set("X-Xss-Protection", "1; mode=block")
 	case PersonaElastic:
 		h["X-elastic-product"] = []string{"Elasticsearch"} // Schreibweise wie das Original
+	case PersonaForti:
+		h.Set("Server", "xxxxxxxx-xxxxx") // so meldet sich FortiOS
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("X-XSS-Protection", "1; mode=block")
+		h.Set("Content-Security-Policy", "frame-ancestors 'self'")
 	}
 }
 
@@ -71,6 +76,8 @@ func sensorHTTPAppMain(persona, path string) bool {
 		return p == "/" || strings.HasPrefix(p, "/auth/authorize") || p == "/onboarding.html"
 	case PersonaGrafana:
 		return p == "/login"
+	case PersonaForti:
+		return p == "/remote/login" || p == "/login"
 	}
 	return false
 }
@@ -143,6 +150,36 @@ func sensorHTTPApp(w http.ResponseWriter, r *http.Request, persona string, id *s
 		}
 	case PersonaElastic:
 		sensorElastic(w, r, id)
+	case PersonaForti:
+		sensorForti(w, r, id, failed)
+	}
+}
+
+// sensorForti: FortiGate ohne Anmeldung – SSL-VPN-Portal (/remote/login, Anmeldung per /remote/logincheck mit
+// username/credential) und Verwaltung (/login, Anmeldung per /logincheck mit username/secretkey). Antworten im Format
+// von FortiOS, Seiten schlicht (kein Logo, kein nachgebautes JavaScript).
+func sensorForti(w http.ResponseWriter, r *http.Request, id *sensorIdent, failed bool) {
+	p := strings.ToLower(r.URL.Path)
+	switch {
+	case p == "/":
+		http.Redirect(w, r, "/remote/login?lang=en", http.StatusFound)
+	case p == "/remote/login":
+		sensorHTTPWrite(w, http.StatusOK, "text/html; charset=utf-8", sensorLoginHTML("Please Login", "Login", "/remote/logincheck",
+			"username", "credential", `<input type="hidden" name="ajax" value="1"><input type="hidden" name="realm" value="">`, failed))
+	case p == "/remote/logincheck":
+		sensorHTTPWrite(w, http.StatusOK, "text/plain", "ret=0,redir=/remote/login?&err=sslvpn_login_permission_denied")
+	case p == "/remote/fgt_lang":
+		sensorHTTPWrite(w, http.StatusOK, "application/javascript", `var fgt_lang = {"sslvpn_login_permission_denied":"Permission denied."};`)
+	case p == "/login":
+		sensorHTTPWrite(w, http.StatusOK, "text/html; charset=utf-8", sensorLoginHTML(id.host, "Login", "/logincheck",
+			"username", "secretkey", `<input type="hidden" name="ajax" value="1">`, failed))
+	case p == "/logincheck":
+		sensorHTTPWrite(w, http.StatusOK, "text/plain", "0") // 0 = Anmeldung abgelehnt
+	case strings.HasPrefix(p, "/api/v2/"):
+		sensorHTTPWrite(w, http.StatusUnauthorized, "application/json",
+			`{"http_method":"`+html.EscapeString(r.Method)+`","status":"error","http_status":401}`)
+	default:
+		sensorHTTPWrite(w, http.StatusNotFound, "text/html", "<html><body><h1>404 Not Found</h1></body></html>")
 	}
 }
 

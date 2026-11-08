@@ -51,6 +51,9 @@ var sensorDevicePersona = map[string]string{"proxmox": PersonaPVE, "homeassistan
 
 // sensorDeviceFits: Endpunkt passt zum Profil des Ports.
 func sensorDeviceFits(d *sensorDevice, persona string) bool {
+	if d.name == "sslvpn" && persona == PersonaForti { // FortiGate-Profil: SSL-VPN-Antwort wie auf Webservern
+		return true
+	}
 	if p := sensorDevicePersona[d.name]; p != "" {
 		return p == persona
 	}

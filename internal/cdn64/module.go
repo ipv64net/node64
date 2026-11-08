@@ -50,7 +50,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.52.0"
+	Version = "1.53.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -98,6 +98,7 @@ type Module struct {
 	localDNS   func() LocalDNS // eigene Eintraege in DNS64 (nil bzw. Ergebnis nil = DNS64 aus)
 	status     StatusPages     // Statusseiten der Healthchecks (nil = nicht verfuegbar)
 	dk         dockerState     // Proxy-Hosts aus Docker-Labels (docker.go)
+	dyn        *dynAddrs       // dynamische Regeln der Zugriffslisten (eigene IP, DNS-Namen; access_dyn.go)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
 	smu    sync.Mutex // Streams (nur kurz halten)
@@ -113,7 +114,8 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 	m := &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
 		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
 		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
-		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists(), lim: newLimiter()}
+		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists(), lim: newLimiter(),
+		dyn: newDynAddrs()}
 	m.online.kick = make(chan struct{}, 1)
 	m.dk.kick = make(chan struct{}, 1)
 	m.lim.onBan = func(ip netip.Addr, until time.Time) {

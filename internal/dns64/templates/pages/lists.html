@@ -53,12 +53,45 @@
 		<div class="card mt-3">
 			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.lists.add"}}{{.Doc "dns64#listenformate"}}</div>
 			<div class="card-body">
-				<form method="post" action="/dns64/lists/add" class="row g-2">
+				<form method="post" action="/dns64/lists/add">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="col-sm-4"><input type="text" class="form-control form-control-sm" name="name" placeholder="{{.T "common.name"}}" aria-label="{{.T "common.name"}}" maxlength="80"></div>
-					<div class="col-sm-6"><input type="url" class="form-control form-control-sm font-monospace" name="url" placeholder="https://…" aria-label="URL" required></div>
-					<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.lists.add_btn"}}</button></div>
-					<div class="col-12 form-text mt-0">{{.T "dns64.lists.add_hint"}}</div>
+					<textarea class="form-control form-control-sm font-monospace mb-2" name="urls" rows="3" placeholder="https://example.org/blocklist.txt&#10;Meine Liste | https://example.org/hosts" aria-label="URL" required></textarea>
+					<div class="d-flex flex-wrap align-items-start gap-2">
+						<div class="form-text mt-0 flex-grow-1">{{.T "dns64.lists.add_hint"}} {{.T "dns64.lists.bulk_hint"}}</div>
+						<button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.lists.add_btn"}}</button>
+					</div>
+				</form>
+			</div>
+		</div>
+		<div class="card mt-3" id="freigabe-listen">
+			<div class="card-header"><i class="bi bi-shield-check text-success"></i> {{.T "dns64.allowlists.title"}}{{.Doc "dns64#freigabe-listen"}}</div>
+			<div class="card-body small pb-0"><p class="text-body-secondary">{{.T "dns64.allowlists.hint"}}</p></div>
+			{{if $d.Cfg.AllowLst}}<form method="post" action="/dns64/allowlists">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="table-responsive">
+					<table class="table table-sm align-middle mb-0 small">
+						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th>{{.T "dns64.lists.list"}}</th><th class="text-end">{{.T "dns64.lists.domains"}}</th><th>{{.T "dns64.lists.updated"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+						<tbody>
+						{{range $i, $l := $d.Cfg.AllowLst}}<tr data-aurl="{{$l.URL}}">
+							<td class="ps-3"><input class="form-check-input" type="checkbox" name="aon_{{$i}}" value="1"{{if $l.Enabled}} checked{{end}} aria-label="{{$l.Name}}"></td>
+							<td><a href="{{$l.URL}}" target="_blank" rel="noopener noreferrer">{{$l.Name}}</a></td>
+							<td class="text-end l-rules">–</td><td class="text-nowrap l-updated">–</td>
+							<td class="l-status">{{if not $l.Enabled}}<span class="badge text-bg-light">{{$.T "dns64.js.off"}}</span>{{end}}</td>
+							<td class="text-end pe-3"><button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/allowlists/remove" name="remove" value="{{$i}}" data-confirm="{{$.T "dns64.lists.remove_confirm" "name" $l.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button></td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>
+				<div class="card-footer d-flex"><button class="btn btn-sm btn-primary ms-auto" type="submit"><i class="bi bi-check2"></i> {{.T "dns64.lists.apply"}}</button></div>
+			</form>{{end}}
+			<div class="card-body border-top">
+				<form method="post" action="/dns64/allowlists/add">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<textarea class="form-control form-control-sm font-monospace mb-2" name="urls" rows="2" placeholder="https://example.org/allowlist.txt" aria-label="{{.T "dns64.allowlists.title"}}" required></textarea>
+					<div class="d-flex flex-wrap align-items-start gap-2">
+						<div class="form-text mt-0 flex-grow-1">{{.T "dns64.allowlists.add_hint"}}</div>
+						<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.lists.add_btn"}}</button>
+					</div>
 				</form>
 			</div>
 		</div>
@@ -95,6 +128,15 @@
 					<button class="btn btn-danger" type="submit"><i class="bi bi-slash-circle"></i> {{.T "dns64.js.block"}}</button>
 				</form>
 				<ul class="list-group list-group-flush" id="deny-list"></ul>{{else}}<p class="mb-0">{{.T "dns64.allow.not_running"}}</p>{{end}}
+				<details class="mt-3"{{if not $d.Running}} open{{end}}>
+					<summary class="text-body-secondary">{{.T "dns64.deny.text_edit"}}</summary>
+					<form method="post" action="/dns64/denylist/save" class="mt-2">
+						<input type="hidden" name="_csrf" value="{{.CSRF}}">
+						<textarea class="form-control font-monospace mb-2" name="domains" rows="10" placeholder="tracker.example.com&#10;*.ads.example.org" aria-label="{{.T "dns64.deny.title"}}" spellcheck="false">{{$d.Deny}}</textarea>
+						<div class="form-text mb-2">{{.T "dns64.deny.text_hint"}}</div>
+						<button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{.T "dns64.deny.text_confirm"}}"><i class="bi bi-check2"></i> {{.T "dns64.deny.text_save"}}</button>
+					</form>
+				</details>
 			</div>
 		</div>
 	</div>

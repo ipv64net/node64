@@ -50,6 +50,32 @@ Einrichten (nur Dennis, das Token bleibt bei ihm):
 4. Bereits gebaute Versionen ohne Neubau kopieren: *Actions › dockerhub-copy › Run workflow*, Version `1.0.0`
    (`latest` nur für die neueste stabile Version).
 
+## Sicherheitspruefungen
+
+Der Workflow `.github/workflows/security.yml` laeuft bei jedem Push auf `main`, bei Tags, montags um 04:17 UTC und von
+Hand (Actions › security › Run workflow). Er bremst `image.yml` nicht und bricht wegen eines Fundes nicht ab – die
+Ergebnisse stehen als SARIF unter GitHub › *Security › Code scanning* (je Werkzeug eine Kategorie) und kurz in der
+Zusammenfassung des Laufs.
+
+| Job | Werkzeug | Prueft |
+|---|---|---|
+| `govulncheck` | [govulncheck](https://go.dev/doc/security/vuln/) | bekannte Schwachstellen in Go-Abhaengigkeiten und der Standardbibliothek – nur, wenn der betroffene Code wirklich aufgerufen wird |
+| `gosec` | [gosec](https://github.com/securego/gosec) | statische Analyse (TLS-Einstellungen, Kryptografie, Dateizugriffe, `exec`, Injection-Muster) |
+| `codeql` | [CodeQL](https://codeql.github.com/) | Datenfluss von Eingaben zu Netzwerk, Dateien und Befehlen (SSRF, Path Traversal, Injection) |
+| `trivy-image` | [Trivy](https://trivy.dev/) | das gebaute Image (amd64): bekannte CVEs im Binary und in den mitgelieferten Dateien, nur behebbare |
+
+Bewusst ausgeschlossene gosec-Regeln (im Workflow begruendet): `G104` (ungepruefte Fehler, viele absichtliche `_ =`),
+`G115` (Ganzzahl-Umwandlungen in gepruefem Netzwerkcode), `G304` (Dateipfade aus Konfiguration bzw. Volume), `G404`
+(`math/rand` nur fuer Streuung) und `G101` (meldet Namen von Einstellungen als Zugangsdaten). Ein
+neuer Fund wird geprueft und entweder behoben oder im Code mit `#nosec <Regel> -- Begruendung` markiert.
+
+Die Go-Version kommt aus `go.mod` (`go`- bzw. `toolchain`-Zeile): Steht dort nur `go 1.27.0`, bauen und pruefen
+`setup-go` und damit auch die Release-Programme aus `image.yml` mit genau 1.27.0 statt der aktuellen 1.27.x. Fuer
+Sicherheitskorrekturen der Standardbibliothek deshalb `toolchain go1.27.x` (aktuelle Version) eintragen.
+
+Ein echter Fund in govulncheck heisst meist: Abhaengigkeit bzw. Go-Version anheben (`go get <modul>@<version>`,
+`go mod tidy`, `toolchain` in `go.mod`) und neu veroeffentlichen.
+
 ## Selbst-Update (ipv64.net/node64)
 
 Kanäle: `stable` und `preview` (in der Oberfläche „Release-Candidate“). Ohne eigene Wahl liest eine Node `preview`,

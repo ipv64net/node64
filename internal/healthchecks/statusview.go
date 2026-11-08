@@ -497,43 +497,19 @@ func statusPick(i int, sets ...[]statusAgg) statusAgg {
 	return statusAgg{}
 }
 
-// buildStatusView rechnet die Sicht ohne Zwischenspeicher (auch fuer die Vorschau ungespeicherter Seiten).
-// Abfragen gesamt: Checks, Einstellung Zeitzone, Wartungen, Ankuendigungen und je 400 Tokens hc_daily, Messungen
-// (heute/gestern) und Stoerungen.
-func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string) (*StatusView, error) {
-	now := statusNow()
-	loc := m.statusLocation(ctx)
-	tr := m.translator(lang)
-	days := p.Days
-	if days != 30 && days != 60 {
-		days = 90
+// statusDaysOf: gueltiger Zeitraum einer Statusseite (1 = 24 Stunden mit Stundenbalken), sonst 90 Tage.
+func statusDaysOf(d int) int {
+	switch d {
+	case 1, 7, 30, 60, 90:
+		return d
 	}
-	v := &StatusView{Slug: p.Slug, Title: p.Title, Description: p.Description, Footer: p.Footer, Layout: p.Layout, Theme: p.Theme,
-		Accent: p.Accent, Days: days, ShowUptime: p.ShowUptime, RefreshSec: p.RefreshSec, PoweredBy: p.PoweredBy, Generated: now.UTC(),
-		Groups: []StatusViewGroup{}, Notices: []StatusNotice{}, Maintenance: []StatusViewMaint{}, Incidents: []StatusViewIncid{}}
-	if p.HasLogo {
-		v.Logo = "logo?v=" + strconv.FormatInt(p.LogoUpdated.Unix(), 10) // neue Datei = neue URL (lange cachebar)
-	}
+	return 90
+}
 
-	all, err := m.st.Checks(ctx)
-	if err != nil {
-		return nil, err
-	}
-	byTok := make(map[string]*Check, len(all))
-	for _, c := range all {
-		byTok[c.Token] = c
-	}
-	var tokens []string
-	seen := map[string]bool{}
-	for _, g := range p.Groups {
-		for _, it := range g.Items {
-			if byTok[it.Token] != nil && !seen[it.Token] {
-				seen[it.Token] = true
-				tokens = append(tokens, it.Token)
-			}
-		}
-	}
-
+// statusDayBars: Grenzen, Beschriftungen und Messungen der Tagesbalken (eigene, fremde Einzelpunkte, fremde
+// Stundenwerte; statusPick waehlt je Balken die erste Quelle mit Messungen).
+func (m *Module) statusDayBars(ctx context.Context, tokens []string, days int, now time.Time, loc *time.Location) ([]time.Time, []string,
+	map[string][]statusAgg, map[string][]statusAgg, map[string][]statusAgg, error) {
 	// Grenzen der Tagesbalken: Mitternacht in der Zeitzone der Node, der letzte endet jetzt
 	y, mo, d := now.In(loc).Date()
 	bounds := make([]time.Time, days+1)
@@ -566,7 +542,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 			append(append(append([]any{}, keyArgs...), args...), ft(yesterday), ft(now))
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	// fremde Messungen nur fuer Tokens mit Luecken: Einzelpunkte (flags 8 ohne Wartung, hc_source_points) und aelter
 	// die Stundenwerte hc_source_hourly (nur fuer Balken ganz ohne Einzelpunkte)
@@ -586,13 +562,120 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 			append(append(append(append(append([]any{}, keyArgs...), args...), ft(bounds[0]), ft(now)), args...), ft(bounds[0]), ft(now))
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	remoteHourly, err := m.statusDayAggs(ctx, gaps, days, idx, func(ph string, args []any) (string, []any) {
 		return `SELECT token, ` + dayKey("hour") + `, sum(count), sum(up_count) FROM hc_source_hourly
 			WHERE token IN (` + ph + `) AND hour >= ? AND hour <= ? GROUP BY 1, 2`,
 			append(append(append([]any{}, keyArgs...), args...), ft(bounds[0]), ft(now))
 	})
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	return bounds, labels, own, remote, remoteHourly, nil
+}
+
+// statusHourBars: 24 Stundenbalken je UTC-Stunde (der letzte endet jetzt), Quellen wie statusDayBars und wie die
+// Stundenbalken der Details (eigene Einzelpunkte und hc_hourly, fremde Einzelpunkte, hc_source_hourly). Beschriftung
+// in der Zeitzone der Node ("2006-01-02T15", wie StatusItemDetail.Hours).
+func (m *Module) statusHourBars(ctx context.Context, tokens []string, now time.Time, loc *time.Location) ([]time.Time, []string,
+	map[string][]statusAgg, map[string][]statusAgg, map[string][]statusAgg, error) {
+	const n = 24
+	bounds := make([]time.Time, n+1)
+	labels := make([]string, n)
+	idx := map[string]int{}
+	cur := now.Truncate(time.Hour)
+	for i := 0; i < n; i++ {
+		bounds[i] = cur.Add(-time.Duration(n-1-i) * time.Hour)
+		labels[i] = bounds[i].In(loc).Format("2006-01-02T15")
+		idx[bounds[i].UTC().Format("2006-01-02T15")] = i
+	}
+	bounds[n] = now
+	from, to := ft(bounds[0]), ft(now)
+	own, err := m.statusDayAggs(ctx, tokens, n, idx, func(ph string, args []any) (string, []any) {
+		return `SELECT token, substr(time, 1, 13), count(*), coalesce(sum(status), 0) FROM hc_measurements
+			WHERE token IN (` + ph + `) AND time >= ? AND time <= ? AND flags = 0 GROUP BY 1, 2`, append(args, from, to)
+	}, func(ph string, args []any) (string, []any) {
+		return `SELECT token, substr(hour, 1, 13), count, up_count FROM hc_hourly WHERE token IN (` + ph + `) AND hour >= ?`, append(args, from)
+	})
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	var gaps []string
+	for _, tok := range tokens {
+		for _, a := range own[tok] {
+			if a.count == 0 {
+				gaps = append(gaps, tok)
+				break
+			}
+		}
+	}
+	remote, err := m.statusDayAggs(ctx, gaps, n, idx, func(ph string, args []any) (string, []any) {
+		return `SELECT token, substr(time, 1, 13), count(*), coalesce(sum(status), 0) FROM (
+			SELECT token, time, status FROM hc_measurements WHERE token IN (` + ph + `) AND time >= ? AND time <= ? AND (flags & 8) != 0 AND (flags & 1) = 0
+			UNION ALL SELECT token, time, status FROM hc_source_points WHERE token IN (` + ph + `) AND time >= ? AND time <= ?) GROUP BY 1, 2`,
+			append(append(append(append([]any{}, args...), from, to), args...), from, to)
+	})
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	remoteHourly, err := m.statusDayAggs(ctx, gaps, n, idx, func(ph string, args []any) (string, []any) {
+		return `SELECT token, substr(hour, 1, 13), sum(count), sum(up_count) FROM hc_source_hourly
+			WHERE token IN (` + ph + `) AND hour >= ? AND hour <= ? GROUP BY 1, 2`, append(args, from, to)
+	})
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	return bounds, labels, own, remote, remoteHourly, nil
+}
+
+// buildStatusView rechnet die Sicht ohne Zwischenspeicher (auch fuer die Vorschau ungespeicherter Seiten).
+// Abfragen gesamt: Checks, Einstellung Zeitzone, Wartungen, Ankuendigungen und je 400 Tokens hc_daily, Messungen
+// (heute/gestern) und Stoerungen.
+func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string) (*StatusView, error) {
+	now := statusNow()
+	loc := m.statusLocation(ctx)
+	tr := m.translator(lang)
+	days := statusDaysOf(p.Days)
+	hourly := days == 1 // 24 Stundenbalken statt Tagesbalken
+	n := days
+	if hourly {
+		n = 24
+	}
+	v := &StatusView{Slug: p.Slug, Title: p.Title, Description: p.Description, Footer: p.Footer, Layout: p.Layout, Theme: p.Theme,
+		Accent: p.Accent, Days: days, ShowUptime: p.ShowUptime, RefreshSec: p.RefreshSec, PoweredBy: p.PoweredBy, Generated: now.UTC(),
+		Groups: []StatusViewGroup{}, Notices: []StatusNotice{}, Maintenance: []StatusViewMaint{}, Incidents: []StatusViewIncid{}}
+	if p.HasLogo {
+		v.Logo = "logo?v=" + strconv.FormatInt(p.LogoUpdated.Unix(), 10) // neue Datei = neue URL (lange cachebar)
+	}
+
+	all, err := m.st.Checks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byTok := make(map[string]*Check, len(all))
+	for _, c := range all {
+		byTok[c.Token] = c
+	}
+	var tokens []string
+	seen := map[string]bool{}
+	for _, g := range p.Groups {
+		for _, it := range g.Items {
+			if byTok[it.Token] != nil && !seen[it.Token] {
+				seen[it.Token] = true
+				tokens = append(tokens, it.Token)
+			}
+		}
+	}
+
+	var bounds []time.Time
+	var labels []string
+	var own, remote, remoteHourly map[string][]statusAgg
+	if hourly {
+		bounds, labels, own, remote, remoteHourly, err = m.statusHourBars(ctx, tokens, now, loc)
+	} else {
+		bounds, labels, own, remote, remoteHourly, err = m.statusDayBars(ctx, tokens, days, now, loc)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -629,12 +712,12 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 				break
 			}
 		}
-		x := &tokView{bars: make([]StatusViewDay, days)}
+		x := &tokView{bars: make([]StatusViewDay, n)}
 		x.state, _ = m.statusItemState(c, inMaint)
 		downs := statusMinutes(statusOverlap(bounds, statusDownSpans(incs[tok], now)))
 		maint := statusMaintCover(bounds, wins, occ, tok)
 		var total statusAgg
-		for i := 0; i < days; i++ {
+		for i := 0; i < n; i++ {
 			a := statusPick(i, own[tok], remote[tok], remoteHourly[tok])
 			total.add(a)
 			x.bars[i] = statusBucket(labels[i], a, downs[i], maint[i])

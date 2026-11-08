@@ -1,0 +1,122 @@
+# Sicherheitspruefungen (docs/RELEASE.md, Abschnitt Sicherheitspruefungen): govulncheck (bekannte Schwachstellen in
+# Go-Abhaengigkeiten, nur tatsaechlich aufgerufener Code), gosec (statische Analyse), CodeQL (Datenfluss, z. B. SSRF,
+# Path Traversal) und Trivy (gebautes Image). Alle Ergebnisse gehen als SARIF nach GitHub › Security › Code scanning.
+# Zunaechst wird nur gemeldet, kein Job bricht wegen eines Fundes ab; image.yml bleibt davon unberuehrt.
+name: security
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  schedule:
+    - cron: "17 4 * * 1" # montags 04:17 UTC: neue Eintraege in den Schwachstellen-Datenbanken
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          # Text fuer die Zusammenfassung (Exit 3 = Fund, hier nur melden), SARIF fuer Code scanning
+          govulncheck ./... | tee govulncheck.txt || true
+          govulncheck -format sarif ./... > govulncheck.sarif || true
+          { echo '### govulncheck'; echo '```'; tail -n 60 govulncheck.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck
+
+  gosec:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: gosec
+        # Ausschluesse (bewusst, siehe docs/RELEASE.md):
+        #   G104 ungepruefte Fehler – viele absichtliche "_ =" (z. B. Close im defer)
+        #   G115 Ganzzahl-Umwandlungen – im Netzwerkcode (Laengenfelder, Ports) gepruefte Wertebereiche
+        #   G304 Datei aus Variable – Pfade kommen aus Konfiguration/Volume, nicht von Besuchern
+        #   G404 math/rand – nur fuer Streuung (Jitter, Lastverteilung), Geheimnisse kommen aus crypto/rand
+        #   G101 "Zugangsdaten im Code" – meldet Namen von Einstellungen wie "auth.oidc.client_id"
+        # Generierte Dateien werden nicht geprueft.
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
+          gosec -no-fail -exclude=G104,G115,G304,G404,G101 -exclude-generated -fmt sarif -out gosec.sarif ./... || true
+          gosec -no-fail -exclude=G104,G115,G304,G404,G101 -exclude-generated -fmt text ./... 2>/dev/null | tail -n 40 > gosec.txt || true
+          { echo '### gosec'; echo '```'; cat gosec.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: autobuild
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: codeql-go
+
+  trivy-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Image bauen (nur amd64, lokal, wird nicht hochgeladen)
+        run: docker build --build-arg VERSION=scan -t node64:scan .
+      - name: Trivy (Image)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: node64:scan
+          format: sarif
+          output: trivy-image.sarif
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH,MEDIUM
+      - name: Trivy (Zusammenfassung)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: node64:scan
+          format: table
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          skip-setup-trivy: true
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image

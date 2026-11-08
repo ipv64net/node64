@@ -403,6 +403,23 @@ type advText struct {
 	HostMode, HostValue                       string
 }
 
+// LocAdv: "Erweitert" einer Location als Text fuer das Formular.
+func (l Location) LocAdv() map[string]string {
+	a := l.Advanced
+	if a == nil {
+		a = &LocationAdvanced{}
+	}
+	out := map[string]string{"req_set": headersText(a.RequestHeaders), "req_del": strings.Join(a.RequestRemove, "\n"),
+		"resp_set": headersText(a.ResponseHeaders), "resp_del": strings.Join(a.ResponseRemove, "\n"), "buffering": a.Buffering}
+	if a.TimeoutSeconds > 0 {
+		out["timeout"] = strconv.Itoa(a.TimeoutSeconds)
+	}
+	if a.MaxBodyMB != 0 {
+		out["max_body"] = strconv.Itoa(a.MaxBodyMB)
+	}
+	return out
+}
+
 func headersText(list []Header) string {
 	var b strings.Builder
 	for _, x := range list {
@@ -533,9 +550,25 @@ func hostFromForm(r *http.Request, h *Host) {
 			}
 			port, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "port")))
 			acl, _ := strconv.ParseInt(r.PostFormValue(k+"acl"), 10, 64)
-			h.Locations = append(h.Locations, Location{Path: path, Scheme: r.PostFormValue(k + "scheme"), TargetHost: strings.TrimSpace(r.PostFormValue(k + "host")),
-				TargetPort: port, ForwardPath: r.PostFormValue(k + "forward"), WebSockets: on(k + "ws"), AccessListID: acl})
+			status, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "status")))
+			l := Location{Path: path, Scheme: r.PostFormValue(k + "scheme"), TargetHost: strings.TrimSpace(r.PostFormValue(k + "host")),
+				TargetPort: port, ForwardPath: r.PostFormValue(k + "forward"), WebSockets: on(k + "ws"), AccessListID: acl,
+				Action: r.PostFormValue(k + "action"), Status: status, Body: strings.ReplaceAll(r.PostFormValue(k+"body"), "\r\n", "\n"),
+				ContentType: strings.TrimSpace(r.PostFormValue(k + "ctype"))}
+			la := &LocationAdvanced{RequestHeaders: parseHeaders(r.PostFormValue(k + "req_set")), RequestRemove: lines(r.PostFormValue(k + "req_del")),
+				ResponseHeaders: parseHeaders(r.PostFormValue(k + "resp_set")), ResponseRemove: lines(r.PostFormValue(k + "resp_del")),
+				Buffering: r.PostFormValue(k + "buffering")}
+			la.TimeoutSeconds, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "timeout")))
+			la.MaxBodyMB, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "max_body")))
+			if !la.empty() {
+				l.Advanced = la
+			}
+			h.Locations = append(h.Locations, l)
 		}
+	}
+	if r.PostFormValue("has_target_path") == "1" { // Pfad beim Ziel und "nur Locations" (Details bzw. Locations)
+		h.Advanced.TargetPath = strings.TrimSpace(r.PostFormValue("target_path"))
+		h.Advanced.OnlyLocations = on("only_locations")
 	}
 	if r.PostFormValue("has_bw") == "1" { // Bandbreite ohne Reiter Erweitert (TLS durchreichen)
 		h.Advanced.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_down")))
@@ -569,6 +602,8 @@ func hostFromForm(r *http.Request, h *Host) {
 	if r.PostFormValue("has_maint") == "1" { // Reiter Wartung war im Formular
 		h.Advanced.Maintenance, h.Advanced.MaintenanceStyle = on("maint_on"), r.PostFormValue("maint_style")
 		h.Advanced.MaintenanceHTML = strings.ReplaceAll(r.PostFormValue("maint_html"), "\r\n", "\n")
+		h.Advanced.ErrorHTML = strings.ReplaceAll(r.PostFormValue("err_html"), "\r\n", "\n")
+		h.Advanced.ErrorOverride = on("err_override")
 	}
 	if h.Kind == KindPass {
 		h.CertID = CertNone
@@ -772,12 +807,16 @@ func (m *Module) pageMaintPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	style := r.URL.Query().Get("style")
-	if style != MaintMatrix && style != MaintGear && style != MaintCustom {
+	if style != MaintMatrix && style != MaintGear && style != MaintCustom && style != "error" {
 		style = h.Advanced.MaintenanceStyle
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts")
+	if style == "error" { // eigene Fehlerseite (wie bei 502)
+		_, _ = w.Write([]byte(errPageFor(&h.Advanced, http.StatusBadGateway, h.Names[0])))
+		return
+	}
 	_, _ = w.Write([]byte(maintPage(style, h.Advanced.MaintenanceHTML, h.Names[0])))
 }
 

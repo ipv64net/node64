@@ -28,7 +28,7 @@ type deviceView struct {
 	Last    time.Time `json:"last_seen"`
 }
 
-// devices liefert die Clients der letzten 24 Stunden mit Name (Router), MAC (Nachbartabelle) und Gruppe.
+// devices liefert die Clients der letzten 24 Stunden mit Name (Gruppe, eigener PTR, Router), MAC (Nachbartabelle) und Gruppe.
 func (m *Module) devices(ctx context.Context, e *engine) ([]deviceView, error) {
 	rows, err := e.store.RecentClients(ctx, time.Now().Add(-24*time.Hour), 200)
 	if err != nil {
@@ -38,7 +38,7 @@ func (m *Module) devices(ctx context.Context, e *engine) ([]deviceView, error) {
 	for _, r := range rows {
 		ips = append(ips, r.Client)
 	}
-	names := e.local.Hostnames(ctx, ips)
+	names := m.clientNames(ctx, e, ips) // Gruppe, eigener PTR, Router (#49)
 	out := make([]deviceView, 0, len(rows))
 	for _, r := range rows {
 		d := deviceView{IP: r.Client, Name: names[r.Client], Queries: r.Queries, Last: time.UnixMilli(r.LastSeen)}
@@ -140,7 +140,8 @@ func (m *Module) pageGroupMove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) pageMemberAdd(w http.ResponseWriter, r *http.Request) {
-	x, err := m.AddMember(r.Context(), groups.Member{GroupID: pathID(r), Kind: r.PostFormValue("kind"), Value: r.PostFormValue("value"), Label: r.PostFormValue("label")})
+	x, err := m.AddMember(r.Context(), groups.Member{GroupID: pathID(r), Kind: r.PostFormValue("kind"), Value: r.PostFormValue("value"), Label: r.PostFormValue("label"),
+		Tags: groups.SplitTags(r.PostFormValue("tags"))})
 	if err == nil {
 		m.audit(r, "dns64.group.member.add", r.PathValue("id"), x.Kind+" "+x.Value)
 	}

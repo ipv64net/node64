@@ -25,7 +25,7 @@ type StatusPage struct {
 	Theme       string        `json:"theme"`        // auto | light | dark
 	Lang        string        `json:"lang"`         // "" = Browser, de, en
 	Accent      string        `json:"accent"`       // #rrggbb oder ""
-	Days        int           `json:"days"`         // 30 | 60 | 90
+	Days        int           `json:"days"`         // 1 (24 h, Stundenbalken) | 7 | 30 | 60 | 90
 	ShowUptime  bool          `json:"show_uptime"`
 	ShowHistory bool          `json:"show_history"`
 	RefreshSec  int           `json:"refresh_sec"`
@@ -114,9 +114,7 @@ func (p *StatusPage) normalize() error {
 	if p.Accent != "" && !statusAccentRe.MatchString(p.Accent) {
 		return fieldErr("accent", "hc.status.err.accent")
 	}
-	if p.Days != 30 && p.Days != 60 {
-		p.Days = 90
-	}
+	p.Days = statusDaysOf(p.Days)
 	if p.RefreshSec < 30 {
 		p.RefreshSec = 30
 	}

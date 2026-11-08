@@ -628,6 +628,7 @@ type formData struct {
 	Parents     []*Check
 	Groups      []string           // vorhandene Gruppen (Vorschlaege)
 	Containers  []checks.Container // Docker: Container des Hosts (Vorschlaege)
+	Devices     []NetDevice        // Geraete aus DNS64 (Auswahl beim Anlegen, nur wenn DNS64 laeuft)
 	DockerErr   string
 	DockerHost  string
 	IPModes     []string
@@ -1083,6 +1084,9 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 		d.DockerErr = derr.Error()
 	}
 	cancel()
+	if !d.Edit && m.netDevices != nil {
+		d.Devices = m.netDevices(r.Context())
+	}
 	d.Types = checks.Types
 	if d.Form["type"] == string(checks.TypeProxmox) { // nur ueber Proxmox VE angelegt, hier nur bearbeiten
 		d.Types = append(append([]checks.Type{}, checks.Types...), checks.TypeProxmox)

@@ -29,6 +29,7 @@ const (
 	PersonaGrafana = "grafana"
 	PersonaNAS     = "nas"
 	PersonaElastic = "elasticsearch"
+	PersonaForti   = "fortigate" // FortiGate SSL-VPN/Verwaltung (Pfade, Kopfzeilen, Antworten; schlichte Seite ohne Logo)
 
 	PersonaOpenSSH       = "openssh" // Debian oder Ubuntu je Sensor
 	PersonaOpenSSHDebian = "openssh-debian"
@@ -43,7 +44,7 @@ const (
 	PersonaMariaDB11 = "mariadb11"
 )
 
-var personaWeb = []string{PersonaNginx, PersonaApache, PersonaPVE, PersonaWebmin, PersonaHA, PersonaGrafana, PersonaNAS, PersonaElastic}
+var personaWeb = []string{PersonaNginx, PersonaApache, PersonaPVE, PersonaWebmin, PersonaHA, PersonaGrafana, PersonaNAS, PersonaElastic, PersonaForti}
 
 // personaList: waehlbare Profile je Dienst (Dienste ohne Eintrag haben keine Auswahl).
 var personaList = map[string][]string{
@@ -57,7 +58,7 @@ var personaList = map[string][]string{
 // PersonaLabels: Anzeige in der Auswahl (Eigennamen, nicht uebersetzt).
 var PersonaLabels = map[string]string{
 	PersonaNginx: "nginx", PersonaApache: "Apache", PersonaPVE: "Proxmox VE", PersonaWebmin: "Webmin", PersonaHA: "Home Assistant",
-	PersonaGrafana: "Grafana", PersonaNAS: "NAS (DSM-API)", PersonaElastic: "Elasticsearch",
+	PersonaGrafana: "Grafana", PersonaNAS: "NAS (DSM-API)", PersonaElastic: "Elasticsearch", PersonaForti: "FortiGate (SSL-VPN)",
 	PersonaOpenSSH: "OpenSSH", PersonaOpenSSHDebian: "OpenSSH Debian 12", PersonaOpenSSHUbuntu: "OpenSSH Ubuntu 24.04", PersonaDropbear: "Dropbear",
 	PersonaBusyBox: "BusyBox", PersonaLinux: "Linux (login)",
 	PersonaMySQL: "MySQL 8.0", PersonaMariaDB: "MariaDB 10.11", PersonaMariaDB11: "MariaDB 11.4",
@@ -66,9 +67,9 @@ var PersonaLabels = map[string]string{
 // Standard je Koeder bzw. Port (HTTP/HTTPS); alles andere ist nginx.
 var (
 	personaPageHTTP = map[string]string{"pve": PersonaPVE, "webmin": PersonaWebmin, "homeassistant": PersonaHA, "grafana": PersonaGrafana,
-		"nas": PersonaNAS, "elastic": PersonaElastic}
+		"nas": PersonaNAS, "elastic": PersonaElastic, "sslvpn": PersonaForti}
 	personaPortHTTP = map[int]string{8006: PersonaPVE, 10000: PersonaWebmin, 8123: PersonaHA, 3000: PersonaGrafana, 5000: PersonaNAS,
-		5001: PersonaNAS, 9200: PersonaElastic}
+		5001: PersonaNAS, 9200: PersonaElastic, 10443: PersonaForti}
 )
 
 // personaOld: Dienste, die „verwundbar wirken“ koennen (aeltere Versionen in Banner bzw. Kopfzeilen).

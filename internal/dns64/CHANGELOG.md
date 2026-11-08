@@ -1,5 +1,16 @@
 # Änderungen – DNS64
 
+## 1.35.0 – 2026-11-09
+
+### Neu
+- Mehrere Blocklisten auf einmal hinzufügen (eine URL je Zeile, optional „Name | URL“); die eigene Sperrliste als Textfeld bearbeiten, doppelte und ungültige Zeilen werden gemeldet (#19).
+- Freigabe-Listen aus dem Netz: wie Blocklisten hinzufügen, ein-/ausschalten und regelmäßig neu laden; sie schlagen jede Blockliste, auch bei Gruppen mit eigener Listen-Auswahl. Im Cluster mit älteren Nodes nehmen diese die Einstellung erst nach dem Update an.
+- Gerätegruppen: Bezeichnung und bis zu 10 Tags je Gerät, Filter nach Tag und Suche; im Cluster abgeglichen (#24).
+- Dienste per Klick sperren – rund 40 Dienste wie TikTok, YouTube, Instagram, Discord, WhatsApp, Steam oder ChatGPT, je Gruppe und im Zeitplan (#19).
+- Eigene Einträge aus Docker-Labels: Container mit `node64.dns.name` (optional `node64.dns.ip` bzw. `container`) bekommen Einträge auf dieser Node, die Adressänderungen folgen und nach dem Entfernen verschwinden (Schalter in den Einstellungen, #18).
+- Abfrage-Log: bei eigenen Einträgen steht die gelieferte Antwort (z. B. → 10.10.78.16) bzw. NODATA (#50).
+- Client-Namen in Abfrage-Log, Top-Clients und Geräteliste: zuerst aus der Gerätegruppe, dann aus eigenen PTR-/A-Einträgen, erst danach vom Router (#49).
+
 ## 1.34.1 – 2026-11-08
 
 ### Behoben

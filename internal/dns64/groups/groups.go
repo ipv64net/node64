@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 // Arten eines Mitglieds.
@@ -113,17 +114,58 @@ const (
 
 // Member ist ein Geraet bzw. Netz einer Gruppe.
 type Member struct {
-	ID      int64  `json:"id"`
-	GroupID int64  `json:"group_id"`
-	Kind    string `json:"kind"`  // mac, ip, net
-	Value   string `json:"value"` // aa:bb:cc:dd:ee:ff, 192.168.1.5, fd00::/64
-	Label   string `json:"label"` // Name fuer die Seite (optional)
+	ID      int64    `json:"id"`
+	GroupID int64    `json:"group_id"`
+	Kind    string   `json:"kind"`  // mac, ip, net
+	Value   string   `json:"value"` // aa:bb:cc:dd:ee:ff, 192.168.1.5, fd00::/64
+	Label   string   `json:"label"` // Name fuer die Seite (optional)
+	Tags    []string `json:"tags"`  // eigene Tags zum Ordnen und Filtern (keine Wirkung auf die Regeln)
+}
+
+// Grenzen der Tags je Geraet.
+const (
+	MaxTags   = 10
+	MaxTagLen = 24
+)
+
+// NormalizeTags trimmt, entfernt Doppelte (ohne Gross-/Kleinschreibung) und Kommas; false = zu viele oder zu lang.
+func NormalizeTags(in []string) ([]string, bool) {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, t := range in {
+		t = strings.Join(strings.Fields(strings.ReplaceAll(t, ",", " ")), " ")
+		if t == "" || seen[strings.ToLower(t)] {
+			continue
+		}
+		if utf8.RuneCountInString(t) > MaxTagLen {
+			return nil, false
+		}
+		seen[strings.ToLower(t)] = true
+		out = append(out, t)
+	}
+	return out, len(out) <= MaxTags
+}
+
+// SplitTags zerlegt eine Eingabe ("Kueche, MQTT") bzw. die gespeicherte Spalte in Tags.
+func SplitTags(s string) []string {
+	var out []string
+	for _, t := range strings.Split(s, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Normalize prueft und vereinheitlicht ein Mitglied; false = ungueltig.
 func Normalize(m *Member) bool {
 	v := strings.TrimSpace(m.Value)
 	m.Label = strings.TrimSpace(m.Label)
+	tags, ok := NormalizeTags(m.Tags)
+	if !ok {
+		return false
+	}
+	m.Tags = tags
 	switch m.Kind {
 	case KindMAC:
 		hw, err := net.ParseMAC(v)

@@ -1,5 +1,19 @@
 # Changes – PROXY64
 
+## 1.53.0 – 2026-11-09
+
+### New
+- Path at the target of a proxy host – e.g. `/rezepte` in front of every request, the address in the browser stays; redirects and cookie paths of the target are written back (#43).
+- Locations can block (error page 400–499) or give a fixed response (e.g. `mta-sts.txt`); "Allow only the locations" blocks every other path (#11).
+- "Advanced" also per location: timeout, upload limit, buffering and headers (e.g. ActiveSync with a long timeout).
+- Custom error page per proxy host when the target is unreachable or overloaded; optionally it also replaces 5xx errors of the target, the status stays (#38).
+- Access lists: `allow self` (own public IP, IPv6 as /64; `self4`/`self6`) and DNS names such as DynDNS names – devices at home get in without a password even via CDN64 (#32).
+
+### Fixed
+- The maintenance page and the custom error page reach visitors in CDN64 mode 2 (until now the CDN64 server showed its own page).
+- Group rows in tables (streams, plans, honeypot) are readable in dark mode.
+
+
 ## 1.52.0 – 2026-11-08
 
 ### New

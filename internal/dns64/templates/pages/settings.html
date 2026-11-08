@@ -50,6 +50,15 @@
 							<div class="form-text">{{if and $d.Running $d.Router}}{{.T "dns64.settings.router_now" "addr" $d.Router}} {{else if $d.Running}}{{.T "dns64.settings.router_none"}} {{end}}{{.T "dns64.settings.router_hint"}}{{with $d.Domains}} {{$.T "dns64.settings.router_domains" "list" (join . ", ")}}{{end}}</div>
 							<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="mdns" name="mdns" value="1"{{if $d.Cfg.MDNS}} checked{{end}}><label class="form-check-label" for="mdns">{{.T "dns64.settings.mdns"}}</label>{{.Doc "dns64#mdns"}}</div>
 							<div class="form-text mt-0">{{.T "dns64.settings.mdns_hint"}}{{if and $d.Running $d.MDNS.On}} {{if lt $d.MDNS.Responders 0}}{{.T "dns64.settings.mdns_probing"}}{{else if eq $d.MDNS.Responders 0}}<span class="text-warning-emphasis">{{.T "dns64.settings.mdns_none"}}</span>{{else}}<span class="text-success">{{.T "dns64.settings.mdns_now" "n" $d.MDNS.Responders}}</span>{{end}}{{end}}</div>
+							<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="docker" name="docker" value="1"{{if $d.Cfg.Docker}} checked{{end}}><label class="form-check-label" for="docker">{{.T "dns64.settings.docker"}}</label>{{.Doc "dns64#docker"}}</div>
+							<div class="form-text mt-0">{{.T "dns64.settings.docker_hint"}}</div>
+							<div class="input-group input-group-sm mt-1" style="max-width:30rem"><span class="input-group-text">{{.T "dns64.settings.docker_ip"}}</span><input type="text" class="form-control font-monospace" id="docker_ip" name="docker_ip" value="{{$d.Cfg.DockerIP}}" placeholder="{{.T "dns64.settings.docker_ip_auto"}}"></div>
+							{{if $d.Docker.Enabled}}<div class="small mt-1" id="dns64-docker">
+								{{if $d.Docker.Error}}<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{$d.Docker.Error}}</span>
+								{{else if not $d.Docker.Connected}}<span class="text-body-secondary">{{.T "dns64.settings.docker_waiting"}}</span>
+								{{else if not $d.Docker.Containers}}<span class="text-body-secondary">{{.T "dns64.settings.docker_none"}}</span>
+								{{else}}<ul class="list-unstyled mb-0">{{range $d.Docker.Containers}}<li><i class="bi bi-box"></i> <strong>{{.Container}}</strong>: {{join .Names ", "}}{{with .Addrs}} → <span class="font-monospace">{{join . ", "}}</span>{{end}}{{if .Problem}} <span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{$.T (print "dns64.settings.docker_err_" .Problem) "name" .ProblemName}}</span>{{end}}</li>{{end}}</ul>{{end}}
+							</div>{{end}}
 						</div>
 						<div class="col-sm-6">
 							<label class="form-label" for="block_mode">{{.T "dns64.settings.block_mode"}}</label>

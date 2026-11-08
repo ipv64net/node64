@@ -230,6 +230,9 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 	}
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
+	if entry.Status == querylog.StatusCustom && entry.Reason == "" && resp.Rcode == dns.RcodeSuccess {
+		entry.Reason = answerReason(resp, q.Qtype) // eigener Eintrag: was geliefert wurde (#50)
+	}
 	entry.Duration = time.Since(start)
 	s.Log.Add(entry)
 	return resp

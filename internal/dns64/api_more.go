@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -67,6 +68,85 @@ func (c *config) addList(name, url string) error {
 	return nil
 }
 
+// addAllowList legt eine Freigabe-Liste an (eingeschaltet).
+func (c *config) addAllowList(name, url string) error {
+	url, name = strings.TrimSpace(url), strings.TrimSpace(name)
+	if err := checkListURL(url); err != nil {
+		return err
+	}
+	for _, l := range c.AllowLst {
+		if l.URL == url {
+			return errCfg("err_list_dup")
+		}
+	}
+	if len(c.AllowLst) >= filter.MaxLists {
+		return errCfg("err_list_max", "n", filter.MaxLists)
+	}
+	if name == "" {
+		name = listName(url)
+	}
+	c.AllowLst = append(c.AllowLst, listSetting{List: filter.List{Name: name, URL: url}, Enabled: true, Custom: true})
+	return nil
+}
+
+// listName: Anzeigename aus der URL (Host und letzter Pfadteil), wenn keiner angegeben ist.
+func listName(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	name := strings.TrimPrefix(u.Host, "www.")
+	if p := strings.Trim(u.Path, "/"); p != "" {
+		if i := strings.LastIndexByte(p, '/'); i >= 0 {
+			p = p[i+1:]
+		}
+		name += " · " + p
+	}
+	return name
+}
+
+// BulkResult: Ergebnis beim Eintragen mehrerer Listen auf einmal.
+type BulkResult struct {
+	Added      []string `json:"added"`      // URLs
+	Duplicates []string `json:"duplicates"` // schon vorhanden bzw. doppelt im Text
+	Invalid    []string `json:"invalid"`    // keine gueltige http(s)-URL
+}
+
+// addListsBulk traegt mehrere Listen ein: je Zeile eine URL, optional davor ein Name ("Name | URL" oder
+// "Name URL"); Kommentare mit "#" am Zeilenanfang. allow = Freigabe-Listen statt Blocklisten.
+func (c *config) addListsBulk(lines []string, allow bool) BulkResult {
+	res := BulkResult{Added: []string{}, Duplicates: []string{}, Invalid: []string{}}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		name, u := "", line
+		if i := strings.LastIndexAny(line, " \t|"); i >= 0 {
+			name, u = strings.TrimSpace(strings.Trim(strings.TrimSpace(line[:i]), "|")), strings.TrimSpace(line[i+1:])
+		}
+		var err error
+		if allow {
+			err = c.addAllowList(name, u)
+		} else {
+			if name == "" {
+				name = listName(u)
+			}
+			err = c.addList(name, u)
+		}
+		var ce *cfgError
+		switch {
+		case err == nil:
+			res.Added = append(res.Added, u)
+		case errors.As(err, &ce) && ce.Key == "err_list_dup":
+			res.Duplicates = append(res.Duplicates, u)
+		default:
+			res.Invalid = append(res.Invalid, line)
+		}
+	}
+	return res
+}
+
 // removeCustom entfernt einen eigenen Upstream bzw. eine eigene Liste per URL (Vorlagen lassen sich nur abschalten).
 func (c *config) removeCustom(url string) bool {
 	for i, u := range c.Upstreams {
@@ -97,6 +177,7 @@ func (m *Module) apiMoreRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("DELETE /api/dns64/upstreams", plain(m.apiCustomRemove("upstream")))
 	mux.Handle("POST /api/dns64/lists", plain(m.apiListAdd))
 	mux.Handle("DELETE /api/dns64/lists", plain(m.apiCustomRemove("list")))
+	m.apiListRoutes(mux, plain)
 }
 
 // apiSave speichert eine geaenderte Konfiguration, startet neu und antwortet mit dem neuen Stand.
@@ -163,17 +244,53 @@ func (m *Module) apiUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiListAdd(w http.ResponseWriter, r *http.Request) {
-	var in filter.List
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in); err != nil {
+	m.apiListAddKind(w, r, false)
+}
+
+// apiListAddKind legt eine Liste ({name, url}) oder mehrere auf einmal ({urls: ["…", "Name | …"]}) an;
+// allow = Freigabe-Listen. Bei mehreren antwortet die API mit dem Ergebnis je URL.
+func (m *Module) apiListAddKind(w http.ResponseWriter, r *http.Request, allow bool) {
+	var in struct {
+		Name string   `json:"name"`
+		URL  string   `json:"url"`
+		URLs []string `json:"urls"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
+	kind := map[bool]string{false: "list", true: "allowlists"}[allow]
 	c := m.loadConfig(r.Context())
-	if err := c.addList(in.Name, in.URL); err != nil {
+	if len(in.URLs) > 0 {
+		res := c.addListsBulk(in.URLs, allow)
+		if len(res.Added) == 0 {
+			writeJSON(w, http.StatusUnprocessableEntity, res)
+			return
+		}
+		ctx := r.Context()
+		if err := m.saveConfig(ctx, c); err != nil {
+			writeErr(w, http.StatusBadRequest, m.errText(r, err))
+			return
+		}
+		m.audit(r, "dns64."+kind+".add", strconv.Itoa(len(res.Added))+" lists", "")
+		if err := m.restart(ctx); err != nil {
+			writeErr(w, http.StatusConflict, m.g.T(r, "dns64.err.restart", "err", err.Error()))
+			return
+		}
+		writeJSON(w, http.StatusCreated, res)
+		return
+	}
+	var err error
+	if allow {
+		err = c.addAllowList(in.Name, in.URL)
+	} else {
+		err = c.addList(in.Name, in.URL)
+	}
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, m.errText(r, err))
 		return
 	}
-	m.audit(r, "dns64.list.add", in.URL, "")
+	m.audit(r, "dns64."+kind+".add", in.URL, "")
 	m.apiSave(w, r, c, http.StatusCreated)
 }
 

@@ -159,6 +159,22 @@
 		if (exSel) { exSel.addEventListener("change", syncNodes); exSel.addEventListener("change", syncMin); exSel.addEventListener("change", syncOnline); }
 		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); syncMin(); syncOnline(); });
 		update(); lockExec(); syncNodes(); syncMin(); syncOnline();
+		// Geraet aus DNS64 (#20): IP ins Ziel, Name vorschlagen; passt der Typ nicht zu einer Adresse, Ping
+		var dev = document.getElementById("hc-device");
+		if (dev) {
+			var autoName = "";
+			dev.addEventListener("change", function () {
+				var o = dev.selectedOptions[0];
+				if (!o || !o.value) { return; }
+				var tg = document.getElementById("target"), nm = document.getElementById("name");
+				if (tg) { tg.value = o.value; }
+				if (nm && (nm.value === "" || nm.value === autoName)) { autoName = o.getAttribute("data-name") || o.value; nm.value = autoName; }
+				if (["icmp", "tcp", "port"].indexOf(typeSel.value) < 0) {
+					typeSel.value = "icmp";
+					typeSel.dispatchEvent(new Event("change"));
+				}
+			});
+		}
 	}
 
 	// Tooltips der Pillen: Inhalt aus data-Attributen, hier maskiert und als HTML gesetzt

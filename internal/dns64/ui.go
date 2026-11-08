@@ -50,6 +50,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/lists/add", page(m.pageListAdd))
 	mux.Handle("POST /dns64/lists/remove", page(m.pageListRemove))
 	mux.Handle("POST /dns64/allowlist/import", page(m.pageAllowImport))
+	m.listUIRoutes(mux, page)
 	mux.Handle("POST /dns64/records", page(m.pageRecordAdd))
 	mux.Handle("POST /dns64/records/{id}/delete", page(m.pageRecordDelete))
 	mux.Handle("POST /dns64/records/{id}/toggle", page(m.pageRecordToggle))
@@ -89,7 +90,12 @@ type pageData struct {
 	Pub     pubView                  // Docker-Bridge: fehlende Veroeffentlichung, Gateway als Client (published.go)
 	Groups  []groups.Group           // Seiten Gruppen und Log
 	Devices []deviceView             // Seite Gruppen: Geraete der letzten 24 Stunden
+	HC      bool                     // Seite Gruppen: Healthchecks laeuft (Knopf "Als Check")
+	Docker  DockerDNSView            // Seite Einstellungen: Eintraege aus Docker-Labels
 	Cats    []string                 // Seite Gruppen: Kategorien
+	Svc     []serviceGroup           // Seite Gruppen: Dienste zum Sperren per Klick, nach Art
+	Tags    []string                 // Seite Gruppen: alle Tags der Geraete (Filter)
+	Deny    string                   // Seite Blocklisten: eigene Sperrliste als Text
 	States  map[int64]groupStateView // Seite Gruppen: Sperre, Frei, Zeitplan je Gruppe
 	Week    []int                    // Seite Gruppen: Wochentage 1..7
 	Types   []string
@@ -141,6 +147,16 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		}
 		if key == "groups" {
 			d.Cats, d.States, d.Week = filter.GroupCategories, m.groupStates(), []int{1, 2, 3, 4, 5, 6, 7}
+			d.HC = m.hcOn != nil && m.hcOn()
+			d.Svc, d.Tags = serviceGroups(), allTags(d.Groups)
+		}
+		if key == "lists" {
+			if dl, err := m.denylist(); err == nil {
+				d.Deny = dl.Text()
+			}
+		}
+		if key == "settings" {
+			d.Docker = m.DockerDNS(ctx)
 		}
 		if e := m.running(); e != nil && key == "groups" {
 			var err error
@@ -175,7 +191,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"no_releases", "ready", "online", "disturbed", "avg", "fastest", "requests", "errors", "last_error", "router_auto", "router_config", "router_none", "mdns_on", "mdns_silent",
 	"of", "failed", "just_now", "min_ago", "hours_ago", "days_ago", "per_hour", "pct_all", "pct_cache", "loaded", "no_data", "empty_chart",
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
-	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
+	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_nodata", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
 	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult", "top_col_domain", "top_col_client"}
 
@@ -183,6 +199,9 @@ func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))
 	for _, k := range jsKeys {
 		out[k] = m.g.T(r, "dns64.js."+k)
+	}
+	for _, s := range filter.Services { // Grund "cat:svc:<id>" im Log: Name des Dienstes
+		out["cat."+filter.ServicePrefix+s.ID] = s.Name
 	}
 	return out
 }
@@ -235,6 +254,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.AllowNets = splitLines(r.PostFormValue("allow_nets"))
 	c.Canary = r.PostFormValue("firefox_canary") != ""
 	c.MDNS = r.PostFormValue("mdns") != ""
+	c.Docker, c.DockerIP = r.PostFormValue("docker") != "", r.PostFormValue("docker_ip")
 	m.apply(w, r, "/dns64/settings", c, "dns64.settings", "")
 }
 
@@ -281,15 +301,9 @@ func (m *Module) pageListsSave(w http.ResponseWriter, r *http.Request) {
 	m.apply(w, r, "/dns64/lists", c, "dns64.lists", "")
 }
 
+// pageListAdd traegt eine oder mehrere Blocklisten ein (Textfeld urls: eine URL je Zeile; lists_ui.go).
 func (m *Module) pageListAdd(w http.ResponseWriter, r *http.Request) {
-	c := m.loadConfig(r.Context())
-	u := strings.TrimSpace(r.PostFormValue("url"))
-	if err := c.addList(r.PostFormValue("name"), u); err != nil {
-		m.g.Flash(w, r, "danger", m.errText(r, err))
-		http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
-		return
-	}
-	m.apply(w, r, "/dns64/lists", c, "dns64.list.add", u)
+	m.pageListAddKind(w, r, false)
 }
 
 func (m *Module) pageListRemove(w http.ResponseWriter, r *http.Request) {

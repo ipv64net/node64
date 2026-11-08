@@ -31,6 +31,10 @@ type publicIPEntry struct {
 	at  time.Time
 }
 
+// PublicIPLookup: dieselbe Abfrage (5 Minuten gemerkt) fuer andere Module, z. B. die Regel "self" der Zugriffslisten
+// von PROXY64.
+func PublicIPLookup() func(ctx context.Context, family string) (string, error) { return newPublicIP() }
+
 func newPublicIP() func(ctx context.Context, family string) (string, error) {
 	c := &publicIPCache{got: map[string]publicIPEntry{}}
 	return c.get

@@ -228,6 +228,7 @@ func run() error {
 	cdnModule.SetSecrets(box)   // Tunnel-Token (CDN64 online)
 	cdnModule.SetPorts(portReg) // Streams pruefen ihre Ports
 	cdnModule.SetDataDir(cfg.DataDir)
+	cdnModule.SetPublicIP(healthchecks.PublicIPLookup())                           // Zugriffslisten: Regel "self" (eigene oeffentliche IP)
 	cdnModule.SetDNSRecords(cdn64.IPv64Records(ipv64Key))                          // DNS-Eintrag bei ipv64 beim Anlegen eines Hosts
 	cdnModule.SetOnlineAPI(cdn64.IPv64Online(ipv64Key))                            // CDN64 online per Klick (Tunnel, Namen bei ipv64)
 	cdnModule.SetNotifier(dispatcher.Dispatch)                                     // CDN64 online: Tunnel weg/wieder da, Sperre
@@ -253,6 +254,18 @@ func run() error {
 		}
 		return out
 	})
+	// Geraete aus DNS64 beim Anlegen eines Checks (#20) und Knopf "Als Check" bei den Geraeten
+	hcModule.SetNetDevices(func(ctx context.Context) []healthchecks.NetDevice {
+		if !modules.IsRunning(dns64.Name) {
+			return nil
+		}
+		var out []healthchecks.NetDevice
+		for _, d := range dnsModule.NetDevices(ctx) {
+			out = append(out, healthchecks.NetDevice{Name: d.Name, IP: d.IP})
+		}
+		return out
+	})
+	dnsModule.SetHealthchecks(func() bool { return modules.IsRunning(healthchecks.Name) })
 	// Knopf "lokal in DNS64 eintragen" in der Host-Liste
 	cdnModule.SetLocalDNS(func() cdn64.LocalDNS {
 		if !modules.IsRunning(dns64.Name) {

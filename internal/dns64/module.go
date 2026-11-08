@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.34.1"
+	version   = "1.35.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -107,6 +107,8 @@ type Module struct {
 
 	updMu     sync.Mutex                   // dynamische Updates nacheinander (update.go)
 	pub       atomic.Pointer[pubState]     // Docker-Bridge: Ports auf dem Host veroeffentlicht? (published.go)
+	dkd       dockerDNS                    // Eintraege aus Docker-Labels (docker.go)
+	hcOn      func() bool                  // Healthchecks laeuft (Knopf "Als Check" bei den Geraeten), nil = nie
 	clMu      sync.Mutex                   // Cluster (cluster.go)
 	clHook    ClusterHook                  // nil = kein Cluster
 	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
@@ -317,6 +319,17 @@ func (m *Module) start(ctx context.Context) error {
 	}
 	filter.PruneFiles(lists, keep)
 	e.lists.Deny = deny
+	// Freigabe-Listen aus dem Netz: eigener Ordner, gelten fuer alle Geraete und Gruppen
+	allowDir := filepath.Join(m.dir(), "allowlists")
+	if e.lists.Release, err = filter.NewReleaseManager(allowDir, cfg.activeAllowLists(), time.Duration(cfg.ListHours)*time.Hour, listClient(m.selfAddr(ctx)), m.log); err != nil {
+		st.CloseNow()
+		return err
+	}
+	allowKeep := []string{}
+	for _, l := range cfg.AllowLst {
+		allowKeep = append(allowKeep, l.URL)
+	}
+	filter.PruneFiles(allowDir, allowKeep)
 	m.buildPolicies(e.lists, cfg, glist)
 	e.cache = cache.New(cfg.CacheSize)
 	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)
@@ -337,7 +350,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.enc = m.startEncrypted(cfg, e.srv)
 	ectx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
-	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.local.RunMDNS, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }, func(ctx context.Context) { m.runPublished(ctx, e, cfg) }} {
+	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.lists.Release.Run, e.local.Run, e.local.RunMDNS, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }, func(ctx context.Context) { m.runPublished(ctx, e, cfg) }, m.runDocker} {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}

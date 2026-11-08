@@ -54,6 +54,7 @@ type Module struct {
 	accountCh  func(context.Context) []*notify.Channel // ohne Verknuepfung: ipv64-Kanaele des Accounts (E-Mail, SMS, App; IDs negativ)
 	viaCluster func() bool                             // nicht verknuepft, aber eine verknuepfte Node des Clusters reicht an ipv64 weiter
 	quota      func() (today, limit, locs int)         // Tageskontingent der Online-Checks, nil = standalone
+	netDevices func(context.Context) []NetDevice       // Geraete aus DNS64 (Auswahl im Formular), nil = keine
 	outage     func() (bool, time.Time)                // ipv64 liefert gerade/zuletzt keine Daten (Sync), nil = standalone
 	api        *ipv64api.Key                           // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
 	groupRole  GroupRole                               // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
@@ -246,7 +247,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "2.53.1", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "2.54.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

@@ -42,15 +42,19 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	mrows, err := m.core.Reader().QueryContext(ctx, `SELECT id, group_id, kind, value, label FROM dns64_group_members ORDER BY id`)
+	mrows, err := m.core.Reader().QueryContext(ctx, `SELECT id, group_id, kind, value, label, tags FROM dns64_group_members ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
 	defer mrows.Close()
 	for mrows.Next() {
 		var x groups.Member
-		if err := mrows.Scan(&x.ID, &x.GroupID, &x.Kind, &x.Value, &x.Label); err != nil {
+		var tags string
+		if err := mrows.Scan(&x.ID, &x.GroupID, &x.Kind, &x.Value, &x.Label, &tags); err != nil {
 			return nil, err
+		}
+		if x.Tags = groups.SplitTags(tags); x.Tags == nil {
+			x.Tags = []string{} // JSON: [] statt null
 		}
 		if i, ok := idx[x.GroupID]; ok {
 			out[i].Members = append(out[i].Members, x)
@@ -151,11 +155,7 @@ func (m *Module) AddSchedule(ctx context.Context, x groups.Schedule) (groups.Sch
 	x.Start, x.End = fmt.Sprintf("%02d:%02d", start/60, start%60), fmt.Sprintf("%02d:%02d", end/60, end%60)
 	var cats []string
 	if x.Action == groups.ScheduleCats {
-		for _, c := range filter.GroupCategories {
-			if slices.Contains(x.Cats, c) {
-				cats = append(cats, c)
-			}
-		}
+		cats = filter.GroupKeys(x.Cats) // Kategorien und Dienste (svc:...)
 		if len(cats) == 0 {
 			return x, errCfg("err_schedule_cats")
 		}
@@ -237,12 +237,7 @@ func (m *Module) SetGroupRules(ctx context.Context, id int64, in groups.Rules) e
 			keep = append(keep, u)
 		}
 	}
-	var catKeep []string
-	for _, c := range filter.GroupCategories {
-		if slices.Contains(cats, c) {
-			catKeep = append(catKeep, c)
-		}
-	}
+	catKeep := filter.GroupKeys(cats) // Kategorien und Dienste (svc:...)
 	res, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_groups SET lists_mode = ?, lists = ?, cats = ?, safesearch = ?, youtube = ?, bypass = ? WHERE id = ?`,
 		mode, strings.Join(keep, "\n"), strings.Join(catKeep, ","), in.SafeSearch, in.YouTube, in.Bypass, id)
 	if err != nil {
@@ -408,6 +403,9 @@ func (m *Module) MoveGroup(ctx context.Context, id int64, up bool) error {
 // AddMember ordnet ein Geraet (MAC, IP) bzw. Netz einer Gruppe zu. Gehoert es schon zu einer anderen Gruppe,
 // wechselt es dorthin (ein Geraet, eine Gruppe).
 func (m *Module) AddMember(ctx context.Context, x groups.Member) (groups.Member, error) {
+	if _, ok := groups.NormalizeTags(x.Tags); !ok {
+		return x, errCfg("err_member_tags", "n", groups.MaxTags, "len", groups.MaxTagLen)
+	}
 	if !groups.Normalize(&x) {
 		return x, errCfg("err_member")
 	}
@@ -424,12 +422,32 @@ func (m *Module) AddMember(ctx context.Context, x groups.Member) (groups.Member,
 	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_members WHERE kind = ? AND value = ?`, x.Kind, x.Value); err != nil {
 		return x, err
 	}
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_group_members (group_id, kind, value, label, created_at) VALUES (?, ?, ?, ?, ?)`,
-		x.GroupID, x.Kind, x.Value, x.Label, time.Now().UTC().Format(time.RFC3339))
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_group_members (group_id, kind, value, label, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		x.GroupID, x.Kind, x.Value, x.Label, strings.Join(x.Tags, ","), time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return x, err
 	}
 	x.ID, _ = res.LastInsertId()
+	return x, m.loadGroups(ctx)
+}
+
+// UpdateMember aendert Bezeichnung und Tags eines Mitglieds (Art und Wert bleiben).
+func (m *Module) UpdateMember(ctx context.Context, id int64, label string, tags []string) (groups.Member, error) {
+	var x groups.Member
+	if err := m.core.Reader().QueryRowContext(ctx, `SELECT id, group_id, kind, value FROM dns64_group_members WHERE id = ?`, id).
+		Scan(&x.ID, &x.GroupID, &x.Kind, &x.Value); err != nil {
+		return x, errNotFound
+	}
+	x.Label, x.Tags = label, tags
+	if _, ok := groups.NormalizeTags(x.Tags); !ok {
+		return x, errCfg("err_member_tags", "n", groups.MaxTags, "len", groups.MaxTagLen)
+	}
+	if !groups.Normalize(&x) || utf8.RuneCountInString(x.Label) > 60 {
+		return x, errCfg("err_member")
+	}
+	if _, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_group_members SET label = ?, tags = ? WHERE id = ?`, x.Label, strings.Join(x.Tags, ","), id); err != nil {
+		return x, err
+	}
 	return x, m.loadGroups(ctx)
 }
 

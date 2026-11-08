@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"strconv"
@@ -166,14 +167,21 @@ func (h *Host) normalize() error {
 	if err := h.Advanced.normalizeMaint(h.Kind); err != nil {
 		return err
 	}
+	if err := h.Advanced.normalizeErrPage(h.Kind); err != nil {
+		return err
+	}
 	if h.Locations == nil {
 		h.Locations = []Location{}
 	}
 	if h.Kind != KindProxy {
 		h.Locations = []Location{}
+		h.Advanced.TargetPath, h.Advanced.OnlyLocations = "", false // Pfad beim Ziel und "nur Locations" nur bei Proxy-Hosts
 	}
 	if err := normalizeLocations(h.Locations); err != nil {
 		return err
+	}
+	if h.Advanced.OnlyLocations && len(h.Locations) == 0 {
+		return ferr("locations", "cdn64.err.only_locations")
 	}
 	if h.AccessListID < 0 {
 		h.AccessListID = 0
@@ -329,6 +337,18 @@ func normalizeLocations(list []Location) error {
 			return &FieldError{Field: "locations", Key: "cdn64.err.location_dup", Name: l.Path}
 		}
 		seen[l.Path] = true
+		if l.Action != LocProxy { // sperren bzw. feste Antwort: ohne Ziel
+			if err := l.normalizeAction(); err != nil {
+				return err
+			}
+			continue
+		}
+		l.Status, l.Body, l.ContentType = 0, "", ""
+		if l.Advanced.empty() {
+			l.Advanced = nil
+		} else if err := l.Advanced.normalize(l.Path); err != nil {
+			return err
+		}
 		if l.Scheme != "https" {
 			l.Scheme = "http"
 		}
@@ -348,6 +368,39 @@ func normalizeLocations(list []Location) error {
 			l.AccessListID = 0
 		}
 	}
+	return nil
+}
+
+// normalizeAction prueft eine Location ohne Ziel (sperren, feste Antwort) und leert die Felder des Ziels.
+func (l *Location) normalizeAction() error {
+	switch l.Action {
+	case LocBlock:
+		if l.Status == 0 {
+			l.Status = http.StatusForbidden
+		}
+		if l.Status < 400 || l.Status > 499 {
+			return &FieldError{Field: "locations", Key: "cdn64.err.location_status", Name: l.Path}
+		}
+		l.Body, l.ContentType = "", ""
+	case LocRespond:
+		if l.Status == 0 {
+			l.Status = http.StatusOK
+		}
+		if l.Status < 200 || l.Status > 599 || l.Status == http.StatusNoContent && l.Body != "" {
+			return &FieldError{Field: "locations", Key: "cdn64.err.location_status", Name: l.Path}
+		}
+		l.Body = strings.ReplaceAll(l.Body, "\r\n", "\n")
+		l.ContentType = strings.TrimSpace(l.ContentType)
+		if len(l.Body) > maxLocBody || len(l.ContentType) > 100 || strings.ContainsAny(l.ContentType, "\r\n") {
+			return &FieldError{Field: "locations", Key: "cdn64.err.location_body", Name: l.Path}
+		}
+		if l.ContentType == "" {
+			l.ContentType = "text/plain; charset=utf-8"
+		}
+	default:
+		return &FieldError{Field: "locations", Key: "cdn64.err.location_action", Name: l.Path}
+	}
+	l.Scheme, l.TargetHost, l.TargetPort, l.ForwardPath, l.WebSockets, l.Advanced = "http", "", 0, "", false, nil
 	return nil
 }
 

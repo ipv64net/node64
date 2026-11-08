@@ -207,7 +207,7 @@ func (m *Module) pageStatusForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status int, d statusFormData) {
-	d.Layouts, d.Themes, d.DaysOpts = []string{"list", "tiles", "compact"}, []string{"auto", "light", "dark"}, []int{30, 60, 90}
+	d.Layouts, d.Themes, d.DaysOpts = []string{"list", "tiles", "compact"}, []string{"auto", "light", "dark"}, []int{1, 7, 30, 60, 90}
 	d.Names = map[string]string{}
 	on := map[string]bool{}
 	tags, groups := map[string]bool{}, map[string]bool{}

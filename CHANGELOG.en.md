@@ -4,6 +4,18 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- DNS64: add several blocklists at once and edit your own blocklist as a text field (#19); allow lists from the web that win over every blocklist.
+- DNS64: block services with a click – about 40 services such as TikTok, YouTube, Discord or ChatGPT, per group and in schedules (#19).
+- DNS64: label and tags per device in groups, with filter and search (#24).
+- DNS64: own records from Docker labels (`node64.dns.name`), following address changes and disappearing with the container (#18).
+- DNS64: the query log shows the answer of custom records or NODATA (#50); client names come from the group, then your own PTR/A records, then the router (#49).
+- PROXY64: path at the target (#43), locations can block or answer with fixed content, "allow only the locations" (#11), "Advanced" per location.
+- PROXY64: custom error page per host, optionally also for 5xx of the target (#38); access lists with `allow self` and DNS names (#32); maintenance and error pages reach visitors in CDN64 mode 2; tables readable in dark mode.
+- Health checks: take over a device from DNS64 as a check (#20); status pages with 24 h, 7, 30, 60 or 90 days.
+- Certificates: 8 more DNS providers, e.g. LuaDNS, hosting.de, Netlify – now 35 (#39).
+- Honeypot64: web profile FortiGate (SSL VPN), default on port 10443 (#36).
+- Security: updated dependencies and Go 1.27.3 (vulnerabilities in klauspost/compress, crypto/x509 and go-pkcs12 fixed); security checks in the build with govulncheck, gosec, CodeQL and Trivy (#27).
+
 ## 1.3.0 – 2026-11-08
 
 - PROXY64: block common exploits no longer blocks sign-ins – OAuth/OIDC (Home Assistant, Keycloak, Authelia, Nextcloud) and WebDAV pass, real attacks are still blocked; addresses on the allow list are exempt.

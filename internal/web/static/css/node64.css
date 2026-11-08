@@ -118,6 +118,8 @@ a { color: var(--bs-primary); }
 
 /* Pillen fuer die letzten Messungen, wie im ipv64-Portal */
 .beats { display: flex; flex-wrap: nowrap; gap: 4px; overflow: hidden; }
+/* Gruppenzeilen in Tabellen: passend zu hell und dunkel (table-light bleibt im Dark Mode hell, Text schlecht lesbar) */
+.table > :not(caption) > tr.table-group > * { --bs-table-bg: var(--bs-tertiary-bg); --bs-table-color: var(--bs-body-color); }
 .beat { display: inline-block; width: 6px; height: 20px; border-radius: 50rem; background: silver; flex: 0 0 auto; transition: transform .05s; cursor: pointer; }
 .beat:hover { transform: scaleY(1.15); filter: brightness(1.15); }
 .beat-lg { width: 6px; height: 24px; }

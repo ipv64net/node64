@@ -50,7 +50,7 @@
 {{if .Heading}}<details class="grp card s-{{.Overall}}" data-k="{{.Key}}"{{if .Open}} open{{end}}><summary><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span></summary>{{else}}<div class="grp card">{{end}}
 <ul class="its">
 {{- range .Items}}
-<li class="it s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="dot" aria-hidden="true"></span><span class="nm"><span class="lb">{{.Label}}</span>{{if .Problem}}<span class="tag">{{.StateText}}</span>{{else}}<span class="sr">{{.StateText}}</span>{{end}}</span>{{if $.ShowUptime}}{{template "up" .}}{{end}}<span class="bars"{{if .Bars}} data-s="{{.FirstDay}}" role="img" aria-label="{{.BarsLabel}}"{{end}}>{{.Bars}}</span></div></li>
+<li class="it s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="dot" aria-hidden="true"></span><span class="nm"><span class="lb">{{.Label}}</span>{{if .Problem}}<span class="tag">{{.StateText}}</span>{{else}}<span class="sr">{{.StateText}}</span>{{end}}</span>{{if $.ShowUptime}}{{template "up" .}}{{end}}<span class="bars"{{if .Bars}}{{if .FirstHour}} data-h="{{.FirstHour}}"{{else}} data-s="{{.FirstDay}}"{{end}} role="img" aria-label="{{.BarsLabel}}"{{end}}>{{.Bars}}</span></div></li>
 {{- end}}
 </ul>{{if .Heading}}</details>{{else}}</div>{{end}}
 {{- end}}
