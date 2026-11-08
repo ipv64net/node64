@@ -99,7 +99,7 @@ jobs:
       - name: Image bauen (nur amd64, lokal, wird nicht hochgeladen)
         run: docker build --build-arg VERSION=scan -t node64:scan .
       - name: Trivy (Image)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: node64:scan
           format: sarif
@@ -108,7 +108,7 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH,MEDIUM
       - name: Trivy (Zusammenfassung)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: node64:scan
           format: table

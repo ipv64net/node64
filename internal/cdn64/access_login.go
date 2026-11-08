@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -175,6 +176,15 @@ func (g *guard) checkUser(user, pass string) bool {
 // safeNext: nur ein Pfad dieses Namens (kein fremder Host, kein Protokoll).
 func safeNext(next string) string {
 	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") || strings.HasPrefix(next, "/.node64/") {
+		return "/"
+	}
+	// Steuerzeichen entfernen Browser (WHATWG): "/\t/evil.com" wuerde zu "//evil.com"
+	for _, c := range next {
+		if c < 0x20 || c == 0x7f {
+			return "/"
+		}
+	}
+	if u, err := url.Parse(next); err != nil || u.Scheme != "" || u.Host != "" {
 		return "/"
 	}
 	return next

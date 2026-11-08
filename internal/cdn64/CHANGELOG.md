@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.53.1 – 2026-11-08
+
+### Behoben
+- Pfad beim Ziel: Das Zurückschreiben von Weiterleitungen kann keine Adresse auf eine fremde Seite mehr erzeugen (z. B. `/rezepte//evil.com` → `//evil.com`); kodierte Zeichen wie `%2F` bleiben erhalten.
+- Anmeldung der Zugriffsliste: Steuerzeichen in der Rücksprung-Adresse werden abgelehnt (Browser hätten daraus eine Weiterleitung auf eine fremde Seite gemacht).
+
 ## 1.53.0 – 2026-11-08
 
 ### Neu

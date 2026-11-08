@@ -238,3 +238,37 @@ func TestMaxBodyFastPath(t *testing.T) {
 		t.Fatal("location without limit")
 	}
 }
+
+// Rueckschreiben der Location darf keine Adresse auf einen fremden Host erzeugen (CodeQL go/bad-redirect-check).
+func TestUnpathNoOpenRedirect(t *testing.T) {
+	tu, _ := url.Parse("http://10.0.0.5:8080")
+	tg := target{url: tu, forward: "/app"}
+	for loc, want := range map[string]string{
+		"/app//evil.com/":            "/app//evil.com/",
+		"/app/%2Fevil.com/":          "/app/%2Fevil.com/",
+		"/app/%2F%2Fevil.com":        "/app/%2F%2Fevil.com",
+		"/app/%5Cevil.com":           "/app/%5Cevil.com",
+		"/app/x%2Fy":                 "/x%2Fy",
+		"/app/suppe":                 "/suppe",
+		"/app":                       "/",
+		"http://10.0.0.5:8080/app/a": "/a",
+	} {
+		resp := &http.Response{Header: http.Header{"Location": {loc}}, Request: httptest.NewRequest("GET", "http://rezepte.test/", nil)}
+		unpath(resp, tg)
+		if got := resp.Header.Get("Location"); got != want {
+			t.Errorf("%s -> %s, want %s", loc, got, want)
+		}
+	}
+}
+
+// safeNext des Zugriffslisten-Logins: nur lokale Pfade, auch nach dem Entfernen von Steuerzeichen durch den Browser.
+func TestAccessLoginSafeNext(t *testing.T) {
+	for in, want := range map[string]string{
+		"/app?x=1": "/app?x=1", "//evil.com": "/", `/\evil.com`: "/", "/\t/evil.com": "/",
+		"/\n/evil.com": "/", "https://evil.com": "/", "/.node64/x": "/", "": "/",
+	} {
+		if got := safeNext(in); got != want {
+			t.Errorf("safeNext(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.53.1 – 2026-11-08
+
+### Fixed
+- Path at the target: writing back redirects can no longer produce an address on a foreign site (e.g. `/rezepte//evil.com` → `//evil.com`); encoded characters such as `%2F` are kept.
+- Access list sign-in: control characters in the return address are rejected (browsers would have turned them into a redirect to a foreign site).
+
 ## 1.53.0 – 2026-11-08
 
 ### New

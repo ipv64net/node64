@@ -178,8 +178,13 @@ func unpath(resp *http.Response, t target) {
 			in := visitorReq(resp)
 			own := u.Host == "" || in != nil && strings.EqualFold(u.Host, in.Host)
 			internal := u.Host != "" && strings.EqualFold(u.Host, t.url.Host)
-			if np, ok := back(u.Path); ok && (own || internal) {
-				u.Path, u.RawPath = np, ""
+			// auf dem kodierten Pfad rechnen (%2F bleibt kodiert); "//x" bzw. "/\x" waere eine Adresse auf einen
+			// fremden Host (offene Weiterleitung) - dann die Location des Ziels unveraendert lassen
+			np, ok := back(u.EscapedPath())
+			p, perr := url.PathUnescape(np)
+			if ok && perr == nil && (own || internal) && !strings.HasPrefix(np, "//") && !strings.HasPrefix(p, "//") &&
+				!strings.HasPrefix(p, "/\\") {
+				u.Path, u.RawPath = p, np
 				if internal { // interne Adresse des Ziels: relativ zum Namen des Besuchers
 					u.Scheme, u.Host = "", ""
 				}

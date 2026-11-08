@@ -35,7 +35,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5 // indirect
 	github.com/bodgit/tsig v1.2.2 // indirect
 	github.com/boombuler/barcode v1.0.1 // indirect

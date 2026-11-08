@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Weiterleitungen beim Pfad beim Ziel und die Rücksprung-Adresse der Zugriffslisten-Anmeldung führen nicht mehr auf fremde Seiten (gefunden von CodeQL/gosec, #27).
+
 ## 1.4.0 – 2026-11-08
 
 - DNS64: Mehrere Blocklisten auf einmal und die eigene Sperrliste als Textfeld (#19); Freigabe-Listen aus dem Netz, die jede Blockliste schlagen.

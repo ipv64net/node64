@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: redirects with a path at the target and the return address of the access list sign-in no longer lead to foreign sites (found by CodeQL/gosec, #27).
+
 ## 1.4.0 – 2026-11-08
 
 - DNS64: add several blocklists at once and edit your own blocklist as a text field (#19); allow lists from the web that win over every blocklist.
