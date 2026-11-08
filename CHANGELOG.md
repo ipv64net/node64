@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.4.0 – 2026-11-09
+
 - DNS64: Mehrere Blocklisten auf einmal und die eigene Sperrliste als Textfeld (#19); Freigabe-Listen aus dem Netz, die jede Blockliste schlagen.
 - DNS64: Dienste per Klick sperren – rund 40 Dienste wie TikTok, YouTube, Discord oder ChatGPT, je Gruppe und im Zeitplan (#19).
 - DNS64: Bezeichnung und Tags je Gerät in Gruppen, mit Filter und Suche (#24).
