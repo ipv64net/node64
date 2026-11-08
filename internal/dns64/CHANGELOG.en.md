@@ -1,5 +1,18 @@
 # Changes – DNS64
 
+## 1.34.1 – 2026-11-08
+
+### Fixed
+- Docker with macvlan or ipvlan (own LAN address, e.g. Unraid `br0`/`bond0`): DNS64, PROXY64 and the port overview
+  wrongly warned that ports were not published on the Docker host (`-p` missing). Node64 now detects the network type
+  via netlink and only checks in a real bridge network (#23, thanks to @sangandi).
+- Upstreams "in order": a failed upstream is skipped after 3 errors in a row and only asked last – first for 30
+  seconds, longer while the outage lasts, at most 5 minutes. A query in the background checks whether it answers
+  again; then it is back in front at once. Until now every new query waited 1–2 seconds for it (#37).
+  `GET /api/dns64/upstreams` shows the pause in `pausedUntil`.
+- Upstreams: the answer REFUSED (e.g. a wrong `access-control` on your own Unbound) counts as an error and leads to the
+  next upstream instead of going to the devices (#37). In "parallel" mode a good answer wins.
+
 ## 1.34.0 – 2026-11-06
 
 ### New

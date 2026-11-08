@@ -1307,8 +1307,8 @@
       "cname": "prüft CNAME …",
       "account": "Konto …",
       "order": "Auftrag …",
-      "txt": "TXT-Record bei ipv64 …",
-      "dns": "wartet auf die Nameserver …",
+      "txt": "setzt den TXT-Record …",
+      "dns": "wartet auf die Nameserver … (bei manchen DNS-Anbietern einige Minuten)",
       "http": "HTTP-Prüfung …",
       "validate": "Let's Encrypt prüft …",
       "certificate": "stellt aus …"
@@ -3234,6 +3234,10 @@
     "verify_sent": "Code gesendet – bitte innerhalb von 15 Minuten eingeben.",
     "verify_ok": "Kanal bestätigt.",
     "verify_failed": "Code falsch oder abgelaufen.",
+    "verify_sent_to": "Kanal gespeichert. Der Code wurde an {to} gesendet – bitte innerhalb von 15 Minuten eingeben.",
+    "verify_intro_sent": "Ein 6-stelliger Code wurde an {to} geschickt (15 Minuten gültig, nur für diesen Kanal). Erst nach der Bestätigung stellt ipv64 über diesen Kanal zu.",
+    "verify_resend": "Code erneut senden",
+    "verify_too_soon": "Der Code wurde eben erst gesendet. Bitte kurz warten und Postfach bzw. SMS prüfen.",
     "app_hint": "Ende-zu-Ende verschlüsselte Push-Nachrichten an die IPv64 App. Geräte-Token aus der App eintragen (NTFY-DEVICE-…). Lange Meldungen kommen gekürzt an."
   },
   "day": {

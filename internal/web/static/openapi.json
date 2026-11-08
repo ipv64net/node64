@@ -1296,6 +1296,11 @@
           "active": {
             "type": "boolean",
             "description": "fastest: gehoert gerade zu den zuerst gefragten"
+          },
+          "pausedUntil": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ordered: nach 3 Fehlern in Folge (auch REFUSED) bis dahin uebersprungen und nur noch als Letzter gefragt (fehlt = nicht pausiert)"
           }
         }
       },

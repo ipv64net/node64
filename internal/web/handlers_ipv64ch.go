@@ -160,8 +160,9 @@ func (s *Server) ipv64ChSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, map[bool]string{true: "channel.update", false: "channel.create"}[id > 0], in.Name, string(typ)+" (ipv64)")
-	if !rc.Verified { // neu oder neue Adresse/Nummer: zuerst bestaetigen
-		http.Redirect(w, r, ipv64ChPath+"/"+strconv.FormatInt(rc.ID, 10)+"/verify", http.StatusSeeOther)
+	if !rc.Verified { // neu oder neue Adresse/Nummer: Code gleich beim ersten Mal senden, dann bestaetigen
+		s.ipv64VerifySendFlash(w, r, key, rc.ID, v.T("nf.verify_sent_to", "to", remoteChannel(*rc).Summary()))
+		http.Redirect(w, r, ipv64ChPath+"/"+strconv.FormatInt(rc.ID, 10)+"/verify?sent=1", http.StatusSeeOther)
 		return
 	}
 	s.flash(w, r, "success", v.T("nf.saved"))
@@ -246,6 +247,7 @@ type ipv64VerifyData struct {
 	Name string
 	To   string
 	Type notify.Type
+	Sent bool // Code schon geschickt: Hinweis und Knopf "erneut senden"
 }
 
 func (s *Server) ipv64ChVerify(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +270,7 @@ func (s *Server) ipv64ChVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := remoteChannel(*rc)
-	v.Data = ipv64VerifyData{ID: rc.ID, Name: rc.Name, To: row.Summary(), Type: row.Type}
+	v.Data = ipv64VerifyData{ID: rc.ID, Name: rc.Name, To: row.Summary(), Type: row.Type, Sent: r.URL.Query().Get("sent") == "1"}
 	s.render(w, r, http.StatusOK, "ipv64_verify", v)
 }
 
@@ -278,15 +280,26 @@ func (s *Server) ipv64ChVerifySend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := s.view(r, "nf.verify_title")
+	id := ipv64ChID(r)
+	s.ipv64VerifySendFlash(w, r, key, id, v.T("nf.verify_sent"))
+	http.Redirect(w, r, fmt.Sprintf("%s/%d/verify?sent=1", ipv64ChPath, id), http.StatusSeeOther)
+}
+
+// ipv64VerifySendFlash laesst ipv64 den Code an den Kanal schicken und meldet das Ergebnis (ok = Text bei Erfolg;
+// eben erst gesendet: Hinweis statt Fehler).
+func (s *Server) ipv64VerifySendFlash(w http.ResponseWriter, r *http.Request, key string, id int64, ok string) {
+	v := s.view(r, "nf.verify_title")
 	ctx, cancel := apiCtx(r)
 	defer cancel()
-	id := ipv64ChID(r)
-	if err := s.IPv64.Client().VerifySend(ctx, key, id); err != nil {
+	var ae *ipv64api.APIError
+	switch err := s.IPv64.Client().VerifySend(ctx, key, id); {
+	case err == nil:
+		s.flash(w, r, "info", ok)
+	case errors.As(err, &ae) && ae.Code == "too_soon":
+		s.flash(w, r, "info", v.T("nf.verify_too_soon"))
+	default:
 		s.flash(w, r, "danger", v.T("nf.ipv64_error", "error", err.Error()))
-	} else {
-		s.flash(w, r, "info", v.T("nf.verify_sent"))
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s/%d/verify", ipv64ChPath, id), http.StatusSeeOther)
 }
 
 func (s *Server) ipv64ChVerifyCheck(w http.ResponseWriter, r *http.Request) {

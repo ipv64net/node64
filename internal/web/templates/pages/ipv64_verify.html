@@ -5,9 +5,9 @@
 	<div class="col-lg-7">
 		<div class="card">
 			<div class="card-body">
-				<p>{{.T "nf.verify_intro" "to" $d.To}}</p>
+				<p>{{if $d.Sent}}{{.T "nf.verify_intro_sent" "to" $d.To}}{{else}}{{.T "nf.verify_intro" "to" $d.To}}{{end}}</p>
 				<form method="post" action="/notifications/ipv64/{{$d.ID}}/verify/send" class="mb-3"><input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<button class="btn btn-outline-primary" type="submit"><i class="bi bi-send"></i> {{.T "nf.verify_send"}}</button></form>
+					<button class="btn btn-outline-primary" type="submit"><i class="bi bi-send"></i> {{if $d.Sent}}{{.T "nf.verify_resend"}}{{else}}{{.T "nf.verify_send"}}{{end}}</button></form>
 				<form method="post" action="/notifications/ipv64/{{$d.ID}}/verify" class="d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<input class="form-control" style="max-width:10rem" name="code" inputmode="numeric" maxlength="8" placeholder="123456" aria-label="{{.T "nf.verify_code"}}" autocomplete="one-time-code" required>
 					<button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "nf.verify_check"}}</button>

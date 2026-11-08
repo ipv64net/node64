@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,58 @@ func TestStatsUploadDownload(t *testing.T) {
 	// POST: 5000 hoch, 2000 runter; WebSocket: >= 1000 hoch, >= 2000 runter (dazu Rahmen und Schliessen)
 	if s.Requests != 2 || s.S2 != 2 || s.S4 != 0 || s.BytesIn < 6000 || s.BytesIn > 6200 || s.Bytes < 4000 || s.Bytes > 4200 { // WebSocket zaehlt als 101, nicht 4xx
 		t.Fatalf("traffic: %+v", s)
+	}
+}
+
+// Wartungsmodus hinter der Zugriffsliste (#33): eigenes HTML nur nach Anmeldung, auch fuer eine Location mit eigener
+// Liste; die Anmeldeseite (/.node64/login) geht im Wartungsmodus weiter.
+func TestMaintenanceBehindAccessList(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	port, _ := echoBackend(t, "ziel")
+	a := &AccessList{Name: "Familie"}
+	if err := e.m.saveAccessList(ctx, a, []UserInput{{Username: "anna", Password: "geheim123"}}); err != nil {
+		t.Fatal(err)
+	}
+	b := &AccessList{Name: "Admin", LoginPage: true}
+	if err := e.m.saveAccessList(ctx, b, []UserInput{{Username: "bert", Password: "geheim456"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID, h.AccessListID = []string{"wartung-acl.test"}, "127.0.0.1", port, CertNone, a.ID
+	h.Locations = []Location{{Path: "/admin", Scheme: "http", TargetHost: "127.0.0.1", TargetPort: port, AccessListID: b.ID}}
+	h.Advanced.Maintenance, h.Advanced.MaintenanceStyle, h.Advanced.MaintenanceHTML = true, MaintCustom, "<p>intern: 10.0.0.5</p>"
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	c := e.client(false)
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if code, body, hdr := do(t, c, "GET", "http://wartung-acl.test/"); code != 401 || strings.Contains(body, "intern") || hdr.Get("WWW-Authenticate") == "" {
+		t.Fatalf("without login: %d %.100s", code, body)
+	}
+	if code, body, _ := do(t, c, "GET", "http://wartung-acl.test/", "Authorization", basic("anna", "falsch")); code != 401 || strings.Contains(body, "intern") {
+		t.Fatalf("wrong password: %d %.100s", code, body)
+	}
+	if code, body, _ := do(t, c, "GET", "http://wartung-acl.test/", "Authorization", basic("anna", "geheim123")); code != 503 || body != "<p>intern: 10.0.0.5</p>" {
+		t.Fatalf("with login: %d %q", code, body)
+	}
+	// Location mit eigener Liste (Login-Seite): ohne Anmeldung das Formular, nicht die Wartungsseite; die Anmeldung
+	// selbst geht im Wartungsmodus weiter, danach die Wartungsseite
+	if code, body, _ := do(t, c, "GET", "http://wartung-acl.test/admin/x"); code != 401 || strings.Contains(body, "intern") || !strings.Contains(body, `action="/.node64/login"`) {
+		t.Fatalf("location without login: %d %.100s", code, body)
+	}
+	resp, err := c.PostForm("http://wartung-acl.test/.node64/login", url.Values{"username": {"bert"}, "password": {"geheim456"}, "next": {"/admin/x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 303 || len(resp.Cookies()) != 1 {
+		t.Fatalf("login in maintenance: %d", resp.StatusCode)
+	}
+	ck := resp.Cookies()[0]
+	if code, body, _ := do(t, c, "GET", "http://wartung-acl.test/admin/x", "Cookie", ck.Name+"="+ck.Value); code != 503 || body != "<p>intern: 10.0.0.5</p>" {
+		t.Fatalf("location after login: %d %q", code, body)
 	}
 }
 

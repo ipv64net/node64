@@ -242,7 +242,8 @@ func TestBackupExportImport(t *testing.T) {
 	}
 }
 
-// Die API-Keys verwaltet die Seite "API", nicht mehr die Einstellungen; der neue Key steht nur in der Antwort.
+// Die API-Keys verwaltet die Seite "API", nicht mehr die Einstellungen; der neue Key steht einmal auf der Seite nach
+// der Weiterleitung (Neuladen legt keinen weiteren an, #44).
 func TestAPIKeysOnAPIPage(t *testing.T) {
 	a := newTestApp(t)
 	ctx := context.Background()
@@ -255,7 +256,11 @@ func TestAPIKeysOnAPIPage(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(body, `id="keys"`) {
 		t.Fatalf("api page: %d", resp.StatusCode)
 	}
-	resp, body = a.post(t, "/settings/api-keys", url.Values{"_csrf": {csrfOf(t, body)}, "name": {"skript"}})
+	resp, _ = a.post(t, "/settings/api-keys", url.Values{"_csrf": {csrfOf(t, body)}, "name": {"skript"}})
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/api/docs#keys" { // PRG (#44)
+		t.Fatalf("create: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	resp, body = a.get(t, "/api/docs")
 	if resp.StatusCode != 200 || !strings.Contains(body, `id="new-api-key" value="node64_`) || !strings.Contains(body, "skript") {
 		t.Fatalf("create: %d", resp.StatusCode)
 	}

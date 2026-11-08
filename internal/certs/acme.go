@@ -50,6 +50,13 @@ func (m *Manager) start(id int64, reason string) error {
 	return nil
 }
 
+// stepOf: aktueller Schritt eines laufenden Abrufs ("" = keiner).
+func (m *Manager) stepOf(id int64) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.steps[id]
+}
+
 func (m *Manager) step(id int64, s string) {
 	m.mu.Lock()
 	if _, ok := m.steps[id]; ok {
@@ -68,6 +75,9 @@ func (m *Manager) issue(ctx context.Context, id int64, reason string) {
 	prevStatus := c.Status
 	m.log.Info("certificate requested", "cert", id, "names", strings.Join(c.Names, ","), "source", c.Source, "reason", reason)
 	err = m.obtain(ctx, c)
+	if errors.Is(err, context.DeadlineExceeded) && m.base.Err() == nil { // wo die Zeit ausging, steht sonst nirgends
+		err = fmt.Errorf("time limit reached at step %q: %w", m.stepOf(id), err)
+	}
 	now := store.Now()
 	if err != nil {
 		if m.base.Err() != nil {
@@ -184,7 +194,13 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	}
 	m.acme.Lock() // ACME nacheinander: schont die Rate-Limits und die ipv64-API
 	defer m.acme.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, m.issueTimeout) // erst nach der Sperre: wartende Abrufe laufen nicht ab
+	timeout := m.issueTimeout
+	if c.Source == SourceDNS { // je Name bis zur Frist des Anbieters warten (nacheinander), dazu Luft fuer die CA
+		if prov, err := m.dnsProvider(ctx, c.DNSAccount); err == nil {
+			timeout = max(timeout, time.Duration(len(c.Names))*providerWait(prov)+5*time.Minute)
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout) // erst nach der Sperre: wartende Abrufe laufen nicht ab
 	defer cancel()
 	if c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
@@ -365,7 +381,13 @@ func (m *Manager) present(ctx context.Context, cl *acme.Client, c *Cert, z *acme
 			return "", nil, nil, err
 		}
 		m.step(c.ID, "dns")
-		if err := m.txtVisible(ctx, base, "_acme-challenge."+base, val); err != nil {
+		// wie lego beim Setzen einem CNAME folgen (_acme-challenge auf eine andere Zone des Anbieters): sonst fragte
+		// die Pruefung den alten Namen, saehe nur den CNAME und liefe bis zur Frist
+		fqdn, zone := m.challengeFQDN(ctx, base), base
+		if fqdn != "_acme-challenge."+base {
+			zone = fqdn // Nameserver des Ziels
+		}
+		if err := m.txtVisible(withWait(ctx, providerWait(prov)), zone, fqdn, val); err != nil {
 			cleanup()
 			return "", nil, nil, fmt.Errorf("%s: %w", name, err)
 		}

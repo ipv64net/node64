@@ -102,10 +102,17 @@ func TestMCPEndToEnd(t *testing.T) {
 		t.Fatalf("settings page: %d", resp.StatusCode)
 	}
 	csrf := csrfOf(t, body)
-	resp, body = a.post(t, "/settings/mcp/keys", url.Values{"_csrf": {csrf}, "name": {"Claude Code"}, "area": {"node", "healthchecks", "audit", "bogus"}})
+	resp, _ = a.post(t, "/settings/mcp/keys", url.Values{"_csrf": {csrf}, "name": {"Claude Code"}, "area": {"node", "healthchecks", "audit", "bogus"}})
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/mcp#keys" { // PRG: Neuladen legt keinen weiteren an (#44)
+		t.Fatalf("create key: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	resp, body = a.get(t, "/settings/mcp")
 	m := newMCPKeyRe.FindStringSubmatch(body)
 	if resp.StatusCode != 200 || m == nil || !strings.HasPrefix(m[1], "mcp64_") || !strings.Contains(body, "Bearer "+m[1]) {
 		t.Fatalf("create key: %d", resp.StatusCode)
+	}
+	if _, again := a.get(t, "/settings/mcp"); newMCPKeyRe.MatchString(again) { // nur einmal sichtbar
+		t.Fatal("mcp key shown again")
 	}
 	key := m[1]
 	keys, _ := a.store.MCPKeys(ctx, u.ID)

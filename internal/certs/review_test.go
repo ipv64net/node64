@@ -259,7 +259,7 @@ func TestQueuedIssueNotTimedOut(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		got, _ := e.m.Get(ctx, c2.ID)
 		if got.Step == "" && got.LastError != "" {
-			if got.Status != StatusPending || !strings.Contains(got.LastError, "deadline") {
+			if got.Status != StatusPending || !strings.Contains(got.LastError, "deadline") || !strings.Contains(got.LastError, `step "dns"`) {
 				t.Fatalf("timeout: %s %s", got.Status, got.LastError)
 			}
 			if k := e.kinds(); len(k) != 0 {

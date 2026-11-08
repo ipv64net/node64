@@ -557,3 +557,79 @@ func TestIssueViaSequentialDNSProvider(t *testing.T) {
 		t.Fatalf("TXT: added %d, left %d", e.dns.added, e.dns.records())
 	}
 }
+
+// slowLego: Anbieter, fuer den lego 15 Minuten Propagierung angibt (netcup, IONOS); folgt wie lego einem CNAME auf
+// _acme-challenge.
+type slowLego struct{ dns *fakeDNS }
+
+func (f slowLego) fqdn(domain string) string {
+	fq := "_acme-challenge." + domain
+	if t := f.dns.cname[fq]; t != "" {
+		fq = strings.TrimSuffix(t, ".")
+	}
+	return fq
+}
+
+func (f slowLego) Present(domain, _, keyAuth string) error {
+	h := sha256.Sum256([]byte(keyAuth))
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	fq := f.fqdn(domain)
+	f.dns.txt[fq] = append(f.dns.txt[fq], base64.RawURLEncoding.EncodeToString(h[:]))
+	return nil
+}
+
+func (f slowLego) CleanUp(domain, _, _ string) error {
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	delete(f.dns.txt, f.fqdn(domain))
+	return nil
+}
+
+func (slowLego) Timeout() (time.Duration, time.Duration) { return 15 * time.Minute, 10 * time.Second }
+
+// DNS-Anbieter: die eigene Pruefung folgt einem CNAME auf _acme-challenge (wie lego beim Setzen) und wartet so lange,
+// wie der Anbieter braucht; der Auftrag bekommt dafuer genug Zeit (je Name die Frist, nicht pauschal 20 min).
+func TestIssueViaDNSProviderCNAMEAndWait(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	_ = e.m.SetAccount(ctx, "", true)
+	e.m.provider = func(string, map[string]string) (challenge.Provider, error) {
+		return slowLego{dns: e.dns}, nil
+	}
+	e.dns.mu.Lock()
+	e.dns.cname["_acme-challenge.fremd.example"] = "_acme-challenge.fremd.example.acme.other.example."
+	e.dns.mu.Unlock()
+	var mu sync.Mutex
+	var checks []string
+	var left time.Duration
+	e.m.txtVisible = func(ctx context.Context, zone, fqdn, _ string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		checks = append(checks, zone+"|"+fqdn+"|"+waitOf(ctx).String())
+		if dl, ok := ctx.Deadline(); ok {
+			left = time.Until(dl)
+		}
+		return nil
+	}
+	acc := &DNSAccount{Name: "netcup", Provider: "cloudflare"}
+	if err := e.m.SaveDNSAccount(ctx, acc, map[string]string{"token": "t"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := e.m.Create(ctx, Request{Names: []string{"fremd.example", "*.fremd.example"}, Source: SourceDNS, DNSAccount: acc.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c = wait(t, e.m, c.ID); c.Status != StatusValid {
+		t.Fatalf("issue: %+v", c)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := "_acme-challenge.fremd.example.acme.other.example|_acme-challenge.fremd.example.acme.other.example|15m0s"
+	if len(checks) != 2 || checks[0] != want || checks[1] != want {
+		t.Fatalf("checks: %q", checks)
+	}
+	if left < 30*time.Minute { // 2 Namen x 15 min + 5 min
+		t.Fatalf("order time limit too short: %s", left)
+	}
+}

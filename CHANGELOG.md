@@ -4,6 +4,14 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- DNS64: Keine falsche Warnung mehr über fehlende Portfreigaben (`-p`) bei Docker mit Macvlan oder IPvlan, z. B. Unraid `br0`/`bond0` (#23, danke an @sangandi).
+- DNS64: Im Modus „der Reihe nach“ wird ein ausgefallener Upstream übersprungen statt bei jeder Anfrage erneut gefragt und im Hintergrund wieder aufgenommen; REFUSED führt zum nächsten Upstream (#37).
+- PROXY64: Im Wartungsmodus greift die Zugriffsliste jetzt vor der Wartungsseite – eigenes HTML ist nicht mehr ohne Anmeldung abrufbar (#33).
+- Anmeldung: SSO-Konto (z. B. Authentik, Pocket ID) verknüpfen funktioniert wieder in Chrome und Safari – der Browser blockierte die Weiterleitung zum Anbieter (Content Security Policy `form-action`, #40, #41).
+- MCP und API-Keys: Neuladen der Seite nach dem Anlegen legt keinen weiteren Schlüssel mehr an (#44).
+- Benachrichtigungen: Beim Anlegen eines E-Mail- oder SMS-Kanals über ipv64 kommt der Bestätigungscode gleich von selbst; „Code erneut senden“ holt bei Bedarf einen neuen. Der Code gilt nur noch für genau diesen Kanal und diese Adresse bzw. Nummer.
+- Zertifikate: DNS-01 bei anderen DNS-Anbietern wartet so lange, wie der Anbieter braucht (mindestens 10 Minuten, z. B. netcup und IONOS 15, Gandi 20); Domain und Wildcard scheitern nicht mehr am festen 20-Minuten-Limit. Zeigt `_acme-challenge` per CNAME auf eine andere Zone, prüft Node64 das Ziel. Beim Warten steht jede Minute der Stand im Log, ein Zeitlimit nennt den Schritt.
+
 ## 1.1.0 – 2026-11-07
 
 - DNS64: mDNS-Brücke – Namen wie drucker.local und Gerätenamen aus dem eigenen Netz kommen per mDNS, auch für Geräte im VPN und in anderen Netzen (Schalter in den Einstellungen, Standard aus). Mit dem Schalter erkennt DNS64 auch eine eigene Endung des Routers.

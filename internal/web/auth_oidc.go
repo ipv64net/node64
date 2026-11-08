@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"errors"
+	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -192,7 +194,28 @@ func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request, linkUser int6
 	redirect := s.oidcCallbackURL(r, o)
 	oidcPut(state, oidcFlow{verifier: verifier, nonce: nonce, next: safeNext(next), redirect: redirect, linkUser: linkUser, expires: time.Now().Add(oidcFlowTTL)})
 	s.setCookie(w, r, oidcCookie, state, int(oidcFlowTTL.Seconds()))
-	http.Redirect(w, r, s.oauthConfig(p, o, redirect).AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), http.StatusFound)
+	target := s.oauthConfig(p, o, redirect).AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier))
+	if linkUser > 0 { // Verknuepfen kommt aus einem Formular (POST mit CSRF): form-action 'self' gilt auch fuer dessen Weiterleitung
+		oidcHandoff(w, target, v.T("sso.link", "name", o.ButtonLabel()))
+		return
+	}
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
+// oidcHandoff: Seite, die selbst zum Anbieter weiterleitet (Meta-Refresh, dazu ein Link). Eine 302-Antwort auf ein
+// Formular blockieren Browser wegen form-action 'self' (Chrome, Safari); eine neue Navigation zaehlt nicht als
+// Formular - die CSP bleibt unveraendert.
+func oidcHandoff(w http.ResponseWriter, target, text string) {
+	if u, err := url.Parse(target); err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+		http.Error(w, "invalid authorization endpoint", http.StatusBadGateway)
+		return
+	}
+	t, x := html.EscapeString(target), html.EscapeString(text)
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=`+t+`"><title>`+x+`</title><p><a href="`+t+`">`+x+`</a></p>`)
 }
 
 func (s *Server) loginOIDC(w http.ResponseWriter, r *http.Request) {

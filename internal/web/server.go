@@ -84,7 +84,8 @@ type Server struct {
 
 	mcpHandler http.Handler // MCP-Schnittstelle /mcp (mcp.go)
 	mcpCounter *mcp.Counter
-	mcpLimit   *ipLimiter // Rate-Limit je MCP-Schluessel
+	mcpLimit   *ipLimiter  // Rate-Limit je MCP-Schluessel
+	newKeys    newKeyStore // eben angelegte Schluessel bis zur naechsten Seite (newkey.go)
 
 	loginWatch atomic.Pointer[LoginWatcher] // Fehlversuche an Honeypot64 (login_watch.go), nil = keiner
 	apiLogOn   atomic.Int32                 // API-Log: apiLogOff, apiLogKeys, apiLogAll (api_log.go)

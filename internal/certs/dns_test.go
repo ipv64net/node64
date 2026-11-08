@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-acme/lego/v4/challenge"
 	"github.com/miekg/dns"
 )
 
@@ -279,5 +280,58 @@ func TestWaitTXTDeadlineFinishesStableRun(t *testing.T) {
 	fastTXT(t, []nameserver{{Name: "ns1.test", Addrs: []string{addr}}}, time.Millisecond)
 	if err := waitTXT(context.Background(), "example.org", "_acme-challenge.example.org", "token"); err != nil {
 		t.Fatalf("stable run at the deadline must finish: %v", err)
+	}
+}
+
+// Eigene Frist (DNS-Anbieter) statt waitDNS, Zwischenstand fuer das Log und die Frist im Fehlertext.
+func TestWaitTXTOwnDeadlineAndProgress(t *testing.T) {
+	addr := testNS(t, answer(true, ""), answer(true, ""))
+	fastTXT(t, []nameserver{{Name: "ns1.test", Addrs: []string{addr}}}, time.Hour)
+	old := progressEvery
+	progressEvery = 50 * time.Millisecond
+	t.Cleanup(func() { progressEvery = old })
+	var mu sync.Mutex
+	reports := 0
+	ctx := withProgress(withWait(context.Background(), 300*time.Millisecond), func(fqdn string, _ time.Duration, detail string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if fqdn == "_acme-challenge.example.org" && strings.Contains(detail, "0 of 1 nameservers") {
+			reports++
+		}
+	})
+	start := time.Now()
+	err := waitTXT(ctx, "example.org", "_acme-challenge.example.org", "token")
+	if err == nil || !strings.Contains(err.Error(), "after 300ms") || time.Since(start) > 10*time.Second {
+		t.Fatalf("error: %v (%s)", err, time.Since(start))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if reports == 0 {
+		t.Fatal("no progress reported")
+	}
+}
+
+type timeoutProvider struct{ to time.Duration }
+
+func (timeoutProvider) Present(string, string, string) error { return nil }
+func (timeoutProvider) CleanUp(string, string, string) error { return nil }
+func (p timeoutProvider) Timeout() (time.Duration, time.Duration) {
+	return p.to, time.Second
+}
+
+type plainProvider struct{}
+
+func (plainProvider) Present(string, string, string) error { return nil }
+func (plainProvider) CleanUp(string, string, string) error { return nil }
+
+// Frist je Anbieter: wie lego angibt (netcup/IONOS 15 min), mindestens waitProvider, hoechstens maxDNSWait.
+func TestProviderWait(t *testing.T) {
+	for _, c := range []struct {
+		p    challenge.Provider
+		want time.Duration
+	}{{plainProvider{}, waitProvider}, {timeoutProvider{2 * time.Minute}, waitProvider}, {timeoutProvider{15 * time.Minute}, 15 * time.Minute}, {timeoutProvider{time.Hour}, maxDNSWait}} {
+		if got := providerWait(c.p); got != c.want {
+			t.Fatalf("%T %v: %s, want %s", c.p, c.p, got, c.want)
+		}
 	}
 }

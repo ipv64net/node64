@@ -15,10 +15,14 @@ import (
 // Absender-Adressen durch die des Gateways ersetzen (Userland-Proxy, IPv6 ohne ip6tables, manche NAS-Systeme).
 
 // Bridge meldet, ob die Node in einem Container im Bridge-Netz laeuft: Container-Datei vorhanden und nur virtuelle
-// Schnittstellen (im Host-Netz sieht der Container die echten Netzwerkkarten des Hosts). Auch fuer andere Module
-// (PROXY64): das Paket importiert nichts aus internal/dns64.
+// Schnittstellen (im Host-Netz sieht der Container die echten Netzwerkkarten des Hosts). Macvlan und IPvlan (z. B.
+// Unraid br0/bond0 mit eigener LAN-Adresse) sind kein Bridge-Netz: dort braucht es kein -p (Issue #23). Auch fuer
+// andere Module (PROXY64): das Paket importiert nichts aus internal/dns64.
 func Bridge() bool {
-	return inBridge(fileExists("/.dockerenv") || fileExists("/run/.containerenv"), readIfaces("/sys/class/net"))
+	if !fileExists("/.dockerenv") && !fileExists("/run/.containerenv") {
+		return false
+	}
+	return inBridge(true, readIfaces("/sys/class/net"), linkKinds())
 }
 
 // Gateway: IPv4-Default-Gateway (im Bridge-Netz der Docker-Host, z. B. 172.17.0.1).
@@ -33,7 +37,11 @@ func Gateway() netip.Addr { return defaultGateway() }
 // iface: ifindex und iflink einer Schnittstelle (gleich = echte Schnittstelle, verschieden = veth-Paar).
 type iface struct{ index, link string }
 
-func inBridge(container bool, ifs map[string]iface) bool {
+// directKinds: Link-Typen mit eigener Adresse im LAN (ohne Docker-NAT).
+var directKinds = map[string]bool{"macvlan": true, "macvtap": true, "ipvlan": true, "ipvtap": true}
+
+// inBridge: kinds = Link-Typ je Schnittstelle (nil = unbekannt, dann nur ifindex/iflink).
+func inBridge(container bool, ifs map[string]iface, kinds map[string]string) bool {
 	if !container {
 		return false
 	}
@@ -43,6 +51,9 @@ func inBridge(container bool, ifs map[string]iface) bool {
 			continue
 		}
 		if name == "docker0" || x.index == x.link { // Host-Netz: echte Karte bzw. Docker-Bruecke des Hosts sichtbar
+			return false
+		}
+		if directKinds[kinds[name]] { // Macvlan/IPvlan: direkt im LAN erreichbar
 			return false
 		}
 		n++

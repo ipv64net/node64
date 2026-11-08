@@ -190,6 +190,18 @@ func (m *Manager) DeleteDNSAccount(ctx context.Context, id int64) error {
 }
 
 // dnsProvider baut den Anbieter eines Zugangs (Tests ersetzen ihn ueber m.provider).
+// providerWait: so lange darf der TXT-Record eines Anbieters brauchen, bis alle Nameserver ihn liefern - die Frist,
+// die lego fuer den Anbieter angibt, mindestens waitProvider, hoechstens maxDNSWait.
+func providerWait(prov challenge.Provider) time.Duration {
+	w := waitProvider
+	if t, ok := prov.(challenge.ProviderTimeout); ok {
+		if to, _ := t.Timeout(); to > w {
+			w = to
+		}
+	}
+	return min(w, maxDNSWait)
+}
+
 func (m *Manager) dnsProvider(ctx context.Context, id int64) (challenge.Provider, error) {
 	a, vals, err := m.dnsAccountRaw(ctx, id)
 	if err != nil {

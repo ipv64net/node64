@@ -117,6 +117,9 @@ func (m *Manager) paths(ctx context.Context) []checkPath {
 func (m *Manager) waitTXTFor(ctx context.Context, zone, fqdn, want string) error {
 	ps := newPathSet(m.paths(ctx))
 	defer ps.close()
+	ctx = withProgress(ctx, func(fqdn string, elapsed time.Duration, detail string) {
+		m.log.Info("acme waiting for TXT record", "fqdn", fqdn, "elapsed", elapsed.String(), "deadline", waitOf(ctx).String(), "state", detail)
+	})
 	return waitTXT(withPaths(ctx, ps), zone, fqdn, want)
 }
 

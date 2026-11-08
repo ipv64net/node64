@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -110,8 +111,8 @@ func TestOIDCLinkAndLogin(t *testing.T) {
 		t.Fatalf("client secret must be stored encrypted: %q", enc)
 	}
 	// verknuepfen
-	resp, _ = a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
-	cb := idp.authorize(t, resp.Header.Get("Location"), "alice")
+	resp, body = a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
+	cb := idp.authorize(t, handoffURL(t, resp, body), "alice")
 	resp, _ = a.get(t, cb)
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/login" {
 		t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
@@ -172,8 +173,8 @@ func TestOIDCIssuerTrailingSlash(t *testing.T) {
 			if got := a.store.SettingOr(t.Context(), setOIDCIssuer, ""); got != idp.srv.URL+tc.store {
 				t.Fatalf("stored issuer %q", got)
 			}
-			resp, _ := a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
-			cb := idp.authorize(t, resp.Header.Get("Location"), "alice")
+			resp, body := a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
+			cb := idp.authorize(t, handoffURL(t, resp, body), "alice")
 			resp, _ = a.get(t, cb)
 			if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/login" {
 				t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
@@ -184,4 +185,22 @@ func TestOIDCIssuerTrailingSlash(t *testing.T) {
 			}
 		})
 	}
+}
+
+// handoffURL: Ziel der Zwischenseite beim Verknuepfen (kein 302 auf ein Formular: form-action 'self'), die CSP
+// bleibt dabei unveraendert.
+func handoffURL(t *testing.T, resp *http.Response, body string) string {
+	t.Helper()
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Location") != "" {
+		t.Fatalf("link start: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self';") {
+		t.Fatalf("csp changed: %q", csp)
+	}
+	i := strings.Index(body, `http-equiv="refresh" content="0;url=`)
+	if i < 0 {
+		t.Fatalf("no refresh: %q", body)
+	}
+	rest := body[i+len(`http-equiv="refresh" content="0;url=`):]
+	return html.UnescapeString(rest[:strings.IndexByte(rest, '"')])
 }

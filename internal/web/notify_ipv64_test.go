@@ -24,6 +24,8 @@ type fakeHC2Channels struct {
 	next  int64
 	chans map[int64]map[string]any
 	calls []string
+	// tooSoon: verify/send antwortet wie ipv64 direkt nach einem Versand (429 too_soon)
+	tooSoon bool
 }
 
 func (f *fakeHC2Channels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +67,11 @@ func (f *fakeHC2Channels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		delete(f.chans, id)
 		w.WriteHeader(204)
 	case len(parts) == 3 && parts[1] == "verify" && parts[2] == "send":
+		if f.tooSoon {
+			w.WriteHeader(429)
+			_, _ = io.WriteString(w, `{"code":"too_soon","detail":"A code was sent just now."}`)
+			return
+		}
 		data(map[string]any{"sent": true})
 	case len(parts) == 2 && parts[1] == "verify":
 		if body["code"] != "123456" {
@@ -114,16 +121,41 @@ func TestNotificationsIPv64Channels(t *testing.T) {
 	}
 	resp, _ = a.post(t, "/notifications/ipv64/new", url.Values{"_csrf": {csrf}, "type": {"ipv64_sms"}, "name": {"Handy"}, "lang": {"de"}, "enabled": {"on"}, "default": {"on"},
 		"notify_down": {"on"}, "notify_up": {"on"}, "cfg_number": {"+49 177 1234567"}})
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/notifications/ipv64/5/verify" {
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/notifications/ipv64/5/verify?sent=1" {
 		t.Fatalf("create: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
+	sends := func() (n int) { // Code beim Anlegen automatisch geschickt, genau einmal
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		for _, c := range fake.calls {
+			if c == "POST /hc2/channels/5/verify/send" {
+				n++
+			}
+		}
+		return n
+	}
+	if sends() != 1 {
+		t.Fatalf("automatic code: %d sends", sends())
+	}
 	_, body = a.get(t, "/notifications")
-	if !strings.Contains(body, ">Handy</a>") || !strings.Contains(body, `href="/notifications/ipv64/5/verify"`) || !strings.Contains(body, `action="/notifications/ipv64/5/toggle"`) {
+	if !strings.Contains(body, ">Handy</a>") || !strings.Contains(body, `href="/notifications/ipv64/5/verify"`) || !strings.Contains(body, `action="/notifications/ipv64/5/toggle"`) ||
+		!strings.Contains(body, "Kanal gespeichert. Der Code wurde an") {
 		t.Fatal("row in table")
 	}
-	_, vpage := a.get(t, "/notifications/ipv64/5/verify")
-	if !strings.Contains(vpage, `action="/notifications/ipv64/5/verify/send"`) {
+	_, vpage := a.get(t, "/notifications/ipv64/5/verify?sent=1")
+	if !strings.Contains(vpage, `action="/notifications/ipv64/5/verify/send"`) || !strings.Contains(vpage, "Code erneut senden") ||
+		!strings.Contains(vpage, "Ein 6-stelliger Code wurde an") {
 		t.Fatal("verify page")
+	}
+	// erneut senden: ipv64 sperrt einen zweiten Code direkt danach (too_soon) - Hinweis statt Fehler
+	fake.mu.Lock()
+	fake.tooSoon = true
+	fake.mu.Unlock()
+	if resp, _ = a.post(t, "/notifications/ipv64/5/verify/send", url.Values{"_csrf": {csrf}}); resp.Header.Get("Location") != "/notifications/ipv64/5/verify?sent=1" {
+		t.Fatal("resend")
+	}
+	if _, vpage = a.get(t, "/notifications/ipv64/5/verify?sent=1"); !strings.Contains(vpage, "Der Code wurde eben erst gesendet") || sends() != 2 {
+		t.Fatal("too soon hint")
 	}
 	if resp, _ = a.post(t, "/notifications/ipv64/5/verify", url.Values{"_csrf": {csrf}, "code": {"000000"}}); resp.Header.Get("Location") != "/notifications/ipv64/5/verify" {
 		t.Fatal("wrong code accepted")

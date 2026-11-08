@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.50.1 – 2026-11-08
+
+### Fixed
+- Maintenance mode: the access list now applies before the maintenance page (#33). Until now the maintenance page –
+  custom HTML included – could be fetched without signing in and from any address. This also applies to locations with
+  their own list; the sign-in page of the access list keeps working in maintenance mode.
+
 ## 1.50.0 – 2026-11-07
 
 ### Improved

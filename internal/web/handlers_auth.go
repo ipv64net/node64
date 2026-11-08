@@ -193,11 +193,9 @@ func (s *Server) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "apikey.create", name, k.Hint)
-	d := v.Data.(map[string]any)
-	d["NewAPIKey"] = key // nur in dieser Antwort sichtbar
-	d["APIKeys"], _ = s.Store.APIKeys(r.Context(), u.ID)
-	v.Flash = &Flash{Kind: "success", Text: v.T("apikey.created")}
-	s.render(w, r, http.StatusOK, "api_docs", v)
+	s.keepNewKey(w, r, u.ID, "api", key) // Weiterleitung: Neuladen legt keinen weiteren an (#44)
+	s.flash(w, r, "success", v.T("apikey.created"))
+	http.Redirect(w, r, "/api/docs#keys", http.StatusSeeOther)
 }
 
 func (s *Server) apiKeyDelete(w http.ResponseWriter, r *http.Request) {

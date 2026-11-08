@@ -86,6 +86,18 @@ const (
 
 const attemptTimeout = 3 * time.Second
 
+// Pause im Modus der Reihe nach (#37): nach breakAfter Fehlern in Folge (auch REFUSED) wird ein Upstream uebersprungen
+// und nur noch als Letzter gefragt, zuerst breakMin, bei anhaltendem Ausfall doppelt so lange bis breakMax. Nach der
+// Pause prueft eine Anfrage im Hintergrund, ob er wieder antwortet - echte Anfragen warten nicht auf ihn.
+const (
+	breakAfter = 3
+	breakMin   = 30 * time.Second
+	breakMax   = 5 * time.Minute
+)
+
+// errRefused: Antwort REFUSED zaehlt als Fehler des Upstreams (z. B. falsche access-control beim eigenen Resolver).
+var errRefused = errors.New("refused")
+
 // testRoots replaces the system CAs in tests (nil = system).
 var testRoots *x509.CertPool
 
@@ -105,6 +117,10 @@ type doh struct {
 	lastErr   string
 	lastErrAt time.Time
 	lastOKAt  time.Time
+	fails     int           // Fehler in Folge
+	backoff   time.Duration // aktuelle Pause
+	skipUntil time.Time     // pausiert bis (Modus der Reihe nach)
+	probing   bool          // Pruefung im Hintergrund laeuft
 }
 
 // Resolver races every query against all upstreams in parallel and returns
@@ -219,7 +235,7 @@ func (r *Resolver) race(ctx context.Context, req *dns.Msg, first, rest []*doh, h
 				defer cancel()
 				start := time.Now()
 				resp, err := u.exchange(actx, q)
-				u.record(time.Since(start), err, false)
+				u.record(time.Since(start), refusedErr(resp, err), false)
 				ch <- result{resp, u, err}
 			}()
 		}
@@ -241,7 +257,7 @@ func (r *Resolver) race(ctx context.Context, req *dns.Msg, first, rest []*doh, h
 			switch {
 			case res.err != nil:
 				errs = append(errs, fmt.Errorf("%s: %w", res.u.Name, res.err))
-			case res.resp.Rcode == dns.RcodeServerFailure:
+			case res.resp.Rcode == dns.RcodeServerFailure || res.resp.Rcode == dns.RcodeRefused:
 				if fallback == nil {
 					fallback = &res
 				}
@@ -270,12 +286,13 @@ func (r *Resolver) race(ctx context.Context, req *dns.Msg, first, rest []*doh, h
 // Mode is parallel or ordered.
 func (r *Resolver) Mode() string { return r.mode }
 
-// exchangeOrdered asks the upstreams one after another; the next one only on an error or SERVFAIL.
+// exchangeOrdered asks the upstreams one after another; the next one only on an error, SERVFAIL or REFUSED.
+// Pausierte Upstreams kommen zuletzt dran (orderedUps).
 func (r *Resolver) exchangeOrdered(ctx context.Context, req *dns.Msg) (*dns.Msg, string, error) {
 	var errs []error
 	var fallback *dns.Msg
 	var fallbackUp *doh
-	for _, u := range r.ups {
+	for _, u := range r.orderedUps(req) {
 		if ctx.Err() != nil {
 			break
 		}
@@ -283,11 +300,11 @@ func (r *Resolver) exchangeOrdered(ctx context.Context, req *dns.Msg) (*dns.Msg,
 		start := time.Now()
 		resp, err := u.exchange(actx, req.Copy())
 		cancel()
-		u.record(time.Since(start), err, false)
+		u.record(time.Since(start), refusedErr(resp, err), false)
 		switch {
 		case err != nil:
 			errs = append(errs, fmt.Errorf("%s: %w", u.Name, err))
-		case resp.Rcode == dns.RcodeServerFailure:
+		case resp.Rcode == dns.RcodeServerFailure || resp.Rcode == dns.RcodeRefused:
 			if fallback == nil {
 				fallback, fallbackUp = resp, u
 			}
@@ -306,6 +323,52 @@ func (r *Resolver) exchangeOrdered(ctx context.Context, req *dns.Msg) (*dns.Msg,
 	return nil, "", errors.Join(errs...)
 }
 
+// orderedUps: Reihenfolge fuer den Modus der Reihe nach - pausierte Upstreams ans Ende; ist die Pause eines
+// Upstreams vorbei, prueft ihn req im Hintergrund (bis dahin bleibt er hinten).
+func (r *Resolver) orderedUps(req *dns.Msg) []*doh {
+	now := time.Now()
+	out := make([]*doh, 0, len(r.ups))
+	var later []*doh
+	for _, u := range r.ups {
+		u.mu.Lock()
+		paused := !u.skipUntil.IsZero()
+		probe := paused && !u.probing && !now.Before(u.skipUntil)
+		if probe {
+			u.probing = true
+		}
+		u.mu.Unlock()
+		if probe {
+			go u.probe(req.Copy())
+		}
+		if paused {
+			later = append(later, u)
+		} else {
+			out = append(out, u)
+		}
+	}
+	return append(out, later...)
+}
+
+// probe: Pruefung eines pausierten Upstreams; Erfolg beendet die Pause, ein Fehler verlaengert sie.
+func (u *doh) probe(q *dns.Msg) {
+	ctx, cancel := context.WithTimeout(context.Background(), attemptTimeout)
+	defer cancel()
+	start := time.Now()
+	resp, err := u.exchange(ctx, q)
+	u.mu.Lock()
+	u.probing = false
+	u.mu.Unlock()
+	u.record(time.Since(start), refusedErr(resp, err), true)
+}
+
+// refusedErr: Fehler des Austauschs bzw. errRefused bei der Antwort REFUSED.
+func refusedErr(resp *dns.Msg, err error) error {
+	if err == nil && resp != nil && resp.Rcode == dns.RcodeRefused {
+		return errRefused
+	}
+	return err
+}
+
 // record notes one answer time; probes (fastest mode) only update the times and the health, not the counters.
 func (u *doh) record(d time.Duration, err error, probe bool) {
 	u.mu.Lock()
@@ -319,8 +382,14 @@ func (u *doh) record(d time.Duration, err error, probe bool) {
 		}
 		u.lastErr = err.Error()
 		u.lastErrAt = time.Now()
+		u.fails++
+		if now := u.lastErrAt; u.fails >= breakAfter && !now.Before(u.skipUntil) { // Pause beginnt bzw. verlaengert sich
+			u.backoff = min(max(2*u.backoff, breakMin), breakMax)
+			u.skipUntil = now.Add(u.backoff)
+		}
 		return
 	}
+	u.fails, u.backoff, u.skipUntil = 0, 0, time.Time{}
 	ms := float64(d.Microseconds()) / 1000
 	if u.avgMs == 0 {
 		u.avgMs, u.recentMs = ms, ms
@@ -356,6 +425,8 @@ type Stats struct {
 	Active    bool      `json:"active"` // fastest mode: currently among the ones asked first
 	LastError string    `json:"lastError,omitempty"`
 	LastErrAt time.Time `json:"lastErrorAt"`
+	// PausedUntil: Modus der Reihe nach - wird bis dahin uebersprungen (nur noch als Letzter gefragt)
+	PausedUntil *time.Time `json:"pausedUntil,omitempty"`
 }
 
 func (r *Resolver) Stats() []Stats {
@@ -375,6 +446,10 @@ func (r *Resolver) Stats() []Stats {
 			Healthy:   u.lastErrAt.IsZero() || u.lastOKAt.After(u.lastErrAt),
 			LastError: u.lastErr, LastErrAt: u.lastErrAt, Active: active[u],
 		})
+		if r.mode == ModeOrdered && !u.skipUntil.IsZero() {
+			t := u.skipUntil
+			out[len(out)-1].PausedUntil = &t
+		}
 		u.mu.Unlock()
 	}
 	return out

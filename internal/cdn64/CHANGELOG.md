@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.50.1 – 2026-11-08
+
+### Behoben
+- Wartungsmodus: Die Zugriffsliste greift jetzt vor der Wartungsseite (#33). Bisher war die Wartungsseite – auch
+  eigenes HTML – ohne Anmeldung und von jeder Adresse abrufbar. Das gilt auch für Locations mit eigener Liste; die
+  Anmeldeseite der Zugriffsliste funktioniert im Wartungsmodus weiter.
+
 ## 1.50.0 – 2026-11-07
 
 ### Verbessert

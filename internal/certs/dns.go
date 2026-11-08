@@ -88,6 +88,20 @@ func AliasCNAME(name, zone, prefix string) (from, to string) {
 	return "_acme-challenge." + strings.TrimPrefix(strings.ToLower(name), "*."), to
 }
 
+// challengeFQDN: wo der TXT-Record fuer base liegt - _acme-challenge.<base>, CNAMEs gefolgt (wie lego beim Setzen).
+func (m *Manager) challengeFQDN(ctx context.Context, base string) string {
+	fqdn := "_acme-challenge." + base
+	for range 8 {
+		cn, err := m.cnameOf(ctx, fqdn)
+		cn = strings.TrimSuffix(strings.ToLower(cn), ".")
+		if err != nil || cn == "" || cn == fqdn {
+			break
+		}
+		fqdn = cn
+	}
+	return fqdn
+}
+
 // checkAlias: der CNAME fuer jeden Namen ist gesetzt.
 func (m *Manager) checkAlias(ctx context.Context, c *Cert) error {
 	_, want := aliasTarget(c.AliasZone, c.AliasPrefix)
@@ -123,7 +137,32 @@ func lookupCNAME(ctx context.Context, name string) (string, error) {
 var (
 	waitDNS  = 8 * time.Minute // ipv64 meist Sekunden, manche Anbieter (netcup) Minuten
 	txtEvery = 3 * time.Second // Abstand der Runden
+	// waitProvider: Frist bei anderen DNS-Anbietern (lego) - mindestens so lange, mehr, wenn lego fuer den Anbieter
+	// mehr angibt (netcup, IONOS 15 min, Gandi 20 min), hoechstens maxDNSWait
+	waitProvider  = 10 * time.Minute
+	maxDNSWait    = 30 * time.Minute
+	progressEvery = time.Minute // so oft meldet waitTXT den Stand (Log)
 )
+
+type waitKey struct{}
+type progressKey struct{}
+
+// withWait: eigene Frist fuer waitTXT (z. B. je DNS-Anbieter).
+func withWait(ctx context.Context, d time.Duration) context.Context {
+	return context.WithValue(ctx, waitKey{}, d)
+}
+
+// withProgress: f bekommt waitTXT-Zwischenstaende (etwa jede Minute, fuer das Log).
+func withProgress(ctx context.Context, f func(fqdn string, elapsed time.Duration, detail string)) context.Context {
+	return context.WithValue(ctx, progressKey{}, f)
+}
+
+func waitOf(ctx context.Context) time.Duration {
+	if d, ok := ctx.Value(waitKey{}).(time.Duration); ok && d > 0 {
+		return d
+	}
+	return waitDNS
+}
 
 // nameserver: ein zustaendiger Nameserver der Zone mit seinen Adressen (ip:53, IPv4 und IPv6).
 type nameserver struct {
@@ -292,7 +331,10 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 	if err != nil {
 		return err
 	}
-	deadline := time.Now().Add(waitDNS)
+	wait := waitOf(ctx)
+	progress, _ := ctx.Value(progressKey{}).(func(string, time.Duration, string))
+	start := time.Now()
+	deadline, nextReport := start.Add(wait), start.Add(progressEvery)
 	var details []string
 	var pubErr error
 	stable, pubStable, seen := 0, 0, false // Runden hintereinander mit dem Wert (direkt, ueber oeffentliche Resolver)
@@ -348,11 +390,15 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 		} else {
 			pubStable = 0
 		}
+		if progress != nil && time.Now().After(nextReport) {
+			nextReport = nextReport.Add(progressEvery)
+			progress(fqdn, time.Since(start).Truncate(time.Second), fmt.Sprintf("visible on %d of %d nameservers (%s)", ok, len(servers), strings.Join(details, "; ")))
+		}
 		// Frist um: laeuft gerade eine stabile Folge, wird sie noch zu Ende geprueft (hoechstens stableRounds-1 Runden)
 		if time.Now().After(deadline) && stable == 0 && pubStable == 0 {
-			msg := fmt.Sprintf("TXT record %s not visible on %d of %d nameservers after %s (%s)", fqdn, len(servers)-ok, len(servers), waitDNS, strings.Join(details, "; "))
+			msg := fmt.Sprintf("TXT record %s not visible on %d of %d nameservers after %s (%s)", fqdn, len(servers)-ok, len(servers), wait, strings.Join(details, "; "))
 			if seen {
-				msg = fmt.Sprintf("TXT record %s not stable after %s: it was visible everywhere but then missing again (%s)", fqdn, waitDNS, strings.Join(details, "; "))
+				msg = fmt.Sprintf("TXT record %s not stable after %s: it was visible everywhere but then missing again (%s)", fqdn, wait, strings.Join(details, "; "))
 			}
 			if !auth {
 				msg += "; the nameservers cannot be queried directly from here (outgoing port 53 blocked or redirected to a local resolver?)"

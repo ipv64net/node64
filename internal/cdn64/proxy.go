@@ -270,6 +270,13 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 				stripLoginCookie(r, g.list.ID)
 			}
 		}
+		// Wartungsmodus: Wartungsseite statt Ziel (im Log als "Wartung", nicht als Fehler des Ziels) - erst nach der
+		// Zugriffsliste, damit eigenes HTML nicht ohne Anmeldung abrufbar ist (#33); die Anmeldeseite geht weiter
+		if h.Advanced.Maintenance {
+			setReject(r, rejMaintenance)
+			serveMaint(w, r, &h.Advanced)
+			return
+		}
 		rt.next.ServeHTTP(w, r)
 	})
 }
@@ -624,11 +631,6 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			return
 		}
-		if maint { // Wartungsmodus: Wartungsseite statt Ziel (im Log als "Wartung", nicht als Fehler des Ziels)
-			*reject = rejMaintenance
-			serveMaint(sw, r, &h.Advanced)
-			return
-		}
 		if maxBody > 0 {
 			if r.ContentLength > maxBody {
 				page(sw, http.StatusRequestEntityTooLarge)
@@ -639,7 +641,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		if hsts != "" && r.TLS != nil {
 			sw.Header().Set("Strict-Transport-Security", hsts)
 		}
-		if sl != nil && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) { // WebSockets laufen lange und zaehlen nicht (nur, wo erlaubt)
+		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) { // WebSockets laufen lange und zaehlen nicht (nur, wo erlaubt); Wartung braucht kein Ziel
 			if !sl.acquire(r.Context(), limQueueWait) {
 				if r.Context().Err() == nil {
 					*reject = rejTarget

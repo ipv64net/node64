@@ -4,6 +4,14 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- DNS64: no more false warning about unpublished ports (`-p`) with Docker macvlan or ipvlan, e.g. Unraid `br0`/`bond0` (#23, thanks to @sangandi).
+- DNS64: in "in order" mode a failed upstream is skipped instead of being asked again on every query and is resumed in the background; REFUSED leads to the next upstream (#37).
+- PROXY64: in maintenance mode the access list now applies before the maintenance page – custom HTML can no longer be fetched without signing in (#33).
+- Sign-in: linking an SSO account (e.g. Authentik, Pocket ID) works again in Chrome and Safari – the browser blocked the redirect to the provider (Content Security Policy `form-action`, #40, #41).
+- MCP and API keys: reloading the page after creating a key no longer creates another one (#44).
+- Notifications: when you add an e-mail or SMS channel via ipv64, the confirmation code now arrives by itself; "Send code again" requests a new one if needed. The code only applies to exactly this channel and this address or number.
+- Certificates: DNS-01 with other DNS providers waits as long as the provider needs (at least 10 minutes, e.g. 15 for netcup and IONOS, 20 for Gandi); domain plus wildcard no longer fail at the fixed 20-minute limit. If `_acme-challenge` points via CNAME to another zone, Node64 checks the target. While waiting, the log shows the state every minute, and a time limit names the step.
+
 ## 1.1.0 – 2026-11-07
 
 - DNS64: mDNS bridge – names like printer.local and device names from your own network come via mDNS, also for devices in the VPN and other networks (switch in the settings, off by default). With the switch on, DNS64 also detects the router's own suffix.

@@ -355,7 +355,8 @@ func mcpSnippets(u, key string) map[string]string {
 }
 
 func (s *Server) mcpSettings(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "mcp", s.mcpView(r, ""))
+	v := s.mcpView(r, s.takeNewKey(w, r, currentUser(r).ID, "mcp")) // nur einmal nach dem Anlegen sichtbar
+	s.render(w, r, http.StatusOK, "mcp", v)
 }
 
 func (s *Server) mcpSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -386,9 +387,9 @@ func (s *Server) mcpKeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "mcp.key_create", name, k.Hint+" "+strings.Join(k.ReadAreas(), ","))
-	v := s.mcpView(r, key) // nur in dieser Antwort sichtbar
-	v.Flash = &Flash{Kind: "success", Text: v.T("mcp.key_created")}
-	s.render(w, r, http.StatusOK, "mcp", v)
+	s.keepNewKey(w, r, u.ID, "mcp", key) // Weiterleitung: Neuladen legt keinen weiteren an (#44)
+	s.flash(w, r, "success", s.view(r, "mcp.title").T("mcp.key_created"))
+	http.Redirect(w, r, "/settings/mcp#keys", http.StatusSeeOther)
 }
 
 // mcpScopes: Leserechte der gewaehlten Bereiche (unbekannte fallen weg).

@@ -466,6 +466,9 @@ func (s *Server) apiDocs(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if key := s.takeNewKey(w, r, currentUser(r).ID, "api"); key != "" { // nur einmal nach dem Anlegen sichtbar
+		v.Data.(map[string]any)["NewAPIKey"] = key
+	}
 	s.render(w, r, http.StatusOK, "api_docs", v)
 }
 
