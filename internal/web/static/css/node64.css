@@ -288,7 +288,8 @@ th a:hover { text-decoration: underline; }
 
 /* Tooltips der Pillen */
 .hc-tip.show { opacity: 1; }
-.hc-tip .tooltip-inner { text-align: left; max-width: 320px; padding: .5rem .7rem; font-size: .8rem; line-height: 1.4; color: #e9ecef; background: #1f2328; border: 1px solid #3d444d; border-radius: .4rem; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+.hc-tip { pointer-events: none; } /* liegt der Tooltip ueber der Pille (lange Meldung), kein Hover-Wechsel = kein Flackern */
+.hc-tip .tooltip-inner { text-align: left; max-width: 320px; overflow-wrap: anywhere; padding: .5rem .7rem; font-size: .8rem; line-height: 1.4; color: #e9ecef; background: #1f2328; border: 1px solid #3d444d; border-radius: .4rem; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
 .hc-tip .tooltip-arrow::before { border-top-color: #3d444d; }
 .hc-tip .hc-tip-msg { color: #9aa3ad; }
 .hc-tip .hc-tip-up { color: #4cd38a; }

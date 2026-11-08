@@ -5,6 +5,7 @@
 ### Behoben
 - Weist das Ziel-Netz eine Verbindung ab (z. B. keine IPv6-Freigabe im Router), sagt die Meldung das jetzt, statt nur
   „permission denied“ (HTTP, TCP, Zertifikat).
+- Der Tooltip einer roten Pille (lange Meldung) flackert nicht mehr und lässt sich lesen.
 
 ## 2.53.0 – 2026-11-06
 

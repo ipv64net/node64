@@ -5,6 +5,7 @@
 ### Fixed
 - If the target network rejects a connection (e.g. no IPv6 port forwarding on the router), the message now says so
   instead of just "permission denied" (HTTP, TCP, certificate).
+- The tooltip of a red pill (long message) no longer flickers and can be read.
 
 ## 2.53.0 – 2026-11-06
 
