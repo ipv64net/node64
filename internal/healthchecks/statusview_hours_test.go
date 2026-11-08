@@ -50,7 +50,7 @@ func TestStatusHourBars(t *testing.T) {
 	v.Layout = "list"
 	html := stRender(t, v, statusRenderOpts{Lang: "de"})
 	if !strings.Contains(html, `data-h="2026-10-19T11"`) || strings.Contains(html, `data-s=`) || !strings.Contains(html, "hc.status.pub.bars.aria_h") ||
-		!strings.Contains(html, "20.10. 08:00") {
+		!strings.Contains(html, "20.10. 08:00") || !strings.Contains(html, `<q data-t="2026-10-19T12"></q>`) || v.BarUnit != "hour" {
 		t.Errorf("html: hourly attributes/labels missing")
 	}
 
@@ -60,12 +60,34 @@ func TestStatusHourBars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := v.Groups[0].Items[0].Bars; v.Days != 7 || len(b) != 7 || b[6].Day != "2026-10-20" {
+	if b := v.Groups[0].Items[0].Bars; v.Days != 7 || v.BarUnit != "day" || len(b) != 7 || b[6].Day != "2026-10-20" {
 		t.Fatalf("7 days: %d %d", v.Days, len(b))
 	}
 	p.Days = 14 // ungueltig
 	p = statusSavePage(t, m, p, "")
 	if p.Days != 90 {
 		t.Fatalf("invalid days -> %d", p.Days)
+	}
+}
+
+// Zeitzonen mit halben Stunden: die Stundenbalken folgen den UTC-Stunden, die Beschriftung nennt die Minuten.
+func TestStatusHourLabel(t *testing.T) {
+	kol, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Skip(err)
+	}
+	h := time.Date(2026, 10, 20, 13, 0, 0, 0, time.UTC)
+	if got := statusHourLabel(h, kol); got != "2026-10-20T18:30" {
+		t.Errorf("kolkata: %s", got)
+	}
+	if got := statusHourLabel(h, time.UTC); got != "2026-10-20T13" {
+		t.Errorf("utc: %s", got)
+	}
+	p := &stPage{Lang: "de"}
+	if got := p.day("2026-10-20T18:30"); got != "20.10. 18:30" {
+		t.Errorf("day: %s", got)
+	}
+	if !stHourly([]StatusViewDay{{Day: "2026-10-20T18:30"}}) || stHourly([]StatusViewDay{{Day: "2026-10-20"}}) {
+		t.Error("stHourly")
 	}
 }

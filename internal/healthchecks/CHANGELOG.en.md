@@ -4,7 +4,7 @@
 
 ### New
 - Pick a device from DNS64 when creating a check (IP and name, ping suggested); under DNS64 → Groups the heart icon creates a ping check right away (#20).
-- Status pages: selectable period – 24 hours with hourly bars, 7, 30, 60 or 90 days.
+- Status pages: selectable period – 24 hours with hourly bars, 7, 30, 60 or 90 days; `status.json` names the bar unit (`bar_unit`: `hour` or `day`).
 
 ## 2.53.1 – 2026-11-08
 

@@ -15,6 +15,7 @@ type StatusView struct {
 	Theme       string            `json:"theme"`
 	Accent      string            `json:"accent"`
 	Days        int               `json:"days"`
+	BarUnit     string            `json:"bar_unit"` // hour (Days = 1: 24 Stundenbalken) | day (Days Tagesbalken)
 	ShowUptime  bool              `json:"show_uptime"`
 	RefreshSec  int               `json:"refresh_sec"`
 	PoweredBy   bool              `json:"powered_by"`
@@ -41,12 +42,12 @@ type StatusViewItem struct {
 	Label  string          `json:"label"`
 	State  string          `json:"state"`  // up | down | degraded | maintenance | paused | unknown
 	Uptime float64         `json:"uptime"` // Prozent ueber Days, -1 = keine Daten
-	Bars   []StatusViewDay `json:"bars"`   // aelteste zuerst, genau Days Eintraege
+	Bars   []StatusViewDay `json:"bars"`   // aelteste zuerst: Days Tagesbalken, bei Days = 1 (BarUnit hour) 24 Stundenbalken
 }
 
-// StatusViewDay ist ein Tagesbalken.
+// StatusViewDay ist ein Tages- bzw. Stundenbalken.
 type StatusViewDay struct {
-	Day      string  `json:"day"`      // 2006-01-02 (Zeitzone der Node)
+	Day      string  `json:"day"`      // Beginn in der Zeitzone der Node: Tag "2006-01-02", Stunde "2006-01-02T15" (statusHourLabel)
 	State    string  `json:"state"`    // up | partial | down | maintenance | none
 	Uptime   float64 `json:"uptime"`   // Prozent, -1 = keine Daten
 	DownMins int     `json:"down_min"` // Minuten gestoert (aus den Stoerungen)
@@ -79,7 +80,7 @@ type StatusItemDetail struct {
 	Uptime7d  float64           `json:"uptime_7d"`
 	Uptime30d float64           `json:"uptime_30d"`
 	Latency   float64           `json:"latency_ms"` // Mittel 24 h, -1 = keine Daten
-	Hours     []StatusViewDay   `json:"hours"`      // letzte 24 Stunden (Day = Stunde "2006-01-02T15")
+	Hours     []StatusViewDay   `json:"hours"`      // letzte 24 Stunden (Day = Stunde "2006-01-02T15", siehe statusHourLabel)
 	Incidents []StatusViewIncid `json:"incidents"`  // letzte 5 (nur bei ShowHistory)
 	// Einstellungen der Seite: ohne ShowUptime sind Verfuegbarkeit und Latenz -1, ohne ShowHistory fehlen die Stoerungen
 	ShowUptime  bool `json:"show_uptime"`

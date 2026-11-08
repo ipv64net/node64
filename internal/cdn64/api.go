@@ -163,18 +163,81 @@ type extras struct {
 	dns  *DNSRequest
 }
 
+// maxHostBody: hoechstens so gross ist ein Host als JSON (error_html, maintenance_html und Antworten der Locations je
+// bis 64 KB, writeJSON schreibt < > & als < usw.; die Weboberflaeche begrenzt alle Anfragen ebenfalls auf 1 MB).
+const maxHostBody = 1 << 20
+
+// readHostBody liest den Body eines Hosts; zu gross = 413.
+func readHostBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxHostBody))
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeErr(w, http.StatusRequestEntityTooLarge, "request too large (max "+strconv.FormatInt(mbe.Limit, 10)+" bytes)")
+		} else {
+			writeErr(w, http.StatusBadRequest, "could not read request")
+		}
+		return nil, false
+	}
+	return body, true
+}
+
 // decode liest JSON in h (fehlende Felder behalten ihren Wert), dazu request_certificate und create_dns_record.
+// Listen im JSON ersetzen die gespeicherten ganz: encoding/json dekodiert Elemente sonst in das alte Element am
+// selben Index, und Felder mit omitempty (action, status, body, advanced …) blieben von dort stehen.
 func decode(w http.ResponseWriter, r *http.Request, h *Host) (extras, bool) {
+	body, ok := readHostBody(w, r)
+	if !ok {
+		return extras{}, false
+	}
 	in := struct {
 		*Host
 		RequestCertificate *certRequest `json:"request_certificate"`
 		CreateDNSRecord    *DNSRequest  `json:"create_dns_record"`
 	}{Host: h}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
-		writeErr(w, http.StatusBadRequest, "invalid json")
-		return extras{}, false
+	if len(strings.TrimSpace(string(body))) > 0 {
+		resetLists(body, h)
+		if err := json.Unmarshal(body, &in); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid json")
+			return extras{}, false
+		}
 	}
 	return extras{cert: in.RequestCertificate, dns: in.CreateDNSRecord}, true
+}
+
+// resetLists leert die Listen von h, die im JSON vorkommen (Locations, Kopfzeilen und Listen in advanced).
+func resetLists(body []byte, h *Host) {
+	var top map[string]json.RawMessage
+	if json.Unmarshal(body, &top) != nil {
+		return // Fehler meldet das eigentliche Dekodieren
+	}
+	if _, ok := top["locations"]; ok {
+		h.Locations = nil
+	}
+	var adv map[string]json.RawMessage
+	if raw, ok := top["advanced"]; !ok || json.Unmarshal(raw, &adv) != nil {
+		return
+	}
+	has := func(k string) bool { _, ok := adv[k]; return ok }
+	a := &h.Advanced
+	if has("request_headers") {
+		a.RequestHeaders = nil
+	}
+	if has("response_headers") {
+		a.ResponseHeaders = nil
+	}
+	if has("request_remove") {
+		a.RequestRemove = nil
+	}
+	if has("response_remove") {
+		a.ResponseRemove = nil
+	}
+	if has("trusted_proxies") {
+		a.TrustedProxies = nil
+	}
+	if has("geo_countries") {
+		a.GeoCountries = nil
+	}
 }
 
 // afterSaveAll: Zertifikat und DNS-Eintrag (Fehler stehen in der Antwort, der Host ist gespeichert).
@@ -251,9 +314,8 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 	var probe struct {
 		Kind string `json:"kind"`
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<16))
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, "request too large")
+	body, ok := readHostBody(w, r)
+	if !ok {
 		return
 	}
 	_ = json.Unmarshal(body, &probe)

@@ -546,15 +546,7 @@ func (m *Module) statusDayBars(ctx context.Context, tokens []string, days int, n
 	}
 	// fremde Messungen nur fuer Tokens mit Luecken: Einzelpunkte (flags 8 ohne Wartung, hc_source_points) und aelter
 	// die Stundenwerte hc_source_hourly (nur fuer Balken ganz ohne Einzelpunkte)
-	var gaps []string
-	for _, tok := range tokens {
-		for _, a := range own[tok] {
-			if a.count == 0 {
-				gaps = append(gaps, tok)
-				break
-			}
-		}
-	}
+	gaps := statusGaps(tokens, own)
 	remote, err := m.statusDayAggs(ctx, gaps, days, idx, func(ph string, args []any) (string, []any) {
 		return `SELECT token, ` + dayKey("time") + `, count(*), coalesce(sum(status), 0) FROM (
 			SELECT token, time, status FROM hc_measurements WHERE token IN (` + ph + `) AND time >= ? AND time <= ? AND (flags & 8) != 0 AND (flags & 1) = 0
@@ -575,9 +567,33 @@ func (m *Module) statusDayBars(ctx context.Context, tokens []string, days int, n
 	return bounds, labels, own, remote, remoteHourly, nil
 }
 
+// statusGaps: Tokens mit mindestens einem Balken ohne eigene Messungen (nur fuer sie zaehlen fremde Messungen).
+func statusGaps(tokens []string, own map[string][]statusAgg) []string {
+	var gaps []string
+	for _, tok := range tokens {
+		for _, a := range own[tok] {
+			if a.count == 0 {
+				gaps = append(gaps, tok)
+				break
+			}
+		}
+	}
+	return gaps
+}
+
+// statusHourLabel beschriftet einen Stundenbalken mit seinem Beginn in der Zeitzone der Node: "2006-01-02T15", in
+// Zeitzonen mit halben bzw. Viertelstunden (z. B. Asia/Kolkata) "2006-01-02T15:04" (die Balken folgen den UTC-Stunden
+// der Stundenwerte hc_hourly/hc_source_hourly und beginnen dort z. B. um 18:30).
+func statusHourLabel(t time.Time, loc *time.Location) string {
+	if t = t.In(loc); t.Minute() != 0 {
+		return t.Format("2006-01-02T15:04")
+	}
+	return t.Format("2006-01-02T15")
+}
+
 // statusHourBars: 24 Stundenbalken je UTC-Stunde (der letzte endet jetzt), Quellen wie statusDayBars und wie die
 // Stundenbalken der Details (eigene Einzelpunkte und hc_hourly, fremde Einzelpunkte, hc_source_hourly). Beschriftung
-// in der Zeitzone der Node ("2006-01-02T15", wie StatusItemDetail.Hours).
+// in der Zeitzone der Node (statusHourLabel, wie StatusItemDetail.Hours).
 func (m *Module) statusHourBars(ctx context.Context, tokens []string, now time.Time, loc *time.Location) ([]time.Time, []string,
 	map[string][]statusAgg, map[string][]statusAgg, map[string][]statusAgg, error) {
 	const n = 24
@@ -587,7 +603,7 @@ func (m *Module) statusHourBars(ctx context.Context, tokens []string, now time.T
 	cur := now.Truncate(time.Hour)
 	for i := 0; i < n; i++ {
 		bounds[i] = cur.Add(-time.Duration(n-1-i) * time.Hour)
-		labels[i] = bounds[i].In(loc).Format("2006-01-02T15")
+		labels[i] = statusHourLabel(bounds[i], loc)
 		idx[bounds[i].UTC().Format("2006-01-02T15")] = i
 	}
 	bounds[n] = now
@@ -601,15 +617,7 @@ func (m *Module) statusHourBars(ctx context.Context, tokens []string, now time.T
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
-	var gaps []string
-	for _, tok := range tokens {
-		for _, a := range own[tok] {
-			if a.count == 0 {
-				gaps = append(gaps, tok)
-				break
-			}
-		}
-	}
+	gaps := statusGaps(tokens, own)
 	remote, err := m.statusDayAggs(ctx, gaps, n, idx, func(ph string, args []any) (string, []any) {
 		return `SELECT token, substr(time, 1, 13), count(*), coalesce(sum(status), 0) FROM (
 			SELECT token, time, status FROM hc_measurements WHERE token IN (` + ph + `) AND time >= ? AND time <= ? AND (flags & 8) != 0 AND (flags & 1) = 0
@@ -638,12 +646,12 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	tr := m.translator(lang)
 	days := statusDaysOf(p.Days)
 	hourly := days == 1 // 24 Stundenbalken statt Tagesbalken
-	n := days
+	n, unit := days, "day"
 	if hourly {
-		n = 24
+		n, unit = 24, "hour"
 	}
 	v := &StatusView{Slug: p.Slug, Title: p.Title, Description: p.Description, Footer: p.Footer, Layout: p.Layout, Theme: p.Theme,
-		Accent: p.Accent, Days: days, ShowUptime: p.ShowUptime, RefreshSec: p.RefreshSec, PoweredBy: p.PoweredBy, Generated: now.UTC(),
+		Accent: p.Accent, Days: days, BarUnit: unit, ShowUptime: p.ShowUptime, RefreshSec: p.RefreshSec, PoweredBy: p.PoweredBy, Generated: now.UTC(),
 		Groups: []StatusViewGroup{}, Notices: []StatusNotice{}, Maintenance: []StatusViewMaint{}, Incidents: []StatusViewIncid{}}
 	if p.HasLogo {
 		v.Logo = "logo?v=" + strconv.FormatInt(p.LogoUpdated.Unix(), 10) // neue Datei = neue URL (lange cachebar)
@@ -984,7 +992,7 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	maint := statusMaintCover(bounds, wins, occ, c.Token)
 	d.Hours = make([]StatusViewDay, 24)
 	for i := 0; i < 24; i++ {
-		d.Hours[i] = statusBucket(bounds[i].In(loc).Format("2006-01-02T15"), hourAgg[bounds[i].UTC().Format("2006-01-02T15")], downs[i], maint[i])
+		d.Hours[i] = statusBucket(statusHourLabel(bounds[i], loc), hourAgg[bounds[i].UTC().Format("2006-01-02T15")], downs[i], maint[i])
 		if !p.ShowUptime {
 			d.Hours[i].Uptime = -1
 		}

@@ -193,10 +193,14 @@ func (m *Module) aiBlocked(a *Advanced, r *http.Request) bool {
 	return false
 }
 
-// aiRobots ersetzt die 404 des Ziels auf /robots.txt durch eine robots.txt mit KI-Sperre (Host mit ai_robots).
+// aiRobots ersetzt die 404 des Ziels auf /robots.txt durch eine robots.txt mit KI-Sperre (Host mit ai_robots). Es
+// zaehlt der Pfad beim Besucher (beim Ziel steht ggf. der Pfad des Hosts davor, z. B. /rezepte/robots.txt).
 func (m *Module) aiRobots(a *Advanced, resp *http.Response) {
-	if !a.AIRobots || resp.StatusCode != http.StatusNotFound || resp.Request == nil || resp.Request.URL.Path != aiRobotsTxt ||
-		(resp.Request.Method != http.MethodGet && resp.Request.Method != http.MethodHead) {
+	if !a.AIRobots || resp.StatusCode != http.StatusNotFound {
+		return
+	}
+	in := visitorReq(resp)
+	if in == nil || in.URL.Path != aiRobotsTxt || (in.Method != http.MethodGet && in.Method != http.MethodHead) {
 		return
 	}
 	body := m.bl.ai.robots(!a.AIBotsAllowUser)

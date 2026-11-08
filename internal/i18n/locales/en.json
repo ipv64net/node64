@@ -561,6 +561,7 @@
       "adv_req_del": "Remove headers before the target",
       "adv_resp_set": "Headers to the visitor",
       "adv_resp_del": "Remove headers before the visitor",
+      "loc_header_ph": "X-Header: value",
       "adv_headers_hint": "One \"Name: value\" or name per line. Connection headers (Connection, Upgrade, Content-Length …) cannot be changed.",
       "adv_host": "Host header to the target",
       "adv_host_pass": "Name the visitor used (default)",
@@ -789,7 +790,7 @@
       "remove_user": "remove",
       "new_users": "New users",
       "users_hint": "New or changed users as \"name:password\", one per line. Passwords are stored hashed only (bcrypt).",
-      "rules_hint": "One \"allow\" or \"deny\" and an IP, a network or \"all\" per line. The first match counts, without a match access is denied. Dynamic: \"self\" = the node's own public IP (IPv4 and IPv6 /64; \"self4\"/\"self6\" only one of them – with DS-Lite/CGNAT many connections share the IPv4, then use \"self6\") or a DNS name such as a DynDNS name (resolved again every minute, IPv6 as /64). This lets devices at home through without a password even via CDN64.",
+      "rules_hint": "One \"allow\" or \"deny\" and an IP, a network or \"all\" per line. The first match counts, without a match access is denied. Dynamic: \"self\" = the node's own public IP (IPv4 and IPv6 /64; \"self4\"/\"self6\" only one of them – if DynDNS detects DS-Lite/CGNAT, \"self\" leaves out the IPv4, which many connections share) or a DNS name such as a DynDNS name (resolved again every minute, IPv6 as /64). This lets devices at home through without a password even via CDN64. If a name cannot be resolved, \"deny\" still applies.",
       "empty": "No access lists yet. They restrict hosts by password and/or to certain networks.",
       "delete_confirm": "Delete access list \"{name}\"?",
       "hint": "After 10 failed logins within 5 minutes the IP is blocked for 15 minutes (recorded in the audit log).",
@@ -3713,6 +3714,8 @@
       "bulk_added": "{n} list(s) added",
       "bulk_dup": "{n} already there",
       "bulk_invalid": "{n} invalid: {list}",
+      "bulk_full": "{n} not added (at most {max} lists)",
+      "add_ph": "https://example.org/blocklist.txt\nMy list | https://example.org/hosts",
       "bulk_none": "No list added.",
       "cat": {
         "ads": "Ads",
@@ -3801,7 +3804,6 @@
       "docker_err_bad_name": "name “{name}” invalid",
       "docker_err_taken": "“{name}” already has another record",
       "docker_err_failed": "“{name}” could not be created (see log)",
-      "err_docker_ip": "Addresses for Docker records: IPv4 or IPv6 addresses, separated by commas.",
       "mdns_probing": "Checking …",
       "mdns_none": "No device answers at the moment – is Node64 behind the Docker bridge?",
       "mdns_now": "{n} devices answer at the moment.",
@@ -4113,6 +4115,7 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "docker_ip": "Addresses for Docker records: IPv4 or IPv6 addresses, separated by commas.",
       "zone_soa": "TTL and SOA values are out of the allowed range.",
       "zone_mail": "The mail in the SOA is invalid.",
       "zone_name": "The zone name is invalid.",

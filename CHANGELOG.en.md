@@ -10,6 +10,7 @@ Short summary of what changes per version. Details per module are in the node un
 - DNS64: block services with a click – about 40 services such as TikTok, YouTube, Discord or ChatGPT, per group and in schedules (#19).
 - DNS64: label and tags per device in groups, with filter and search (#24).
 - DNS64: own records from Docker labels (`node64.dns.name`), following address changes and disappearing with the container (#18).
+- DNS64: your own blocklist and the import of allowed domains understand hosts lines; at most 64 enabled blocklists, beyond that you get a message.
 - DNS64: the query log shows the answer of custom records or NODATA (#50); client names come from the group, then your own PTR/A records, then the router (#49).
 - PROXY64: path at the target (#43), locations can block or answer with fixed content, "allow only the locations" (#11), "Advanced" per location.
 - PROXY64: custom error page per host, optionally also for 5xx of the target (#38); access lists with `allow self` and DNS names (#32); maintenance and error pages reach visitors in CDN64 mode 2; tables readable in dark mode.

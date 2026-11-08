@@ -137,7 +137,7 @@ type stItem struct {
 	Bars      template.HTML
 	BarsLabel string
 	FirstDay  string
-	FirstHour string // Stundenbalken (Zeitraum 24 h): erste Stunde "2006-01-02T15" in der Zeitzone der Node
+	FirstHour string // Stundenbalken (Zeitraum 24 h): erste Stunde (statusHourLabel) in der Zeitzone der Node
 	NoData    string // title fuer "–" (keine Daten)
 }
 
@@ -449,7 +449,7 @@ func (p *stPage) group(g StatusViewGroup, total int) stGroup {
 		}
 		if p.Layout == "list" && len(it.Bars) > 0 {
 			si.Bars, si.BarsLabel = p.bars(it.Bars)
-			if len(it.Bars[0].Day) == len("2006-01-02T15") {
+			if stHourly(it.Bars) {
 				si.FirstHour = it.Bars[0].Day
 			} else {
 				si.FirstDay = it.Bars[0].Day
@@ -499,16 +499,25 @@ func stBarTag(state string) string {
 
 var stBarTagState = map[string]string{"i": "up", "s": "partial", "b": "down", "u": "maintenance", "q": "none"}
 
+// stHourly: Stundenbalken (Zeitraum 24 h, Day "2006-01-02T15" bzw. "2006-01-02T15:04") statt Tagesbalken.
+func stHourly(days []StatusViewDay) bool { return len(days) > 0 && strings.Contains(days[0].Day, "T") }
+
 // bars rendert die Tagesbalken kompakt: Tage ohne Auffaelligkeit ohne title (den setzt das JS beim Darueberfahren),
-// auffaellige Tage mit Datum, Verfuegbarkeit und Ausfall-Minuten (auch ohne JS sichtbar).
+// auffaellige Tage mit Datum, Verfuegbarkeit und Ausfall-Minuten (auch ohne JS sichtbar). Stundenbalken ohne title
+// tragen ihre Beschriftung in data-t (nach einer Zeitumstellung folgen die Ortsstunden nicht mehr lueckenlos).
 func (p *stPage) bars(days []StatusViewDay) (template.HTML, string) {
 	var b strings.Builder
 	b.Grow(len(days) * 8)
 	bad := 0
+	hourly := stHourly(days)
 	for _, d := range days {
 		c := stBarTag(d.State)
 		if c == "i" && d.DownMins == 0 || c == "q" {
-			b.WriteString("<" + c + "></" + c + ">")
+			if hourly {
+				b.WriteString("<" + c + ` data-t="` + html.EscapeString(d.Day) + `"></` + c + ">")
+			} else {
+				b.WriteString("<" + c + "></" + c + ">")
+			}
 			continue
 		}
 		if c == "s" || c == "b" {
@@ -523,19 +532,23 @@ func (p *stPage) bars(days []StatusViewDay) (template.HTML, string) {
 		}
 		b.WriteString("<" + c + ` title="` + html.EscapeString(t) + `"></` + c + ">")
 	}
-	if len(days) > 0 && len(days[0].Day) == len("2006-01-02T15") {
+	if hourly {
 		return template.HTML(b.String()), p.T("hc.status.pub.bars.aria_h", "hours", len(days), "count", bad)
 	}
 	return template.HTML(b.String()), p.T("hc.status.pub.bars.aria", "days", len(days), "count", bad)
 }
 
-// day formatiert "2006-01-02" (bzw. "2006-01-02T15" bei Stundenbalken) fuer die Anzeige.
+// day formatiert "2006-01-02" (bzw. "2006-01-02T15" oder "2006-01-02T15:04" bei Stundenbalken) fuer die Anzeige.
 func (p *stPage) day(s string) string {
-	if h, err := time.Parse("2006-01-02T15", s); err == nil {
+	h, err := time.Parse("2006-01-02T15", s)
+	if err != nil {
+		h, err = time.Parse("2006-01-02T15:04", s)
+	}
+	if err == nil {
 		if p.Lang == "de" {
-			return h.Format("02.01. 15:00")
+			return h.Format("02.01. 15:04")
 		}
-		return h.Format("Jan 2, 15:00")
+		return h.Format("Jan 2, 15:04")
 	}
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {

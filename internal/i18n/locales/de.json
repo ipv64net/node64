@@ -561,6 +561,7 @@
       "adv_req_del": "Kopfzeilen vor dem Ziel entfernen",
       "adv_resp_set": "Kopfzeilen an den Besucher",
       "adv_resp_del": "Kopfzeilen vor dem Besucher entfernen",
+      "loc_header_ph": "X-Header: Wert",
       "adv_headers_hint": "Je Zeile „Name: Wert“ bzw. ein Name. Verbindungs-Kopfzeilen (Connection, Upgrade, Content-Length …) lassen sich nicht ändern.",
       "adv_host": "Host-Kopf an das Ziel",
       "adv_host_pass": "Name des Besuchers (Standard)",
@@ -789,7 +790,7 @@
       "remove_user": "entfernen",
       "new_users": "Neue Benutzer",
       "users_hint": "Neue oder geänderte Benutzer als „name:passwort“, je Zeile. Passwörter werden nur gehasht gespeichert (bcrypt).",
-      "rules_hint": "Je Zeile „allow“ oder „deny“ und eine IP, ein Netz oder „all“. Der erste Treffer gilt, ohne Treffer ist der Zugriff gesperrt. Dynamisch: „self“ = eigene öffentliche IP der Node (IPv4 und IPv6-/64; „self4“/„self6“ nur eine davon – bei DS-Lite/CGNAT teilen sich viele Anschlüsse die IPv4, dann „self6“) oder ein DNS-Name wie ein DynDNS-Name (wird jede Minute neu aufgelöst, IPv6 als /64). So kommen Geräte zu Hause auch über CDN64 ohne Passwort durch.",
+      "rules_hint": "Je Zeile „allow“ oder „deny“ und eine IP, ein Netz oder „all“. Der erste Treffer gilt, ohne Treffer ist der Zugriff gesperrt. Dynamisch: „self“ = eigene öffentliche IP der Node (IPv4 und IPv6-/64; „self4“/„self6“ nur eine davon – erkennt DynDNS DS-Lite/CGNAT, nimmt „self“ keine IPv4 auf, die teilen sich viele Anschlüsse) oder ein DNS-Name wie ein DynDNS-Name (wird jede Minute neu aufgelöst, IPv6 als /64). So kommen Geräte zu Hause auch über CDN64 ohne Passwort durch. Lässt sich ein Name nicht auflösen, greift „deny“ trotzdem.",
       "empty": "Noch keine Zugriffslisten. Damit lassen sich Hosts per Passwort und/oder auf bestimmte Netze beschränken.",
       "delete_confirm": "Zugriffsliste „{name}“ löschen?",
       "hint": "Nach 10 falschen Anmeldungen in 5 Minuten wird die IP 15 Minuten gesperrt (steht im Audit).",
@@ -3713,6 +3714,8 @@
       "bulk_added": "{n} Liste(n) hinzugefügt",
       "bulk_dup": "{n} schon vorhanden",
       "bulk_invalid": "{n} ungültig: {list}",
+      "bulk_full": "{n} nicht hinzugefügt (höchstens {max} Listen)",
+      "add_ph": "https://example.org/blocklist.txt\nMeine Liste | https://example.org/hosts",
       "bulk_none": "Keine Liste hinzugefügt.",
       "cat": {
         "ads": "Werbung",
@@ -3801,7 +3804,6 @@
       "docker_err_bad_name": "Name „{name}“ ungültig",
       "docker_err_taken": "„{name}“ hat schon einen anderen Eintrag",
       "docker_err_failed": "„{name}“ ließ sich nicht anlegen (siehe Log)",
-      "err_docker_ip": "Adressen für Docker-Einträge: IPv4- bzw. IPv6-Adressen, mit Komma getrennt.",
       "mdns_probing": "Prüfung läuft …",
       "mdns_none": "Zurzeit antwortet kein Gerät – hängt Node64 hinter der Docker-Bridge?",
       "mdns_now": "Zurzeit antworten {n} Geräte.",
@@ -4113,6 +4115,7 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "docker_ip": "Adressen für Docker-Einträge: IPv4- bzw. IPv6-Adressen, mit Komma getrennt.",
       "zone_soa": "TTL- und SOA-Werte sind außerhalb des erlaubten Bereichs.",
       "zone_mail": "Die Mail im SOA ist ungültig.",
       "zone_name": "Der Name der Zone ist ungültig.",

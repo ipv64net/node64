@@ -30,6 +30,9 @@ var MaintStyles = []string{MaintMatrix, MaintGear, MaintCustom}
 // (internal/cdnedge/errorpage.go) - Wartungsseite und eigene Fehlerseite sollen beim Besucher ankommen.
 const keepPage = "CDN64-Error-Page"
 
+// keepOwnPage: selbst erzeugte Seite (Wartung, eigene Fehlerseite, feste 5xx einer Location) nicht ersetzen lassen.
+func keepOwnPage(h http.Header) { h.Set(keepPage, "off") }
+
 const (
 	maintMaxHTML    = 64 << 10 // eigenes HTML hoechstens 64 KB
 	maintRetryAfter = "600"    // Sekunden: Hinweis an Browser und Suchmaschinen
@@ -98,7 +101,7 @@ func hostPage(w http.ResponseWriter, r *http.Request, a *Advanced, status int) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set(keepPage, "off")
+	keepOwnPage(w.Header())
 	w.WriteHeader(status)
 	if r.Method != http.MethodHead {
 		_, _ = io.WriteString(w, body)
@@ -111,8 +114,8 @@ func overrideErr(a *Advanced, resp *http.Response) {
 		return
 	}
 	host := ""
-	if resp.Request != nil {
-		host = hostOnly(resp.Request.Host)
+	if in := visitorReq(resp); in != nil { // Name beim Besucher, nicht der Host-Kopf zum Ziel
+		host = hostOnly(in.Host)
 	}
 	body := errPageFor(a, resp.StatusCode, host)
 	if body == "" {
@@ -130,7 +133,7 @@ func overrideErr(a *Advanced, resp *http.Response) {
 	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 	resp.Header.Set("Cache-Control", "no-store")
-	resp.Header.Set(keepPage, "off")
+	keepOwnPage(resp.Header)
 }
 
 // maintPage liefert die Seite fuer einen Stil; {{HOST}} wird durch den angefragten Namen ersetzt (eigenes HTML bleibt
@@ -152,7 +155,7 @@ func serveMaint(w http.ResponseWriter, r *http.Request, a *Advanced) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("Retry-After", maintRetryAfter)
 	h.Set("X-Robots-Tag", "noindex")
-	h.Set(keepPage, "off")
+	keepOwnPage(h)
 	w.WriteHeader(http.StatusServiceUnavailable)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write([]byte(maintPage(a.MaintenanceStyle, a.MaintenanceHTML, hostOnly(r.Host))))

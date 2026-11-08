@@ -78,7 +78,7 @@
 	}
 
 	function isSeparator(tr, cols) {
-		if (tr.hasAttribute("data-sort-sep") || tr.classList.contains("table-light") || tr.classList.contains("hc-group-row") || tr.classList.contains("dyn-domain-row")) { return true; }
+		if (tr.hasAttribute("data-sort-sep") || tr.classList.contains("table-light") || tr.classList.contains("table-group") || tr.classList.contains("hc-group-row") || tr.classList.contains("dyn-domain-row")) { return true; }
 		if (tr.querySelector(":scope > th")) { return true; }
 		return tr.children.length === 1 && (tr.firstElementChild.colSpan || 1) >= Math.max(2, cols - 1);
 	}

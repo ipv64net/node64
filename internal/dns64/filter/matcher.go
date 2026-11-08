@@ -27,11 +27,14 @@ const MaxLists = 64
 // AllLists is the mask with every list.
 const AllLists = ^uint64(0)
 
-func newMatcher(names []string) *Matcher {
+func newMatcher(names []string) *Matcher { return newMatcherSize(names, 1<<18) }
+
+// newMatcherSize wie newMatcher; hint = erwartete Regeln je Map (Platz vorab).
+func newMatcherSize(names []string, hint int) *Matcher {
 	return &Matcher{
 		seed:  maphash.MakeSeed(),
-		exact: make(map[uint64]uint64, 1<<18),
-		wild:  make(map[uint64]uint64, 1<<18),
+		exact: make(map[uint64]uint64, hint),
+		wild:  make(map[uint64]uint64, hint),
 		allow: make(map[uint64]struct{}),
 		names: names,
 	}

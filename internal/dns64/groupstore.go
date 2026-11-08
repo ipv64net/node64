@@ -431,6 +431,18 @@ func (m *Module) AddMember(ctx context.Context, x groups.Member) (groups.Member,
 	return x, m.loadGroups(ctx)
 }
 
+// memberTags liefert die Tags eines vorhandenen Mitglieds gleicher Art und gleichen Werts (nil = keins).
+func (m *Module) memberTags(ctx context.Context, x groups.Member) []string {
+	if !groups.Normalize(&x) {
+		return nil
+	}
+	var tags string
+	if err := m.core.Reader().QueryRowContext(ctx, `SELECT tags FROM dns64_group_members WHERE kind = ? AND value = ?`, x.Kind, x.Value).Scan(&tags); err != nil {
+		return nil
+	}
+	return groups.SplitTags(tags)
+}
+
 // UpdateMember aendert Bezeichnung und Tags eines Mitglieds (Art und Wert bleiben).
 func (m *Module) UpdateMember(ctx context.Context, id int64, label string, tags []string) (groups.Member, error) {
 	var x groups.Member

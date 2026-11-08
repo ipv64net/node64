@@ -89,7 +89,7 @@ func (m *Module) pageListAddKind(w http.ResponseWriter, r *http.Request, allow b
 	res := c.addListsBulk(lines, allow)
 	if len(res.Added) == 0 {
 		msg := m.g.T(r, "dns64.lists.bulk_none")
-		if len(res.Duplicates) > 0 || len(res.Invalid) > 0 {
+		if len(res.Duplicates) > 0 || len(res.Invalid) > 0 || len(res.Full) > 0 {
 			msg += " " + m.bulkText(r, res)
 		}
 		m.g.Flash(w, r, "danger", msg)
@@ -111,7 +111,7 @@ func (m *Module) pageListAddKind(w http.ResponseWriter, r *http.Request, allow b
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
-// bulkText: "3 Listen hinzugefügt · 1 schon vorhanden · 1 ungültig: …".
+// bulkText: "3 Listen hinzugefuegt · 1 schon vorhanden · 1 ungueltig: … · 2 nicht hinzugefuegt (hoechstens 64)".
 func (m *Module) bulkText(r *http.Request, res BulkResult) string {
 	parts := []string{m.g.T(r, "dns64.lists.bulk_added", "n", len(res.Added))}
 	if len(res.Duplicates) > 0 {
@@ -123,6 +123,9 @@ func (m *Module) bulkText(r *http.Request, res BulkResult) string {
 			inv = inv[:5]
 		}
 		parts = append(parts, m.g.T(r, "dns64.lists.bulk_invalid", "n", len(res.Invalid), "list", strings.Join(inv, ", ")))
+	}
+	if len(res.Full) > 0 {
+		parts = append(parts, m.g.T(r, "dns64.lists.bulk_full", "n", len(res.Full), "max", filter.MaxLists))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -137,7 +140,8 @@ func (m *Module) pageAllowListRemove(w http.ResponseWriter, r *http.Request) {
 	m.apply(w, r, "/dns64/lists#freigabe-listen", c, "dns64.allowlists.remove", url)
 }
 
-// replaceDeny setzt die eigene Sperrliste auf die Zeilen des Textfelds.
+// replaceDeny setzt die eigene Sperrliste auf die Zeilen des Textfelds; wie beim Sperren einzelner Domains faellt
+// eine gleichlautende Freigabe einer neuen Domain weg (sonst gewinnt sie und die Sperre wirkt nicht).
 func (m *Module) replaceDeny(r *http.Request, lines []string) (filter.ReplaceResult, error) {
 	dl, err := m.denylist()
 	if err != nil {
@@ -146,6 +150,23 @@ func (m *Module) replaceDeny(r *http.Request, lines []string) (filter.ReplaceRes
 	res, err := dl.Replace(lines)
 	if err != nil {
 		return res, err
+	}
+	if len(res.New) > 0 {
+		if a, err := m.allowlist(); err == nil {
+			freed := false
+			for _, d := range res.New {
+				if x, ok := a.Match(d); ok && x == d {
+					_ = a.Remove(d)
+					freed = true
+				}
+			}
+			if freed {
+				m.clChanged(r.Context(), ItemAllow)
+			}
+		}
+		if e := m.running(); e != nil {
+			e.cache.Flush() // wie apiDenyAdd
+		}
 	}
 	m.clChanged(r.Context(), ItemDeny)
 	m.audit(r, "dns64.denylist.replace", strconv.Itoa(res.Total)+" domains", "+"+strconv.Itoa(res.Added)+" -"+strconv.Itoa(res.Removed))

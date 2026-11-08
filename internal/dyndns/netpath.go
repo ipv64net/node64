@@ -81,3 +81,8 @@ func (m *Module) lastNetInfo(ctx context.Context) netInfo {
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, SetNetInfo, "")), &ni)
 	return ni
 }
+
+// SharedIPv4: teilt sich der Anschluss laut letztem Befund die IPv4? cgnat, dslite oder "" (nein bzw. ohne Befund).
+func (m *Module) SharedIPv4(ctx context.Context) string {
+	return m.lastNetInfo(ctx).Kind
+}

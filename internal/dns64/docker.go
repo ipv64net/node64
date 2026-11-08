@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -19,11 +20,12 @@ import (
 )
 
 // DNS-Eintraege aus Docker-Labels (GitHub #18): Container mit dem Label node64.dns.name bekommen eigene Eintraege
-// (A/AAAA) in DNS64 - nur auf dieser Node (local_only), Kommentar "Docker: <Container>". Nur mit Schalter
-// dns64.docker = 1 (je Node). Die Docker-API (nur GET) wird jede Minute gelesen. Fehlt ein Container (bzw. sein
-// Label) in einer erfolgreich gelesenen Liste dockerDNSRemoveWait lang, verschwinden seine Eintraege; aendert sich nur
-// die Adresse, sofort. Fehler beim Lesen loeschen nie etwas, Schalter aus: die Eintraege bleiben. Namen, die schon einen
-// anderen eigenen Eintrag haben, fasst der Abgleich nicht an.
+// (A/AAAA) in DNS64 - nur auf dieser Node (local_only), ohne PTR (meist teilen sie die Adresse der Node), Kommentar
+// "Docker: <Container>", Herkunft (Spalte origin) "docker". Nur mit Schalter dns64.docker = 1 (je Node). Die
+// Docker-API (nur GET) wird jede Minute gelesen. Fehlt ein Container (bzw. sein Label) in einer erfolgreich gelesenen
+// Liste dockerDNSRemoveWait lang, verschwinden seine Eintraege; aendert sich nur die Adresse, sofort. Fehler beim Lesen
+// loeschen nie etwas, Schalter aus: die Eintraege bleiben. Eigen sind nur Eintraege mit Herkunft docker, die noch nur
+// auf dieser Node gelten (Kommentar egal); Namen mit anderen Eintraegen fasst der Abgleich nicht an.
 
 const (
 	setDocker   = "dns64.docker"    // 1 = Docker-Labels node64.dns.* auswerten (je Node)
@@ -31,7 +33,8 @@ const (
 
 	dockerLabelName = "node64.dns.name" // Namen, Komma
 	dockerLabelIP   = "node64.dns.ip"   // Adressen (Komma) oder "container" = Adressen des Containers (Macvlan/IPvlan)
-	dockerComment   = "Docker: "        // Kennzeichen der Eintraege aus dem Abgleich
+	dockerComment   = "Docker: "        // Kommentar der Eintraege aus dem Abgleich (nur zur Anzeige)
+	dockerOrigin    = "docker"          // Herkunft (dns64_records.origin) der Eintraege aus dem Abgleich
 )
 
 // Zeiten (Variablen, damit Tests sie verkuerzen koennen).
@@ -139,7 +142,9 @@ func (c dockerC) name() string {
 	return ""
 }
 
-// dockerList liest alle Container (auch gestoppte: ihre Namen bleiben, bis der Container entfernt ist).
+// dockerList liest alle Container mit dem Label node64.dns.name (auch gestoppte: ihre Namen bleiben, bis der
+// Container entfernt ist). Container ohne das Label wertet der Abgleich ohnehin nicht aus; fehlen sie in der Liste,
+// gelten sie wie bisher als verschwunden.
 func dockerList(ctx context.Context, host string) ([]dockerC, error) {
 	hc, base, err := proxmox.DockerClient(host)
 	if err != nil {
@@ -147,7 +152,8 @@ func dockerList(ctx context.Context, host string) ([]dockerC, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, dockerDNSTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/containers/json?all=1", nil)
+	q := url.Values{"all": {"1"}, "filters": {`{"label":["` + dockerLabelName + `"]}`}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/containers/json?"+q.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -250,9 +256,10 @@ func lanAddrs() []netip.Addr {
 	return out
 }
 
-// virtualIface: Schnittstellen von Docker, Bruecken und VMs (deren Adressen erreicht im Heimnetz niemand).
+// virtualIface: Schnittstellen von Docker/Podman, internen Bruecken, VMs und Tunneln (deren Adressen erreicht im
+// Heimnetz niemand). vmbr* nicht: auf einem Proxmox-Host liegt die LAN-Adresse auf der Bruecke vmbr0 (wie cdn64).
 func virtualIface(name string) bool {
-	for _, p := range []string{"docker", "br-", "veth", "virbr", "vmbr", "lxc", "cni", "flannel", "cali", "tun", "tap", "wg", "zt"} {
+	for _, p := range []string{"docker", "br-", "veth", "virbr", "podman", "lxc", "cni", "flannel", "cali", "tun", "tap", "wg", "zt"} {
 		if strings.HasPrefix(name, p) {
 			return true
 		}
@@ -359,20 +366,38 @@ func (m *Module) dockerSync(ctx context.Context) {
 }
 
 // dockerApply legt fehlende Eintraege an, passt geaenderte Adressen an und entfernt Eintraege verschwundener Container
-// nach dockerDNSRemoveWait. Probleme stehen danach in view.
+// nach dockerDNSRemoveWait. Probleme stehen danach in view. Alle Aenderungen gehen in einer Transaktion in die
+// Datenbank; die Momentaufnahme entsteht danach einmal neu (statt je Eintrag).
 func (m *Module) dockerApply(ctx context.Context, wants []dockerWant, view []DockerDNSEntry) error {
-	recs, err := m.Records(ctx)
+	type rec struct {
+		id               int64
+		name, typ, value string
+		noPTR, localOnly bool
+		origin           string
+	}
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, no_ptr, local_only, origin FROM dns64_records`)
 	if err != nil {
 		return err
 	}
-	mine := map[string]Record{} // Name Typ Wert -> Eintrag aus dem Abgleich
+	mine := map[string]rec{}    // Name Typ Wert -> Eintrag aus dem Abgleich
 	others := map[string]bool{} // Namen mit anderen eigenen Eintraegen
-	for _, r := range recs {
-		if strings.HasPrefix(r.Comment, dockerComment) {
-			mine[r.Name+" "+r.Type+" "+r.Value] = r
-		} else {
-			others[r.Name] = true
+	for rows.Next() {
+		var r rec
+		if err := rows.Scan(&r.id, &r.name, &r.typ, &r.value, &r.noPTR, &r.localOnly, &r.origin); err != nil {
+			rows.Close()
+			return err
 		}
+		// eigen nur mit Herkunft docker und nur auf dieser Node: von Hand angelegte Eintraege mit gleichem Kommentar
+		// und solche, die der Nutzer in den Cluster gegeben hat, bleiben unberuehrt
+		if r.origin == dockerOrigin && r.localOnly {
+			mine[r.name+" "+r.typ+" "+r.value] = r
+		} else {
+			others[r.name] = true
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	problem := func(container, code, name string) {
 		for i := range view {
@@ -384,21 +409,31 @@ func (m *Module) dockerApply(ctx context.Context, wants []dockerWant, view []Doc
 	want := map[string]bool{}
 	wantName := map[string]bool{} // Namen, die ein Container noch will (Adresse geaendert: alten Eintrag sofort weg)
 	var errs []error
+	type add struct {
+		r         Record
+		container string
+	}
+	var adds []add
+	var noPTR, dels []rec
 	for _, w := range wants {
 		if others[w.name] {
 			problem(w.container, dockerErrTaken, w.name)
 			continue
 		}
 		want[w.key()], wantName[w.name] = true, true
-		if _, ok := mine[w.key()]; ok {
+		if r, ok := mine[w.key()]; ok {
+			if !r.noPTR { // angleichen: kein PTR aus Docker-Eintraegen
+				noPTR = append(noPTR, r)
+			}
 			continue
 		}
-		if _, err := m.AddRecord(ctx, Record{Name: w.name, Type: w.typ, Value: w.value, Comment: dockerComment + w.container, LocalOnly: true}); err != nil {
+		r := Record{Name: w.name, Type: w.typ, Value: w.value, Comment: dockerComment + w.container, NoPTR: true, LocalOnly: true}
+		if err := m.checkRecord(ctx, &r, 0); err != nil {
 			problem(w.container, dockerErrFailed, w.name)
 			errs = append(errs, fmt.Errorf("%s %s: %w", w.name, w.typ, err))
 			continue
 		}
-		m.log.Info("dns64 docker: record added", "name", w.name, "type", w.typ, "value", w.value, "container", w.container)
+		adds = append(adds, add{r, w.container})
 	}
 	now := time.Now()
 	if m.dkd.gone == nil {
@@ -409,7 +444,7 @@ func (m *Module) dockerApply(ctx context.Context, wants []dockerWant, view []Doc
 			delete(m.dkd.gone, k)
 			continue
 		}
-		if !wantName[r.Name] { // Container (bzw. Name) weg: erst nach der Wartezeit
+		if !wantName[r.name] { // Container (bzw. Name) weg: erst nach der Wartezeit
 			since, ok := m.dkd.gone[k]
 			if !ok {
 				m.dkd.gone[k] = now
@@ -420,16 +455,65 @@ func (m *Module) dockerApply(ctx context.Context, wants []dockerWant, view []Doc
 			}
 		}
 		delete(m.dkd.gone, k)
-		if err := m.DeleteRecord(ctx, r.ID); err != nil && !errors.Is(err, errNotFound) {
-			errs = append(errs, err)
-			continue
-		}
-		m.log.Info("dns64 docker: record removed", "name", r.Name, "type", r.Type, "value", r.Value)
+		dels = append(dels, r)
 	}
 	for k := range m.dkd.gone {
 		if _, ok := mine[k]; !ok {
 			delete(m.dkd.gone, k)
 		}
+	}
+	if len(adds)+len(noPTR)+len(dels) == 0 {
+		return errors.Join(errs...)
+	}
+
+	tx, err := m.core.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	defer tx.Rollback()
+	created := time.Now().UTC().Format(time.RFC3339)
+	var added []add
+	for _, a := range adds {
+		r := a.r
+		if _, err := tx.ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, local_only, origin, enabled, created_at) VALUES (?,?,?,?,?,1,1,?,1,?)`,
+			r.Name, r.Type, r.Value, r.TTL, r.Comment, dockerOrigin, created); err != nil {
+			problem(a.container, dockerErrFailed, r.Name)
+			errs = append(errs, fmt.Errorf("%s %s: %w", r.Name, r.Type, err))
+			continue
+		}
+		added = append(added, a)
+	}
+	// nur Eintraege, die (noch) dem Abgleich gehoeren: inzwischen von Hand geaenderte bleiben
+	for _, r := range noPTR {
+		if _, err := tx.ExecContext(ctx, `UPDATE dns64_records SET no_ptr = 1 WHERE id = ? AND origin = ? AND local_only = 1`, r.id, dockerOrigin); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	var removed []rec
+	for _, r := range dels {
+		res, err := tx.ExecContext(ctx, `DELETE FROM dns64_records WHERE id = ? AND origin = ? AND local_only = 1`, r.id, dockerOrigin)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			removed = append(removed, r)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		for _, a := range added {
+			problem(a.container, dockerErrFailed, a.r.Name)
+		}
+		return errors.Join(append(errs, err)...)
+	}
+	for _, a := range added {
+		m.log.Info("dns64 docker: record added", "name", a.r.Name, "type", a.r.Type, "value", a.r.Value, "container", a.container)
+	}
+	for _, r := range removed {
+		m.log.Info("dns64 docker: record removed", "name", r.name, "type", r.typ, "value", r.value)
+	}
+	if err := m.loadRecords(ctx); err != nil { // einmal fuer den ganzen Abgleich
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

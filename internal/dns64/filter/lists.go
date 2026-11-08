@@ -185,7 +185,9 @@ func NewReleaseManager(dir string, lists []List, interval time.Duration, client 
 	for i, l := range m.lists {
 		m.status[i].List = l
 	}
-	m.rebuild()
+	if len(m.lists) > 0 { // ohne Listen kein Matcher (Released prueft dann nichts)
+		m.rebuild()
+	}
 	return m, nil
 }
 
@@ -196,6 +198,16 @@ func (m *Manager) Released(name string) (list string, ok bool) {
 	}
 	ok, list = m.cur.Load().Match(name)
 	return list, ok
+}
+
+// Exempt: name ist freigegeben (eigene Freigabe oder Freigabe-Liste, fuer alle Geraete und Gruppen); dann
+// sperrt auch kein CNAME-Ziel. Ohne Freigabe-Listen kostet die Pruefung fast nichts.
+func (m *Manager) Exempt(name string) bool {
+	if m.Allow.Contains(name) {
+		return true
+	}
+	_, ok := m.Release.Released(name)
+	return ok
 }
 
 // ReleasedPrefix marks the reason of a released domain that a list would block ("released:<list>").
@@ -387,7 +399,17 @@ func (m *Manager) rebuild() {
 	for i, l := range m.lists {
 		names[i] = l.Name
 	}
-	mt := newMatcher(names)
+	hint := 1 << 18
+	if m.release { // Freigabe-Listen sind meist klein: Platz nach Dateigroesse statt fuer eine grosse Blockliste
+		var size int64
+		for i := range m.lists {
+			if fi, err := os.Stat(m.path(i)); err == nil {
+				size += fi.Size()
+			}
+		}
+		hint = int(min(size/48, 1<<18)) // gut 20 Byte je Zeile, verteilt auf zwei Maps
+	}
+	mt := newMatcherSize(names, hint)
 	counts := make([]int, len(m.lists))
 	mtimes := make([]time.Time, len(m.lists))
 	for i := range m.lists {
@@ -404,7 +426,7 @@ func (m *Manager) rebuild() {
 			m.log.Warn("blocklist parse error", "list", m.lists[i].Name, "err", err)
 		}
 	}
-	m.cur.Store(mt)
+	old := m.cur.Swap(mt)
 
 	m.mu.Lock()
 	for i := range m.status {
@@ -414,8 +436,10 @@ func (m *Manager) rebuild() {
 	m.updated = time.Now()
 	m.mu.Unlock()
 
-	// The old matcher can be large; hand the memory back promptly.
-	debug.FreeOSMemory()
+	// The old matcher can be large; hand the memory back promptly (Freigabe-Listen nur nach einem grossen).
+	if !m.release || (old != nil && old.Size() >= 1<<16) {
+		debug.FreeOSMemory()
+	}
 	if m.release {
 		m.log.Info("allow lists loaded", "domains", mt.Size(), "took", time.Since(start).Round(time.Millisecond))
 		return

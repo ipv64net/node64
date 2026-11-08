@@ -143,8 +143,24 @@ type target struct {
 	forward string // Pfad beim Ziel ("" = unveraendert; beim Host Advanced.TargetPath)
 }
 
+// ctxInKey: Anfrage des Besuchers im Kontext der ausgehenden Anfrage (fuer ModifyResponse: resp.Request ist die
+// ausgehende mit Pfad und Host beim Ziel).
+type ctxInKey struct{}
+
+// visitorReq: Anfrage des Besuchers zu einer Antwort des Ziels (ohne gemerkte die ausgehende).
+func visitorReq(resp *http.Response) *http.Request {
+	if resp.Request == nil {
+		return nil
+	}
+	if in, ok := resp.Request.Context().Value(ctxInKey{}).(*http.Request); ok {
+		return in
+	}
+	return resp.Request
+}
+
 // unpath: Weiterleitungen und Cookie-Pfade des Ziels zurueck auf den Pfad beim Besucher (forward -> prefix, wie
 // proxy_redirect und proxy_cookie_path bei nginx). Eine absolute Adresse auf das Ziel selbst wird dabei relativ.
+// Nur fuer den Pfad beim Ziel des Hosts (Advanced.TargetPath); Locations mit ForwardPath bleiben wie vor 1.4.0.
 func unpath(resp *http.Response, t target) {
 	fw := strings.TrimSuffix(t.forward, "/")
 	back := func(p string) (string, bool) {
@@ -159,7 +175,8 @@ func unpath(resp *http.Response, t target) {
 	}
 	if loc := resp.Header.Get("Location"); loc != "" {
 		if u, err := url.Parse(loc); err == nil && u.Opaque == "" && strings.HasPrefix(u.Path, "/") {
-			own := u.Host == "" || resp.Request != nil && strings.EqualFold(u.Host, resp.Request.Host)
+			in := visitorReq(resp)
+			own := u.Host == "" || in != nil && strings.EqualFold(u.Host, in.Host)
 			internal := u.Host != "" && strings.EqualFold(u.Host, t.url.Host)
 			if np, ok := back(u.Path); ok && (own || internal) {
 				u.Path, u.RawPath = np, ""
@@ -200,6 +217,9 @@ func fixedHandler(l Location) http.Handler {
 		w.Header().Set("Content-Type", l.ContentType)
 		w.Header().Set("Content-Length", strconv.Itoa(len(l.Body)))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if l.Status >= 500 { // feste 5xx soll so beim Besucher ankommen (CDN64 Modus 2)
+			keepOwnPage(w.Header())
+		}
 		w.WriteHeader(l.Status)
 		if r.Method != http.MethodHead {
 			_, _ = io.WriteString(w, l.Body)
@@ -236,17 +256,31 @@ func maxBodyAt(h *Host, p string) int64 {
 // reverseProxy baut den Proxy zu einem Ziel mit den Optionen adv (Host bzw. Host mit den Werten der Location).
 func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv *Advanced) http.Handler {
 	token := m.loopToken
+	host := t.prefix == "" // der Host selbst (keine Location)
+	// Besucher-Anfrage merken: Rueckschreiben (Host, Pfad), {{HOST}} der Fehlerseite und robots.txt brauchen sie
+	keepIn := host && (t.forward != "" || adv.AIRobots) || adv.ErrorOverride && adv.ErrorHTML != ""
+	join := func(fw, in string) string {
+		rest := strings.TrimPrefix(strings.TrimPrefix(in, t.prefix), "/")
+		if rest != "" || strings.HasSuffix(in, "/") {
+			return strings.TrimSuffix(fw, "/") + "/" + rest
+		}
+		return fw
+	}
+	escForward := (&url.URL{Path: t.forward}).EscapedPath()
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(t.url)
 			if t.forward != "" { // /api/x -> /v1/x (vom bereinigten Pfad: ohne Punkt-Segmente, kein Weg aus forward heraus)
 				in, _ := reqPath(pr.In.URL.Path)
-				rest := strings.TrimPrefix(strings.TrimPrefix(in, t.prefix), "/")
-				pr.Out.URL.Path = t.forward
-				if rest != "" || strings.HasSuffix(in, "/") {
-					pr.Out.URL.Path = strings.TrimSuffix(t.forward, "/") + "/" + rest
-				}
+				pr.Out.URL.Path = join(t.forward, in)
 				pr.Out.URL.RawPath = ""
+				if host { // Pfad beim Ziel des Hosts: Kodierung bleibt (%2F), Punkt-Segmente hat proxyHandler abgewiesen
+					ein, _ := reqPath(pr.In.URL.EscapedPath())
+					raw := join(escForward, ein)
+					if p, err := url.PathUnescape(raw); err == nil {
+						pr.Out.URL.Path, pr.Out.URL.RawPath = p, raw
+					}
+				}
 			}
 			switch adv.HostHeader {
 			case "": // wie NPM: das Ziel sieht den Namen, unter dem der Besucher kam
@@ -271,6 +305,9 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 				}
 			}
 			pr.Out.Header.Set(loopHeader, token)
+			if keepIn {
+				pr.Out = pr.Out.WithContext(context.WithValue(pr.Out.Context(), ctxInKey{}, pr.In))
+			}
 		},
 		Transport: tr,
 		ErrorLog:  log.New(io.Discard, "", 0),
@@ -288,11 +325,11 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 		},
 	}
 	rp.ModifyResponse = func(resp *http.Response) error {
-		if t.forward != "" {
+		if host && t.forward != "" {
 			unpath(resp, t)
 		}
 		overrideErr(adv, resp) // eigene Fehlerseite statt 5xx des Ziels (vor dem Cache: wird nie gespeichert)
-		if t.prefix == "" {
+		if host {
 			m.aiRobots(adv, resp) // robots.txt mit KI-Sperre, wenn das Ziel keine hat
 		}
 		httpcompress.TrackBody(resp) // Cache: nur ganz gelesene Antworten
@@ -656,6 +693,15 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 	}
 	limited := !h.Advanced.NoLimits
 	maint := h.Kind == KindProxy && h.Advanced.Maintenance
+	// Upload-Grenze: ohne eigene Grenze einer Location gilt immer die des Hosts (keine Suche je Anfrage)
+	hostBody := int64(h.Advanced.MaxBodyMB) << 20
+	locBody := slices.ContainsFunc(h.Locations, func(l Location) bool { return l.Advanced != nil && l.Advanced.MaxBodyMB != 0 })
+	// volle Zielplaetze: eigene Fehlerseite nur ohne Zugriffsliste (die Pruefung liegt vor der Liste; eigenes HTML
+	// soll nicht ohne Anmeldung abrufbar sein, wie bei der Wartungsseite #33)
+	busyAdv := &h.Advanced
+	if h.AccessListID > 0 || slices.ContainsFunc(h.Locations, func(l Location) bool { return l.AccessListID > 0 }) {
+		busyAdv = nil
+	}
 	var sl slots // gleichzeitige Anfragen an das Ziel
 	if c := m.lim.config(); h.Kind == KindProxy && limited && c.Enabled && c.TargetConns > 0 {
 		sl = make(slots, c.TargetConns)
@@ -755,7 +801,11 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 				return
 			}
 		}
-		if maxBody := maxBodyAt(h, r.URL.Path); maxBody > 0 { // Location vor Host (Forum 4974)
+		maxBody := hostBody
+		if locBody {
+			maxBody = maxBodyAt(h, r.URL.Path) // Location vor Host (Forum 4974)
+		}
+		if maxBody > 0 {
 			if r.ContentLength > maxBody {
 				page(sw, http.StatusRequestEntityTooLarge)
 				return
@@ -773,7 +823,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 					m.lim.rejected.Add(1)
 					st.blocked.Add(1)
 					sw.Header().Set("Retry-After", "10")
-					hostPage(sw, r, &h.Advanced, http.StatusServiceUnavailable)
+					hostPage(sw, r, busyAdv, http.StatusServiceUnavailable)
 				}
 				return
 			}

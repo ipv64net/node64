@@ -7,9 +7,10 @@
 - Locations can block (error page 400–499) or give a fixed response (e.g. `mta-sts.txt`); "Allow only the locations" blocks every other path (#11).
 - "Advanced" also per location: timeout, upload limit, buffering and headers (e.g. ActiveSync with a long timeout).
 - Custom error page per proxy host when the target is unreachable or overloaded; optionally it also replaces 5xx errors of the target, the status stays (#38).
-- Access lists: `allow self` (own public IP, IPv6 as /64; `self4`/`self6`) and DNS names such as DynDNS names – devices at home get in without a password even via CDN64 (#32).
+- Access lists: `allow self` (own public IP, IPv6 as /64; `self4`/`self6`) and DNS names such as DynDNS names – devices at home get in without a password even via CDN64 (#32). If DynDNS detects DS-Lite/CGNAT, `self` leaves out the IPv4; if a name cannot be resolved, `deny` still applies.
 
 ### Fixed
+- API: hosts with large error or maintenance pages can be changed via PUT (up to 1 MiB, beyond that 413 instead of "invalid json").
 - The maintenance page and the custom error page reach visitors in CDN64 mode 2 (until now the CDN64 server showed its own page).
 - Group rows in tables (streams, plans, honeypot) are readable in dark mode.
 

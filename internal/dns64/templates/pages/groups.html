@@ -234,7 +234,7 @@
 					<tbody>
 					{{range $d.Devices}}<tr>
 						<td class="ps-3">{{if .Name}}{{.Name}}{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
-						<td class="font-monospace text-break">{{.IP}}{{if $d.HC}} <a class="btn btn-sm btn-link p-0 ms-1" href="/healthchecks/new?type=icmp&amp;target={{.IP}}&amp;name={{if .Name}}{{.Name}}{{else}}{{.IP}}{{end}}" title="{{$.T "dns64.groups.as_check"}}" aria-label="{{$.T "dns64.groups.as_check"}}"><i class="bi bi-heart-pulse"></i></a>{{end}}</td>
+						<td class="font-monospace text-break">{{.IP}}{{if and $d.HC .Host}} <a class="btn btn-sm btn-link p-0 ms-1" href="/healthchecks/new?type=icmp&amp;target={{.IP}}&amp;name={{if .Name}}{{.Name}}{{else}}{{.IP}}{{end}}" title="{{$.T "dns64.groups.as_check"}}" aria-label="{{$.T "dns64.groups.as_check"}}"><i class="bi bi-heart-pulse"></i></a>{{end}}</td>
 						<td class="font-monospace">{{if .MAC}}{{.MAC}}{{else}}<span class="text-body-tertiary" title="{{$.T "dns64.groups.no_mac"}}">–</span>{{end}}</td>
 						<td class="text-end">{{.Queries}}</td>
 						<td class="text-nowrap">{{$.Ago .Last}}</td>

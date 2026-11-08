@@ -441,7 +441,7 @@ func (m *Module) denylist() (*filter.Allowlist, error) {
 
 // ---- Export/Import (module.Exporter) ----
 
-var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setListHours,
+var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setAllowLst, setListHours,
 	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setMDNS, setDocker, setDockerIP, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
 	setNotifyUpstream, setNotifyLists, setACMEDom, setACMEPre, setACMEMail, setACMEStage}
 
@@ -521,7 +521,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	n := 0
 	for _, k := range exportSettings {
-		if v, ok := in.Settings[k]; ok && m.core.SetSetting(ctx, k, v) == nil {
+		if v, ok := in.Settings[k]; ok && importListsOK(k, v) && m.core.SetSetting(ctx, k, v) == nil {
 			n++
 		}
 	}
@@ -572,6 +572,31 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		m.clChanged(ctx, it)
 	}
 	return n, m.restart(ctx)
+}
+
+// importListsOK prueft Block- und Freigabe-Listen eines Imports wie das Speichern (gueltige URLs, hoechstens
+// filter.MaxLists eingeschaltete Blocklisten bzw. Freigabe-Listen); andere Einstellungen faengt loadConfig ab.
+func importListsOK(k, v string) bool {
+	if k != setLists && k != setAllowLst {
+		return true
+	}
+	var l []listSetting
+	if json.Unmarshal([]byte(v), &l) != nil {
+		return false
+	}
+	n := len(config{Lists: l}.activeLists())
+	if k == setAllowLst {
+		n = len(l)
+	}
+	if n > filter.MaxLists {
+		return false
+	}
+	for _, x := range l {
+		if checkListURL(x.URL) != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // importGroups legt Gruppen mit Mitgliedern, Regeln, Freigaben/Sperren und Zeitplaenen an; eine Gruppe mit

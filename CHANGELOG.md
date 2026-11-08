@@ -10,6 +10,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - DNS64: Dienste per Klick sperren – rund 40 Dienste wie TikTok, YouTube, Discord oder ChatGPT, je Gruppe und im Zeitplan (#19).
 - DNS64: Bezeichnung und Tags je Gerät in Gruppen, mit Filter und Suche (#24).
 - DNS64: Eigene Einträge aus Docker-Labels (`node64.dns.name`), folgen Adressänderungen und verschwinden mit dem Container (#18).
+- DNS64: Eigene Sperrliste und Freigabe-Import verstehen hosts-Zeilen; höchstens 64 eingeschaltete Blocklisten, darüber gibt es eine Meldung.
 - DNS64: Abfrage-Log zeigt bei eigenen Einträgen die Antwort bzw. NODATA (#50); Client-Namen kommen aus Gruppe, dann eigenen PTR-/A-Einträgen, dann vom Router (#49).
 - PROXY64: Pfad beim Ziel (#43), Locations können sperren oder fest antworten, „nur Locations erlauben“ (#11), „Erweitert“ je Location.
 - PROXY64: Eigene Fehlerseite je Host, optional auch für 5xx des Ziels (#38); Zugriffslisten mit `allow self` und DNS-Namen (#32); Wartungs- und Fehlerseite kommen in CDN64 Modus 2 an; Tabellen im Dark Mode lesbar.

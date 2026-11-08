@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"sort"
 	"strings"
@@ -93,7 +94,7 @@ func (a *Allowlist) Match(name string) (string, bool) {
 }
 
 func (a *Allowlist) Add(domain string) (string, error) {
-	d, ok := normalizeDomain(strings.TrimSpace(domain))
+	d, ok := normalizeEntry(strings.TrimSpace(domain))
 	if !ok {
 		return "", ErrInvalidDomain
 	}
@@ -124,32 +125,63 @@ type ReplaceResult struct {
 	Removed    int      `json:"removed"`    // nicht mehr enthalten
 	Duplicates int      `json:"duplicates"` // doppelte Zeilen (zusammengefasst)
 	Invalid    []string `json:"invalid"`    // ungueltige Zeilen (hoechstens 20)
+	New        []string `json:"-"`          // neu aufgenommene Domains
 }
 
-// Replace setzt die Liste auf die Domains aus lines (eine je Zeile, "#" leitet einen Kommentar ein, "*." und ein
-// Zeitstempel nach Tab werden ignoriert). Vorhandene Eintraege behalten ihr Datum. Ungueltige Zeilen werden
-// gemeldet und nicht uebernommen; sind alle Zeilen ungueltig, bleibt die Liste unveraendert.
+// LineDomain liefert die Domain einer Zeile aus einem Textfeld: "#" leitet einen Kommentar ein, ein Zeitstempel
+// nach Tab und "*." werden ignoriert, eine hosts-Zeile ("0.0.0.0 example.com") liefert das zweite Feld. tok ist
+// das gepruefte Feld (fuer die Meldung ungueltiger Zeilen); tok == "" heisst nichts zu tun (leere Zeile, Kommentar,
+// Standardnamen einer hosts-Datei wie localhost). Eine IP-Adresse ist nie eine Domain.
+func LineDomain(line string) (d, tok string, ok bool) {
+	if i := strings.IndexByte(line, '#'); i >= 0 {
+		line = line[:i]
+	}
+	f := strings.Fields(line)
+	if len(f) == 0 {
+		return "", "", false
+	}
+	tok = f[0]
+	if isIP(tok) && len(f) > 1 { // hosts-Format
+		tok = f[1]
+		if hostsIgnore[strings.ToLower(tok)] {
+			return "", "", false
+		}
+	}
+	d, ok = normalizeEntry(strings.TrimPrefix(tok, "*."))
+	return d, tok, ok
+}
+
+// normalizeEntry wie normalizeDomain, lehnt aber IP-Adressen ab ("0.0.0.0" saehe sonst wie ein Name aus).
+func normalizeEntry(s string) (string, bool) {
+	d, ok := normalizeDomain(s)
+	if !ok || isIP(d) {
+		return "", false
+	}
+	return d, true
+}
+
+func isIP(s string) bool {
+	_, err := netip.ParseAddr(strings.Trim(s, "[]"))
+	return err == nil
+}
+
+// Replace setzt die Liste auf die Domains aus lines (eine je Zeile, Format wie LineDomain). Vorhandene Eintraege
+// behalten ihr Datum. Ungueltige Zeilen werden gemeldet und nicht uebernommen; sind alle Zeilen ungueltig, bleibt
+// die Liste unveraendert.
 func (a *Allowlist) Replace(lines []string) (ReplaceResult, error) {
 	var res ReplaceResult
 	res.Invalid = []string{}
 	next := map[string]bool{}
 	bad := 0
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if i := strings.IndexByte(line, '#'); i >= 0 {
-			line = strings.TrimSpace(line[:i])
-		}
-		if i := strings.IndexAny(line, "\t "); i >= 0 {
-			line = line[:i]
-		}
-		if line == "" {
+		d, tok, ok := LineDomain(line)
+		if tok == "" {
 			continue
 		}
-		d, ok := normalizeDomain(strings.TrimPrefix(line, "*."))
 		if !ok {
 			bad++
 			if len(res.Invalid) < 20 {
-				res.Invalid = append(res.Invalid, line)
+				res.Invalid = append(res.Invalid, tok)
 			}
 			continue
 		}
@@ -173,6 +205,7 @@ func (a *Allowlist) Replace(lines []string) (ReplaceResult, error) {
 		} else {
 			set[d] = now
 			res.Added++
+			res.New = append(res.New, d)
 		}
 	}
 	for d := range a.set {

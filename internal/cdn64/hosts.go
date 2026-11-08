@@ -337,6 +337,9 @@ func normalizeLocations(list []Location) error {
 			return &FieldError{Field: "locations", Key: "cdn64.err.location_dup", Name: l.Path}
 		}
 		seen[l.Path] = true
+		if l.AccessListID < 0 { // vor dem continue: auch sperren/feste Antwort (proxy.go: <= 0 = wie der Host)
+			l.AccessListID = 0
+		}
 		if l.Action != LocProxy { // sperren bzw. feste Antwort: ohne Ziel
 			if err := l.normalizeAction(); err != nil {
 				return err
@@ -363,9 +366,6 @@ func normalizeLocations(list []Location) error {
 				return &FieldError{Field: "locations", Key: "cdn64.err.location_path", Name: fp}
 			}
 			l.ForwardPath = fp
-		}
-		if l.AccessListID < 0 {
-			l.AccessListID = 0
 		}
 	}
 	return nil

@@ -20,9 +20,10 @@ d.addEventListener('mouseover', function (e) {
 var i = e.target, p = i.parentNode;
 if (i.title || !p.classList || !p.classList.contains('bars') || !(p.dataset.s || p.dataset.h)) return;
 var t, k = [].indexOf.call(p.children, i);
-if (p.dataset.h) { // Stundenbalken: Stunden in der Zeitzone der Node (als UTC gerechnet, damit der Browser nicht umrechnet)
-t = new Date(p.dataset.h + ':00:00Z'); t.setUTCHours(t.getUTCHours() + k);
-i.title = HR.format(t) + ': ' + (L.b[i.tagName.toLowerCase()] || '');
+if (p.dataset.h) { // Stundenbalken: Beschriftung je Balken vom Server (Ortszeit der Node, als UTC gelesen, damit der Browser nicht umrechnet)
+var s = i.dataset.t || '';
+t = new Date(s + (s.length == 13 ? ':00' : '') + ':00Z');
+i.title = (isNaN(t) ? '' : HR.format(t) + ': ') + (L.b[i.tagName.toLowerCase()] || '');
 return;
 }
 t = new Date(p.dataset.s + 'T00:00:00Z');
@@ -53,7 +54,7 @@ if (j.hours && j.hours.length) {
 p.appendChild(el('div', 'cap', L.hrs));
 var b = el('div', 'bars hb');
 b.setAttribute('role', 'img'); b.setAttribute('aria-label', L.hrs);
-j.hours.forEach(function (x) { var g = B[x.state] || 'q', i = el(g); i.title = String(x.day).slice(11) + ':00 · ' + L.b[g] + (x.uptime >= 0 ? ' · ' + pct(x.uptime) : ''); b.appendChild(i); });
+j.hours.forEach(function (x) { var g = B[x.state] || 'q', i = el(g), s = String(x.day).slice(11); i.title = s + (s.length == 2 ? ':00' : '') + ' · ' + L.b[g] + (x.uptime >= 0 ? ' · ' + pct(x.uptime) : ''); b.appendChild(i); });
 p.appendChild(b);
 }
 if (j.show_history === false) return;

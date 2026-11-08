@@ -17,21 +17,22 @@ import (
 // Weitere Endpunkte der lokalen API (alles, was die Oberflaeche kann) und die Logik, die Oberflaeche und API
 // gemeinsam nutzen.
 
-// importAllow uebernimmt Freigaben (eine Domain je Zeile; Kommentare und Zeitstempel werden ignoriert).
+// importAllow uebernimmt Freigaben (eine Domain je Zeile, Format wie filter.LineDomain).
 func (m *Module) importAllow(lines []string) (n, bad int, err error) {
 	a, err := m.allowlist()
 	if err != nil {
 		return 0, 0, err
 	}
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if i := strings.IndexAny(line, "#\t "); i >= 0 {
-			line = strings.TrimSpace(line[:i])
-		}
-		if line == "" {
+		d, tok, ok := filter.LineDomain(line) // auch hosts-Zeilen ("0.0.0.0 example.com")
+		if tok == "" {
 			continue
 		}
-		if _, err := a.Add(line); err != nil {
+		if !ok {
+			bad++
+			continue
+		}
+		if _, err := a.Add(d); err != nil {
 			bad++
 			continue
 		}
@@ -60,6 +61,9 @@ func (c *config) addList(name, url string) error {
 		if l.URL == url {
 			return errCfg("err_list_dup")
 		}
+	}
+	if len(c.activeLists()) >= filter.MaxLists { // neue Listen sind an; mehr kann der Filter nicht auseinanderhalten
+		return errCfg("err_list_max", "n", filter.MaxLists)
 	}
 	if name == "" {
 		name = url
@@ -110,12 +114,13 @@ type BulkResult struct {
 	Added      []string `json:"added"`      // URLs
 	Duplicates []string `json:"duplicates"` // schon vorhanden bzw. doppelt im Text
 	Invalid    []string `json:"invalid"`    // keine gueltige http(s)-URL
+	Full       []string `json:"full"`       // nicht hinzugefuegt: schon filter.MaxLists Listen
 }
 
 // addListsBulk traegt mehrere Listen ein: je Zeile eine URL, optional davor ein Name ("Name | URL" oder
 // "Name URL"); Kommentare mit "#" am Zeilenanfang. allow = Freigabe-Listen statt Blocklisten.
 func (c *config) addListsBulk(lines []string, allow bool) BulkResult {
-	res := BulkResult{Added: []string{}, Duplicates: []string{}, Invalid: []string{}}
+	res := BulkResult{Added: []string{}, Duplicates: []string{}, Invalid: []string{}, Full: []string{}}
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || line[0] == '#' {
@@ -140,6 +145,8 @@ func (c *config) addListsBulk(lines []string, allow bool) BulkResult {
 			res.Added = append(res.Added, u)
 		case errors.As(err, &ce) && ce.Key == "err_list_dup":
 			res.Duplicates = append(res.Duplicates, u)
+		case errors.As(err, &ce) && ce.Key == "err_list_max":
+			res.Full = append(res.Full, u)
 		default:
 			res.Invalid = append(res.Invalid, line)
 		}

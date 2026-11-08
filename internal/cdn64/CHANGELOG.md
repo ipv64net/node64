@@ -7,9 +7,10 @@
 - Locations können sperren (Fehlerseite 400–499) oder eine feste Antwort geben (z. B. `mta-sts.txt`); „Nur die Locations erlauben“ sperrt alle anderen Pfade (#11).
 - „Erweitert“ auch je Location: Timeout, Upload-Grenze, Puffern und Kopfzeilen (z. B. ActiveSync mit langem Timeout).
 - Eigene Fehlerseite je Proxy-Host, wenn das Ziel nicht erreichbar oder überlastet ist; optional ersetzt sie auch 5xx-Fehler des Ziels, der Status bleibt (#38).
-- Zugriffslisten: `allow self` (eigene öffentliche IP, IPv6 als /64; `self4`/`self6`) und DNS-Namen wie DynDNS-Namen – Geräte zu Hause kommen auch über CDN64 ohne Passwort durch (#32).
+- Zugriffslisten: `allow self` (eigene öffentliche IP, IPv6 als /64; `self4`/`self6`) und DNS-Namen wie DynDNS-Namen – Geräte zu Hause kommen auch über CDN64 ohne Passwort durch (#32). Erkennt DynDNS DS-Lite/CGNAT, nimmt `self` keine IPv4 auf; lässt sich ein Name nicht auflösen, greift `deny` trotzdem.
 
 ### Behoben
+- API: Hosts mit großen Fehler- oder Wartungsseiten lassen sich per PUT ändern (bis 1 MiB, darüber 413 statt „invalid json“).
 - Wartungsseite und eigene Fehlerseite kommen in CDN64 Modus 2 beim Besucher an (bisher zeigte der CDN64-Server seine eigene Seite).
 - Gruppenzeilen der Tabellen (Streams, Tarife, Honeypot) sind im Dark Mode lesbar.
 

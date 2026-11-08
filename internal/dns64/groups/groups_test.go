@@ -106,3 +106,11 @@ func TestResolverIPs(t *testing.T) {
 		t.Fatalf("IPs = %v", got)
 	}
 }
+
+// Komma und "|" trennen Tags in Spalte bzw. data-tags und duerfen nicht im Tag stehen.
+func TestNormalizeTagsSeparators(t *testing.T) {
+	got, ok := NormalizeTags([]string{"LAN|WLAN", "Kueche, MQTT"})
+	if !ok || len(got) != 2 || got[0] != "LAN WLAN" || got[1] != "Kueche MQTT" {
+		t.Fatalf("NormalizeTags = %q, %v", got, ok)
+	}
+}

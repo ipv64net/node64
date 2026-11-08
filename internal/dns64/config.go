@@ -426,6 +426,9 @@ func (c *config) validate() error {
 			return err
 		}
 	}
+	if len(c.activeLists()) > filter.MaxLists { // eingeschaltete Blocklisten (Vorlagen stehen auch aus in Lists)
+		return errCfg("err_list_max", "n", filter.MaxLists)
+	}
 	if len(c.AllowLst) > filter.MaxLists {
 		return errCfg("err_list_max", "n", filter.MaxLists)
 	}

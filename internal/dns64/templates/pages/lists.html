@@ -55,7 +55,7 @@
 			<div class="card-body">
 				<form method="post" action="/dns64/lists/add">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<textarea class="form-control form-control-sm font-monospace mb-2" name="urls" rows="3" placeholder="https://example.org/blocklist.txt&#10;Meine Liste | https://example.org/hosts" aria-label="URL" required></textarea>
+					<textarea class="form-control form-control-sm font-monospace mb-2" name="urls" rows="3" placeholder="{{.T "dns64.lists.add_ph"}}" aria-label="URL" required></textarea>
 					<div class="d-flex flex-wrap align-items-start gap-2">
 						<div class="form-text mt-0 flex-grow-1">{{.T "dns64.lists.add_hint"}} {{.T "dns64.lists.bulk_hint"}}</div>
 						<button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.lists.add_btn"}}</button>

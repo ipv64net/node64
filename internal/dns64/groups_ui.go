@@ -26,6 +26,7 @@ type deviceView struct {
 	GroupID int64     `json:"group_id,omitempty"`
 	Queries int64     `json:"queries"`
 	Last    time.Time `json:"last_seen"`
+	Host    bool      `json:"-"` // volle Geraeteadresse (nicht anonymisiert), taugt als Check-Ziel
 }
 
 // devices liefert die Clients der letzten 24 Stunden mit Name (Gruppe, eigener PTR, Router), MAC (Nachbartabelle) und Gruppe.
@@ -39,16 +40,26 @@ func (m *Module) devices(ctx context.Context, e *engine) ([]deviceView, error) {
 		ips = append(ips, r.Client)
 	}
 	names := m.clientNames(ctx, e, ips) // Gruppe, eigener PTR, Router (#49)
+	// Bei "mask" stehen Netzadressen im Log (192.168.1.0, 2001:db8:1::), bei "hide" gar keine; nur Adressen, die die
+	// Kuerzung veraendern wuerde (z. B. Eintraege von vor dem Umschalten), sind echte Geraeteadressen.
+	anon := config{Anonymize: m.core.SettingOr(ctx, setAnonymize, "")}.anonymizer()
 	out := make([]deviceView, 0, len(rows))
 	for _, r := range rows {
 		d := deviceView{IP: r.Client, Name: names[r.Client], Queries: r.Queries, Last: time.UnixMilli(r.LastSeen)}
-		if ip, err := netip.ParseAddr(r.Client); err == nil { // gekuerzte Adressen (Datenschutz) haben weder MAC noch Gruppe
+		if ip, err := netip.ParseAddr(r.Client); err == nil { // "-" (hide) hat weder MAC noch Gruppe
 			match := m.grp.For(ip)
 			d.MAC, d.Group, d.GroupID = match.MAC, match.Name, match.ID
+			d.Host = hostAddr(anon, ip)
 		}
 		out = append(out, d)
 	}
 	return out, nil
+}
+
+// hostAddr meldet, ob eine Adresse aus dem Log ein einzelnes Geraet ist: nicht unbestimmt, kein Loopback und keine
+// von der Anonymisierung gekuerzte Netzadresse (anon = config.anonymizer, nil = aus).
+func hostAddr(anon func(netip.Addr) string, ip netip.Addr) bool {
+	return !ip.IsUnspecified() && !ip.IsLoopback() && (anon == nil || anon(ip) != ip.String())
 }
 
 func (m *Module) groupRoutes(mux *http.ServeMux, g module.Guards) {
@@ -172,6 +183,7 @@ func (m *Module) pageAssign(w http.ResponseWriter, r *http.Request) {
 		if mac != "" {
 			x.Kind, x.Value = groups.KindMAC, mac
 		}
+		x.Tags = m.memberTags(r.Context(), x) // Tags bleiben beim Verschieben bzw. erneuten Zuordnen erhalten
 		if x, err = m.AddMember(r.Context(), x); err == nil {
 			m.audit(r, "dns64.group.member.add", strconv.FormatInt(gid, 10), x.Kind+" "+x.Value)
 		}

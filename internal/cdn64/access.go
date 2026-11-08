@@ -110,7 +110,8 @@ func (a *AccessList) ipAllowedDyn(ip netip.Addr, d *dynAddrs) bool {
 	ip = ip.Unmap()
 	for _, r := range a.Rules {
 		if r.dyn != "" {
-			if d.matches(r.dyn, r.CIDR, ip) {
+			hit, known := d.match(r.dyn, r.CIDR, ip)
+			if hit || !known && r.Action == "deny" { // nicht aufloesbar: deny greift trotzdem (sicher)
 				return r.Action == "allow"
 			}
 			continue
@@ -422,7 +423,7 @@ func (m *Module) saveAccessList(ctx context.Context, a *AccessList, users []User
 			return &FieldError{Field: "rules", Key: "cdn64.err.acl_rule", Name: r.Action + " " + r.CIDR}
 		}
 		if dynRule(r.CIDR) != "" { // eigene oeffentliche Adresse bzw. DNS-Name (access_dyn.go)
-			rules = append(rules, AccessRule{Action: r.Action, CIDR: strings.ToLower(r.CIDR)})
+			rules = append(rules, AccessRule{Action: r.Action, CIDR: dynNorm(r.CIDR)})
 			continue
 		}
 		p, err := parsePrefix(r.CIDR)

@@ -376,7 +376,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 			return s.blockedMsg(r)
 		}
 	}
-	released := groupAllowed || reason != "" || s.Filter.Allow.Contains(name) || pausedNow
+	released := groupAllowed || reason != "" || pausedNow || s.Filter.Exempt(name)
 
 	if p != nil && p.SafeSearch { // Suchmaschinen und YouTube kinderfreundlich (auch bei Freigaben der Gruppe)
 		if target := safeTarget(name, p.YouTube); target != "" {

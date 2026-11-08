@@ -4,7 +4,7 @@
 
 ### Neu
 - Beim Anlegen eines Checks ein Gerät aus DNS64 wählen (IP und Name, Ping als Vorschlag); unter DNS64 → Gruppen legt das Herz-Symbol direkt einen Ping-Check an (#20).
-- Statusseiten: Zeitraum wählbar – 24 Stunden mit Stundenbalken, 7, 30, 60 oder 90 Tage.
+- Statusseiten: Zeitraum wählbar – 24 Stunden mit Stundenbalken, 7, 30, 60 oder 90 Tage; `status.json` nennt die Balkeneinheit (`bar_unit`: `hour` oder `day`).
 
 ## 2.53.1 – 2026-11-08
 

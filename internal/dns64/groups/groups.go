@@ -133,7 +133,8 @@ func NormalizeTags(in []string) ([]string, bool) {
 	out := []string{}
 	seen := map[string]bool{}
 	for _, t := range in {
-		t = strings.Join(strings.Fields(strings.ReplaceAll(t, ",", " ")), " ")
+		// "|" trennt die Tags im data-tags-Attribut (TagAttr), Komma in der Spalte
+		t = strings.Join(strings.Fields(strings.NewReplacer(",", " ", "|", " ").Replace(t)), " ")
 		if t == "" || seen[strings.ToLower(t)] {
 			continue
 		}

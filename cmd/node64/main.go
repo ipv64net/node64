@@ -229,6 +229,7 @@ func run() error {
 	cdnModule.SetPorts(portReg) // Streams pruefen ihre Ports
 	cdnModule.SetDataDir(cfg.DataDir)
 	cdnModule.SetPublicIP(healthchecks.PublicIPLookup())                           // Zugriffslisten: Regel "self" (eigene oeffentliche IP)
+	cdnModule.SetSharedIPv4(dynModule.SharedIPv4)                                  // "self" ohne IPv4 bei CGNAT/DS-Lite (Befund von DynDNS)
 	cdnModule.SetDNSRecords(cdn64.IPv64Records(ipv64Key))                          // DNS-Eintrag bei ipv64 beim Anlegen eines Hosts
 	cdnModule.SetOnlineAPI(cdn64.IPv64Online(ipv64Key))                            // CDN64 online per Klick (Tunnel, Namen bei ipv64)
 	cdnModule.SetNotifier(dispatcher.Dispatch)                                     // CDN64 online: Tunnel weg/wieder da, Sperre

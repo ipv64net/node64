@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -147,11 +148,26 @@ func (l *Location) effective(host *Advanced) Advanced {
 	case "off":
 		a.NoBuffering = true
 	}
-	a.RequestHeaders = mergeHeaders(host.RequestHeaders, la.RequestHeaders)
-	a.ResponseHeaders = mergeHeaders(host.ResponseHeaders, la.ResponseHeaders)
+	// was die Location entfernt, setzt auch der Host hier nicht (Entfernen laeuft vor dem Setzen)
+	a.RequestHeaders = mergeHeaders(dropHeaders(host.RequestHeaders, la.RequestRemove), la.RequestHeaders)
+	a.ResponseHeaders = mergeHeaders(dropHeaders(host.ResponseHeaders, la.ResponseRemove), la.ResponseHeaders)
 	a.RequestRemove = append(append([]string{}, host.RequestRemove...), la.RequestRemove...)
 	a.ResponseRemove = append(append([]string{}, host.ResponseRemove...), la.ResponseRemove...)
 	return a
+}
+
+// dropHeaders: Kopfzeilen ohne die genannten (Gross-/Kleinschreibung egal); die Liste des Hosts bleibt unveraendert.
+func dropHeaders(hs []Header, names []string) []Header {
+	if len(names) == 0 {
+		return hs
+	}
+	out := make([]Header, 0, len(hs))
+	for _, h := range hs {
+		if !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, h.Name) }) {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // mergeHeaders: Kopfzeilen des Hosts, gleichnamige durch die der Location ersetzt.

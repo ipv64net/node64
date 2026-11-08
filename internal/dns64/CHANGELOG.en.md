@@ -7,9 +7,13 @@
 - Allow lists from the web: add, switch on/off and reload them like blocklists; they win over every blocklist, also for groups with their own list selection. In a cluster, older nodes accept the setting only after their update.
 - Device groups: label and up to 10 tags per device, filter by tag and search; synced in the cluster (#24).
 - Block services with a click – about 40 services such as TikTok, YouTube, Instagram, Discord, WhatsApp, Steam or ChatGPT, per group and in schedules (#19).
-- Own records from Docker labels: containers with `node64.dns.name` (optionally `node64.dns.ip` or `container`) get records on this node that follow address changes and disappear after removal (switch in the settings, #18).
+- Own records from Docker labels: containers with `node64.dns.name` (optionally `node64.dns.ip` or `container`) get records on this node that follow address changes and disappear after removal (switch in the settings, #18). They deliver no PTR; the sync never touches records created by hand.
 - Query log: custom records show the answer they delivered (e.g. → 10.10.78.16) or NODATA (#50).
 - Client names in the query log, top clients and device list: from the device group first, then your own PTR/A records, only then from the router (#49).
+
+### Fixed
+- Your own blocklist and the import of allowed domains understand hosts lines (`0.0.0.0 domain`); an IP alone counts as invalid.
+- At most 64 enabled blocklists – beyond that the page reports what was not added (until now extra lists were silently ignored).
 
 ## 1.34.1 – 2026-11-08
 
