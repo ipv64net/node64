@@ -17,6 +17,9 @@
   (node_exporter, windows_exporter, eigene Metriken), Einträge auf den Statusseiten, Regel „Windows-Dienst gestoppt“.
 - Neue Zugänge: NUT (USV), TrueNAS, Unraid, Redfish (Server-BMC); Assistent mit Kacheln für Windows, FreeBSD,
   TrueNAS, Unraid, Server-BMC, USV und Prometheus; neue Regeln für USV, Gerätemeldungen und Unraid-Parität.
+- Zugang SNMP (v1/v2c/v3, Geräteprofile, eigene OIDs) mit Kacheln „SNMP-Gerät“ und „NAS“; SNMP-Traps (Port einstellbar,
+  sofortige Abfrage bei bekannten Traps, Dienst „Traps“ bis quittiert, unbekannte Absender als Host anlegen); neue
+  Regeln für Neustart, Ports, USV-Alarm, Drucker, Hardware und PoE.
 - Nachbesserungen aus dem Code-Review: gewollt fehlende Messwerte (gestoppte VM, schlafende Platte) bleiben OK,
   Erinnerungen gehen nach der Ruhezeit nicht verloren, keine doppelten Meldungen an Standardkanäle,
   ZFS-Gerätefehler an ONLINE-Pools, Proxmox-Cluster-Dienste von einer überwachten Node, hängende VMs auch bei

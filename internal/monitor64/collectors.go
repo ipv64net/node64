@@ -19,6 +19,7 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/promscrape"
+	"github.com/ipv64net/node64/internal/monitor64/snmp"
 	"github.com/ipv64net/node64/internal/monitor64/transport"
 	"github.com/ipv64net/node64/internal/secrets"
 )
@@ -101,6 +102,16 @@ type accessConfig struct {
 	Session bool   `json:"session,omitempty"` // Redfish: Sitzung statt Basic-Auth
 	// Prometheus: eigene Metriken (beliebige Exporter)
 	Metrics []promscrape.CustomMetric `json:"metrics,omitempty"`
+	// SNMP (Port und User = v3-Benutzer wie oben; Community bzw. v3-Passwoerter im Secret als snmp.Secret-JSON)
+	SNMPVersion string           `json:"snmp_version,omitempty"` // "1", "2c" (Standard), "3"
+	Level       string           `json:"level,omitempty"`        // v3: noAuthNoPriv, authNoPriv, authPriv
+	AuthProto   string           `json:"auth_proto,omitempty"`   // v3: SHA, SHA224, SHA256, SHA384, SHA512, MD5
+	PrivProto   string           `json:"priv_proto,omitempty"`   // v3: AES, AES192, AES256, AES192C, AES256C, DES
+	Context     string           `json:"context,omitempty"`      // v3-Kontext (meist leer)
+	Custom      []snmp.CustomOID `json:"custom,omitempty"`       // eigene OIDs
+	Profiles    []string         `json:"profiles,omitempty"`     // feste Profile (leer = automatisch)
+	Traps       bool             `json:"traps,omitempty"`        // Traps dieses Hosts annehmen
+	TrapEngine  string           `json:"trap_engine_id,omitempty"`
 }
 
 // newCollector baut den Sammler eines Zugangs.

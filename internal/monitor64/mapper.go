@@ -557,7 +557,8 @@ func delta(old, cur uint64) (uint64, bool) {
 }
 
 func kindOrder(k string) int {
-	order := []string{"cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "fs", "zfs", "raid", "disk", "if", "bond", "winsvc", "local"}
+	order := []string{"uptime", "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "ups", "printer", "supply", "tray", "fs",
+		"store", "zfs", "raid", "disk", "if", "bond", "poe", "wlan", "fan", "psu", "hw", "winsvc", "local", "oid", "traps"}
 	for i, o := range order {
 		if o == k {
 			return i

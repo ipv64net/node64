@@ -1,6 +1,6 @@
 {{define "content"}}
 {{template "m64-top" .}}
-{{$s := .Data.Settings}}{{$st := $s.Status}}
+{{$s := .Data.Settings}}{{$st := $s.Status}}{{$tr := $s.Traps}}
 <div id="m64" data-m64-page="settings">
 	<h1 class="h3 mb-3">{{.T "monitor64.tab.settings"}}</h1>
 	<div class="row g-3">
@@ -18,6 +18,8 @@
 						</select><div class="form-text">{{.T "monitor64.st.interval_hint"}}</div></div>
 					<div class="col-sm-6"><label class="form-label" for="m64-workers">{{.T "monitor64.st.workers"}}</label>
 						<input class="form-control form-control-sm" id="m64-workers" name="workers" type="number" min="1" max="512" value="{{$s.Workers}}"><div class="form-text">{{.T "monitor64.st.workers_hint"}}</div></div>
+					<div class="col-sm-6"><label class="form-label" for="m64-trap-port">{{.T "monitor64.st.trap_port"}}</label>
+						<input class="form-control form-control-sm" id="m64-trap-port" name="trap_port" type="number" min="1" max="65535" value="{{$s.TrapPort}}"><div class="form-text">{{.T "monitor64.st.trap_port_hint"}}</div></div>
 					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_raw"}}</div><div class="fw-semibold" id="m64-ret-raw">{{.T "monitor64.st.hours" "n" $s.RetRawH}}</div></div>
 					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_5m"}}</div><div class="fw-semibold">{{.T "monitor64.st.days" "n" $s.Ret5mD}}</div></div>
 					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_1h"}}</div><div class="fw-semibold">{{.T "monitor64.st.days" "n" $s.Ret1hD}}</div></div>
@@ -44,6 +46,20 @@
 					<div class="col-sm-6"><div class="small text-body-secondary">{{.T "monitor64.status.memory"}}</div><div class="fs-4 fw-semibold">{{printf "%.0f" $st.HeapMB}} MB</div><div class="small text-body-secondary">{{.T "monitor64.status.goroutines" "n" $st.Routines}}</div></div>
 				</div>
 				{{if $st.LoadHosts}}<div class="alert alert-warning small mt-3 mb-0" id="m64-loadgen"><i class="bi bi-speedometer2"></i> {{.T "monitor64.status.loadgen" "hosts" $st.LoadHosts "rate" (printf "%.0f" $st.LoadRate)}}</div>{{end}}
+				</div>
+			</div>
+			<div class="card mb-3" id="m64-traps">
+				<div class="card-header fw-semibold">{{.T "monitor64.st.traps"}}</div>
+				<div class="card-body small">
+					{{if $tr.Running}}<div class="text-success"><i class="bi bi-broadcast"></i> {{.T "monitor64.st.traps_on" "port" $tr.Port "n" $tr.Active}}</div>
+					{{else if $tr.Error}}<div class="text-danger-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "monitor64.st.traps_err" "port" $tr.Port "error" $tr.Error}}</div>
+					{{else}}<div class="text-body-secondary"><i class="bi bi-dash-circle"></i> {{.T "monitor64.st.traps_off"}}</div>{{end}}
+					{{if lt $tr.Port 1024}}<div class="text-body-secondary mt-1">{{.T "monitor64.st.traps_low_port"}}</div>{{end}}
+					{{if $tr.EngineID}}<div class="mt-1">{{.T "monitor64.st.traps_engine"}} <code id="m64-trap-engine">{{$tr.EngineID}}</code></div>{{end}}
+					{{if $tr.Running}}<div class="mt-2 text-body-secondary" id="m64-trap-stats">{{.T "monitor64.st.traps_stats" "received" $tr.Stats.Received "accepted" $tr.Stats.Accepted "rejected" $tr.Stats.Rejected "unknown" $tr.Stats.Unknown "limited" $tr.Stats.RateLimited "bad" $tr.Stats.BadPacket "big" $tr.Stats.TooBig "full" $tr.Stats.QueueFull}}</div>{{end}}
+					<div class="fw-semibold mt-3 d-flex align-items-center">{{.T "monitor64.st.traps_unknown"}}<button class="btn btn-sm btn-link ms-auto p-0" type="button" id="m64-trap-clear"{{if not $tr.Unknown}} hidden{{end}}><i class="bi bi-x-circle"></i> {{.T "monitor64.st.traps_clear"}}</button></div>
+					<div class="text-body-secondary">{{.T "monitor64.st.traps_unknown_hint"}}</div>
+					<div class="list-group list-group-flush mt-1" id="m64-trap-unknown"></div>
 				</div>
 			</div>
 			<div class="card mb-3">

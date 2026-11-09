@@ -18,6 +18,7 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/promscrape"
+	"github.com/ipv64net/node64/internal/monitor64/snmp"
 	"github.com/ipv64net/node64/internal/monitor64/tsdb"
 )
 
@@ -253,6 +254,9 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	case c.Session && typ != "redfish":
 		return nil, errBad("session")
 	}
+	if err := cleanSNMPConfig(typ, &c); err != nil {
+		return nil, err
+	}
 	if c.URL != "" && typ != "prom" {
 		ok := strings.HasPrefix(c.URL, "https://") || strings.HasPrefix(c.URL, "http://")
 		switch typ {
@@ -260,6 +264,8 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 			ok = !strings.Contains(c.URL, "/") || strings.HasPrefix(c.URL, "nut://")
 		case "truenas", "redfish": // TrueNAS widerruft ueber http benutzte API-Keys; BMC nur https
 			ok = strings.HasPrefix(c.URL, "https://")
+		case "snmp": // Adresse des Hosts, Port im Zugang
+			ok = false
 		}
 		if typ == "docker" {
 			ok = ok || strings.HasPrefix(c.URL, "unix://") || strings.HasPrefix(c.URL, "tcp://") || strings.HasPrefix(c.URL, "ssh://")
@@ -327,6 +333,11 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 	}
 	if len(in.Secret) > limit {
 		return false, errBad("secret")
+	}
+	if a.Type == "snmp" {
+		if err := m.snmpSecretIn(a, &in, isNew); err != nil {
+			return false, err
+		}
 	}
 	switch {
 	case in.Secret != "":
@@ -627,6 +638,10 @@ type testResult struct {
 	Nodes       []apis.ClusterNode `json:"nodes,omitempty"`
 	Summary     string             `json:"summary,omitempty"`
 	Warning     string             `json:"warning,omitempty"`
+	// nur SNMP
+	Device   string             `json:"device,omitempty"`   // nas, ups, printer, switch, router, ap, server, device
+	Profiles []snmp.ProfileInfo `json:"profiles,omitempty"` // erkannte Profile (verified = an echtem Geraet geprueft)
+	Queries  []string           `json:"queries,omitempty"`  // "Was wird abgefragt?"
 }
 
 const testTimeout = 20 * time.Second
@@ -683,6 +698,10 @@ func (m *Module) testAPIAccess(ctx context.Context, h *Host, a Access, res *test
 			return
 		}
 		secret = s
+	}
+	if a.Type == "snmp" {
+		m.testSNMP(ctx, h, cfg, secret, res)
+		return
 	}
 	t, done, err := newAPITester(a.Type, h, cfg, secret)
 	if err != nil {

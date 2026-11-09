@@ -114,7 +114,7 @@ Genau eine Bedingung: `when` (Wert in Liste), `ok` (Wert nicht in Liste), `when_
 Groß-/Kleinschreibung), `above`/`below` (Grenze). `text` ist der Meldungstext (Standard: Anzeigetext bzw. Rohwert).
 
 Erlaubte Codes: `smart_failed`, `smart_sectors`, `raid_degraded`, `zfs_degraded`, `store_inactive`, `bond_member_down`,
-`lacp_mismatch`, `updates_security`, `reboot_required`, `ups_on_battery`, `ups_battery_low`, `ups_battery_replace`,
+`lacp_mismatch`, `updates_security`, `reboot_required`, `ups_on_battery`, `ups_low_battery`, `ups_replace_battery`,
 `ups_alarm`, `printer_error`, `paper_empty`, `hw_failed`, `poe_fault`, `if_down`, `if_speed_low`, `if_half_duplex`,
 `restarted`. Wie stark ein Zustand meldet, legen die Regeln in Monitor64 fest (nicht das Profil).
 

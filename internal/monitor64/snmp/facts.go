@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // Neue Fact-Codes des SNMP-Sammlers (Zuordnung zu Zustandsregeln im Kern: factKind in internal/monitor64/runner.go).
@@ -12,8 +14,8 @@ const (
 	FactIfDown        = "if_down"             // Port ohne Link, obwohl eingeschaltet (ifAdminStatus up, ifOperStatus down)
 	FactIfSpeedLow    = "if_speed_low"        // Port verbunden, aber langsamer als zuvor gesehen
 	FactIfHalfDuplex  = "if_half_duplex"      // Port im Halbduplex
-	FactUPSBatteryLow = "ups_battery_low"     // USV-Batterie schwach bzw. erschoepft
-	FactUPSReplace    = "ups_battery_replace" // USV-Batterie tauschen
+	FactUPSBatteryLow = "ups_low_battery"     // USV-Batterie schwach bzw. erschoepft (gleicher Code wie NUT)
+	FactUPSReplace    = "ups_replace_battery" // USV-Batterie tauschen (gleicher Code wie NUT)
 	FactUPSAlarm      = "ups_alarm"           // USV meldet Alarm (Ueberlast, Fehler, Bypass ...)
 	FactPrinterError  = "printer_error"       // Drucker: kein Papier, Stau, Klappe offen, offline, Wartung
 	FactPaperEmpty    = "paper_empty"         // Papierfach leer
@@ -43,9 +45,9 @@ var knownFacts = map[string]bool{
 
 // Regel-Arten fuer Zahlenwerte (Schluessel der Standard-Schwellen, Paket eval; im Test gegen eval.Defaults geprueft).
 const (
-	RulePrinterSupply = "printer.supply"
-	RuleUPSRuntime    = "ups.runtime"
-	RulePoEUsed       = "poe.used"
+	RulePrinterSupply = model.RulePrinterSupply
+	RuleUPSRuntime    = model.RuleUPSRuntime
+	RulePoEUsed       = model.RulePoEUsed
 )
 
 var knownRules = map[string]bool{

@@ -16,6 +16,10 @@ const (
 	RuleIfUtil    = "if.util"
 	RuleIfErrRate = "if.errrate"
 	RuleTemp      = "temp.system"
+	// Geraete (SNMP, APIs)
+	RulePrinterSupply = "printer.supply" // Toner/Tinte in % (Richtung unten)
+	RuleUPSRuntime    = "ups.runtime"    // USV-Restlaufzeit in Sekunden (Richtung unten)
+	RulePoEUsed       = "poe.used"       // PoE-Budget belegt in %
 )
 
 // Metric ist ein Messwert eines Dienstes.

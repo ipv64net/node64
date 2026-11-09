@@ -35,6 +35,7 @@ func (m *Module) startHosts(ctx context.Context) error {
 func (m *Module) ReloadHost(ctx context.Context, uid string) {
 	m.reloadMu.Lock() // gleichzeitige Aenderungen nacheinander (sonst laufen Planer und Laufzeitstand auseinander)
 	defer m.reloadMu.Unlock()
+	defer m.kickTraps() // Absender des Trap-Empfaengers abgleichen
 	h, err := m.store.Host(ctx, uid)
 	if errors.Is(err, ErrNotFound) {
 		m.removeHost(uid)
@@ -86,7 +87,7 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 	if old != nil { // Stand im Speicher weiterverwenden (aktueller als m64_runtime)
 		old.mu.Lock()
 		rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = old.Trackers, old.Kinds, old.Failures, old.Missing, old.Provider
-		rt.Rising, rt.Local, rt.Trend = old.Rising, old.Local, old.Trend
+		rt.Rising, rt.Local, rt.Trend, rt.Traps = old.Rising, old.Local, old.Trend, old.Traps
 		old.mu.Unlock()
 		rt.view = old.getView()
 		rt.dirty = true
@@ -107,6 +108,9 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 		}
 	}
 	rt.initMaps()
+	if m.traps != nil {
+		m.traps.restore(h.UID, rt.Traps)
+	}
 	rt.LastDisc = time.Time{} // nach dem (Neu-)Laden sofort erkennen (z. B. neuer Zugang)
 	accs, err := m.store.Accesses(ctx, h.UID)
 	if err != nil {

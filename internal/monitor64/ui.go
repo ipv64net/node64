@@ -100,6 +100,10 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 
 	mux.Handle("GET /api/monitor64/settings", api(m.apiSettings))
 	mux.Handle("PUT /api/monitor64/settings", api(m.apiSettingsSave))
+	mux.Handle("GET /api/monitor64/traps", api(m.apiTraps))
+	mux.Handle("DELETE /api/monitor64/traps/unknown", api(m.apiTrapsUnknownClear))
+	mux.Handle("GET /api/monitor64/hosts/{uid}/traps", api(m.apiHostTraps))
+	mux.Handle("POST /api/monitor64/hosts/{uid}/traps/reset", api(m.apiHostTrapsReset))
 }
 
 // statusView ist der technische Stand (Planer, Verlauf, Lastgenerator) – unter Einstellungen.
@@ -332,7 +336,7 @@ func (m *Module) basePage(r *http.Request, page, active string) *pageData {
 		hk[k.Kind] = [2]string{m.t(r, "monitor64.hostkind."+k.Kind+".title"), m.t(r, "monitor64.hostkind."+k.Kind+".sub")}
 	}
 	acc := map[string]string{}
-	for _, a := range append(append([]string{}, accessTypes...), "snmp") {
+	for _, a := range accessTypes {
 		acc[a] = m.t(r, "monitor64.access."+a)
 	}
 	csrf, lang := "", "de"
@@ -400,6 +404,7 @@ func (m *Module) pageNotify(w http.ResponseWriter, r *http.Request) {
 func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
 	d := m.basePage(r, "settings", "/monitor64/settings")
 	d.Settings = m.settings(r.Context())
+	d.JS["traps"] = d.Settings.Traps
 	m.render(w, r, "settings", "monitor64.tab.settings", d)
 }
 

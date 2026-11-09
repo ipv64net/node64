@@ -888,12 +888,15 @@ type settingsOut struct {
 	Port        int        `json:"port"`
 	PublicKey   string     `json:"public_key,omitempty"`
 	Fingerprint string     `json:"fingerprint,omitempty"`
+	TrapPort    int        `json:"trap_port"`
+	Traps       trapStatus `json:"traps"`
 }
 
 func (m *Module) settings(ctx context.Context) settingsOut {
 	o := tsdb.DefaultOptions()
 	s := settingsOut{Interval: m.defaultInterval(ctx), Workers: m.workers(ctx), RetRawH: int(o.RetentionRaw.Hours()), Ret5mD: int(o.Retention5m.Hours() / 24),
-		Ret1hD: int(o.Retention1h.Hours() / 24), Status: m.status(), Port: m64proto.DefaultPort, Services: m.store.ServiceCount(ctx)}
+		Ret1hD: int(o.Retention1h.Hours() / 24), Status: m.status(), Port: m64proto.DefaultPort, Services: m.store.ServiceCount(ctx),
+		TrapPort: m.trapPort(ctx), Traps: m.trapStatus(ctx)}
 	if hl, err := m.store.Hosts(ctx); err == nil {
 		s.Hosts = len(hl)
 	}
@@ -911,12 +914,14 @@ func (m *Module) apiSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m.settings(r.Context()))
 }
 
-// apiSettingsSave: PUT Standard-Intervall und gleichzeitige Abfragen (gilt nach dem naechsten Start des Moduls).
+// apiSettingsSave: PUT Standard-Intervall, gleichzeitige Abfragen (gilt nach dem naechsten Start des Moduls) und
+// Port des Trap-Empfaengers (sofort; fehlt das Feld, bleibt er).
 func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var in struct {
-		Interval int `json:"interval"`
-		Workers  int `json:"workers"`
+		Interval int  `json:"interval"`
+		Workers  int  `json:"workers"`
+		TrapPort *int `json:"trap_port"`
 	}
 	if err := decode(r, &in); err != nil {
 		m.fail(w, r, err)
@@ -930,11 +935,21 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, errBad("workers"))
 		return
 	}
+	if in.TrapPort != nil && !validTrapPort(*in.TrapPort) {
+		m.fail(w, r, errBad("trap_port"))
+		return
+	}
 	err := errors.Join(m.st.SetSetting(ctx, setInterval, strconv.Itoa(in.Interval)), m.st.SetSetting(ctx, setWorkers, strconv.Itoa(in.Workers)))
+	trapPort := m.trapPort(ctx)
+	if err == nil && in.TrapPort != nil && *in.TrapPort != trapPort {
+		trapPort = *in.TrapPort
+		err = m.st.SetSetting(ctx, setTrapPort, strconv.Itoa(trapPort))
+		m.kickTraps() // Empfaenger auf dem neuen Port
+	}
 	if err != nil {
 		m.fail(w, r, err)
 		return
 	}
-	m.audit(r, "settings", "", fmt.Sprintf("interval=%d workers=%d", in.Interval, in.Workers))
+	m.audit(r, "settings", "", fmt.Sprintf("interval=%d workers=%d trap_port=%d", in.Interval, in.Workers, trapPort))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

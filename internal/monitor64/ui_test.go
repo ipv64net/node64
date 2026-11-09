@@ -161,7 +161,7 @@ func TestPagesRender(t *testing.T) {
 			`data-kind="smart.failed"`, `value="crit" selected`, `id="m64-ovr"`, "monitor64.rgroup.storage", `value="900" selected`}},
 		{"/monitor64/notify", "notify", []string{`data-m64-page="notify"`, `id="m64-nf-channels"`, `id="m64-remind-crit"`, `id="m64-crit-quiet"`, `data-pv="f"`, `id="m64-nf-test"`}},
 		{"/monitor64/settings", "settings", []string{`data-m64-page="settings"`, `id="m64-settings-form"`, `id="m64-status"`, `value="60" selected`, `id="m64-pubkey"`, "ssh-ed25519 ", `id="m64-fp"`, "SHA256:"}},
-		{"/monitor64/new", "new", []string{`data-m64-page="new"`, `data-kind="linux-agent"`, `data-kind="snmp"`, `kind-tile disabled`, `id="m64-next"`, `"public_key":"ssh-ed25519 `}},
+		{"/monitor64/new", "new", []string{`data-m64-page="new"`, `data-kind="linux-agent"`, `data-kind="snmp"`, `kind-tile" data-kind="nas"`, `id="m64-next"`, `"public_key":"ssh-ed25519 `}},
 	}
 	for _, c := range cases {
 		rec := e.do("GET", c.path, nil)

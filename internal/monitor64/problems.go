@@ -169,6 +169,7 @@ func (m *Module) Ack(ctx context.Context, hostUID, svcKey, comment string, by Ac
 		return err
 	}
 	m.event(ctx, p.UID, hostUID, svcKey, "ack", comment, by, time.Now())
+	m.trapsAcked(hostUID, svcKey) // Dienst "traps": Warnung bis quittiert
 	return nil
 }
 
@@ -187,6 +188,7 @@ func (m *Module) Resolve(ctx context.Context, hostUID, svcKey, comment string, b
 		return err
 	}
 	m.event(ctx, p.UID, hostUID, svcKey, "resolved", comment, by, time.Now())
+	m.trapsAcked(hostUID, svcKey)
 	return nil
 }
 

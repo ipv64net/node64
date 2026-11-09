@@ -39,7 +39,7 @@ type exportData struct {
 	Settings map[string]string           `json:"settings,omitempty"`
 }
 
-var exportSettings = []string{setWorkers, setProm, setPromTags}
+var exportSettings = []string{setWorkers, setProm, setPromTags, setTrapPort}
 
 // Export liefert die Konfiguration (module.Exporter).
 func (m *Module) Export(ctx context.Context) (any, error) {

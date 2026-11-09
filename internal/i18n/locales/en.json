@@ -6023,7 +6023,40 @@
       "session": "Session instead of basic auth (only if the BMC rejects basic auth)",
       "metrics": "Custom metrics (JSON)",
       "metrics_hint": "For other exporters: list of {\"name\", \"labels\", \"title\", \"unit\", \"factor\", \"rate\"} – e.g. [{\"name\":\"nginx_connections_active\",\"title\":\"Connections\"}].",
-      "metrics_bad": "Custom metrics: not valid JSON (list expected)."
+      "metrics_bad": "Custom metrics: not valid JSON (list expected).",
+      "snmp_version": "Version",
+      "snmp_community": "Community",
+      "snmp_warn_v2c": "Community is sent unencrypted – v3 recommended.",
+      "snmp_user": "v3 user",
+      "snmp_level": "Security level",
+      "snmp_level_priv": "Authentication + privacy",
+      "snmp_level_auth": "Authentication only",
+      "snmp_level_none": "None",
+      "snmp_auth": "Authentication",
+      "snmp_auth_pass": "Authentication password",
+      "snmp_priv": "Privacy",
+      "snmp_priv_pass": "Privacy password",
+      "snmp_context": "Context (v3, usually empty)",
+      "snmp_engine": "Sender engine ID (optional)",
+      "snmp_traps": "Receive traps",
+      "snmp_traps_short": "Traps",
+      "snmp_traps_hint": "Known traps (port link down, UPS on battery …) trigger an immediate poll; others appear in the “Traps” service (warning until acknowledged). Enter this node as trap target on the device (port under Settings).",
+      "snmp_custom": "Custom OIDs",
+      "snmp_custom_hint": "JSON list: oid, name, optional unit (%, °C, V, W …), factor, counter (counter → rate per second) and rule (e.g. temp.system for default thresholds).",
+      "snmp_custom_bad": "Custom OIDs: please enter a valid JSON list.",
+      "snmp_device": "Detected: {d}",
+      "snmp_dev_nas": "NAS",
+      "snmp_dev_ups": "UPS",
+      "snmp_dev_printer": "Printer",
+      "snmp_dev_switch": "Switch",
+      "snmp_dev_router": "Router",
+      "snmp_dev_ap": "Wi-Fi access point",
+      "snmp_dev_server": "Server",
+      "snmp_dev_device": "Device",
+      "snmp_profile": "Profile: {p}",
+      "snmp_unverified": "Profile not yet verified on a real device – please check the values and report back.",
+      "snmp_unverified_short": "not verified",
+      "snmp_queries": "What is queried?"
     },
     "access": {
       "agent": "Agent",
@@ -6082,7 +6115,15 @@
       "ignored_toast": "Service ignored (restore it on the host page under “ignored services”)",
       "reset_toast": "Own values removed – the next level applies again",
       "saved_toast": "Saved – re-evaluated immediately, recorded with your name in the history",
-      "thresholds": "Thresholds"
+      "thresholds": "Thresholds",
+      "traps_pending": "{n} open · {t} received",
+      "traps_reset": "Reset",
+      "traps_reset_toast": "Traps reset",
+      "traps_rejected": "{n} rejected (last {at}: {r} does not match)",
+      "traps_handled": "polled",
+      "traps_handled_hint": "Known trap: immediate poll, the state comes from the poll.",
+      "traps_values": "{n} values",
+      "traps_none": "No traps received yet."
     },
     "f": {
       "name": "Name",
@@ -6305,7 +6346,17 @@
       "ups_overload": "UPS: overload",
       "device_warn": "Device reports a warning (alert, health Warning)",
       "device_crit": "Device reports critical (alert, health Critical)",
-      "raid_parity_errors": "Parity check found errors (Unraid)"
+      "raid_parity_errors": "Parity check found errors (Unraid)",
+      "host_restarted": "Restart detected",
+      "if_down": "Port link down",
+      "if_speed_low": "Port slower than before",
+      "if_half_duplex": "Port in half duplex",
+      "ups_alarm": "UPS: alarm",
+      "printer_error": "Printer error",
+      "printer_paper_empty": "Paper tray empty",
+      "hw_failed": "Hardware failure (fan, power supply, system status)",
+      "poe_fault": "PoE fault",
+      "trap_received": "SNMP trap received (until acknowledged)"
     },
     "cat": {
       "system": "System",
@@ -6437,7 +6488,8 @@
       "hint_nut": "Address of upsd (port 3493). Set \"LISTEN <IP> 3493\" in upsd.conf. Reading needs no login; user and password from upsd.users only if wanted. Encrypted via STARTTLS if upsd has a certificate.",
       "hint_truenas": "Under Settings → Users create a user with the role \"Read-Only Administrator\" and an API key for it; enter the user name as well (required from TrueNAS 27). https:// only – TrueNAS revokes keys used over http://.",
       "hint_unraid": "Under Settings → Management Access → API Keys create a key with the role \"Viewer\" (built in from Unraid 7.2, before that plugin \"Unraid Connect\"). https:// recommended.",
-      "hint_redfish": "Create a separate BMC user with the role \"ReadOnly\" (iDRAC: Read Only, iLO: Login, Supermicro: User). The certificate is usually self-signed – confirm the fingerprint during the test."
+      "hint_redfish": "Create a separate BMC user with the role \"ReadOnly\" (iDRAC: Read Only, iLO: Login, Supermicro: User). The certificate is usually self-signed – confirm the fingerprint during the test.",
+      "hint_snmp": "Enable SNMP on the device (read-only) and allow this node as a manager. Preferably v3 with authentication and privacy; v1/v2c send the community in clear text. The node picks profiles (Synology, QNAP, MikroTik, UniFi, APC, printers …) itself."
     },
     "nf": {
       "where": "Where to",
@@ -6523,7 +6575,23 @@
       "prometheus_text": "Values and states under /api/metrics (same access as the other Node64 metrics) – coming with phase 1.",
       "backup": "Export and backup",
       "backup_text": "Monitor64 is fully contained in the node's config export and backup: hosts, access methods (encrypted), groups, tags, thresholds, notifications, maintenance, acknowledgements, problem history. The history (monitor64.db) is part of the backup “with statistics”.",
-      "saved_toast": "Settings saved"
+      "saved_toast": "Settings saved",
+      "trap_port": "Trap port (UDP)",
+      "trap_port_hint": "Default 162. Ports below 1024 need CAP_NET_BIND_SERVICE in the container – or e.g. 1162 with a port mapping 162→1162.",
+      "traps": "SNMP traps",
+      "traps_on": "Receiving on UDP {port} · {n} hosts",
+      "traps_off": "Off – no SNMP access uses traps (port closed).",
+      "traps_err": "Could not open UDP port {port}: {error}",
+      "traps_low_port": "Port below 1024: in a container only with CAP_NET_BIND_SERVICE or via a port mapping.",
+      "traps_engine": "Engine ID of this node (v3 informs):",
+      "traps_stats": "Received {received} · accepted {accepted} · rejected {rejected} · unknown {unknown} · rate limited {limited} · malformed {bad} · too big {big} · queue full {full}",
+      "traps_unknown": "Traps from unknown senders",
+      "traps_unknown_hint": "Senders without a matching host are never added automatically (at most 100 entries, in memory only).",
+      "traps_none": "None.",
+      "traps_clear": "Clear list",
+      "traps_add_host": "Add as host",
+      "traps_count": "{n}×",
+      "traps_user": "v3 user {u}"
     },
     "err": {
       "json": "Invalid request: {error}",
@@ -6566,7 +6634,9 @@
       "workers": "Concurrent polls: 1 to 512.",
       "series": "Invalid history query.",
       "comment": "Please enter a comment.",
-      "action": "Unknown action."
+      "action": "Unknown action.",
+      "snmp_secret": "SNMP credentials: {error}",
+      "trap_port": "Invalid trap port (1 to 65535)."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",
@@ -6580,7 +6650,9 @@
       "secret_unreadable": "credentials unreadable",
       "no_data": "no data",
       "host_removed": "host removed",
-      "zfs_errors": "data errors: {text}"
+      "zfs_errors": "data errors: {text}",
+      "traps": "{n} trap(s) open, last {name} ({at})",
+      "trap_last": "Last trap: {name} ({at})"
     }
   }
 }

@@ -59,7 +59,7 @@ func newAPITester(typ string, h *Host, cfg accessConfig, secret string) (t apiTe
 // isAPIAccess: Zugang ueber eine API (Test mit Fingerabdruck und Bestaetigung).
 func isAPIAccess(typ string) bool {
 	switch typ {
-	case "pve", "pbs", "docker", "prom", "nut", "truenas", "unraid", "redfish":
+	case "pve", "pbs", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp": // snmp: eigener Test (testSNMP)
 		return true
 	}
 	return false

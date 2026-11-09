@@ -62,11 +62,18 @@ func accessRank(typ string) int {
 var factKinds = map[string][]string{
 	"disk":    {eval.KindSmartFailed, eval.KindSmartSectors, eval.KindSmartSectorsUp},
 	"raid":    {eval.KindRAIDDegraded, eval.KindParityErrors},
-	"ups":     {eval.KindUPSOnBattery, eval.KindUPSLowBattery, eval.KindUPSReplace, eval.KindUPSOverload},
+	"ups":     {eval.KindUPSOnBattery, eval.KindUPSLowBattery, eval.KindUPSReplace, eval.KindUPSOverload, eval.KindUPSAlarm},
 	"alerts":  {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"system":  {eval.KindDeviceWarn, eval.KindDeviceCrit},
-	"fan":     {eval.KindDeviceWarn, eval.KindDeviceCrit},
-	"psu":     {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"fan":     {eval.KindDeviceWarn, eval.KindDeviceCrit, eval.KindHWFailed},
+	"psu":     {eval.KindDeviceWarn, eval.KindDeviceCrit, eval.KindHWFailed},
+	"hw":      {eval.KindHWFailed},
+	"if":      {eval.KindIfDown, eval.KindIfSpeedLow, eval.KindIfHalfDuplex},
+	"uptime":  {eval.KindHostRestarted},
+	"printer": {eval.KindPrinterError},
+	"tray":    {eval.KindPaperEmpty},
+	"poe":     {eval.KindPoEFault},
+	"traps":   {eval.KindTrapReceived},
 	"power":   {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"ctrl":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"temp":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
@@ -81,7 +88,7 @@ var factKinds = map[string][]string{
 	"ctr":     {eval.KindGuestDown, eval.KindCtrUnhealthy},
 	"backup":  {eval.KindBackupOld},
 	"job":     {eval.KindJobFailed},
-	"store":   {eval.KindStoreInactive},
+	"store":   {eval.KindStoreInactive, eval.KindRAIDDegraded},
 	"ds":      {eval.KindStoreInactive},
 	"cluster": {eval.KindClusterQuorum, eval.KindClusterNodeDown},
 	"ha":      {eval.KindHAError},
@@ -125,6 +132,26 @@ func factKind(code string) string {
 		return eval.KindParityErrors
 	case "disk_errors": // Geraet meldet Plattenfehler (TrueNAS/Unraid/Redfish) wie SMART-Sektoren
 		return eval.KindSmartSectors
+	case "restarted": // SNMP: Laufzeit zurueckgesprungen (Fact steht eine Weile)
+		return eval.KindHostRestarted
+	case "if_down":
+		return eval.KindIfDown
+	case "if_speed_low":
+		return eval.KindIfSpeedLow
+	case "if_half_duplex":
+		return eval.KindIfHalfDuplex
+	case "ups_alarm":
+		return eval.KindUPSAlarm
+	case "printer_error":
+		return eval.KindPrinterError
+	case "paper_empty":
+		return eval.KindPaperEmpty
+	case "hw_failed":
+		return eval.KindHWFailed
+	case "poe_fault":
+		return eval.KindPoEFault
+	case factTrapReceived:
+		return eval.KindTrapReceived
 	case "guest_down", "guest_fault": // guest_fault: gestartet, steht aber (io-error, Absturz)
 		return eval.KindGuestDown
 	case "ups_on_battery":
@@ -211,6 +238,7 @@ type hostRT struct {
 	Rising   map[string]time.Time     `json:"rising,omitempty"`   // Platte -> "Sektoren steigen" gilt bis
 	Local    map[string]localState    `json:"local,omitempty"`    // eigene Skripte: letzter Zustand
 	Trend    map[string]trendState    `json:"trend,omitempty"`    // Fuellstand -> letzte Trendrechnung
+	Traps    *hostTraps               `json:"traps,omitempty"`    // SNMP-Traps (Kopie fuer den Neustart)
 	LastDisc time.Time                `json:"last_disc,omitzero"`
 	dirty    bool
 
@@ -386,6 +414,10 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				found[s.Key] = got{svc: s, via: name, acc: a.row.UID, rank: rank}
 			}
 		}
+	}
+	// SNMP-Traps: eigener Dienst des Hosts, solange ein SNMP-Zugang Traps nutzt
+	if s, acc, ok := m.trapService(rt); ok {
+		found[s.Key] = got{svc: s, via: accessName("snmp"), acc: acc, rank: accessRank("snmp")}
 	}
 	ref := hostRef(h)
 	maint, win := m.inMaintenance(now, ref)

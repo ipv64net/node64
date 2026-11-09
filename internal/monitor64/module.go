@@ -92,6 +92,7 @@ type Module struct {
 	pveSeen  *apis.ClusterSeen // Proxmox: welche Nodes hier erfolgreich abgefragt werden (Zustaendigkeit Cluster)
 	rts      map[string]*hostRT
 	pool     *transport.Pool
+	traps    *trapMgr // SNMP-Trap-Empfaenger
 	locMu    sync.Mutex
 	loc      *time.Location
 	locAt    time.Time
@@ -108,8 +109,10 @@ type Module struct {
 
 // New legt das Modul an (laeuft erst nach Start).
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dataDir, nodeVersion string) *Module {
-	return &Module{st: core, log: log.With("module", Name), box: box, dataDir: dataDir, nodeVersion: nodeVersion, store: newStore(core),
+	m := &Module{st: core, log: log.With("module", Name), box: box, dataDir: dataDir, nodeVersion: nodeVersion, store: newStore(core),
 		pveSeen: &apis.ClusterSeen{}}
+	m.traps = newTrapMgr(m.repoll)
+	return m
 }
 
 // SetQuiet verbindet die Ruhezeit-Pruefung der Benachrichtigung (fuer Erinnerungen).
@@ -173,9 +176,12 @@ func (m *Module) Start(ctx context.Context) error {
 	if err := m.startHosts(ctx); err != nil {
 		m.log.Warn("monitor64: load hosts", "err", err)
 	}
-	m.wg.Add(2)
+	m.traps.start()
+	m.wg.Add(3)
 	go func() { defer m.wg.Done(); sched.Run(life) }()
 	go func() { defer m.wg.Done(); m.housekeeping(life) }()
+	go func() { defer m.wg.Done(); m.trapLoop(life) }()
+	m.kickTraps() // Trap-Empfaenger nur, wenn ein SNMP-Zugang Traps nutzt
 
 	if n, _ := strconv.Atoi(os.Getenv(EnvLoadGen)); n > 0 {
 		lg := newLoadGen(n, sched, ser)
@@ -208,6 +214,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	case <-time.After(stopWait):
 		m.log.Warn("monitor64: stop timeout, jobs still running")
 	}
+	m.traps.stop()
 	m.rtMu.Lock()
 	rts := m.rts
 	m.rts = nil

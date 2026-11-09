@@ -6023,7 +6023,40 @@
       "session": "Sitzung statt Basic-Auth (nur wenn der BMC Basic-Auth ablehnt)",
       "metrics": "Eigene Metriken (JSON)",
       "metrics_hint": "Für andere Exporter: Liste aus {\"name\", \"labels\", \"title\", \"unit\", \"factor\", \"rate\"} – z. B. [{\"name\":\"nginx_connections_active\",\"title\":\"Verbindungen\"}].",
-      "metrics_bad": "Eigene Metriken: kein gültiges JSON (Liste erwartet)."
+      "metrics_bad": "Eigene Metriken: kein gültiges JSON (Liste erwartet).",
+      "snmp_version": "Version",
+      "snmp_community": "Community",
+      "snmp_warn_v2c": "Community unverschlüsselt – v3 empfohlen.",
+      "snmp_user": "v3-Benutzer",
+      "snmp_level": "Sicherheitsstufe",
+      "snmp_level_priv": "Authentifizierung + Verschlüsselung",
+      "snmp_level_auth": "nur Authentifizierung",
+      "snmp_level_none": "ohne",
+      "snmp_auth": "Authentifizierung",
+      "snmp_auth_pass": "Passwort Authentifizierung",
+      "snmp_priv": "Verschlüsselung",
+      "snmp_priv_pass": "Passwort Verschlüsselung",
+      "snmp_context": "Kontext (v3, meist leer)",
+      "snmp_engine": "Engine-ID des Absenders (optional)",
+      "snmp_traps": "Traps empfangen",
+      "snmp_traps_short": "Traps",
+      "snmp_traps_hint": "Bekannte Traps (Port ohne Link, USV auf Batterie …) lösen sofort eine Abfrage aus; übrige erscheinen im Dienst „Traps“ (Warnung bis quittiert). Im Gerät diese Node als Trap-Ziel eintragen (Port unter Einstellungen).",
+      "snmp_custom": "Eigene OIDs",
+      "snmp_custom_hint": "JSON-Liste: oid, name, optional unit (%, °C, V, W …), factor, counter (Zähler → Rate je Sekunde) und rule (z. B. temp.system für Standard-Schwellen).",
+      "snmp_custom_bad": "Eigene OIDs: bitte eine gültige JSON-Liste eingeben.",
+      "snmp_device": "Erkannt: {d}",
+      "snmp_dev_nas": "NAS",
+      "snmp_dev_ups": "USV",
+      "snmp_dev_printer": "Drucker",
+      "snmp_dev_switch": "Switch",
+      "snmp_dev_router": "Router",
+      "snmp_dev_ap": "WLAN-Access-Point",
+      "snmp_dev_server": "Server",
+      "snmp_dev_device": "Gerät",
+      "snmp_profile": "Profil: {p}",
+      "snmp_unverified": "Profil noch nicht an einem echten Gerät geprüft – Werte bitte kontrollieren und Rückmeldung geben.",
+      "snmp_unverified_short": "nicht geprüft",
+      "snmp_queries": "Was wird abgefragt?"
     },
     "access": {
       "agent": "Agent",
@@ -6082,7 +6115,15 @@
       "ignored_toast": "Dienst wird ignoriert (auf der Host-Seite unter „ignorierte Dienste“ zurückholbar)",
       "reset_toast": "Eigene Werte entfernt – es gilt wieder die nächste Stufe",
       "saved_toast": "Gespeichert – Neubewertung sofort, im Verlauf mit deinem Namen vermerkt",
-      "thresholds": "Schwellen"
+      "thresholds": "Schwellen",
+      "traps_pending": "{n} offen · {t} empfangen",
+      "traps_reset": "Zurücksetzen",
+      "traps_reset_toast": "Traps zurückgesetzt",
+      "traps_rejected": "{n} abgewiesen (zuletzt {at}: {r} passt nicht)",
+      "traps_handled": "abgefragt",
+      "traps_handled_hint": "Bekannter Trap: sofortige Abfrage, der Zustand kommt aus der Abfrage.",
+      "traps_values": "{n} Werte",
+      "traps_none": "Noch keine Traps empfangen."
     },
     "f": {
       "name": "Name",
@@ -6305,7 +6346,17 @@
       "ups_overload": "USV: Überlast",
       "device_warn": "Gerät meldet Warnung (Alarm, Zustand Warning)",
       "device_crit": "Gerät meldet kritisch (Alarm, Zustand Critical)",
-      "raid_parity_errors": "Paritätsprüfung mit Fehlern (Unraid)"
+      "raid_parity_errors": "Paritätsprüfung mit Fehlern (Unraid)",
+      "host_restarted": "Neustart erkannt",
+      "if_down": "Port ohne Link",
+      "if_speed_low": "Port langsamer als zuvor",
+      "if_half_duplex": "Port im Halbduplex",
+      "ups_alarm": "USV: Alarm",
+      "printer_error": "Druckerfehler",
+      "printer_paper_empty": "Papierfach leer",
+      "hw_failed": "Hardware-Fehler (Lüfter, Netzteil, Systemstatus)",
+      "poe_fault": "PoE-Fehler",
+      "trap_received": "SNMP-Trap empfangen (bis quittiert)"
     },
     "cat": {
       "system": "System",
@@ -6437,7 +6488,8 @@
       "hint_nut": "Adresse des upsd (Port 3493). In upsd.conf „LISTEN <IP> 3493“ setzen. Zum Lesen ist keine Anmeldung nötig; Benutzer und Passwort aus upsd.users nur, wenn gewünscht. Verschlüsselt per STARTTLS, wenn upsd ein Zertifikat hat.",
       "hint_truenas": "Unter Einstellungen → Benutzer einen Benutzer mit der Rolle „Read-Only Administrator“ anlegen und für ihn einen API-Key erzeugen; den Benutzernamen mit eintragen (ab TrueNAS 27 nötig). Nur https:// – über http:// benutzte Keys widerruft TrueNAS.",
       "hint_unraid": "Unter Einstellungen → Verwaltungszugriff → API-Keys einen Key mit der Rolle „Viewer“ anlegen (ab Unraid 7.2 eingebaut, davor Plugin „Unraid Connect“). https:// empfohlen.",
-      "hint_redfish": "Im BMC einen eigenen Benutzer mit der Rolle „ReadOnly“ anlegen (iDRAC: Read Only, iLO: Login, Supermicro: User). Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen."
+      "hint_redfish": "Im BMC einen eigenen Benutzer mit der Rolle „ReadOnly“ anlegen (iDRAC: Read Only, iLO: Login, Supermicro: User). Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
+      "hint_snmp": "Im Gerät SNMP einschalten (nur lesend) und diese Node als erlaubten Abfrager eintragen. Am besten v3 mit Authentifizierung und Verschlüsselung; v1/v2c senden die Community im Klartext. Profile (Synology, QNAP, MikroTik, UniFi, APC, Drucker …) wählt die Node selbst."
     },
     "nf": {
       "where": "Wohin",
@@ -6523,7 +6575,23 @@
       "prometheus_text": "Werte und Zustände unter /api/metrics (gleicher Zugriff wie die übrigen Node64-Kennzahlen) – folgt mit Phase 1.",
       "backup": "Export und Backup",
       "backup_text": "Monitor64 ist komplett im Konfig-Export und im Backup der Node: Hosts, Zugänge (verschlüsselt), Gruppen, Tags, Schwellen, Benachrichtigung, Wartungen, Quittierungen, Problem-Historie. Der Verlauf (monitor64.db) ist im Backup „mit Statistik“ enthalten.",
-      "saved_toast": "Einstellungen gespeichert"
+      "saved_toast": "Einstellungen gespeichert",
+      "trap_port": "Trap-Port (UDP)",
+      "trap_port_hint": "Standard 162. Ports unter 1024 brauchen im Container CAP_NET_BIND_SERVICE – oder z. B. 1162 mit Port-Mapping 162→1162.",
+      "traps": "SNMP-Traps",
+      "traps_on": "Empfang aktiv auf UDP {port} · {n} Hosts",
+      "traps_off": "Aus – kein SNMP-Zugang nutzt Traps (Port geschlossen).",
+      "traps_err": "Port UDP {port} nicht geöffnet: {error}",
+      "traps_low_port": "Port unter 1024: im Container nur mit CAP_NET_BIND_SERVICE bzw. über ein Port-Mapping.",
+      "traps_engine": "Engine-ID dieser Node (v3-Informs):",
+      "traps_stats": "Empfangen {received} · angenommen {accepted} · abgewiesen {rejected} · unbekannt {unknown} · gebremst {limited} · fehlerhaft {bad} · zu groß {big} · Warteschlange voll {full}",
+      "traps_unknown": "Traps von unbekannten Absendern",
+      "traps_unknown_hint": "Absender ohne passenden Host werden nie automatisch angelegt (höchstens 100 Einträge, nur im Speicher).",
+      "traps_none": "Keine.",
+      "traps_clear": "Liste leeren",
+      "traps_add_host": "Als Host anlegen",
+      "traps_count": "{n}×",
+      "traps_user": "v3-Benutzer {u}"
     },
     "err": {
       "json": "Ungültige Anfrage: {error}",
@@ -6566,7 +6634,9 @@
       "workers": "Gleichzeitige Abfragen: 1 bis 512.",
       "series": "Ungültige Abfrage des Verlaufs.",
       "comment": "Bitte einen Kommentar eingeben.",
-      "action": "Unbekannte Aktion."
+      "action": "Unbekannte Aktion.",
+      "snmp_secret": "SNMP-Zugangsdaten: {error}",
+      "trap_port": "Ungültiger Trap-Port (1 bis 65535)."
     },
     "quote": "„{t}“",
     "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",
@@ -6580,7 +6650,9 @@
       "secret_unreadable": "Zugangsdaten nicht lesbar",
       "no_data": "keine Daten",
       "host_removed": "Host entfernt",
-      "zfs_errors": "Datenfehler: {text}"
+      "zfs_errors": "Datenfehler: {text}",
+      "traps": "{n} Trap(s) offen, zuletzt {name} ({at})",
+      "trap_last": "Letzter Trap: {name} ({at})"
     }
   }
 }

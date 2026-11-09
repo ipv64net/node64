@@ -108,6 +108,93 @@ function devCfg(t, get) {
 	}
 	return o;
 }
+// SNMP: Felder des Zugangs (p = "af": Host-Seite, p = "w": Assistent mit data-w="s_<feld>"). Community bzw.
+// v3-Passwoerter werden einzeln eingegeben und als ein Geheimnis (JSON) gesendet; leere Felder behalten beim Aendern
+// den gespeicherten Wert.
+var SNMP_AUTH = ['SHA256', 'SHA', 'SHA224', 'SHA384', 'SHA512', 'MD5'];
+var SNMP_PRIV = ['AES', 'AES256', 'AES192', 'AES256C', 'AES192C', 'DES'];
+var SNMP_PASS = ['community', 'authpass', 'privpass'];
+// snmpVal: Wert eines Feldes aus der gespeicherten Konfiguration (Geheimnisse nie).
+function snmpVal(c, x) {
+	c = c || {};
+	var v = { version: c.snmp_version || '2c', port: c.port || '', user: c.user || '', level: c.level || 'authPriv', auth: c.auth_proto || 'SHA256', priv: c.priv_proto || 'AES',
+		context: c.context || '', traps: !!c.traps, engine: c.trap_engine_id || '', custom: c.custom ? JSON.stringify(c.custom, null, 1) : '' }[x];
+	return v === undefined ? '' : v;
+}
+function snmpLevelText(v) { return { authPriv: L('acc.snmp_level_priv'), authNoPriv: L('acc.snmp_level_auth'), noAuthNoPriv: L('acc.snmp_level_none') }[v]; }
+// snmpFields: Formular; get(x) liefert den Startwert, stored = Geheimnis gespeichert (Platzhalter "unveraendert").
+function snmpFields(p, get, stored) {
+	var id = function (x) { return 'm64-' + p + '-s' + x; };
+	var at = function (x) { return ' id="' + id(x) + '"' + (p === 'w' ? ' data-w="s_' + x + '"' : ''); };
+	var lab = function (x, t) { return '<label class="form-label" for="' + id(x) + '">' + esc(t) + '</label>'; };
+	var sel = function (x, list, txt) { return '<select class="form-select"' + at(x) + '>' + list.map(function (v) { return '<option value="' + esc(v) + '"' + (v === get(x) ? ' selected' : '') + '>' + esc(txt ? txt(v) : v) + '</option>'; }).join('') + '</select>'; };
+	var pass = function (x, t) { return lab(x, t) + '<input class="form-control" type="password" autocomplete="new-password" maxlength="256"' + at(x) + (p === 'w' ? ' value="' + esc(get(x)) + '"' : '') + (stored ? ' placeholder="' + esc(L('acc.secret_keep')) + '"' : '') + '>'; };
+	var txt = function (x, t, attrs) { return lab(x, t) + '<input class="form-control"' + at(x) + ' value="' + esc(get(x)) + '"' + (attrs || '') + '>'; };
+	var open = get('context') || get('engine') || get('custom');
+	return '<div class="col-md-6">' + lab('version', L('acc.snmp_version')) + sel('version', ['2c', '1', '3'], function (v) { return 'SNMP v' + v; }) + '</div>' +
+		'<div class="col-md-6">' + txt('port', L('acc.port'), ' type="number" min="1" max="65535" placeholder="161"') + '</div>' +
+		'<div class="col-md-6" data-snmp="c">' + pass('community', L('acc.snmp_community')) + '</div>' +
+		'<div class="col-12 small text-warning-emphasis" data-snmp="c"><i class="bi bi-unlock"></i> ' + esc(L('acc.snmp_warn_v2c')) + '</div>' +
+		'<div class="col-md-6" data-snmp="v3">' + txt('user', L('acc.snmp_user'), ' maxlength="32"') + '</div>' +
+		'<div class="col-md-6" data-snmp="v3">' + lab('level', L('acc.snmp_level')) + sel('level', ['authPriv', 'authNoPriv', 'noAuthNoPriv'], snmpLevelText) + '</div>' +
+		'<div class="col-md-6" data-snmp="auth">' + lab('auth', L('acc.snmp_auth')) + sel('auth', SNMP_AUTH) + '</div>' +
+		'<div class="col-md-6" data-snmp="auth">' + pass('authpass', L('acc.snmp_auth_pass')) + '</div>' +
+		'<div class="col-md-6" data-snmp="priv">' + lab('priv', L('acc.snmp_priv')) + sel('priv', SNMP_PRIV) + '</div>' +
+		'<div class="col-md-6" data-snmp="priv">' + pass('privpass', L('acc.snmp_priv_pass')) + '</div>' +
+		'<div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox"' + at('traps') + (get('traps') ? ' checked' : '') + '><label class="form-check-label small" for="' + id('traps') + '">' + esc(L('acc.snmp_traps')) + '</label></div>' +
+		'<div class="form-text">' + esc(L('acc.snmp_traps_hint')) + '</div></div>' +
+		'<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' +
+		'<div class="col-md-6" data-snmp="v3">' + txt('context', L('acc.snmp_context'), ' maxlength="32"') + '</div>' +
+		'<div class="col-md-6" data-snmp="v3">' + txt('engine', L('acc.snmp_engine'), ' maxlength="66" placeholder="80001f88…"') + '</div>' +
+		'<div class="col-12">' + lab('custom', L('acc.snmp_custom')) + '<textarea class="form-control font-monospace small"' + at('custom') + ' rows="3" spellcheck="false" placeholder="' + esc('[{"oid":"1.3.6.1.4.1.2021.10.1.5.1","name":"Load 1 min","factor":0.01}]') + '">' + esc(get('custom')) + '</textarea>' +
+		'<div class="form-text">' + esc(L('acc.snmp_custom_hint')) + '</div></div></div></details></div>';
+}
+// snmpShow blendet die Felder nach Version und Stufe ein.
+function snmpShow(box, p) {
+	var v = $('#m64-' + p + '-sversion', box), l = $('#m64-' + p + '-slevel', box);
+	if (!v) { return; }
+	var v3 = v.value === '3', lv = l ? l.value : 'authPriv';
+	$$('[data-snmp]', box).forEach(function (x) {
+		var k = x.dataset.snmp, on = k === 'c' ? !v3 : k === 'v3' ? v3 : k === 'auth' ? v3 && lv !== 'noAuthNoPriv' : v3 && lv === 'authPriv';
+		x.classList.toggle('d-none', !on);
+	});
+}
+// snmpRead liest Konfiguration und Geheimnis aus get(x) (null = eigene OIDs kein gueltiges JSON-Array).
+function snmpRead(get) {
+	var v = get('version') || '2c', cfg = { snmp_version: v }, sec = {}, port = parseInt(get('port'), 10);
+	if (port) { cfg.port = port; }
+	if (v === '3') {
+		cfg.user = get('user') || '';
+		cfg.level = get('level') || 'authPriv';
+		if (cfg.level !== 'noAuthNoPriv') { cfg.auth_proto = get('auth') || 'SHA256'; if (get('authpass')) { sec.auth = get('authpass'); } }
+		if (cfg.level === 'authPriv') { cfg.priv_proto = get('priv') || 'AES'; if (get('privpass')) { sec.priv = get('privpass'); } }
+		cfg.context = get('context') || '';
+		cfg.trap_engine_id = get('engine') || '';
+	} else if (get('community')) {
+		sec.community = get('community');
+	}
+	cfg.traps = !!get('traps');
+	var cu = get('custom');
+	if (cu) {
+		try { cfg.custom = JSON.parse(cu); } catch (e) { return null; }
+		if (!Array.isArray(cfg.custom)) { return null; }
+	}
+	return { config: cfg, secret: Object.keys(sec).length ? JSON.stringify(sec) : '' };
+}
+// snmpTestHTML: Ergebnis "Verbindung testen" bei SNMP (Geraeteart, Profile mit Hinweis "nicht geprueft", Abfragen).
+function snmpTestHTML(r) {
+	if (!r.ok || (!r.device && !(r.profiles || []).length && !(r.queries || []).length)) { return ''; }
+	var dev = { nas: L('acc.snmp_dev_nas'), ups: L('acc.snmp_dev_ups'), printer: L('acc.snmp_dev_printer'), 'switch': L('acc.snmp_dev_switch'), router: L('acc.snmp_dev_router'),
+		ap: L('acc.snmp_dev_ap'), server: L('acc.snmp_dev_server'), device: L('acc.snmp_dev_device') }[r.device] || r.device || '';
+	var html = dev ? '<div class="small mt-1">' + esc(L('acc.snmp_device', { d: dev })) + '</div>' : '';
+	(r.profiles || []).forEach(function (pr) {
+		html += '<div class="small">' + esc(L('acc.snmp_profile', { p: pr.name })) + (pr.verified ? '' : ' <span class="badge text-bg-light" title="' + esc(L('acc.snmp_unverified')) + '">' + esc(L('acc.snmp_unverified_short')) + '</span>') + '</div>';
+	});
+	if ((r.queries || []).length) {
+		html += '<details class="small mt-1"><summary class="text-body-secondary">' + esc(L('acc.snmp_queries')) + '</summary><ul class="mb-0 ps-3">' + r.queries.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul></details>';
+	}
+	return html;
+}
 // numIn zeigt einen Wert exakt im Eingabefeld (ohne Rundung der Anzeige; Dezimalkomma auf Deutsch).
 function numIn(v) {
 	if (v === null || v === undefined || v === 'off' || isNaN(v)) { return ''; }
@@ -541,6 +628,7 @@ function testHTML(r) {
 	var n = (r.services || []).length, extra = '';
 	if (r.summary || r.version) { extra += '<div class="small text-body-secondary mt-1">' + esc([r.version ? L('new.version', { v: r.version }) : '', r.cluster ? L('new.cluster', { c: r.cluster }) : '', tx(r.summary || '')].filter(Boolean).join(' · ')) + '</div>'; }
 	if (r.warning) { extra += '<div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle"></i> ' + esc(tx(r.warning)) + '</div>'; }
+	extra += snmpTestHTML(r);
 	if (r.ok && !r.error) { return '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + esc(L('new.test_ok', { n: n, ms: r.ms })) + '</span>' + extra + fp; }
 	if (r.ok) { return '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('new.test_partial', { n: n, e: tx(r.error) })) + '</span>' + extra + fp; }
 	return '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> ' + esc(r.error ? tx(r.error) : L('new.test_fail')) + '</span>' + fp;
@@ -648,6 +736,8 @@ function pageHost() {
 	}
 	function accSummary(a) {
 		var c = a.config || {}, p = [];
+		if (a.type === 'snmp') { p.push('SNMP v' + (c.snmp_version || '2c')); }
+		if (c.traps) { p.push(L('acc.snmp_traps_short')); }
 		if (c.user) { p.push(L('acc.user') + ' ' + c.user); }
 		if (c.port) { p.push(L('acc.port') + ' ' + c.port); }
 		if (c.url) { p.push(c.url); }
@@ -866,6 +956,10 @@ function pageHost() {
 			if ((m.rule_kind || m.rule) === 'fs.trend_days' && m.value < 1e5) { html += '<div class="alert alert-danger py-2 small"><i class="bi bi-graph-up-arrow"></i> ' + esc(L('sd.trend', { n: fmtNum(m.value, 1) })) + '</div>'; }
 		});
 		var chartMetric = mt || ((s.metrics || []).length ? s.metrics[0] : null);
+		if (s.kind === 'traps') { // letzte Traps statt Diagramm
+			chartMetric = null;
+			html += '<div class="mb-3" id="m64-sd-traps"><span class="spinner-border spinner-border-sm"></span></div>';
+		}
 		if (chartMetric) { html += '<div class="chart-box mb-3"><canvas id="m64-sd-chart"></canvas><div class="zoom-sel"></div></div>'; }
 		if (rules.length) {
 			html += '<h6 class="mt-2">' + esc(rules.length > 1 ? L('sd.thresholds') : L('sd.threshold')) + ' <span class="small text-body-secondary fw-normal">– ' + esc(L('sd.threshold_sub')) + '</span></h6>';
@@ -933,6 +1027,7 @@ function pageHost() {
 		}
 		var oc = window.bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('m64-detail'));
 		oc.show();
+		if (s.kind === 'traps') { loadTraps(key); }
 		if (sdChart) { sdChart.destroy(); sdChart = null; }
 		if (chartMetric) {
 			var gen = ++sdGen;
@@ -945,6 +1040,28 @@ function pageHost() {
 				sdChart = lineChart(cv, { from: res.from, to: res.to, warn: w, crit: c, fmt: u.fmt, max: chartMetric.unit === '%' ? 100 : undefined, series: [{ label: svcName(s), data: toPoints(res.series[0] || {}, u.factor) }] });
 			}).catch(function (e) { if (gen === sdGen) { chartFail(document.getElementById('m64-sd-chart'), e); } });
 		}
+	}
+	// loadTraps zeigt die letzten Traps des Hosts im Dienst "traps" (Texte vom Geraet, immer escaped).
+	function loadTraps(key) {
+		var trapsURL = '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/traps';
+		api('GET', trapsURL).then(function (r) {
+			var box = document.getElementById('m64-sd-traps');
+			if (!box || detailFor !== key) { return; }
+			var html = '<div class="d-flex align-items-center small mb-1"><span class="me-auto text-body-secondary">' + esc(L('sd.traps_pending', { n: r.pending, t: r.total })) + '</span>' +
+				(r.pending ? '<button class="btn btn-sm btn-link p-0" type="button" data-traps-reset><i class="bi bi-arrow-counterclockwise"></i> ' + esc(L('sd.traps_reset')) + '</button>' : '') + '</div>';
+			if (r.rejected) { html += '<div class="small text-warning-emphasis mb-1"><i class="bi bi-shield-x"></i> ' + esc(L('sd.traps_rejected', { n: r.rejected, r: r.reject_reason || '', at: fmtTime(r.rejected_at) })) + '</div>'; }
+			html += (r.list || []).length ? '<div class="list-group list-group-flush small">' + r.list.map(function (e) {
+				var vb = (e.varbinds || []).map(function (v) { return esc(v.oid) + ' = ' + esc(v.value); }).join('<br>');
+				return '<div class="list-group-item px-0"><div class="d-flex gap-2"><span class="me-auto fw-semibold text-break">' + esc(e.trap_name || e.trap_oid || 'Trap') + '</span>' +
+					(e.handled ? '<span class="badge text-bg-light" title="' + esc(L('sd.traps_handled_hint')) + '">' + esc(L('sd.traps_handled')) + '</span>' : '') +
+					'<span class="text-body-secondary text-nowrap">' + esc(fmtTime(e.time)) + '</span></div>' +
+					'<div class="text-body-secondary">v' + esc(e.version) + (e.inform ? ' · Inform' : '') + (e.user ? ' · ' + esc(e.user) : '') + (e.trap_name && e.trap_oid ? ' · ' + esc(e.trap_oid) : '') + '</div>' +
+					(vb ? '<details><summary class="text-body-secondary">' + esc(L('sd.traps_values', { n: (e.varbinds || []).length })) + '</summary><div class="font-monospace text-break">' + vb + (e.truncated ? '<br>…' : '') + '</div></details>' : '') + '</div>';
+			}).join('') + '</div>' : '<div class="small text-body-secondary">' + esc(L('sd.traps_none')) + '</div>';
+			box.innerHTML = html;
+			var rb = $('[data-traps-reset]', box);
+			if (rb) { rb.onclick = function () { lock(rb, function () { return api('POST', trapsURL + '/reset').then(function () { toast(L('sd.traps_reset_toast')); closeDetail(); return reload(); }); }).catch(fail); }; }
+		}).catch(function (e) { var box = document.getElementById('m64-sd-traps'); if (box) { box.innerHTML = '<span class="small text-danger">' + esc(tx(e.message)) + '</span>'; } });
 	}
 	function closeDetail() { var oc = window.bootstrap.Offcanvas.getInstance(document.getElementById('m64-detail')); if (oc) { oc.hide(); } detailFor = null; }
 	document.getElementById('m64-detail').addEventListener('hidden.bs.offcanvas', function () {
@@ -975,7 +1092,7 @@ function pageHost() {
 	function hostPut(body) { return api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid), body); }
 	function accessForm(a) {
 		var t = a ? a.type : 'agent', c = (a && a.config) || {};
-		var types = ['agent', 'ssh', 'pve', 'pbs', 'docker'].concat(DEVAPI);
+		var types = ['agent', 'ssh', 'pve', 'pbs', 'docker'].concat(DEVAPI, ['snmp']);
 		return '<div class="row g-3"><div class="col-md-6"><label class="form-label" for="m64-af-type">' + esc(L('acc.type')) + '</label><select class="form-select" id="m64-af-type"' + (a ? ' disabled' : '') + '>' + types.map(function (x) { return '<option value="' + x + '"' + (x === t ? ' selected' : '') + '>' + esc(accLabel(x)) + '</option>'; }).join('') + '</select></div>' +
 			'<div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-af-en"' + (!a || a.enabled ? ' checked' : '') + '><label class="form-check-label" for="m64-af-en">' + esc(L('acc.enabled')) + '</label></div></div>' +
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + (c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
@@ -985,18 +1102,20 @@ function pageHost() {
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
 			'<div class="col-md-6" data-af="pve"><label class="form-label" for="m64-af-node">' + esc(L('new.node')) + '</label><input class="form-control" id="m64-af-node" maxlength="64" value="' + esc(c.node || '') + '"></div>' +
 			devFields(c, 'af') +
+			'<div class="col-12" data-af="snmp"><div class="row g-3">' + snmpFields('af', function (x) { return snmpVal(c, x); }, !!(a && a.secret_set && a.type === 'snmp')) + '</div></div>' +
 			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
 			'<div class="col-12" data-af="ssh pve pbs ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-secret">' + esc(L('acc.secret')) + '</label><input class="form-control" id="m64-af-secret" type="password" autocomplete="new-password" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '') + '">' +
 			'<div class="form-text" id="m64-af-shint">' + esc(L('acc.secret_hint')) + '</div></div>' +
 			'<div class="col-12" data-af="docker"><label class="form-label" for="m64-af-dsecret">' + esc(L('acc.docker_secret')) + '</label><textarea class="form-control font-monospace small" id="m64-af-dsecret" rows="4" spellcheck="false" autocomplete="off" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '-----BEGIN …') + '"></textarea>' +
 			'<div class="form-text">' + esc(L('acc.docker_secret_hint')) + '</div></div>' +
-			(a && a.secret_set ? '<div class="col-12" data-af="ssh pve pbs docker ' + DEVAPI.join(' ') + '"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-clear"><label class="form-check-label small" for="m64-af-clear">' + esc(L('acc.secret_clear')) + '</label></div></div>' : '') + '</div>';
+			(a && a.secret_set ? '<div class="col-12" data-af="ssh pve pbs docker snmp ' + DEVAPI.join(' ') + '"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-clear"><label class="form-check-label small" for="m64-af-clear">' + esc(L('acc.secret_clear')) + '</label></div></div>' : '') + '</div>';
 	}
 	function accessShow(body) {
 		var t = $('#m64-af-type', body).value;
 		$$('[data-af]', body).forEach(function (x) { x.classList.toggle('d-none', x.dataset.af.split(' ').indexOf(t) < 0); });
 		$('#m64-af-url', body).placeholder = DEVAPI.indexOf(t) >= 0 ? devURL(t, H.host.address) : t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.10') + ':' + (t === 'pbs' ? 8007 : 8006);
 		$('#m64-af-shint', body).textContent = DEVAPI.indexOf(t) >= 0 ? devSecretHint(t) : L('acc.secret_hint');
+		snmpShow(body, 'af');
 	}
 	function accessFromForm(body) {
 		var t = $('#m64-af-type', body).value, cfg = {};
@@ -1013,7 +1132,14 @@ function pageHost() {
 			cfg.pin = $('#m64-af-pin', body).value.trim();
 			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
 		}
-		var out = { type: t, config: cfg, secret: t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value, enabled: $('#m64-af-en', body).checked };
+		var secret = t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value;
+		if (t === 'snmp') {
+			var sr = snmpRead(function (id) { var x = $('#m64-af-s' + id, body); return x ? (x.type === 'checkbox' ? x.checked : SNMP_PASS.indexOf(id) >= 0 ? x.value : x.value.trim()) : ''; });
+			if (sr === null) { throw new Error(L('acc.snmp_custom_bad')); }
+			cfg = sr.config;
+			secret = sr.secret;
+		}
+		var out = { type: t, config: cfg, secret: secret, enabled: $('#m64-af-en', body).checked };
 		var cl = $('#m64-af-clear', body);
 		if (cl && cl.checked) { out.clear_secret = true; }
 		return out;
@@ -1037,6 +1163,7 @@ function pageHost() {
 		} }], true);
 		body.insertAdjacentHTML('beforeend', '<div class="mt-3 small" id="m64-af-res"></div>');
 		$('#m64-af-type', body).onchange = function () { accessShow(body); $('#m64-af-res', body).innerHTML = ''; };
+		$$('#m64-af-sversion, #m64-af-slevel', body).forEach(function (x) { x.onchange = function () { snmpShow(body, 'af'); }; });
 		body.addEventListener('click', function (ev) {
 			var fb = ev.target.closest('[data-fp-confirm]');
 			if (!fb) { return; }
@@ -1060,6 +1187,7 @@ function pageHost() {
 			var m = devCfg(t, function (id) { return id === 'metrics' ? (c.metrics ? JSON.stringify(c.metrics) : '') : id === 'session' ? !!c.session : (c[id] || ''); }) || {};
 			Object.keys(m).forEach(function (x) { o[x] = m[x]; });
 		}
+		if (t === 'snmp') { o = (snmpRead(function (x) { return snmpVal(c, x); }) || {}).config || {}; }
 		return o;
 	}
 	root.addEventListener('click', function (ev) {
@@ -1708,17 +1836,47 @@ function pageSettings() {
 	$('#m64-settings-form').onsubmit = function (ev) {
 		ev.preventDefault();
 		var sb = $('#m64-settings-form [type=submit]');
-		lock(sb, function () { return api('PUT', '/api/monitor64/settings', { interval: parseInt($('#m64-interval').value, 10), workers: parseInt($('#m64-workers').value, 10) }).then(function () { toast(L('st.saved_toast')); }); }).catch(fail);
+		var body = { interval: parseInt($('#m64-interval').value, 10), workers: parseInt($('#m64-workers').value, 10) }, tp = $('#m64-trap-port');
+		if (tp) { body.trap_port = parseInt(tp.value, 10) || 0; }
+		lock(sb, function () { return api('PUT', '/api/monitor64/settings', body).then(function () { toast(L('st.saved_toast')); }); }).catch(fail);
 	};
+	// Traps unbekannter Absender: nie automatisch angelegt, Knopf oeffnet den Assistenten mit Adresse und Art SNMP
+	function renderUnknown(list) {
+		var box = $('#m64-trap-unknown');
+		if (!box) { return; }
+		box.innerHTML = list.length ? list.map(function (u) {
+			var what = u.user ? L('st.traps_user', { u: u.user }) : (u.trap_name || u.trap_oid || '');
+			return '<div class="list-group-item px-0 d-flex flex-wrap align-items-center gap-2"><div class="me-auto min-w-0"><code>' + esc(u.addr) + '</code> <span class="text-body-secondary">v' + esc(u.version) + ' · ' + esc(L('st.traps_count', { n: u.count })) + ' · ' + esc(fmtTime(u.last)) + '</span>' +
+				(what ? '<div class="text-body-secondary text-truncate">' + esc(what) + '</div>' : '') + '</div>' +
+				'<a class="btn btn-sm btn-outline-primary" href="/monitor64/new?kind=snmp&amp;address=' + encodeURIComponent(u.addr) + '"><i class="bi bi-plus-lg"></i> ' + esc(L('st.traps_add_host')) + '</a></div>';
+		}).join('') : '<div class="list-group-item px-0 text-body-secondary">' + esc(L('st.traps_none')) + '</div>';
+		var cl = $('#m64-trap-clear');
+		if (cl) { cl.hidden = !list.length; }
+	}
+	renderUnknown((D.traps && D.traps.unknown) || []);
+	var clr = $('#m64-trap-clear');
+	if (clr) { clr.onclick = function () { lock(clr, function () { return api('DELETE', '/api/monitor64/traps/unknown').then(function () { renderUnknown([]); }); }).catch(fail); }; }
 }
 
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
 	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
 		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '',
+		s_version: '2c', s_port: '', s_community: '', s_user: '', s_level: 'authPriv', s_auth: 'SHA256', s_authpass: '', s_priv: 'AES', s_privpass: '', s_context: '', s_engine: '', s_custom: '', s_traps: false,
 		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {} };
 	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
-	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics'];
+	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics',
+		's_version', 's_port', 's_community', 's_user', 's_level', 's_auth', 's_authpass', 's_priv', 's_privpass', 's_context', 's_engine', 's_custom', 's_traps'];
+	// Vorbelegung aus der Adresse (z. B. "als Host anlegen" bei Traps unbekannter Absender): ?kind=snmp&address=10.0.0.5
+	(function () {
+		var q = new URLSearchParams(location.search), k = q.get('kind'), a = (q.get('address') || '').trim();
+		var hk = (D.host_kinds || []).filter(function (x) { return x.kind === k && !x.soon; })[0];
+		if (!hk) { return; }
+		WZ.kind = hk.kind;
+		if (a && a.length <= 253) { WZ.address = a; WZ.name = a; }
+		if (hk.access === 'snmp' && a) { WZ.s_traps = true; }
+		WZ.step = 2;
+	})();
 	var key = D.public_key || L('new.no_key');
 	function kind() { var k = null; (D.host_kinds || []).forEach(function (x) { if (x.kind === WZ.kind) { k = x; } }); return k; }
 	function kl(k) { return ((D.host_kind_labels || {})[k] || [k, ''])[0]; }
@@ -1745,6 +1903,12 @@ function pageNew() {
 			cfg.pin = WZ.pin;
 			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
 			out.secret = WZ.dsecret;
+		}
+		if (t === 'snmp') {
+			var sr = snmpRead(function (id) { return WZ['s_' + id]; });
+			if (sr === null) { throw new Error(L('acc.snmp_custom_bad')); }
+			out.config = sr.config;
+			out.secret = sr.secret;
 		}
 		return out;
 	}
@@ -1805,6 +1969,9 @@ function pageNew() {
 					'<div class="col-12 small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(devHint(ta)) + '<div class="mt-1">' + esc(devSecretHint(ta)) + '</div></div>' +
 					'<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' +
 					devFields(WZ, 'w', ta) + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
+			} else if (k.access === 'snmp') {
+				html += '<div class="col-12 small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(L('new.hint_snmp')) + '</div>' +
+					snmpFields('w', function (x) { return WZ['s_' + x]; }, false);
 			} else if (k.access === 'docker') {
 				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="unix:///var/run/docker.sock"') + '<div class="form-text">' + esc(L('new.docker_hint')) + '</div></div>' +
 					'<div class="col-12"><details' + (WZ.pin || WZ.docker_secret ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2"><div class="col-12">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div>' +
@@ -1853,9 +2020,11 @@ function pageNew() {
 		if (us) { us.onchange = function () { collect(); render(); }; }
 		var t = $('#m64-w-test');
 		if (t) { t.onclick = function () { lock(t, testConn); }; }
+		snmpShow($('#m64-wizard'), 'w');
+		$$('#m64-w-sversion, #m64-w-slevel').forEach(function (x) { x.onchange = function () { snmpShow($('#m64-wizard'), 'w'); }; });
 	}
 	function selectedNodes() { return otherNodes().filter(function (n) { return WZ.nodes[n.name]; }); }
-	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
+	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
 		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { WZ.nodeAddr = r.addr; render(); } }).catch(failQuiet);

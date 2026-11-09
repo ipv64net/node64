@@ -371,11 +371,17 @@ func TestUIMetaPhase(t *testing.T) {
 	e := newEnv(t)
 	body := e.do("GET", "/monitor64/new", nil).Body.String()
 	mustContain(t, "new", body, `kind-tile" data-kind="windows"`)
-	mustContain(t, "new", body, `kind-tile disabled" data-kind="snmp"`)
+	mustContain(t, "new", body, `kind-tile" data-kind="snmp"`) // SNMP seit Phase 2
+	mustContain(t, "new", body, `kind-tile" data-kind="nas"`)
+	if strings.Contains(body, "kind-tile disabled") {
+		t.Error("no host kind may be 'soon' any more")
+	}
 	set := e.do("GET", "/monitor64/settings", nil).Body.String()
 	if strings.Contains(set, "/monitor64/agent/") {
 		t.Error("settings point to /monitor64/agent/")
 	}
+	mustContain(t, "settings", set, `id="m64-trap-port"`)
+	mustContain(t, "settings", set, `id="m64-traps"`)
 	pb := e.do("GET", "/monitor64/problems", nil).Body.String()
 	mustContain(t, "problems", pb, `pb-table" data-nosort`)
 	// Texte des Kerns stehen dem Skript zur Verfuegung

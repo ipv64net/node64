@@ -32,7 +32,7 @@ func (a *apiCollector) closeFn() {
 	}
 }
 
-// newAPICollector baut den Sammler fuer Proxmox VE, PBS und Docker.
+// newAPICollector baut den Sammler fuer Proxmox VE, PBS, Docker, Prometheus, Geraete-APIs und SNMP.
 func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret string) (collector, error) {
 	addr := cfg.URL
 	typ := a.Type
@@ -85,6 +85,12 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 			return nil, err
 		}
 		return &apiAdapter{apiCollector: apiCollector{src: src, close: done}}, nil
+	case "snmp":
+		c, err := newSNMP(h, cfg, secret)
+		if err != nil {
+			return nil, err
+		}
+		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
 	}
 	return nil, fmt.Errorf("unbekannter Zugang %q", typ)
 }

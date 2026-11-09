@@ -42,6 +42,16 @@ const (
 	KindDeviceWarn      = "device.warn"          // Geraet meldet Warnung (Alarm, Health Warning)
 	KindDeviceCrit      = "device.crit"          // Geraet meldet kritisch (Alarm, Health Critical)
 	KindParityErrors    = "raid.parity_errors"   // Paritaetspruefung mit Fehlern (Unraid)
+	KindHostRestarted   = "host.restarted"       // Geraet neu gestartet (SNMP: Laufzeit zurueckgesprungen)
+	KindIfDown          = "if.down"              // Port ohne Link, obwohl eingeschaltet
+	KindIfSpeedLow      = "if.speed_low"         // Port langsamer als zuvor
+	KindIfHalfDuplex    = "if.half_duplex"       // Port im Halbduplex
+	KindUPSAlarm        = "ups.alarm"            // USV meldet Alarm (UPS-MIB)
+	KindPrinterError    = "printer.error"        // Druckerfehler (Stau, Klappe offen, offline ...)
+	KindPaperEmpty      = "printer.paper_empty"  // Papierfach leer
+	KindHWFailed        = "hw.failed"            // Hardware-Fehler (Luefter, Netzteil, Systemstatus)
+	KindPoEFault        = "poe.fault"            // PoE-Port ueberlastet bzw. fehlerhaft
+	KindTrapReceived    = "trap.received"        // SNMP-Trap empfangen (bis quittiert)
 	KindServiceGone     = "svc.vanished"         // Dienst verschwunden (bleibt bis "Entfernen")
 	KindAccessFailed    = "access.failed"        // einzelner Zugang antwortet nicht
 	KindCtrUnhealthy    = "ctr.unhealthy"        // Container meldet unhealthy
@@ -132,6 +142,16 @@ func Defaults() Table {
 		KindDeviceWarn:      stateRule(SevWarn, 0),
 		KindDeviceCrit:      stateRule(SevCrit, 0),
 		KindParityErrors:    stateRule(SevWarn, 0),
+		KindHostRestarted:   stateRule(SevWarn, 0),
+		KindIfDown:          stateRule(SevWarn, 0),
+		KindIfSpeedLow:      stateRule(SevWarn, 0),
+		KindIfHalfDuplex:    stateRule(SevWarn, 0),
+		KindUPSAlarm:        stateRule(SevWarn, 0),
+		KindPrinterError:    stateRule(SevWarn, 0),
+		KindPaperEmpty:      stateRule(SevWarn, 0),
+		KindHWFailed:        stateRule(SevCrit, 0),
+		KindPoEFault:        stateRule(SevWarn, 0),
+		KindTrapReceived:    stateRule(SevWarn, 0),
 		KindServiceGone:     stateRule(SevWarn, 0),
 		KindAccessFailed:    stateRule(SevWarn, 0),
 		KindCtrUnhealthy:    stateRule(SevWarn, 0),

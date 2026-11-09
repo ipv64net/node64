@@ -58,6 +58,16 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindDeviceWarn, Group: "fixed", State: true},
 	{Kind: eval.KindDeviceCrit, Group: "fixed", State: true},
 	{Kind: eval.KindParityErrors, Group: "fixed", State: true},
+	{Kind: eval.KindHostRestarted, Group: "fixed", State: true},
+	{Kind: eval.KindIfDown, Group: "fixed", State: true},
+	{Kind: eval.KindIfSpeedLow, Group: "fixed", State: true},
+	{Kind: eval.KindIfHalfDuplex, Group: "fixed", State: true},
+	{Kind: eval.KindUPSAlarm, Group: "fixed", State: true},
+	{Kind: eval.KindPrinterError, Group: "fixed", State: true},
+	{Kind: eval.KindPaperEmpty, Group: "fixed", State: true},
+	{Kind: eval.KindHWFailed, Group: "fixed", State: true},
+	{Kind: eval.KindPoEFault, Group: "fixed", State: true},
+	{Kind: eval.KindTrapReceived, Group: "fixed", State: true},
 	{Kind: eval.KindServiceGone, Group: "fixed", State: true},
 	{Kind: eval.KindAccessFailed, Group: "fixed", State: true},
 	{Kind: eval.KindCtrUnhealthy, Group: "fixed", State: true},
@@ -74,7 +84,7 @@ var ruleKinds = []ruleKind{
 // coreTexts sind Texte, die der Kern als "i18n:<schluessel>?..." liefert (Ursache, Zugangsfehler, Ablauf eines
 // Problems); das Skript uebersetzt sie mit diesen Schluesseln (unter monitor64.).
 var coreTexts = []string{"detail.vanished", "detail.not_running", "detail.access", "detail.threshold", "detail.maint_silent", "detail.unack",
-	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "err.not_running"}
+	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "err.not_running", "detail.traps", "detail.trap_last"}
 
 // ruleGroups ist die Reihenfolge der Abschnitte auf der Seite Schwellen.
 var ruleGroups = []string{"system", "storage", "disks", "network", "devices"}
@@ -94,9 +104,9 @@ func kindKey(kind string) string { return strings.ReplaceAll(kind, ".", "_") }
 // svcCategory ordnet die Art eines Dienstes einer Kategorie der Dienste-Tabelle zu.
 func svcCategory(kind string) string {
 	switch kind {
-	case "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "cluster", "ha", "ceph", "alerts", "system":
+	case "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "cluster", "ha", "ceph", "alerts", "system", "uptime", "traps":
 		return "system"
-	case "ups", "fan", "psu", "power", "printer":
+	case "ups", "fan", "psu", "power", "printer", "supply", "tray", "hw":
 		return "devices"
 	case "fs":
 		return "fs"
@@ -104,7 +114,7 @@ func svcCategory(kind string) string {
 		return "storage"
 	case "disk":
 		return "disks"
-	case "if", "bond":
+	case "if", "bond", "poe", "wlan":
 		return "network"
 	case "vm", "ct", "backup", "job":
 		return "guests"
@@ -127,7 +137,7 @@ var svcCategories = []string{"system", "fs", "storage", "disks", "network", "dev
 func guestKind(kind string) bool { return kind == "vm" || kind == "ct" || kind == "ctr" }
 
 // hostKinds sind die Arten im Assistenten "Host hinzufuegen" (Reihenfolge wie im Entwurf). Access ist der Zugang,
-// den der Assistent anlegt; Soon = noch nicht waehlbar (Windows-Agent und SNMP folgen in Phase 2).
+// den der Assistent anlegt; Soon = noch nicht waehlbar.
 type hostKind struct {
 	Kind   string `json:"kind"`
 	Icon   string `json:"icon"`
@@ -148,8 +158,8 @@ var hostKinds = []hostKind{
 	{Kind: "server", Icon: "bi-motherboard", Access: "redfish"},
 	{Kind: "ups", Icon: "bi-battery-charging", Access: "nut"},
 	{Kind: "prom", Icon: "bi-graph-up", Access: "prom"},
-	{Kind: "snmp", Icon: "bi-diagram-3", Access: "snmp", Soon: true},
-	{Kind: "nas", Icon: "bi-device-hdd", Access: "snmp", Soon: true},
+	{Kind: "snmp", Icon: "bi-diagram-3", Access: "snmp"},
+	{Kind: "nas", Icon: "bi-device-hdd", Access: "snmp"},
 }
 
 func hostKindOf(kind string) (hostKind, bool) {
@@ -169,8 +179,8 @@ func hostIcon(kind string) string {
 	return "bi-pc-display"
 }
 
-// accessTypes sind die Zugangsarten, die angelegt werden koennen (SNMP folgt).
-var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker", "prom", "nut", "truenas", "unraid", "redfish"}
+// accessTypes sind die Zugangsarten, die angelegt werden koennen.
+var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp"}
 
 func validAccessType(t string) bool {
 	for _, a := range accessTypes {

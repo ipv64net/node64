@@ -17,6 +17,9 @@
   (node_exporter, windows_exporter, custom metrics), entries on status pages, rule "Windows service stopped".
 - New accesses: NUT (UPS), TrueNAS, Unraid, Redfish (server BMC); wizard tiles for Windows, FreeBSD, TrueNAS,
   Unraid, server BMC, UPS and Prometheus; new rules for UPS, device alerts and Unraid parity.
+- SNMP access (v1/v2c/v3, device profiles, custom OIDs) with wizard tiles "SNMP device" and "NAS"; SNMP traps
+  (configurable port, immediate poll on known traps, "Traps" service until acknowledged, add unknown senders as host);
+  new rules for restarts, ports, UPS alarm, printers, hardware and PoE.
 - Code review fixes: intentionally missing values (stopped VM, sleeping disk) stay OK, reminders are not lost after
   quiet hours, no duplicate messages to default channels, ZFS device errors on ONLINE pools, Proxmox cluster services
   evaluated by a monitored node, hung VMs even when allowed to be off, thousands separator and hysteresis in the shown unit.
