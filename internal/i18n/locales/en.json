@@ -6691,7 +6691,8 @@
       "trap_last": "Last trap: {name} ({at})",
       "cluster_takeover": "Responsibility taken over: {to} instead of {from}",
       "cluster_handover": "Responsibility handed back: from {from} to {to}",
-      "handover": "ended by handover"
+      "handover": "ended by handover",
+      "push_waiting": "Agent (push) not reconnected yet after the node started – not counted as an outage for up to 7 minutes"
     },
     "push": {
       "mode_label": "Connection",

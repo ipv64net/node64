@@ -15,6 +15,7 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/transport"
 	"github.com/ipv64net/node64/internal/notify"
 )
 
@@ -407,7 +408,12 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				rt.SeenUp[a.row.UID], rt.dirty = keys, true
 			}
 		}
-		if err != nil && len(svcs) == 0 {
+		if err != nil && len(svcs) == 0 && errors.Is(err, transport.ErrNotConnected) && m.sinceStart() < pushStartGrace {
+			// Push-Agent nach dem Start der Node noch nicht wieder verbunden (er wartet bis 5 min, bevor er es neu
+			// versucht): nicht als Ausfall zaehlen, sonst meldet jeder Neustart alle Push-Hosts "nicht erreichbar"
+			failedAcc[a.row.UID] = true
+			av.Error = i18nText("monitor64.detail.push_waiting")
+		} else if err != nil && len(svcs) == 0 {
 			rt.Failures[a.row.UID]++
 			failedAcc[a.row.UID] = true
 			av.Error = shortErr(err)

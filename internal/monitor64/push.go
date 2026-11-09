@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/ipv64net/node64/internal/m64proto"
 	"github.com/ipv64net/node64/internal/monitor64/transport"
@@ -88,6 +89,20 @@ func (m *Module) checkPushPort(ctx context.Context, bind string, port int) error
 		return nil
 	}
 	return reg.Check(ctx, Name, []ports.Claim{{Owner: Name, Purpose: "Monitor64 Push", Proto: ports.TCP, Port: port, Bind: bind}})
+}
+
+// pushStartGrace: so lange nach dem Start zaehlt "Agent nicht verbunden" bei Push-Zugaengen nicht als Ausfall (der
+// Agent versucht es nach einer Trennung erst nach bis zu 5 min +-20 % erneut).
+const pushStartGrace = 7 * time.Minute
+
+// sinceStart: Zeit seit dem Start des Moduls.
+func (m *Module) sinceStart() time.Duration {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.start.IsZero() {
+		return 0
+	}
+	return time.Since(m.start)
 }
 
 // pushPort ist der eingestellte Port des Lauschers.

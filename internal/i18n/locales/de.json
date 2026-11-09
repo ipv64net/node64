@@ -6691,7 +6691,8 @@
       "trap_last": "Letzter Trap: {name} ({at})",
       "cluster_takeover": "Zuständigkeit übernommen: {to} statt {from}",
       "cluster_handover": "Zuständigkeit zurückgegeben: von {from} an {to}",
-      "handover": "durch Übergabe beendet"
+      "handover": "durch Übergabe beendet",
+      "push_waiting": "Agent (Push) nach dem Start der Node noch nicht wieder verbunden – zählt bis zu 7 Minuten nicht als Ausfall"
     },
     "push": {
       "mode_label": "Verbindung",

@@ -142,6 +142,13 @@ func (m *Module) recordNotified(ctx context.Context, h *Host, lines []eval.Line,
 		key := l.Key
 		p := open[key]
 		if p == nil {
+			// Entwarnung: das Problem ist in dieser Runde schon geschlossen worden - Meldung beim zuletzt geschlossenen
+			// Problem des Dienstes festhalten (sonst fehlt "Entwarnung an ..." im Ablauf)
+			var uid string
+			if m.st.Reader().QueryRowContext(ctx, `SELECT uid FROM m64_problems WHERE host_uid = ? AND service_key = ? AND closed_at >= ? ORDER BY closed_at DESC LIMIT 1`,
+				h.UID, key, ts(at.Add(-time.Minute))).Scan(&uid) == nil {
+				m.event(ctx, uid, h.UID, key, "bell", string(l.Kind)+": "+strings.Join(l.Channels, ","), SystemActor, at)
+			}
 			continue
 		}
 		b, _ := json.Marshal(l.Channels)

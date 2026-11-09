@@ -226,3 +226,24 @@ func TestSectionErrorsPrefixes(t *testing.T) {
 		t.Fatal("error without section errors")
 	}
 }
+
+// Test mit drei Nodes: Die Entwarnung zu einem in dieser Runde geschlossenen Problem steht im Ablauf ("bell").
+func TestRecordNotifiedOKBell(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	h := &Host{Name: "h1", Address: "192.0.2.1", IntervalSec: 60}
+	if err := m.store.SaveHost(ctx, h, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if _, err := m.st.Writer().ExecContext(ctx, `INSERT INTO m64_problems (uid, host_uid, service_key, state, worst, opened_at, closed_at, updated_at)
+		VALUES ('p1', ?, 'fs:/', 'ok', 'warn', ?, ?, ?)`, h.UID, ts(now.Add(-time.Hour)), ts(now), tsNow()); err != nil {
+		t.Fatal(err)
+	}
+	m.recordNotified(ctx, h, []eval.Line{{Kind: eval.LineOK, Key: "fs:/", State: eval.OK, Channels: []string{"default"}}}, now)
+	var n int
+	_ = m.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM m64_events WHERE problem_uid = 'p1' AND kind = 'bell' AND text = 'ok: default'`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("bell events for OK: %d", n)
+	}
+}
