@@ -2,11 +2,14 @@ package certs
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -94,12 +97,68 @@ func (m *Manager) challengeFQDN(ctx context.Context, base string) string {
 	for range 8 {
 		cn, err := m.cnameOf(ctx, fqdn)
 		cn = strings.TrimSuffix(strings.ToLower(cn), ".")
-		if err != nil || cn == "" || cn == fqdn {
+		if err != nil || cn == "" || cn == fqdn || isWildcardCNAME(ctx, fqdn, cn, m.cnameOf) {
 			break
 		}
 		fqdn = cn
 	}
 	return fqdn
+}
+
+// Wildcard-CNAME bei _acme-challenge (Forum 5036): Zeigt *.lab.domain.tld per CNAME nach Hause (DynDNS), trifft der
+// Wildcard auch _acme-challenge.lab.domain.tld. lego folgte ihm und suchte beim Anbieter die Zone des Ziels
+// ("failed to find zone home64.de"). Ein CNAME, den nur ein Wildcard liefert, ist keine Delegation: Der TXT-Record
+// gehoert dann nach _acme-challenge.<name> (dort ueberdeckt er den Wildcard). Erkannt wird das an einer Gegenprobe:
+// Ein zufaelliger Name daneben bekommt denselben CNAME. Explizite CNAMEs (Alias auf ipv64, Delegation auf eine andere
+// Zone) zeigen auf _acme-challenge.* oder haben keinen solchen Zwilling und werden weiter verfolgt; scheitert die
+// Gegenprobe, ebenso. Gilt fuer den Weiterleiter von lego (legodns.go) und die eigene Pruefung (challengeFQDN).
+
+const wildcardTTL = time.Minute // Ergebnis der Gegenprobe
+
+var wildcards = struct {
+	sync.Mutex
+	m map[string]wildcardEntry
+}{m: map[string]wildcardEntry{}}
+
+type wildcardEntry struct {
+	wild bool
+	exp  time.Time
+}
+
+// isWildcardCNAME: stammt der CNAME name -> target nur aus einem Wildcard? cname liefert das CNAME-Ziel eines Namens
+// ("" = keiner). Nur fuer _acme-challenge.*; im Zweifel false (verfolgen wie bisher).
+func isWildcardCNAME(ctx context.Context, name, target string, cname func(ctx context.Context, name string) (string, error)) bool {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	target = strings.ToLower(strings.TrimSuffix(target, "."))
+	parent, ok := strings.CutPrefix(name, "_acme-challenge.")
+	if !ok || parent == "" || target == "" || strings.HasPrefix(target, "_acme-challenge.") {
+		return false
+	}
+	key, now := name+"|"+target, time.Now()
+	wildcards.Lock()
+	e, ok := wildcards.m[key]
+	wildcards.Unlock()
+	if ok && now.Before(e.exp) {
+		return e.wild
+	}
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return false
+	}
+	got, err := cname(ctx, "_n64-"+hex.EncodeToString(b[:])+"."+parent)
+	if err != nil {
+		return false
+	}
+	wild := strings.EqualFold(strings.TrimSuffix(got, "."), target)
+	wildcards.Lock()
+	for k, old := range wildcards.m { // Abgelaufenes wegraeumen
+		if now.After(old.exp) {
+			delete(wildcards.m, k)
+		}
+	}
+	wildcards.m[key] = wildcardEntry{wild: wild, exp: now.Add(wildcardTTL)}
+	wildcards.Unlock()
+	return wild
 }
 
 // checkAlias: der CNAME fuer jeden Namen ist gesetzt.

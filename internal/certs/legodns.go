@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,15 +67,12 @@ func (f *legoDNS) close() {
 }
 
 func (f *legoDNS) ServeDNS(w dns.ResponseWriter, q *dns.Msg) {
-	ctx, cancel := context.WithTimeout(context.Background(), legoDNSWait)
-	r := f.public(ctx, q)
-	cancel()
-	if r == nil {
-		r = f.fromSystem(q)
-	}
+	r := f.resolve(q)
 	if r == nil {
 		r = new(dns.Msg)
 		r.SetRcode(q, dns.RcodeServerFailure)
+	} else {
+		f.dropWildcardCNAME(q, r)
 	}
 	r.Id = q.Id
 	if _, udp := w.RemoteAddr().(*net.UDPAddr); udp {
@@ -85,6 +83,60 @@ func (f *legoDNS) ServeDNS(w dns.ResponseWriter, q *dns.Msg) {
 		r.Truncate(size) // lego fragt dann per TCP
 	}
 	_ = w.WriteMsg(r)
+}
+
+// resolve: oeffentliche Resolver, ohne Antwort von dort der System-Resolver; nil = keiner.
+func (f *legoDNS) resolve(q *dns.Msg) *dns.Msg {
+	ctx, cancel := context.WithTimeout(context.Background(), legoDNSWait)
+	r := f.public(ctx, q)
+	cancel()
+	if r == nil {
+		r = f.fromSystem(q)
+	}
+	return r
+}
+
+// dropWildcardCNAME: Fuer _acme-challenge.<name> kommt ein CNAME, den nur ein Wildcard liefert (isWildcardCNAME,
+// Forum 5036) - dann ohne ihn antworten (NOERROR ohne Daten). lego bleibt so beim Namen und findet die Zone per SOA
+// wie ohne CNAME; explizite CNAMEs bleiben in der Antwort.
+func (f *legoDNS) dropWildcardCNAME(q, r *dns.Msg) {
+	if len(q.Question) != 1 {
+		return
+	}
+	name, target := q.Question[0].Name, ""
+	for _, rr := range r.Answer {
+		if cn, ok := rr.(*dns.CNAME); ok && strings.EqualFold(cn.Hdr.Name, name) {
+			target = cn.Target
+			break
+		}
+	}
+	if target == "" || !isWildcardCNAME(context.Background(), name, target, f.cname) {
+		return
+	}
+	r.Rcode, r.Answer, r.Ns = dns.RcodeSuccess, nil, nil
+	var extra []dns.RR
+	for _, rr := range r.Extra {
+		if rr.Header().Rrtype == dns.TypeOPT {
+			extra = append(extra, rr)
+		}
+	}
+	r.Extra = extra
+}
+
+// cname: CNAME-Ziel eines Namens auf denselben Wegen wie die Antworten an lego ("" = keiner).
+func (f *legoDNS) cname(_ context.Context, name string) (string, error) {
+	q := new(dns.Msg)
+	q.SetQuestion(dns.Fqdn(name), dns.TypeCNAME)
+	r := f.resolve(q)
+	if r == nil {
+		return "", errors.New("no answer")
+	}
+	for _, rr := range r.Answer {
+		if cn, ok := rr.(*dns.CNAME); ok && strings.EqualFold(cn.Hdr.Name, q.Question[0].Name) {
+			return cn.Target, nil
+		}
+	}
+	return "", nil
 }
 
 // public: erste Antwort (NOERROR/NXDOMAIN) eines oeffentlichen Resolvers; alle gleichzeitig, nil = keiner.
