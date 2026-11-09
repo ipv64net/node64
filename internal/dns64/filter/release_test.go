@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// Freigabe-Listen: jede Regel gibt frei (auch @@-Ausnahmen, samt Subdomains bei ||x^); die eigene Sperrliste
+// Freigabe-Listen: jede Regel gibt frei (auch @@-Ausnahmen, samt Subdomains bei ||x^, genau bei |x^); die eigene Sperrliste
 // geht vor, nicht gesperrte Namen bleiben unberuehrt.
 func TestReleaseManager(t *testing.T) {
 	dir := t.TempDir()
@@ -16,12 +16,14 @@ func TestReleaseManager(t *testing.T) {
 	d, _ := LoadDenylist(filepath.Join(dir, "deny.txt"))
 	m := &Manager{Allow: a, Deny: d}
 	mt := newMatcher([]string{"ads"})
-	mt.load(0, strings.NewReader("||tracker.example^\n||cdn.example^\n0.0.0.0 shop.example\n||own.example^\n"))
+	mt.load(0, strings.NewReader("||tracker.example^\n||cdn.example^\n0.0.0.0 shop.example\n||own.example^\n||amazon.example^\n"))
 	m.cur.Store(mt)
 
 	rel := &Manager{lists: []List{{Name: "ok", URL: "https://x.example/ok.txt"}}, release: true}
 	rm := newMatcher([]string{"ok"})
-	rm.loadAs(0, strings.NewReader("@@||cdn.example^\nshop.example\n||own.example^\n"), true)
+	if n, _ := rm.loadAs(0, strings.NewReader("@@||cdn.example^\nshop.example\n||own.example^\n@@|a4k.amazon.example^$important\n"), true); n != 4 {
+		t.Fatalf("release rules = %d, want 4", n)
+	}
 	rel.cur.Store(rm)
 	m.Release = rel
 
@@ -38,6 +40,9 @@ func TestReleaseManager(t *testing.T) {
 		{"shop.example", false, ReleasedPrefix + "ads"},
 		{"own.example", true, OwnPrefix + "own.example"}, // eigene Sperrliste schlaegt Freigabe-Liste
 		{"free.example", false, ""},
+		{"a4k.amazon.example", false, ReleasedPrefix + "ads"}, // @@| gibt genau diesen Namen frei (Forum 5065)
+		{"x.a4k.amazon.example", true, "ads"},
+		{"amazon.example", true, "ads"},
 	} {
 		if b, r := m.Check(tt.name); b != tt.blocked || r != tt.reason {
 			t.Errorf("Check(%s) = %v %q, want %v %q", tt.name, b, r, tt.blocked, tt.reason)

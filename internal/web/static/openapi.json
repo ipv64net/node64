@@ -9268,7 +9268,7 @@
           "DNS64"
         ],
         "summary": "Freigabe-Liste(n) hinzufuegen (an)",
-        "description": "Wie POST /dns64/lists: {name, url} oder {urls: [...]}. Formate: Domain je Zeile, hosts oder Adblock (||example.com^ und @@||example.com^).",
+        "description": "Wie POST /dns64/lists: {name, url} oder {urls: [...]}. Formate: Domain je Zeile, hosts oder Adblock (||example.com^ und @@||example.com^; |example.com^ bzw. @@|example.com^ genau dieser Name).",
         "requestBody": {
           "required": true,
           "content": {

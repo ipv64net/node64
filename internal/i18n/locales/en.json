@@ -3722,7 +3722,7 @@
       "remove_confirm": "Remove list “{name}”?",
       "add": "Custom blocklist",
       "add_btn": "Add",
-      "add_hint": "Formats: hosts file, one domain per line or Adblock syntax (||domain^, exceptions @@||domain^).",
+      "add_hint": "Formats: hosts file, one domain per line or Adblock syntax (||domain^, exceptions @@||domain^; with a single bar |domain^ or @@|domain^ exactly this name).",
       "hint_categories": "“Child protection” and “Bypass” apply to all devices; “Bypass” blocks foreign DoH servers, VPNs and proxies. Stronger levels sometimes block wanted sites too – then allow the domain.",
       "bulk_hint": "Several lists at once: one URL per line, optionally with a name in front (“Name | URL”).",
       "bulk_added": "{n} list(s) added",
@@ -4232,7 +4232,7 @@
     "allowlists": {
       "title": "Allow lists",
       "hint": "Lists from the web with domains no blocklist should block (e.g. known false positives). They apply to all devices and groups and are reloaded regularly like the blocklists. Your own blocklist wins.",
-      "add_hint": "One URL per line, optionally with a name in front (“Name | URL”). Formats: one domain per line, hosts or Adblock (||example.com^ and @@||example.com^)."
+      "add_hint": "One URL per line, optionally with a name in front (“Name | URL”). Formats: one domain per line, hosts or Adblock (||example.com^ and @@||example.com^; |example.com^ or @@|example.com^ exactly this name only)."
     },
     "deny": {
       "title": "Own blocklist",

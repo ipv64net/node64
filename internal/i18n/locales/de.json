@@ -3722,7 +3722,7 @@
       "remove_confirm": "Liste „{name}“ entfernen?",
       "add": "Eigene Blockliste",
       "add_btn": "Hinzufügen",
-      "add_hint": "Formate: hosts-Datei, eine Domain je Zeile oder Adblock-Syntax (||domain^, Ausnahmen @@||domain^).",
+      "add_hint": "Formate: hosts-Datei, eine Domain je Zeile oder Adblock-Syntax (||domain^, Ausnahmen @@||domain^; mit einem Strich |domain^ bzw. @@|domain^ genau dieser Name).",
       "hint_categories": "„Kinderschutz“ und „Umgehen“ gelten für alle Geräte; „Umgehen“ sperrt fremde DoH-Server, VPNs und Proxys. Stärkere Stufen sperren ab und zu auch Gewolltes – dann die Domain freigeben.",
       "bulk_hint": "Mehrere Listen auf einmal: eine URL je Zeile, optional mit Namen davor („Name | URL“).",
       "bulk_added": "{n} Liste(n) hinzugefügt",
@@ -4232,7 +4232,7 @@
     "allowlists": {
       "title": "Freigabe-Listen",
       "hint": "Listen aus dem Netz mit Domains, die keine Blockliste sperren soll (z. B. bekannte Fehlblockierungen). Sie gelten für alle Geräte und Gruppen und werden wie die Blocklisten regelmäßig neu geladen. Die eigene Sperrliste geht vor.",
-      "add_hint": "Eine URL je Zeile, optional mit Namen davor („Name | URL“). Formate: Domain je Zeile, hosts oder Adblock (||example.com^ und @@||example.com^)."
+      "add_hint": "Eine URL je Zeile, optional mit Namen davor („Name | URL“). Formate: Domain je Zeile, hosts oder Adblock (||example.com^ und @@||example.com^; |example.com^ bzw. @@|example.com^ nur genau dieser Name)."
     },
     "deny": {
       "title": "Eigene Sperrliste",

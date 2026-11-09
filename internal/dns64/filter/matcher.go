@@ -18,7 +18,9 @@ type Matcher struct {
 	exact map[uint64]uint64
 	wild  map[uint64]uint64
 	allow map[uint64]struct{}
-	names []string
+	// allowExact: Ausnahmen nur fuer genau diesen Namen (@@|example.com^)
+	allowExact map[uint64]struct{}
+	names      []string
 }
 
 // MaxLists is the number of lists one matcher can tell apart (bits of the mask).
@@ -32,11 +34,12 @@ func newMatcher(names []string) *Matcher { return newMatcherSize(names, 1<<18) }
 // newMatcherSize wie newMatcher; hint = erwartete Regeln je Map (Platz vorab).
 func newMatcherSize(names []string, hint int) *Matcher {
 	return &Matcher{
-		seed:  maphash.MakeSeed(),
-		exact: make(map[uint64]uint64, hint),
-		wild:  make(map[uint64]uint64, hint),
-		allow: make(map[uint64]struct{}),
-		names: names,
+		seed:       maphash.MakeSeed(),
+		exact:      make(map[uint64]uint64, hint),
+		wild:       make(map[uint64]uint64, hint),
+		allow:      make(map[uint64]struct{}),
+		allowExact: make(map[uint64]struct{}),
+		names:      names,
 	}
 }
 
@@ -46,7 +49,8 @@ func (m *Matcher) hash(s string) uint64 { return maphash.String(m.seed, s) }
 // before it had.
 func (m *Matcher) load(idx int, r io.Reader) (int, error) { return m.loadAs(idx, r, false) }
 
-// loadAs wie load; release = Freigabe-Liste: auch Ausnahmen (@@||example.com^) zaehlen als Eintrag der Liste.
+// loadAs wie load; release = Freigabe-Liste: auch Ausnahmen zaehlen als Eintrag der Liste (@@||example.com^ samt
+// Subdomains, @@|example.com^ genau dieser Name).
 func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 	bit := uint64(1) << uint(idx)
 	sc := bufio.NewScanner(r)
@@ -57,8 +61,13 @@ func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 		if kind == ruleNone {
 			continue
 		}
-		if release && kind == ruleAllow {
-			kind = ruleWildcard
+		if release {
+			switch kind {
+			case ruleAllow:
+				kind = ruleWildcard
+			case ruleAllowExact:
+				kind = ruleExact
+			}
 		}
 		h := m.hash(domain)
 		switch kind {
@@ -74,6 +83,8 @@ func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 			m.wild[h] |= bit
 		case ruleAllow:
 			m.allow[h] = struct{}{}
+		case ruleAllowExact:
+			m.allowExact[h] = struct{}{}
 		}
 	}
 	return added, sc.Err()
@@ -92,6 +103,11 @@ func (m *Matcher) MatchMask(name string, mask uint64) (bool, string) {
 		return false, ""
 	}
 	exactHash := m.hash(name)
+	if len(m.allowExact) > 0 {
+		if _, ok := m.allowExact[exactHash]; ok {
+			return false, ""
+		}
+	}
 	hit := m.exact[exactHash] & mask
 	for s := name; ; {
 		h := exactHash

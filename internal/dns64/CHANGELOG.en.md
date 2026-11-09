@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.35.1 – 2026-11-09
+
+### Fixed
+- Block and allow lists understand AdGuard rules with a single bar: `@@|name^` exempts exactly this name (in allow lists: allows exactly it), `|name^` blocks exactly it; modifiers such as `$important` are accepted. Such lines used to be ignored silently (forum v64.tech 5065). Rules without a bar (`name^`, `@@name^`) apply to the name and its subdomains.
+
 ## 1.35.0 – 2026-11-08
 
 ### New

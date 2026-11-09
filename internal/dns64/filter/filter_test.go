@@ -30,6 +30,20 @@ func TestParseLine(t *testing.T) {
 		{"||example.net/path^", "", ruleNone},
 		{"@@||good.example.net^", "good.example.net", ruleAllow},
 		{"@@||good.example.net^|", "good.example.net", ruleAllow},
+		// AdGuard: ein Strich = genau dieser Name, ohne Strich = Name samt Subdomains (Forum 5065)
+		{"@@|a4k.amazon.com^$important", "a4k.amazon.com", ruleAllowExact},
+		{"@@|good.example.net^", "good.example.net", ruleAllowExact},
+		{"@@|good.example.net^|", "good.example.net", ruleAllowExact},
+		{"@@|*.good.example.net^", "good.example.net", ruleAllow},
+		{"@@||good.example.net^$important", "good.example.net", ruleAllow},
+		{"@@good.example.net^", "good.example.net", ruleAllow},
+		{"@@|good.example.net^$third-party", "", ruleNone},
+		{"@@|https://good.example.net/path", "", ruleNone},
+		{"|ads.example.net^", "ads.example.net", ruleExact},
+		{"|ads.example.net^$important", "ads.example.net", ruleExact},
+		{"|*.ads.example.net^", "ads.example.net", ruleWildcard},
+		{"ads.example.net^", "ads.example.net", ruleWildcard},
+		{"ads.example.net^$third-party", "", ruleNone},
 		{"! comment", "", ruleNone},
 		{"# comment", "", ruleNone},
 		{"[Adblock Plus 2.0]", "", ruleNone},
@@ -69,6 +83,30 @@ func TestMatcher(t *testing.T) {
 		blocked, list := m.Match(tt.name)
 		if blocked != tt.blocked || list != tt.list {
 			t.Errorf("Match(%q) = %v, %q; want %v, %q", tt.name, blocked, list, tt.blocked, tt.list)
+		}
+	}
+	if m.Size() != 2 {
+		t.Errorf("Size() = %d, want 2", m.Size())
+	}
+}
+
+// Blockliste mit exakter Ausnahme (@@|name^): gilt nur fuer genau den Namen, Subdomains bleiben gesperrt.
+func TestMatcherAllowExact(t *testing.T) {
+	m := newMatcher([]string{"ads"})
+	m.load(0, strings.NewReader("||amazon.example^\n@@|a4k.amazon.example^$important\n|exact.example^\n"))
+	for _, tt := range []struct {
+		name    string
+		blocked bool
+	}{
+		{"amazon.example", true},
+		{"a4k.amazon.example", false},  // exakte Ausnahme
+		{"x.a4k.amazon.example", true}, // Subdomain nicht ausgenommen
+		{"www.amazon.example", true},
+		{"exact.example", true}, // |name^ sperrt genau den Namen
+		{"sub.exact.example", false},
+	} {
+		if blocked, _ := m.Match(tt.name); blocked != tt.blocked {
+			t.Errorf("Match(%q) = %v, want %v", tt.name, blocked, tt.blocked)
 		}
 	}
 	if m.Size() != 2 {

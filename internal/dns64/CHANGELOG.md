@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.35.1 – 2026-11-09
+
+### Behoben
+- Block- und Freigabe-Listen verstehen AdGuard-Regeln mit einem Strich: `@@|name^` nimmt genau diesen Namen aus (in Freigabe-Listen: gibt genau ihn frei), `|name^` sperrt genau ihn; Zusätze wie `$important` sind erlaubt. Bisher wurden solche Zeilen still ignoriert (Forum v64.tech 5065). Regeln ohne Strich (`name^`, `@@name^`) gelten für den Namen samt Subdomains.
+
 ## 1.35.0 – 2026-11-08
 
 ### Neu

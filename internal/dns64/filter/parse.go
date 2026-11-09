@@ -9,10 +9,11 @@ import (
 type ruleKind uint8
 
 const (
-	ruleNone     ruleKind = iota
-	ruleExact             // blocks exactly this name (hosts / plain domain lists)
-	ruleWildcard          // blocks this name and all subdomains (||example.com^)
-	ruleAllow             // exception for this name and all subdomains (@@||example.com^)
+	ruleNone       ruleKind = iota
+	ruleExact               // blocks exactly this name (hosts / plain domain lists)
+	ruleWildcard            // blocks this name and all subdomains (||example.com^)
+	ruleAllow               // exception for this name and all subdomains (@@||example.com^)
+	ruleAllowExact          // exception for exactly this name (@@|example.com^)
 )
 
 // hostsIgnore are entries every hosts file contains that must never be blocked.
@@ -33,8 +34,9 @@ var hostsIgnore = map[string]bool{
 
 // parseLine understands the three formats used by common DNS blocklists:
 // hosts files ("0.0.0.0 ads.example.com"), plain domain lists and the
-// DNS-relevant subset of Adblock syntax ("||ads.example.com^"). Browser-only
-// rules (paths, cosmetic filters, modifiers) are ignored.
+// DNS-relevant subset of Adblock syntax ("||ads.example.com^", "|exact.example.com^",
+// exceptions "@@||..." and "@@|..."). Browser-only rules (paths, cosmetic filters,
+// modifiers) are ignored.
 func parseLine(line string) (string, ruleKind) {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -45,14 +47,42 @@ func parseLine(line string) (string, ruleKind) {
 		return "", ruleNone
 	}
 
-	if strings.HasPrefix(line, "@@||") {
-		if d, ok := adblockDomain(line[4:]); ok {
-			return d, ruleAllow
+	// Adblock/AdGuard: "||" = Name samt Subdomains, ein "|" = Anfang der Adresse, also genau dieser Name; ohne
+	// Strich ("example.com^") meint AdGuard einen Teilstring - am naechsten kommt Name samt Subdomains (enger als
+	// der Teilstring, sperrt bzw. erlaubt also nie mehr als gemeint). "||" muss vor "|" geprueft werden.
+	if rest, ok := strings.CutPrefix(line, "@@"); ok {
+		kind := ruleAllow
+		switch {
+		case strings.HasPrefix(rest, "||"):
+			rest = rest[2:]
+		case strings.HasPrefix(rest, "|"):
+			if rest = rest[1:]; !strings.HasPrefix(rest, "*.") { // "|*.example.com^" = Subdomains, nicht genau
+				kind = ruleAllowExact
+			}
+		}
+		if d, ok := adblockDomain(rest); ok {
+			return d, kind
 		}
 		return "", ruleNone
 	}
 	if strings.HasPrefix(line, "||") {
 		if d, ok := adblockDomain(line[2:]); ok {
+			return d, ruleWildcard
+		}
+		return "", ruleNone
+	}
+	if strings.HasPrefix(line, "|") {
+		kind := ruleExact
+		if strings.HasPrefix(line, "|*.") {
+			kind = ruleWildcard
+		}
+		if d, ok := adblockDomain(line[1:]); ok {
+			return d, kind
+		}
+		return "", ruleNone
+	}
+	if strings.IndexByte(line, '^') >= 0 { // "example.com^"
+		if d, ok := adblockDomain(line); ok {
 			return d, ruleWildcard
 		}
 		return "", ruleNone
@@ -90,7 +120,7 @@ func parseLine(line string) (string, ruleKind) {
 	return "", ruleNone
 }
 
-// adblockDomain extracts the domain from the part after "||". Only rules that
+// adblockDomain extracts the domain from the part after "||" (or "|", "@@"). Only rules that
 // target a whole domain are accepted: "example.com^", optionally followed by
 // "|" or the "$important" modifier.
 func adblockDomain(s string) (string, bool) {
