@@ -40,7 +40,7 @@ Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.
 (BSD-3, Grundlage von CoreDHCP, gut getestet). Die Server-Schleife ist eigener Code: ein UDP-Socket je Schnittstelle
 mit `SO_BINDTODEVICE` und `SO_BROADCAST` über `x/sys/unix`. Antworten gehen per Broadcast an Clients ohne Adresse,
 sonst per Unicast. So braucht es keinen Raw-Socket für Ethernet-Frames. Alternative: eigener Parser (~400 Zeilen),
-das bedeutet aber mehr Pflege. Siehe offene Entscheidung 1.
+das bedeutet aber mehr Pflege. Entschieden: Paket (Entscheidung 1).
 
 **Datenbank** (Migration `0016_dhcp.sql`, node64.db):
 
