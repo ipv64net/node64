@@ -6780,7 +6780,8 @@
       "retire": "Alte Schlüssel verwerfen",
       "retire_confirm": "Alte Schlüssel sofort verwerfen? Hosts, die noch nicht umgestellt sind, lassen sich danach nicht mehr abfragen (Agent neu einrichten bzw. neue Zeile in authorized_keys eintragen).",
       "retired_toast": "Alte Schlüssel verworfen.",
-      "inactive_keys": "Diese Node ist in keinem aktiven Cluster. Schlüssel, alte Schlüssel und offene Umstellungen der Agents lassen sich hier weiter verwalten."
+      "inactive_keys": "Diese Node ist in keinem aktiven Cluster. Schlüssel, alte Schlüssel und offene Umstellungen der Agents lassen sich hier weiter verwalten.",
+      "local_access_hint": "Dieser Host hat einen Docker-Zugang über den lokalen Socket der Node – eine Ersatz-Node erreicht ihn nicht und meldet ihn nach einer Übernahme als nicht erreichbar. Vorher „Erreichbarkeit prüfen“."
     }
   }
 }

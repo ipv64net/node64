@@ -841,6 +841,9 @@ function pageHost() {
 				return '<div class="form-check" data-cl-node="' + esc(n.id) + '"><input class="form-check-input" type="checkbox" id="m64-cl-b' + i + '" value="' + esc(n.id) + '"' + (back[n.id] ? ' checked' : '') + '><label class="form-check-label" for="m64-cl-b' + i + '">' + esc(n.name) +
 					(n.self ? ' <span class="text-body-tertiary">' + esc(L('cluster.this_node')) + '</span>' : '') + (n.online ? '' : ' <span class="badge text-bg-secondary">' + esc(L('cluster.offline')) + '</span>') + ' <span class="small" data-cl-reach></span></label></div>';
 			}).join('') + '</div><div class="form-text">' + esc(L('cluster.backups_hint')) + '</div>' +
+			// Zugaenge, die nur auf dieser Node gehen (lokaler Docker-Socket): eine Ersatz-Node erreicht sie nie
+			(H.accesses.some(function (a) { var u = (a.config && a.config.url) || ''; return a.type === 'docker' && (u === '' || u.indexOf('unix://') === 0); }) ?
+				'<div class="form-text text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('cluster.local_access_hint')) + '</div>' : '') +
 			'<div class="mt-3"><button class="btn btn-sm btn-outline-primary" type="button" id="m64-cl-reach"><i class="bi bi-broadcast"></i> ' + esc(L('cluster.reach')) + '</button></div><div class="small mt-2" id="m64-cl-reach-res"></div>',
 		[{ label: L('cancel') }, { label: L('save'), cls: 'btn-primary', click: function (close) {
 			var pref = $('#m64-cl-pref', body).value, list = [];

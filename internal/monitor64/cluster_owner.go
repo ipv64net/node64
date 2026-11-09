@@ -41,6 +41,7 @@ const (
 type clusterSnap struct {
 	Active    bool
 	Self      string
+	SelfName  string // Name dieser Node (Verlauf "von node01 an node02")
 	Peers     map[string]ClusterPeer
 	Stable    map[string]bool
 	Total     int // Mitglieder des Bereichs mit dieser Node
@@ -60,6 +61,9 @@ func (s *clusterSnap) online(id string) bool {
 }
 
 func (s *clusterSnap) name(id string) string {
+	if id == s.Self && s.SelfName != "" { // eigene Node: Name aus den Einstellungen (sonst stuende die Kennung im Verlauf)
+		return s.SelfName
+	}
 	if p, ok := s.Peers[id]; ok && p.Name != "" {
 		return p.Name
 	}
@@ -69,7 +73,7 @@ func (s *clusterSnap) name(id string) string {
 // clusterRefresh liest die Mitglieder und merkt, seit wann sie ununterbrochen erreichbar sind.
 func (m *Module) clusterRefresh(ctx context.Context) *clusterSnap {
 	now := m.cl.clock()
-	s := &clusterSnap{Self: m.clusterSelf(), Peers: map[string]ClusterPeer{}, Stable: map[string]bool{}, At: now}
+	s := &clusterSnap{Self: m.clusterSelf(), SelfName: m.st.SettingOr(ctx, "node.name", ""), Peers: map[string]ClusterPeer{}, Stable: map[string]bool{}, At: now}
 	var list []ClusterPeer
 	if m.hooks().Members != nil {
 		list = m.hooks().Members(ctx, ClusterItemConfig)

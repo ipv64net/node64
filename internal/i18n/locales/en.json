@@ -6780,7 +6780,8 @@
       "retire": "Discard old keys",
       "retire_confirm": "Discard the old keys now? Hosts that have not been switched can no longer be polled afterwards (set up the agent again or add the new line to authorized_keys).",
       "retired_toast": "Old keys discarded.",
-      "inactive_keys": "This node is not part of an active cluster. You can still manage the key, old keys and pending agent switches here."
+      "inactive_keys": "This node is not part of an active cluster. You can still manage the key, old keys and pending agent switches here.",
+      "local_access_hint": "This host has a Docker access via the node's local socket – a backup node cannot reach it and reports it as unreachable after a takeover. Use “Check reachability” first."
     }
   }
 }

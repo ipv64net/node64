@@ -598,6 +598,15 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   21 Stellen (Agent-Sperren bei NAT/IPv6, `from=`, Update-Rückfall, `#!`-Interpreter, gewollt fehlende Messwerte,
   Erinnerung nach der Ruhezeit, doppelte Meldungen, ZFS-Gerätefehler, Proxmox-Cluster-Zuständigkeit u. a.) – behoben
   in 4b5dbd0e und dem folgenden Agent-Commit, Tests mit `-race` auf der Box grün.
+- 2026-11-09: Phasen 2–4 gebaut (Windows-/FreeBSD-Agent, SNMP+Traps, NUT, TrueNAS, Unraid, Redfish, Prometheus,
+  Statusseiten, Push-Betrieb, Cluster samt Oberfläche), `/code-review max` über 16ce32ac..c751761a (11 Prüfer, rund 85
+  Kandidaten, unabhängig geprüft) – alle bestätigten Funde behoben (8fde73c0). **Echter Test mit drei Nodes** auf
+  agentbox (8091/8092/8093, gekoppelt): Abgleich, gemeinsamer Schlüssel mit Umstellung der Agents, Übernahme nach
+  2 min 9 s, Rückgabe nach 5 min, Problem-Übergang ohne Doppel, Split-Brain (abgetrennte Node ohne Mehrheit, Mehrheit
+  übernimmt nach 2 min 11 s), Wiederverbindung ohne doppelte Probleme. Funde daraus behoben: Zeiten ohne
+  Millisekunden, Push-Fehlalarm nach Neustart, fehlende Entwarnung im Ablauf, abgetrennte Node meldete vor Klärung
+  der Mehrheit, Node-Name im Verlauf, Hinweis bei lokalen Zugängen. Nicht echt getestet (nur Tests im Prozess): Trap
+  an nicht zuständige Node, „Schlüssel wechseln“.
 - Offene Punkte aus den Teilberichten: Release-Ablauf für Agent-Dateien (bauen, `agent-sign`, auf node64.de/GitHub,
   Download über die Node) kommt mit der Freigabe – Schlüssel entschieden (der von Node64);
   Ruhezeit-Prüfung für Erinnerungen (Dispatcher exportieren); Dienstnamen/-texte aus Mapper/m64linux noch deutsch
