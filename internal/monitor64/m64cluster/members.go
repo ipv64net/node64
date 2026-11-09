@@ -3,6 +3,7 @@ package m64cluster
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64"
 	"github.com/ipv64net/node64/internal/peer"
@@ -37,10 +38,14 @@ func areaPeers(localOn bool, list []peer.Member, item string, used func(id strin
 		if !inArea && !used(x.NodeID) {
 			continue
 		}
-		out = append(out, monitor64.ClusterPeer{ID: x.NodeID, Name: x.Name, Online: syncing && x.Online()})
+		online := syncing && x.Online()
+		out = append(out, monitor64.ClusterPeer{ID: x.NodeID, Name: x.Name, Online: online, Silent: online && time.Since(x.LastSeen) > peerSilentAfter})
 	}
 	return out
 }
+
+// peerSilentAfter: laenger als ein Ping-Abstand (30 s) plus Spielraum ohne Antwort.
+const peerSilentAfter = 45 * time.Second
 
 // localAreaOn: Bereich auf dieser Node eingeschaltet (Modul laeuft, abgleichen an, Bereich an; wie peer.syncOn).
 func localAreaOn(ctx context.Context, pm *peer.Manager, item string) bool {

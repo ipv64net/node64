@@ -34,3 +34,16 @@ func TestAreaPeersCountsInactiveMembers(t *testing.T) {
 		t.Fatalf("area off here: no members, got %+v", got)
 	}
 }
+
+// Mitglied online, aber laenger als ein Ping-Abstand ohne Antwort: Silent.
+func TestAreaPeersSilent(t *testing.T) {
+	area := []string{"monitor64/config"}
+	list := []peer.Member{
+		{NodeID: "fresh", LastSeen: time.Now(), Sync: area},
+		{NodeID: "quiet", LastSeen: time.Now().Add(-70 * time.Second), Sync: area},
+	}
+	out := areaPeers(true, list, "config", func(string) bool { return false })
+	if len(out) != 2 || out[0].Silent || !out[1].Silent || !out[1].Online {
+		t.Fatalf("peers %+v", out)
+	}
+}

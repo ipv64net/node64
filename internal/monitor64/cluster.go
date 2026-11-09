@@ -63,6 +63,9 @@ type ClusterPeer struct {
 	ID     string
 	Name   string
 	Online bool
+	// Silent: noch online, aber seit mehr als einem Ping-Abstand ohne Antwort (vielleicht ist diese Node gerade selbst
+	// abgetrennt) - bis zur Klaerung meldet sie keine Hosts, deren Mehrheit davon abhaengt
+	Silent bool
 }
 
 // ClusterHooks verbinden das Modul mit dem Cluster (main.go ueber monitor64/m64cluster); leer = kein Cluster.

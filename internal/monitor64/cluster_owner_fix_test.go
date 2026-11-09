@@ -254,6 +254,7 @@ func TestStatePublishedOnMemoryChangeAndHandover(t *testing.T) {
 	uid := rt.host.UID
 	a.m.poll(ctx, rt)
 	saved := rt.lastSave
+	time.Sleep(20 * time.Millisecond) // Uhr unter Windows grob: sonst ist der neue Zeitstempel gleich dem alten
 	// gleicher Zustand, aber anderes Gedaechtnis: sofort speichern
 	rt.mu.Lock()
 	a.m.saveRuntime(ctx, rt, []byte(`{"svcs":{"cpu":{"cur":1,"sent":1}}}`))
@@ -410,5 +411,25 @@ func TestStopClosesCollectors(t *testing.T) {
 	defer col.mu.Unlock()
 	if col.closed != 1 {
 		t.Fatalf("collector closed %d times, want 1", col.closed)
+	}
+}
+
+// Test mit drei Nodes: eine gerade abgetrennte Node (Mitglieder schweigen, gelten aber noch 2 min als online) meldet
+// Hosts mit Ersatz-Node nicht, bis klar ist, ob die Mehrheit bleibt; ohne Ersatz meldet sie weiter.
+func TestClusterSilentPeersHoldReport(t *testing.T) {
+	b := newBus(t)
+	n := b.newNode("c", "C", 1, false)
+	own := &Host{UID: "host00000001", PreferredNode: "c", BackupNodes: []string{"a"}}
+	alone := &Host{UID: "host00000002", PreferredNode: "c"}
+	s := snapOf("c", map[string]bool{"a": true, "b": true})
+	s.Peers["a"] = ClusterPeer{ID: "a", Online: true, Silent: true}
+	s.Peers["b"] = ClusterPeer{ID: "b", Online: true, Silent: true}
+	s.Unsure = true
+	n.m.cl.snap.Store(s)
+	if r, _ := n.m.roleOf(own); r != roleMeasure {
+		t.Fatalf("silent peers, host with backup: role %d, want measure", r)
+	}
+	if r, _ := n.m.roleOf(alone); r != roleReport {
+		t.Fatalf("silent peers, host without backup: role %d, want report", r)
 	}
 }

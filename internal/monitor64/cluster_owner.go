@@ -46,7 +46,9 @@ type clusterSnap struct {
 	Total     int // Mitglieder des Bereichs mit dieser Node
 	Connected int // davon erreichbar (mit dieser Node)
 	Majority  bool
-	At        time.Time
+	// Unsure: Mehrheit nur, solange schweigende Mitglieder (ClusterPeer.Silent) noch als erreichbar zaehlen
+	Unsure bool
+	At     time.Time
 }
 
 func (s *clusterSnap) online(id string) bool {
@@ -104,12 +106,17 @@ func (m *Module) clusterRefresh(ctx context.Context) *clusterSnap {
 	m.cl.mu.Unlock()
 	s.Active = len(s.Peers) > 0 && s.Self != ""
 	s.Total, s.Connected = len(s.Peers)+1, 1
+	sure := 1
 	for _, p := range s.Peers {
 		if p.Online {
 			s.Connected++
+			if !p.Silent {
+				sure++
+			}
 		}
 	}
 	s.Majority = s.Connected*2 > s.Total || s.Total == 2 // zwei Nodes: Uebernahme erlaubt (Sonderfall)
+	s.Unsure = s.Majority && !(sure*2 > s.Total || s.Total == 2)
 	if old := m.cl.snap.Swap(s); old == nil || old.Active != s.Active {
 		m.cl.mu.Lock()
 		m.cl.roles = nil // Cluster an/aus: Rollen neu bestimmen (Zustand gleich melden)
@@ -171,9 +178,12 @@ func (m *Module) roleOf(h *Host) (int, string) {
 	if owner != s.Self {
 		return roleIdle, owner
 	}
-	if s.Majority {
+	if s.Majority && !s.Unsure {
 		return roleReport, owner
 	}
+	// ohne (sichere) Mehrheit und mit Ersatz-Node: messen, nicht melden. Schweigen Mitglieder erst kurz (diese Node ist
+	// vielleicht selbst abgetrennt), meldet sie erst wieder, wenn klar ist, ob die Mehrheit bleibt - sonst kaeme von
+	// einer abgetrennten Node "nicht erreichbar", bevor der Cluster sie nach 2 min als weg sieht
 	for _, c := range candidatesOf(h, s.Self) {
 		if _, member := s.Peers[c]; member && c != s.Self {
 			return roleMeasure, owner // ohne Mehrheit und mit Ersatz-Node: messen, nicht melden
