@@ -43,7 +43,7 @@ func TestDockerRemoteHosts(t *testing.T) {
 	ctx := context.Background()
 	dockerAddLocal(t, srv) // lokaler Host
 	body := dockerGetPage(t, srv, "/healthchecks/docker/new")
-	for _, want := range []string{"docker.conn.ssh", "docker.howto.s1", `id="dk-host"`, "docker.form.genkey"} {
+	for _, want := range []string{"docker.conn.ssh", "docker.howto.s1", `id="dk-host"`, "docker.form.genkey", `name="user" value="node64"`, "useradd -m -s /bin/sh node64"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("form: %q missing", want)
 		}

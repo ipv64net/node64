@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Beim Docker-Host über SSH ist der Benutzer mit `node64` vorausgefüllt (verhindert Tippfehler in den Befehlen der Anleitung).
 - PROXY64: HTTP/2 zum Ziel – automatisch bei https-Zielen, h2c für gRPC (z. B. NetBird), Nur HTTP/1.1 als Ausweg (#53). **Achtung:** https-Ziele, die HTTP/2 anbieten, bekommen jetzt HTTP/2; bei Problemen mit NTLM/Exchange den Host unter Erweitert auf „Nur HTTP/1.1“ stellen.
 - PROXY64: PROXY-Protokoll zum Ziel (v1/v2) für „TLS durchreichen“ und TCP-Streams, auch über CDN64 – das Ziel sieht die echte Besucher-Adresse, z. B. mailcow (Postfix/Dovecot) oder ein weiterer Reverse Proxy (#52).
 - PROXY64: Weiterleitungen beim Pfad beim Ziel und die Rücksprung-Adresse der Zugriffslisten-Anmeldung führen nicht mehr auf fremde Seiten (gefunden von CodeQL/gosec, #27).

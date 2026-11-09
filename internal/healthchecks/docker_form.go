@@ -211,6 +211,8 @@ func (m *Module) dockerFormOf(sys *proxmox.System, edit bool) dockerFormData {
 		if d.Conn == dockerConnSSH && c.Key != "" {
 			d.PubKey = proxmox.DockerSSHPublicKey(c.Key)
 		}
+	} else {
+		d.F["user"] = "node64" // vorgefuellt wie in den Befehlen der Anleitung (kein Abtippen)
 	}
 	return d
 }

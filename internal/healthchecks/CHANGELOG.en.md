@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.54.1 – 2026-11-09
+
+### Changed
+- Docker host via SSH: the “User” field is prefilled with `node64`, matching the commands in the guide.
+
 ## 2.54.0 – 2026-11-08
 
 ### New
