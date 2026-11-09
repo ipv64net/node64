@@ -1,0 +1,120 @@
+{
+ "@odata.type": "#Thermal.v1_7_0.Thermal",
+ "Id": "Thermal",
+ "Name": "Thermal",
+ "Temperatures": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Temperatures/0",
+   "MemberId": "0",
+   "Name": "CPU1 Temp",
+   "SensorNumber": 5,
+   "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+   },
+   "ReadingCelsius": 62,
+   "UpperThresholdNonCritical": 75,
+   "UpperThresholdCritical": 90,
+   "UpperThresholdFatal": 95,
+   "MinReadingRangeTemp": 0,
+   "MaxReadingRangeTemp": 200,
+   "PhysicalContext": "CPU"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Temperatures/1",
+   "MemberId": "1",
+   "Name": "CPU2 Temp",
+   "Status": {
+    "State": "Enabled",
+    "Health": "Critical"
+   },
+   "ReadingCelsius": 91,
+   "UpperThresholdNonCritical": 75,
+   "UpperThresholdCritical": 90,
+   "UpperThresholdFatal": 95,
+   "PhysicalContext": "CPU"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Temperatures/2",
+   "MemberId": "2",
+   "Name": "Chassis Intake Temp",
+   "Status": {
+    "State": "Enabled",
+    "Health": "Warning"
+   },
+   "ReadingCelsius": 41,
+   "UpperThresholdNonCritical": 40,
+   "UpperThresholdCritical": 42,
+   "UpperThresholdFatal": null,
+   "PhysicalContext": "Intake"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Temperatures/3",
+   "MemberId": "3",
+   "Name": "Board Temp",
+   "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+   },
+   "ReadingCelsius": 45,
+   "PhysicalContext": "SystemBoard"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Temperatures/4",
+   "MemberId": "4",
+   "Name": "CPU3 Temp",
+   "Status": {
+    "State": "Absent"
+   },
+   "ReadingCelsius": null
+  }
+ ],
+ "Fans": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Fans/0",
+   "MemberId": "0",
+   "Name": "BaseBoard System Fan",
+   "PhysicalContext": "Backplane",
+   "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+   },
+   "Reading": 2100,
+   "ReadingUnits": "RPM",
+   "LowerThresholdFatal": 0,
+   "LowerThresholdCritical": 1000
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Fans/1",
+   "MemberId": "1",
+   "Name": "BaseBoard System Fan Backup",
+   "Status": {
+    "State": "Enabled",
+    "Health": "Critical"
+   },
+   "Reading": 800,
+   "ReadingUnits": "RPM",
+   "LowerThresholdCritical": 1000
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Thermal#/Fans/2",
+   "MemberId": "2",
+   "FanName": "Fan 3",
+   "Status": {
+    "State": "Absent"
+   }
+  }
+ ],
+ "Redundancy": [
+  {
+   "MemberId": "0",
+   "Name": "BaseBoard System Fans",
+   "Mode": "N+m",
+   "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+   }
+  }
+ ],
+ "@odata.id": "/redfish/v1/Chassis/1U/Thermal"
+}

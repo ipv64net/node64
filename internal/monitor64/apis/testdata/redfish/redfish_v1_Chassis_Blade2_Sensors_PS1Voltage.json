@@ -1,0 +1,13 @@
+{
+ "@odata.type": "#Sensor.v1_7_0.Sensor",
+ "Id": "PS1Voltage",
+ "Name": "PS1 Voltage",
+ "ReadingType": "Voltage",
+ "Reading": 12.1,
+ "ReadingUnits": "V",
+ "Status": {
+  "State": "Enabled",
+  "Health": "OK"
+ },
+ "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors/PS1Voltage"
+}

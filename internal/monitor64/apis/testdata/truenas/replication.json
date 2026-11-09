@@ -1,0 +1,4 @@
+[
+ {"id": 1, "target_dataset": "backup/tank", "recursive": true, "enabled": true, "direction": "PUSH", "transport": "SSH", "source_datasets": ["tank/data"], "auto": true, "retention_policy": "SOURCE", "retries": 5, "name": "tank/data - backup/tank", "state": {"state": "ERROR", "datetime": {"$date": 1731146400000}, "error": "No incremental base on dataset 'tank/data' and replication from scratch is not allowed", "last_snapshot": "tank/data@auto-2024-11-08_00-00"}, "schedule": {"minute": "0", "hour": "*", "dom": "*", "month": "*", "dow": "*", "begin": "00:00", "end": "23:59"}, "job": null},
+ {"id": 2, "name": "fast/vms - offsite", "enabled": false, "state": {"state": "FINISHED", "datetime": {"$date": 1731000000000}, "last_snapshot": "fast/vms@auto-2024-11-07"}, "job": null}
+]

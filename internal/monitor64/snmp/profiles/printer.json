@@ -1,0 +1,19 @@
+{
+  "id": "printer",
+  "name": "Drucker (Printer-MIB)",
+  "device": "printer",
+  "verified": false,
+  "source": "Printer-MIB (RFC 3805); Toner, Papier und Status liest der Sammler selbst",
+  "match": {
+    "probe": ".1.3.6.1.2.1.43.5.1.1.1.1"
+  },
+  "scalars": [
+    {
+      "key": "printer",
+      "service": "Drucker",
+      "kind": "printer",
+      "oid": ".1.3.6.1.2.1.43.5.1.1.17.1",
+      "label": "Seriennummer"
+    }
+  ]
+}

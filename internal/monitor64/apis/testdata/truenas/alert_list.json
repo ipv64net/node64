@@ -1,0 +1,7 @@
+[
+ {"uuid": "b4b6e1d0-1", "source": "", "klass": "VolumeStatus", "args": {"volume": "tank", "state": "DEGRADED"}, "node": "Controller A", "key": "[\"tank\"]", "datetime": {"$date": 1731100000000}, "last_occurrence": {"$date": 1731149000000}, "dismissed": false, "mail": null, "text": "Pool %(volume)s state is %(state)s: %(status)s", "id": "b4b6e1d0-1", "level": "CRITICAL", "formatted": "Pool tank state is DEGRADED: One or more devices has been removed by the administrator.<br>The following devices are not healthy:<ul><li>Disk WDC_WD120EFBX REMOVED</li></ul>", "one_shot": false},
+ {"uuid": "b4b6e1d0-2", "klass": "SMART", "dismissed": false, "level": "CRITICAL", "formatted": "Device: /dev/sdb [SAT], Self-Test Log error count increased from 0 to 1.", "text": "%(message)s"},
+ {"uuid": "b4b6e1d0-3", "klass": "CloudSyncTaskFailed", "dismissed": false, "level": "ERROR", "formatted": "Cloud sync task \"B2 Fotos\" failed.", "text": ""},
+ {"uuid": "b4b6e1d0-4", "klass": "HasUpdate", "dismissed": false, "level": "INFO", "formatted": "There is a new update available! Apply it in System Settings.", "text": ""},
+ {"uuid": "b4b6e1d0-5", "klass": "ScrubPaused", "dismissed": true, "level": "WARNING", "formatted": "Scrub for pool \"fast\" is paused for more than 8 hours.", "text": ""}
+]

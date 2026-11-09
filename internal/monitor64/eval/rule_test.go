@@ -252,6 +252,8 @@ func TestDefaultsTable(t *testing.T) {
 		KindRAIDDegraded: {SevCrit, 0}, KindBondMemberDown: {SevWarn, 0}, KindBondLACP: {SevWarn, 0},
 		KindUPSOnBattery: {SevWarn, 0}, KindUpdatesSecurity: {SevWarn, 24 * time.Hour},
 		KindRebootRequired: {SevWarn, 24 * time.Hour}, KindGuestDown: {SevCrit, 0}, KindSystemdFailed: {SevWarn, 0}, KindWinSvcStopped: {SevWarn, 5 * time.Minute},
+		KindUPSLowBattery: {SevCrit, 0}, KindUPSReplace: {SevWarn, 0}, KindUPSOverload: {SevWarn, 0},
+		KindDeviceWarn: {SevWarn, 0}, KindDeviceCrit: {SevCrit, 0}, KindParityErrors: {SevWarn, 0},
 		KindServiceGone: {SevWarn, 0}, KindAccessFailed: {SevWarn, 0},
 		KindCtrUnhealthy: {SevWarn, 0}, KindBackupOld: {SevWarn, 0}, KindJobFailed: {SevWarn, 0},
 		KindStoreInactive: {SevCrit, 0}, KindClusterQuorum: {SevCrit, 0}, KindClusterNodeDown: {SevWarn, 0},

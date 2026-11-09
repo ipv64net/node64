@@ -1,0 +1,67 @@
+{
+  "id": "unifi",
+  "name": "Ubiquiti UniFi",
+  "device": "ap",
+  "verified": false,
+  "source": "UBNT-UniFi-MIB (unifiVapTable, unifiApSystem)",
+  "match": {
+    "object_ids": [
+      ".1.3.6.1.4.1.41112"
+    ],
+    "descr": [
+      "unifi",
+      "uap-",
+      "u6-",
+      "u7-"
+    ],
+    "probe": ".1.3.6.1.4.1.41112.1.6.3.3.0"
+  },
+  "scalars": [
+    {
+      "key": "unifi:system",
+      "service": "UniFi",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.41112.1.6.3.3.0",
+      "label": "Modell"
+    },
+    {
+      "key": "unifi:system",
+      "service": "UniFi",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.41112.1.6.3.6.0",
+      "label": "Version"
+    }
+  ],
+  "tables": [
+    {
+      "key": "wlan:{name}",
+      "service": "WLAN {name}",
+      "kind": "wlan",
+      "oid": ".1.3.6.1.4.1.41112.1.6.1.2.1",
+      "name_col": 7,
+      "columns": [
+        {
+          "col": 6,
+          "label": "SSID"
+        },
+        {
+          "col": 9,
+          "label": "Funk"
+        },
+        {
+          "col": 4,
+          "metric": "channel",
+          "hide": true,
+          "min": 0,
+          "max": 300
+        },
+        {
+          "col": 8,
+          "metric": "clients",
+          "min": 0,
+          "max": 10000
+        }
+      ]
+    }
+  ]
+}

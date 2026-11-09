@@ -1,0 +1,17 @@
+{
+ "@odata.type": "#Chassis.v1_23_0.Chassis",
+ "Id": "Blade2",
+ "Name": "Blade 2",
+ "ChassisType": "Blade",
+ "Status": {
+  "State": "Enabled",
+  "Health": "OK"
+ },
+ "Sensors": {
+  "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors"
+ },
+ "PowerSubsystem": {
+  "@odata.id": "/redfish/v1/Chassis/Blade2/PowerSubsystem"
+ },
+ "@odata.id": "/redfish/v1/Chassis/Blade2"
+}

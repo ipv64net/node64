@@ -1,0 +1,5 @@
+[
+ {"disk": "sda", "tests": [{"num": 1, "description": "Short offline", "status": "SUCCESS", "status_verbose": "Completed without error", "remaining": 0.0, "lifetime": 21834, "lba_of_first_error": null}, {"num": 2, "description": "Extended offline", "status": "SUCCESS", "status_verbose": "Completed without error", "remaining": 0.0, "lifetime": 21700, "lba_of_first_error": null}], "current_test": null},
+ {"disk": "sdb", "tests": [{"num": 1, "description": "Short offline", "status": "FAILED", "status_verbose": "Completed: read failure", "remaining": 0.9, "lifetime": 21834, "lba_of_first_error": 1953524168}], "current_test": null},
+ {"disk": "sdc", "tests": [], "current_test": null}
+]

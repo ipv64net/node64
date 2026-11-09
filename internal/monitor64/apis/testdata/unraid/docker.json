@@ -1,0 +1,5 @@
+{"data": {"docker": {"containers": [
+ {"names": ["/plex"], "image": "lscr.io/linuxserver/plex:latest", "state": "RUNNING", "status": "Up 3 days", "autoStart": true},
+ {"names": ["/nextcloud"], "image": "lscr.io/linuxserver/nextcloud:latest", "state": "EXITED", "status": "Exited (137) 2 hours ago", "autoStart": true},
+ {"names": ["/test"], "image": "alpine", "state": "EXITED", "status": "Exited (0) 5 weeks ago", "autoStart": false}
+]}}}

@@ -1,0 +1,9 @@
+{
+ "@odata.type": "#Drive.v1_17_0.Drive",
+ "Id": "Disk.Bay.3",
+ "Name": "Empty Bay",
+ "Status": {
+  "State": "Absent"
+ },
+ "@odata.id": "/redfish/v1/Systems/437XR1138R2/Storage/1/Drives/Disk.Bay.3"
+}

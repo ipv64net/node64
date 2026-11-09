@@ -1,0 +1,245 @@
+{
+  "id": "synology",
+  "name": "Synology DSM",
+  "device": "nas",
+  "verified": false,
+  "source": "SYNOLOGY-SYSTEM-MIB, SYNOLOGY-DISK-MIB, SYNOLOGY-RAID-MIB (Synology MIB Guide)",
+  "match": {
+    "object_ids": [
+      ".1.3.6.1.4.1.8072.3.2.10",
+      ".1.3.6.1.4.1.6574"
+    ],
+    "descr": [
+      "synology"
+    ],
+    "probe": ".1.3.6.1.4.1.6574.1.1.0"
+  },
+  "scalars": [
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.1.0",
+      "text": {
+        "1": "System normal",
+        "2": "System fehlerhaft"
+      },
+      "fact": {
+        "code": "hw_failed",
+        "ok": [
+          1
+        ],
+        "text": "Systemstatus fehlerhaft"
+      }
+    },
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.3.0",
+      "text": {
+        "1": "Netzteil ok",
+        "2": "Netzteil fehlerhaft"
+      },
+      "fact": {
+        "code": "hw_failed",
+        "ok": [
+          1
+        ],
+        "text": "Netzteil fehlerhaft"
+      }
+    },
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.4.1.0",
+      "text": {
+        "1": "Lüfter ok",
+        "2": "Lüfter fehlerhaft"
+      },
+      "fact": {
+        "code": "hw_failed",
+        "ok": [
+          1
+        ],
+        "text": "Systemlüfter fehlerhaft"
+      }
+    },
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.4.2.0",
+      "fact": {
+        "code": "hw_failed",
+        "ok": [
+          1
+        ],
+        "text": "CPU-Lüfter fehlerhaft"
+      }
+    },
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.5.1.0",
+      "label": "Modell"
+    },
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.5.3.0",
+      "label": "DSM"
+    },
+    {
+      "key": "syno:system",
+      "service": "Synology System",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.6574.1.5.4.0",
+      "text": {
+        "1": "Update verfügbar",
+        "2": "",
+        "3": "",
+        "4": "",
+        "5": ""
+      }
+    },
+    {
+      "key": "temp:system",
+      "service": "Temperatur System",
+      "kind": "temp",
+      "oid": ".1.3.6.1.4.1.6574.1.2.0",
+      "metric": "temp",
+      "unit": "°C",
+      "rule": "temp.system",
+      "min": -40,
+      "max": 150
+    }
+  ],
+  "tables": [
+    {
+      "key": "disk:{name}",
+      "service": "Platte {name}",
+      "kind": "disk",
+      "oid": ".1.3.6.1.4.1.6574.2.1.1",
+      "name_col": 2,
+      "columns": [
+        {
+          "col": 3,
+          "label": "Modell"
+        },
+        {
+          "col": 6,
+          "metric": "temp",
+          "unit": "°C",
+          "rule": "disk.temp",
+          "min": -40,
+          "max": 150
+        },
+        {
+          "col": 5,
+          "text": {
+            "1": "Normal",
+            "2": "Initialisiert",
+            "3": "Nicht initialisiert",
+            "4": "Systempartition defekt",
+            "5": "Abgestürzt"
+          },
+          "fact": {
+            "code": "smart_failed",
+            "when": [
+              4,
+              5
+            ],
+            "text": "Platte defekt"
+          }
+        },
+        {
+          "col": 13,
+          "text": {
+            "1": "Gesund",
+            "2": "Warnung",
+            "3": "Kritisch",
+            "4": "Ausfallend"
+          },
+          "fact": {
+            "code": "smart_failed",
+            "when": [
+              3,
+              4
+            ],
+            "text": "Gesundheitsstatus kritisch"
+          }
+        },
+        {
+          "col": 9,
+          "metric": "realloc",
+          "hide": true,
+          "min": 0,
+          "fact": {
+            "code": "smart_sectors",
+            "above": 0,
+            "text": "fehlerhafte Sektoren"
+          }
+        },
+        {
+          "col": 11,
+          "metric": "wear",
+          "unit": "%",
+          "rule": "ssd.wear",
+          "factor": -1,
+          "offset": 100,
+          "min": 0,
+          "max": 100,
+          "hide": true
+        }
+      ]
+    },
+    {
+      "key": "raid:{name}",
+      "service": "Speicherpool {name}",
+      "kind": "raid",
+      "oid": ".1.3.6.1.4.1.6574.3.1.1",
+      "name_col": 2,
+      "columns": [
+        {
+          "col": 3,
+          "text": {
+            "1": "Normal",
+            "2": "Reparatur",
+            "3": "Migration",
+            "4": "Erweiterung",
+            "5": "Löschen",
+            "6": "Erstellen",
+            "7": "Synchronisierung",
+            "8": "Paritätsprüfung",
+            "9": "Zusammenbau",
+            "10": "Abbruch",
+            "11": "Beeinträchtigt",
+            "12": "Abgestürzt",
+            "13": "Datenbereinigung"
+          },
+          "fact": {
+            "code": "raid_degraded",
+            "when": [
+              11,
+              12
+            ],
+            "text": "Speicherpool beeinträchtigt"
+          }
+        },
+        {
+          "col": 5,
+          "metric": "used",
+          "rule": "store.used",
+          "pct": {
+            "total": "5",
+            "free": "4"
+          }
+        }
+      ]
+    }
+  ]
+}

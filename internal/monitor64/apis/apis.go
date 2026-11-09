@@ -184,7 +184,7 @@ func (n *num) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	if err != nil || !finite(f) { // ParseFloat nimmt auch "NaN"/"Inf"
 		*n = 0 // unbekannter Wert: lieber 0 als die ganze Abfrage verwerfen
 		return nil
 	}
@@ -201,7 +201,7 @@ type optNum struct {
 func (n *optNum) UnmarshalJSON(b []byte) error {
 	s := strings.TrimSpace(strings.Trim(strings.TrimSpace(string(b)), `"`))
 	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	if err != nil || !finite(f) {
 		*n = optNum{}
 		return nil
 	}

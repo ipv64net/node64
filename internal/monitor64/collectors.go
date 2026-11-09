@@ -95,6 +95,10 @@ type accessConfig struct {
 	TokenID string `json:"token_id,omitempty"`
 	Node    string `json:"node,omitempty"`
 	Pin     string `json:"pin,omitempty"`
+	UPS     string `json:"ups,omitempty"`     // NUT: USV-Namen (Komma-Liste, leer = alle)
+	TLS     string `json:"tls,omitempty"`     // NUT: "" (STARTTLS wenn angeboten), "off", "require"
+	API     string `json:"api,omitempty"`     // TrueNAS: "" (automatisch), "jsonrpc", "rest"
+	Session bool   `json:"session,omitempty"` // Redfish: Sitzung statt Basic-Auth
 	// Prometheus: eigene Metriken (beliebige Exporter)
 	Metrics []promscrape.CustomMetric `json:"metrics,omitempty"`
 }

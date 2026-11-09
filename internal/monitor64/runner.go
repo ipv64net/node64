@@ -61,7 +61,15 @@ func accessRank(typ string) int {
 // factKinds: welche Zustandsregeln eine Dienst-Art kennt (fehlt der Fact, ist die Bedingung nicht erfuellt).
 var factKinds = map[string][]string{
 	"disk":    {eval.KindSmartFailed, eval.KindSmartSectors, eval.KindSmartSectorsUp},
-	"raid":    {eval.KindRAIDDegraded},
+	"raid":    {eval.KindRAIDDegraded, eval.KindParityErrors},
+	"ups":     {eval.KindUPSOnBattery, eval.KindUPSLowBattery, eval.KindUPSReplace, eval.KindUPSOverload},
+	"alerts":  {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"system":  {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"fan":     {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"psu":     {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"power":   {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"ctrl":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"temp":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"zfs":     {eval.KindRAIDDegraded},
 	"bond":    {eval.KindBondMemberDown, eval.KindBondLACP},
 	"updates": {eval.KindUpdatesSecurity},
@@ -103,6 +111,20 @@ func factKind(code string) string {
 		return eval.KindSystemdFailed
 	case "winsvc_stopped":
 		return eval.KindWinSvcStopped
+	case "ups_low_battery":
+		return eval.KindUPSLowBattery
+	case "ups_replace_battery":
+		return eval.KindUPSReplace
+	case "ups_overload":
+		return eval.KindUPSOverload
+	case "device_warn":
+		return eval.KindDeviceWarn
+	case "device_crit":
+		return eval.KindDeviceCrit
+	case "parity_errors":
+		return eval.KindParityErrors
+	case "disk_errors": // Geraet meldet Plattenfehler (TrueNAS/Unraid/Redfish) wie SMART-Sektoren
+		return eval.KindSmartSectors
 	case "guest_down", "guest_fault": // guest_fault: gestartet, steht aber (io-error, Absturz)
 		return eval.KindGuestDown
 	case "ups_on_battery":

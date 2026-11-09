@@ -1,0 +1,5 @@
+[
+ {"name": "plex", "id": "plex", "state": "RUNNING", "upgrade_available": true, "latest_version": "1.2.3", "image_updates_available": false, "custom_app": false, "migrated": false, "human_version": "1.41.1.9057_1.1.4", "version": "1.1.4", "metadata": {}, "active_workloads": {}, "notes": null, "portals": {}},
+ {"name": "nextcloud", "id": "nextcloud", "state": "CRASHED", "upgrade_available": false, "human_version": "30.0.1_2.0.3", "version": "2.0.3"},
+ {"name": "test", "id": "test", "state": "STOPPED", "upgrade_available": false, "human_version": "1.0", "version": "1.0"}
+]

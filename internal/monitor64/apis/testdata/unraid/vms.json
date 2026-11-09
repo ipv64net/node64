@@ -1,0 +1,5 @@
+{"data": {"vms": {"domains": [
+ {"name": "Windows 11", "state": "RUNNING"},
+ {"name": "HomeAssistant", "state": "CRASHED"},
+ {"name": "Debian", "state": "SHUTOFF"}
+]}}}

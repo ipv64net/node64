@@ -1,0 +1,19 @@
+{"data": {"array": {
+ "state": "STARTED",
+ "capacity": {"kilobytes": {"free": "9765625000", "used": "13671875000", "total": "23437500000"}},
+ "parities": [
+  {"id": "a1b2c3:WDC_WD120EFBX-68B0EN0_D7HABCDE", "idx": 0, "name": "parity", "device": "sdb", "size": 11718885324, "status": "DISK_OK", "temp": 34, "numErrors": 0, "rotational": true, "isSpinning": true, "fsSize": null, "fsFree": null, "fsUsed": null, "fsType": null, "type": "PARITY"},
+  {"id": "a1b2c3:", "idx": 29, "name": "parity2", "device": "", "size": 0, "status": "DISK_NP", "temp": null, "numErrors": 0, "rotational": null, "isSpinning": null, "fsSize": null, "fsFree": null, "fsUsed": null, "fsType": null, "type": "PARITY"}
+ ],
+ "disks": [
+  {"id": "a1b2c3:WDC_WD80EFAX-68KNBN0_VAKABCD1", "idx": 1, "name": "disk1", "device": "sdc", "size": 7814026532, "status": "DISK_OK", "temp": 36, "numErrors": 0, "rotational": true, "isSpinning": true, "fsSize": 7811939620, "fsFree": 1562387924, "fsUsed": 6249551696, "fsType": "xfs", "type": "DATA"},
+  {"id": "a1b2c3:ST8000VN004-2M2101_WSD0XYZ2", "idx": 2, "name": "disk2", "device": "sdd", "size": 7814026532, "status": "DISK_DSBL", "temp": null, "numErrors": 128, "rotational": true, "isSpinning": false, "fsSize": 7811939620, "fsFree": 7000000000, "fsUsed": 811939620, "fsType": "xfs", "type": "DATA"},
+  {"id": "a1b2c3:ST8000VN004-2M2101_WSD0XYZ3", "idx": 3, "name": "disk3", "device": "sde", "size": 7814026532, "status": "DISK_OK", "temp": null, "numErrors": 0, "rotational": true, "isSpinning": false, "fsSize": 7811939620, "fsFree": 1203000000, "fsUsed": 6608939620, "fsType": "xfs", "type": "DATA"}
+ ],
+ "caches": [
+  {"id": "a1b2c3:Samsung_SSD_970_EVO_Plus_1TB_S4EWNX0R111111", "idx": 30, "name": "cache", "device": "nvme0n1", "size": 976762552, "status": "DISK_OK", "temp": 41, "numErrors": 0, "rotational": false, "isSpinning": true, "fsSize": 976762552, "fsFree": 488381276, "fsUsed": 488381276, "fsType": "btrfs", "type": "CACHE"},
+  {"id": "a1b2c3:Samsung_SSD_970_EVO_Plus_1TB_S4EWNX0R222222", "idx": 31, "name": "cache2", "device": "nvme1n1", "size": 976762552, "status": "DISK_NP_MISSING", "temp": null, "numErrors": 0, "rotational": false, "isSpinning": null, "fsSize": null, "fsFree": null, "fsUsed": null, "fsType": "btrfs", "type": "CACHE"},
+  {"id": "a1b2c3:CT2000MX500SSD1_2213E6111111", "idx": 32, "name": "fastpool", "device": "sdf", "size": 1953514552, "status": "DISK_OK", "temp": 33, "numErrors": 0, "rotational": false, "isSpinning": true, "fsSize": 1884000000, "fsFree": 1700000000, "fsUsed": 184000000, "fsType": "zfs", "type": "CACHE"}
+ ],
+ "parityCheckStatus": {"status": "COMPLETED", "progress": 100, "errors": 3, "running": false, "paused": false, "correcting": false, "date": "2024-11-03T05:41:12.000Z"}
+}}}

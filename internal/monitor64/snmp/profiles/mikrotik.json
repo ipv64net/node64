@@ -1,0 +1,136 @@
+{
+  "id": "mikrotik",
+  "name": "MikroTik RouterOS",
+  "device": "router",
+  "verified": false,
+  "source": "MIKROTIK-MIB (mtxrHealth, mtxrGaugeTable ab RouterOS 7, mtxrPOETable)",
+  "match": {
+    "object_ids": [
+      ".1.3.6.1.4.1.14988"
+    ],
+    "descr": [
+      "routeros",
+      "mikrotik"
+    ]
+  },
+  "scalars": [
+    {
+      "key": "temp:board",
+      "service": "Temperatur Board",
+      "kind": "temp",
+      "oid": ".1.3.6.1.4.1.14988.1.1.3.10.0",
+      "metric": "temp",
+      "unit": "°C",
+      "factor": 0.1,
+      "rule": "temp.system",
+      "min": -400,
+      "max": 1500
+    },
+    {
+      "key": "mikrotik:system",
+      "service": "RouterOS",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.14988.1.1.4.4.0",
+      "label": "Version"
+    },
+    {
+      "key": "mikrotik:system",
+      "service": "RouterOS",
+      "kind": "hw",
+      "oid": ".1.3.6.1.4.1.14988.1.1.3.8.0",
+      "metric": "voltage",
+      "unit": "V",
+      "factor": 0.1,
+      "min": 0,
+      "max": 10000
+    }
+  ],
+  "tables": [
+    {
+      "key": "temp:{name}",
+      "service": "Temperatur {name}",
+      "kind": "temp",
+      "oid": ".1.3.6.1.4.1.14988.1.1.3.100.1",
+      "name_col": 2,
+      "filter": {
+        "col": 4,
+        "values": [
+          1
+        ]
+      },
+      "columns": [
+        {
+          "col": 3,
+          "metric": "temp",
+          "unit": "°C",
+          "rule": "temp.system",
+          "min": -40,
+          "max": 150
+        }
+      ]
+    },
+    {
+      "key": "fan:{name}",
+      "service": "Lüfter {name}",
+      "kind": "fan",
+      "oid": ".1.3.6.1.4.1.14988.1.1.3.100.1",
+      "name_col": 2,
+      "filter": {
+        "col": 4,
+        "values": [
+          2
+        ]
+      },
+      "columns": [
+        {
+          "col": 3,
+          "metric": "rpm",
+          "unit": "rpm",
+          "min": 0,
+          "max": 100000
+        }
+      ]
+    },
+    {
+      "key": "poe:{name}",
+      "service": "PoE {name}",
+      "kind": "poe",
+      "oid": ".1.3.6.1.4.1.14988.1.1.15.1.1",
+      "name_col": 2,
+      "columns": [
+        {
+          "col": 3,
+          "text": {
+            "1": "aus",
+            "2": "wartet auf Gerät",
+            "3": "versorgt",
+            "4": "überlastet",
+            "5": "Kurzschluss",
+            "6": "Spannung zu niedrig",
+            "7": "Strom zu hoch",
+            "8": "Spannung zu hoch"
+          },
+          "fact": {
+            "code": "poe_fault",
+            "when": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "text": "PoE-Fehler"
+          }
+        },
+        {
+          "col": 6,
+          "metric": "power",
+          "unit": "W",
+          "factor": 0.1,
+          "min": 0,
+          "max": 100000
+        }
+      ]
+    }
+  ]
+}

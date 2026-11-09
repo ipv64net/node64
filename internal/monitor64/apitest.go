@@ -50,11 +50,17 @@ func newAPITester(typ string, h *Host, cfg accessConfig, secret string) (t apiTe
 			return nil, nil, err
 		}
 		return c, c.Close, nil
+	case "nut", "truenas", "unraid", "redfish":
+		return newDeviceAPI(typ, h, cfg, secret)
 	}
 	return nil, nil, fmt.Errorf("monitor64: no api access %q", typ)
 }
 
 // isAPIAccess: Zugang ueber eine API (Test mit Fingerabdruck und Bestaetigung).
 func isAPIAccess(typ string) bool {
-	return typ == "pve" || typ == "pbs" || typ == "docker" || typ == "prom"
+	switch typ {
+	case "pve", "pbs", "docker", "prom", "nut", "truenas", "unraid", "redfish":
+		return true
+	}
+	return false
 }

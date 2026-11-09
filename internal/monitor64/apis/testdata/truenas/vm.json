@@ -1,0 +1,4 @@
+[
+ {"id": 1, "name": "homeassistant", "description": "", "vcpus": 1, "memory": 4096, "min_memory": null, "autostart": true, "time": "LOCAL", "bootloader": "UEFI", "cores": 2, "threads": 1, "status": {"state": "STOPPED", "pid": null, "domain_state": "SHUTOFF"}},
+ {"id": 2, "name": "win11", "autostart": false, "status": {"state": "RUNNING", "pid": 4242, "domain_state": "RUNNING"}}
+]

@@ -6004,7 +6004,26 @@
       "docker_secret_hint": "For ssh://: private SSH key (PEM). For https:// with TLS: JSON {\"key\": \"…\", \"cert\": \"…\", \"ca\": \"…\"} with PEM blocks. Leave empty for unix:// and tcp://. Stored encrypted and never shown.",
       "pin_set": "Fingerprint entered as pin – save, then test again.",
       "pinned": "fingerprint pinned",
-      "save_first": "Settings were changed: please save first (or enter the secret again), then test."
+      "save_first": "Settings were changed: please save first (or enter the secret again), then test.",
+      "secret_prom": "With user: password (basic auth). Without user: bearer token. Empty = no authentication.",
+      "secret_nut": "Password from upsd.users (optional).",
+      "secret_truenas": "API key (read-only).",
+      "secret_unraid": "API key (role Viewer).",
+      "secret_redfish": "Password of the BMC user.",
+      "ups": "UPS names",
+      "ups_hint": "Comma list; empty = all UPS of upsd.",
+      "tls": "Encryption",
+      "tls_auto": "STARTTLS if offered",
+      "tls_require": "require STARTTLS",
+      "tls_off": "off",
+      "api": "Interface",
+      "api_auto": "automatic",
+      "api_jsonrpc": "JSON-RPC (25.04 and later)",
+      "api_rest": "REST v2.0 (up to 24.10, CORE)",
+      "session": "Session instead of basic auth (only if the BMC rejects basic auth)",
+      "metrics": "Custom metrics (JSON)",
+      "metrics_hint": "For other exporters: list of {\"name\", \"labels\", \"title\", \"unit\", \"factor\", \"rate\"} – e.g. [{\"name\":\"nginx_connections_active\",\"title\":\"Connections\"}].",
+      "metrics_bad": "Custom metrics: not valid JSON (list expected)."
     },
     "access": {
       "agent": "Agent",
@@ -6013,7 +6032,11 @@
       "pbs": "Proxmox Backup Server",
       "docker": "Docker API",
       "snmp": "SNMP",
-      "prom": "Prometheus"
+      "prom": "Prometheus",
+      "nut": "NUT (UPS)",
+      "truenas": "TrueNAS",
+      "unraid": "Unraid",
+      "redfish": "Redfish (BMC: iDRAC, iLO …)"
     },
     "sd": {
       "vanished": "This service is no longer delivered. It stays a warning until you remove it.",
@@ -6276,7 +6299,13 @@
       "cluster_node_down": "Cluster node offline",
       "ha_error": "HA resource in error state",
       "ceph_warn": "Ceph: HEALTH_WARN",
-      "ceph_err": "Ceph: HEALTH_ERR"
+      "ceph_err": "Ceph: HEALTH_ERR",
+      "ups_low_battery": "UPS: battery low / forced shutdown",
+      "ups_replace_battery": "UPS: replace battery",
+      "ups_overload": "UPS: overload",
+      "device_warn": "Device reports a warning (alert, health Warning)",
+      "device_crit": "Device reports critical (alert, health Critical)",
+      "raid_parity_errors": "Parity check found errors (Unraid)"
     },
     "cat": {
       "system": "System",
@@ -6289,7 +6318,8 @@
       "winsvc": "Services",
       "local": "Own scripts",
       "access": "Access methods",
-      "other": "Other"
+      "other": "Other",
+      "devices": "Devices"
     },
     "hostkind": {
       "linux-agent": {
@@ -6323,6 +6353,30 @@
       "nas": {
         "title": "NAS",
         "sub": "Synology, QNAP, TrueNAS, Unraid"
+      },
+      "freebsd": {
+        "title": "FreeBSD / OPNsense",
+        "sub": "agent – also pfSense, TrueNAS CORE"
+      },
+      "truenas": {
+        "title": "TrueNAS",
+        "sub": "API – pools, disks, alerts"
+      },
+      "unraid": {
+        "title": "Unraid",
+        "sub": "API – array, disks, containers"
+      },
+      "server": {
+        "title": "Server BMC",
+        "sub": "Redfish – iDRAC, iLO, Supermicro"
+      },
+      "ups": {
+        "title": "UPS via NUT",
+        "sub": "Network UPS Tools (upsd)"
+      },
+      "prom": {
+        "title": "Prometheus exporter",
+        "sub": "node_exporter, windows_exporter, custom"
       }
     },
     "new": {
@@ -6377,7 +6431,13 @@
       "test_stale": "Changed – please test again.",
       "fp_confirm": "Certificate or host key is not confirmed – the token was not sent. Compare the fingerprint with the server and confirm it.",
       "fp_accept": "Confirm fingerprint and test again",
-      "smart_hint": "Allows only the calls the script needs (find disks, read values without waking sleeping disks). If smartctl lives elsewhere, adjust the path (command -v smartctl)."
+      "smart_hint": "Allows only the calls the script needs (find disks, read values without waking sleeping disks). If smartctl lives elsewhere, adjust the path (command -v smartctl).",
+      "bsd_cmd": "fetch -o /tmp/install.sh https://node64.de/agent/install.sh && sh /tmp/install.sh --key \"{k}\"",
+      "hint_prom": "Exporter address, e.g. http://10.0.0.5:9100/metrics (node_exporter) or port 9182 (windows_exporter). Empty: host address, port 9100.",
+      "hint_nut": "Address of upsd (port 3493). Set \"LISTEN <IP> 3493\" in upsd.conf. Reading needs no login; user and password from upsd.users only if wanted. Encrypted via STARTTLS if upsd has a certificate.",
+      "hint_truenas": "Under Settings → Users create a user with the role \"Read-Only Administrator\" and an API key for it; enter the user name as well (required from TrueNAS 27). https:// only – TrueNAS revokes keys used over http://.",
+      "hint_unraid": "Under Settings → Management Access → API Keys create a key with the role \"Viewer\" (built in from Unraid 7.2, before that plugin \"Unraid Connect\"). https:// recommended.",
+      "hint_redfish": "Create a separate BMC user with the role \"ReadOnly\" (iDRAC: Read Only, iLO: Login, Supermicro: User). The certificate is usually self-signed – confirm the fingerprint during the test."
     },
     "nf": {
       "where": "Where to",

@@ -52,6 +52,12 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindGuestDown, Group: "fixed", State: true},
 	{Kind: eval.KindSystemdFailed, Group: "fixed", State: true},
 	{Kind: eval.KindWinSvcStopped, Group: "fixed", State: true},
+	{Kind: eval.KindUPSLowBattery, Group: "fixed", State: true},
+	{Kind: eval.KindUPSReplace, Group: "fixed", State: true},
+	{Kind: eval.KindUPSOverload, Group: "fixed", State: true},
+	{Kind: eval.KindDeviceWarn, Group: "fixed", State: true},
+	{Kind: eval.KindDeviceCrit, Group: "fixed", State: true},
+	{Kind: eval.KindParityErrors, Group: "fixed", State: true},
 	{Kind: eval.KindServiceGone, Group: "fixed", State: true},
 	{Kind: eval.KindAccessFailed, Group: "fixed", State: true},
 	{Kind: eval.KindCtrUnhealthy, Group: "fixed", State: true},
@@ -88,11 +94,13 @@ func kindKey(kind string) string { return strings.ReplaceAll(kind, ".", "_") }
 // svcCategory ordnet die Art eines Dienstes einer Kategorie der Dienste-Tabelle zu.
 func svcCategory(kind string) string {
 	switch kind {
-	case "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "cluster", "ha", "ceph":
+	case "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "cluster", "ha", "ceph", "alerts", "system":
 		return "system"
+	case "ups", "fan", "psu", "power", "printer":
+		return "devices"
 	case "fs":
 		return "fs"
-	case "zfs", "raid", "store", "ds":
+	case "zfs", "raid", "store", "ds", "ctrl":
 		return "storage"
 	case "disk":
 		return "disks"
@@ -113,7 +121,7 @@ func svcCategory(kind string) string {
 }
 
 // svcCategories in der Reihenfolge der Dienste-Tabelle.
-var svcCategories = []string{"system", "fs", "storage", "disks", "network", "guests", "docker", "winsvc", "local", "access", "other"}
+var svcCategories = []string{"system", "fs", "storage", "disks", "network", "devices", "guests", "docker", "winsvc", "local", "access", "other"}
 
 // guestKind: Dienst mit Soll-Zustand (Proxmox-Gast, Docker-Container).
 func guestKind(kind string) bool { return kind == "vm" || kind == "ct" || kind == "ctr" }
@@ -129,11 +137,17 @@ type hostKind struct {
 
 var hostKinds = []hostKind{
 	{Kind: "linux-agent", Icon: "bi-ubuntu", Access: "agent"},
-	{Kind: "windows", Icon: "bi-windows", Access: "agent", Soon: true},
+	{Kind: "windows", Icon: "bi-windows", Access: "agent"},
+	{Kind: "freebsd", Icon: "bi-shield-check", Access: "agent"},
 	{Kind: "ssh", Icon: "bi-terminal", Access: "ssh"},
 	{Kind: "pve", Icon: "bi-hdd-rack", Access: "pve"},
 	{Kind: "pbs", Icon: "bi-archive", Access: "pbs"},
 	{Kind: "docker", Icon: "bi-box-seam", Access: "docker"},
+	{Kind: "truenas", Icon: "bi-device-hdd", Access: "truenas"},
+	{Kind: "unraid", Icon: "bi-hdd-stack", Access: "unraid"},
+	{Kind: "server", Icon: "bi-motherboard", Access: "redfish"},
+	{Kind: "ups", Icon: "bi-battery-charging", Access: "nut"},
+	{Kind: "prom", Icon: "bi-graph-up", Access: "prom"},
 	{Kind: "snmp", Icon: "bi-diagram-3", Access: "snmp", Soon: true},
 	{Kind: "nas", Icon: "bi-device-hdd", Access: "snmp", Soon: true},
 }
@@ -156,7 +170,7 @@ func hostIcon(kind string) string {
 }
 
 // accessTypes sind die Zugangsarten, die angelegt werden koennen (SNMP folgt).
-var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker", "prom"}
+var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker", "prom", "nut", "truenas", "unraid", "redfish"}
 
 func validAccessType(t string) bool {
 	for _, a := range accessTypes {

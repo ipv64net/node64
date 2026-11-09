@@ -14,6 +14,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/google/nftables v0.3.0
+	github.com/gosnmp/gosnmp v1.47.0
 	github.com/hashicorp/yamux v0.1.2
 	github.com/insomniacslk/dhcp v0.0.0-20261014062924-c6bb46ad3f3a
 	github.com/klauspost/compress v1.20.2

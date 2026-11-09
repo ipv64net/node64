@@ -1,0 +1,119 @@
+{
+  "id": "qnap",
+  "name": "QNAP QTS",
+  "device": "nas",
+  "verified": false,
+  "source": "NAS-MIB (QNAP, .1.3.6.1.4.1.24681.1.2)",
+  "match": {
+    "object_ids": [
+      ".1.3.6.1.4.1.24681",
+      ".1.3.6.1.4.1.55062",
+      ".1.3.6.1.4.1.8072.3.2.10"
+    ],
+    "descr": [
+      "qnap"
+    ],
+    "probe": ".1.3.6.1.4.1.24681.1.2.4.0"
+  },
+  "scalars": [
+    {
+      "key": "temp:system",
+      "service": "Temperatur System",
+      "kind": "temp",
+      "oid": ".1.3.6.1.4.1.24681.1.2.6.0",
+      "metric": "temp",
+      "unit": "°C",
+      "rule": "temp.system",
+      "leading": true,
+      "min": -40,
+      "max": 150
+    },
+    {
+      "key": "temp:cpu",
+      "service": "Temperatur CPU",
+      "kind": "temp",
+      "oid": ".1.3.6.1.4.1.24681.1.2.5.0",
+      "metric": "temp",
+      "unit": "°C",
+      "rule": "temp.system",
+      "leading": true,
+      "min": -40,
+      "max": 150
+    }
+  ],
+  "tables": [
+    {
+      "key": "disk:{name}",
+      "service": "Platte {name}",
+      "kind": "disk",
+      "oid": ".1.3.6.1.4.1.24681.1.2.11.1",
+      "name_col": 2,
+      "columns": [
+        {
+          "col": 5,
+          "label": "Modell"
+        },
+        {
+          "col": 3,
+          "metric": "temp",
+          "unit": "°C",
+          "rule": "disk.temp",
+          "leading": true,
+          "min": -40,
+          "max": 150
+        },
+        {
+          "col": 7,
+          "text": {
+            "GOOD": "SMART gut",
+            "Normal": "SMART normal",
+            "Warning": "SMART Warnung",
+            "Abnormal": "SMART auffällig"
+          },
+          "fact": {
+            "code": "smart_failed",
+            "when_text": [
+              "abnormal",
+              "error",
+              "fail"
+            ],
+            "text": "SMART auffällig"
+          }
+        },
+        {
+          "col": 4,
+          "fact": {
+            "code": "smart_failed",
+            "when": [
+              -9
+            ],
+            "text": "Lese-/Schreibfehler"
+          }
+        }
+      ]
+    },
+    {
+      "key": "store:{name}",
+      "service": "Volume {name}",
+      "kind": "store",
+      "oid": ".1.3.6.1.4.1.24681.1.2.17.1",
+      "name_col": 2,
+      "columns": [
+        {
+          "col": 6,
+          "label": "Status",
+          "fact": {
+            "code": "raid_degraded",
+            "when_text": [
+              "degraded",
+              "not active",
+              "abnormal",
+              "error"
+            ],
+            "text": "Volume beeinträchtigt"
+          }
+        }
+      ]
+    }
+  ]
+}

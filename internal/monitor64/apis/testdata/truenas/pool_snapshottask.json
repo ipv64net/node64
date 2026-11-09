@@ -1,0 +1,3 @@
+[
+ {"id": 1, "dataset": "tank/data", "recursive": true, "lifetime_value": 2, "lifetime_unit": "WEEK", "enabled": true, "exclude": [], "naming_schema": "auto-%Y-%m-%d_%H-%M", "allow_empty": true, "schedule": {"minute": "0", "hour": "*", "dom": "*", "month": "*", "dow": "*", "begin": "00:00", "end": "23:59"}, "vmware_sync": false, "state": {"state": "FINISHED", "datetime": {"$date": 1731146400000}}}
+]

@@ -1,0 +1,18 @@
+{
+ "@odata.type": "#Sensor.v1_7_0.Sensor",
+ "Id": "Fan1",
+ "Name": "Fan 1",
+ "ReadingType": "Rotational",
+ "Reading": 7200,
+ "ReadingUnits": "RPM",
+ "Status": {
+  "State": "Enabled",
+  "Health": "OK"
+ },
+ "Thresholds": {
+  "LowerCritical": {
+   "Reading": 1500
+  }
+ },
+ "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors/Fan1"
+}

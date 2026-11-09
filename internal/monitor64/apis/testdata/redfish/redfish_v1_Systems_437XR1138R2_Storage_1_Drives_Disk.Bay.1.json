@@ -1,0 +1,17 @@
+{
+ "@odata.type": "#Drive.v1_17_0.Drive",
+ "Id": "Disk.Bay.1",
+ "Name": "Solid State Disk 1",
+ "Status": {
+  "State": "Enabled",
+  "Health": "Warning"
+ },
+ "Model": "SSDSC2KG960G8R",
+ "CapacityBytes": 960197124096,
+ "FailurePredicted": false,
+ "Protocol": "SATA",
+ "MediaType": "SSD",
+ "SerialNumber": "PHYG0123456789",
+ "PredictedMediaLifeLeftPercent": 12,
+ "@odata.id": "/redfish/v1/Systems/437XR1138R2/Storage/1/Drives/Disk.Bay.1"
+}

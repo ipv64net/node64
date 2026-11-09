@@ -1,0 +1,11 @@
+{
+ "@odata.type": "#PowerSupplyCollection.PowerSupplyCollection",
+ "Name": "PowerSupply Collection",
+ "Members@odata.count": 1,
+ "Members": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/Blade2/PowerSubsystem/PowerSupplies/PSU0"
+  }
+ ],
+ "@odata.id": "/redfish/v1/Chassis/Blade2/PowerSubsystem/PowerSupplies"
+}

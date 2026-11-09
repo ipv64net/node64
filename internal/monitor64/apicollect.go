@@ -79,6 +79,12 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 			return nil, err
 		}
 		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
+	case "nut", "truenas", "unraid", "redfish":
+		src, done, err := newDeviceAPI(typ, h, cfg, secret)
+		if err != nil {
+			return nil, err
+		}
+		return &apiAdapter{apiCollector: apiCollector{src: src, close: done}}, nil
 	}
 	return nil, fmt.Errorf("unbekannter Zugang %q", typ)
 }
@@ -90,6 +96,56 @@ func newProm(h *Host, cfg accessConfig, secret string) (*promscrape.Collector, e
 		u = hostPort(h.Address, promscrape.DefaultPort)
 	}
 	return promscrape.New(promscrape.Config{URL: u, User: cfg.User, Secret: secret, Pin: cfg.Pin, Metrics: cfg.Metrics, Map: MapReport})
+}
+
+// deviceAPI: Sammler fuer NUT, TrueNAS, Unraid und Redfish (Collect und Test).
+type deviceAPI interface {
+	apiSource
+	Test(ctx context.Context) apis.TestResult
+}
+
+// newDeviceAPI baut NUT/TrueNAS/Unraid/Redfish; done schliesst Verbindungen bzw. meldet die Redfish-Sitzung ab.
+func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceAPI, func(), error) {
+	addr := cfg.URL
+	switch typ {
+	case "nut":
+		if addr == "" {
+			addr = hostPort(h.Address, 3493)
+		}
+		c, err := apis.NewNUT(apis.NUTConfig{Address: addr, UPS: splitAddrs(cfg.UPS), User: cfg.User, Password: secret, TLS: cfg.TLS, Pin: cfg.Pin})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, func() {}, nil
+	case "truenas":
+		if addr == "" {
+			addr = "https://" + hostPort(h.Address, 443)
+		}
+		c, err := apis.NewTrueNAS(apis.TrueNASConfig{Address: addr, APIKey: secret, User: cfg.User, Pin: cfg.Pin, API: cfg.API})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, c.Close, nil
+	case "unraid":
+		if addr == "" {
+			addr = "http://" + hostPort(h.Address, 80)
+		}
+		c, err := apis.NewUnraid(apis.UnraidConfig{Address: addr, APIKey: secret, Pin: cfg.Pin})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, c.Close, nil
+	case "redfish":
+		if addr == "" {
+			addr = "https://" + hostPort(h.Address, 443)
+		}
+		c, err := apis.NewRedfish(apis.RedfishConfig{Address: addr, User: cfg.User, Password: secret, Pin: cfg.Pin, Session: cfg.Session})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, c.Close, nil
+	}
+	return nil, nil, fmt.Errorf("unbekannter Zugang %q", typ)
 }
 
 // apiAdapter erfuellt das collector-Interface des Kerns.

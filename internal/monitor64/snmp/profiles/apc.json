@@ -1,0 +1,132 @@
+{
+  "id": "apc",
+  "name": "APC (PowerNet-MIB)",
+  "device": "ups",
+  "verified": false,
+  "source": "PowerNet-MIB (APC/Schneider, upsBasic/upsAdv)",
+  "match": {
+    "object_ids": [
+      ".1.3.6.1.4.1.318"
+    ],
+    "descr": [
+      "apc web/snmp",
+      "network management card"
+    ]
+  },
+  "scalars": [
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.1.1.1.0",
+      "label": "Modell"
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.4.1.1.0",
+      "text": {
+        "1": "Status unbekannt",
+        "2": "Netzbetrieb",
+        "3": "auf Batterie",
+        "4": "Smart Boost",
+        "5": "Ruhezustand",
+        "6": "Software-Bypass",
+        "7": "aus",
+        "8": "neu startend",
+        "9": "Hardware-Bypass",
+        "10": "Bypass (Fehler)",
+        "11": "Schlaf bis Strom",
+        "12": "Smart Trim"
+      },
+      "fact": {
+        "code": "ups_on_battery",
+        "when": [
+          3
+        ],
+        "text": "auf Batterie"
+      }
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.1.0",
+      "metric": "charge",
+      "unit": "%",
+      "min": 0,
+      "max": 100
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.3.0",
+      "metric": "runtime",
+      "unit": "s",
+      "factor": 0.01,
+      "rule": "ups.runtime",
+      "min": 0
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.4.2.3.0",
+      "metric": "load",
+      "unit": "%",
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.2.0",
+      "metric": "battery_temp",
+      "unit": "°C",
+      "min": -40,
+      "max": 120,
+      "hide": true
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.3.2.1.0",
+      "metric": "input_v",
+      "unit": "V",
+      "min": 0,
+      "max": 1000,
+      "hide": true
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.4.0",
+      "fact": {
+        "code": "ups_battery_replace",
+        "when": [
+          2
+        ],
+        "text": "Batterie tauschen"
+      }
+    },
+    {
+      "key": "ups",
+      "service": "USV",
+      "kind": "ups",
+      "oid": ".1.3.6.1.4.1.318.1.1.1.2.1.1.0",
+      "fact": {
+        "code": "ups_battery_low",
+        "when": [
+          3,
+          4
+        ],
+        "text": "Batterie schwach"
+      }
+    }
+  ]
+}

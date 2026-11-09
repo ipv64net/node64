@@ -1,0 +1,11 @@
+{
+ "@odata.type": "#Chassis.v1_23_0.Chassis",
+ "Id": "Enclosure.Internal.0-1",
+ "Name": "BP14G+ 0:1",
+ "ChassisType": "Enclosure",
+ "Status": {
+  "State": "Enabled",
+  "Health": "OK"
+ },
+ "@odata.id": "/redfish/v1/Chassis/Enclosure.Internal.0-1"
+}

@@ -55,6 +55,59 @@ function parseNum(s) {
 	var v = Number(sign + s);
 	return isFinite(v) ? v : NaN;
 }
+// Geraete-APIs (Prometheus, NUT, TrueNAS, Unraid, Redfish): zusaetzliche Felder je Zugangsart.
+var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish'];
+var DEVSPEC = {
+	prom: { url: 'http://{a}:9100/metrics', user: true, extra: ['metrics'] },
+	nut: { url: '{a}:3493', user: true, extra: ['ups', 'tls'] },
+	truenas: { url: 'https://{a}', user: true, extra: ['api'] },
+	unraid: { url: 'http://{a}', user: false, extra: [] },
+	redfish: { url: 'https://{a}', user: true, extra: ['session'] }
+};
+function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', addr || '10.0.0.10'); }
+// Texte je Art und Feld (ausgeschrieben, damit die Pruefung der Texte sie findet)
+function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish') }[t]; }
+function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish') }[t]; }
+function devText(k) {
+	return { ups: L('acc.ups'), tls: L('acc.tls'), api: L('acc.api'), session: L('acc.session'), metrics: L('acc.metrics'), tls_auto: L('acc.tls_auto'), tls_require: L('acc.tls_require'), tls_off: L('acc.tls_off'),
+		api_auto: L('acc.api_auto'), api_jsonrpc: L('acc.api_jsonrpc'), api_rest: L('acc.api_rest') }[k];
+}
+// devFields: Zusatzfelder. p = "af": Host-Seite, alle Felder mit data-af (Werte aus der Konfiguration c);
+// p = "w": Assistent, nur die Felder der Art t (Werte aus dem Zustand c, data-w).
+function devFields(c, p, t) {
+	c = c || {};
+	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics'];
+	var owner = { ups: 'nut', tls: 'nut', api: 'truenas', session: 'redfish', metrics: 'prom' };
+	var val = function (id) { return id === 'metrics' && p === 'af' ? (c.metrics ? JSON.stringify(c.metrics, null, 1) : '') : c[id] || ''; };
+	var attr = function (id) { return ' id="m64-' + p + '-' + id + '"' + (p === 'w' ? ' data-w="' + id + '"' : ''); };
+	var opts = function (id, list) { return list.map(function (x) { return '<option value="' + x + '"' + (val(id) === x ? ' selected' : '') + '>' + esc(devText(id + '_' + (x || 'auto'))) + '</option>'; }).join(''); };
+	return ids.map(function (id) {
+		var lab = '<label class="form-label" for="m64-' + p + '-' + id + '">' + esc(devText(id)) + '</label>', inner, cls = 'col-md-6';
+		if (id === 'ups') { inner = lab + '<input class="form-control"' + attr(id) + ' maxlength="512" value="' + esc(val(id)) + '" placeholder="ups1, ups2"><div class="form-text">' + esc(L('acc.ups_hint')) + '</div>'; }
+		if (id === 'tls') { inner = lab + '<select class="form-select"' + attr(id) + '>' + opts(id, ['', 'require', 'off']) + '</select>'; }
+		if (id === 'api') { inner = lab + '<select class="form-select"' + attr(id) + '>' + opts(id, ['', 'jsonrpc', 'rest']) + '</select>'; }
+		if (id === 'session') { cls = 'col-12'; inner = '<div class="form-check"><input class="form-check-input" type="checkbox"' + attr(id) + (val(id) ? ' checked' : '') + '><label class="form-check-label small" for="m64-' + p + '-session">' + esc(devText('session')) + '</label></div>'; }
+		if (id === 'metrics') { cls = 'col-12'; inner = lab + '<textarea class="form-control font-monospace small"' + attr(id) + ' rows="3" spellcheck="false" placeholder="' + esc('[{"name":"nginx_connections_active","title":"Verbindungen"}]') + '">' + esc(val(id)) + '</textarea><div class="form-text">' + esc(L('acc.metrics_hint')) + '</div>'; }
+		return '<div class="' + cls + '"' + (p === 'af' ? ' data-af="' + owner[id] + '"' : '') + '>' + inner + '</div>';
+	}).join('');
+}
+// devCfg: Konfiguration der Zusatzfelder einer Art aus get(id) (null = eigene Metriken kein gueltiges JSON-Array).
+function devCfg(t, get) {
+	var o = {}, spec = DEVSPEC[t];
+	if (spec.user) { o.user = get('user') || ''; }
+	for (var i = 0; i < spec.extra.length; i++) {
+		var id = spec.extra[i], v = get(id);
+		if (id === 'session') { o.session = !!v; continue; }
+		if (id === 'metrics') {
+			if (!v) { continue; }
+			try { o.metrics = JSON.parse(v); } catch (e) { return null; }
+			if (!Array.isArray(o.metrics)) { return null; }
+			continue;
+		}
+		o[id] = v || '';
+	}
+	return o;
+}
 // numIn zeigt einen Wert exakt im Eingabefeld (ohne Rundung der Anzeige; Dezimalkomma auf Deutsch).
 function numIn(v) {
 	if (v === null || v === undefined || v === 'off' || isNaN(v)) { return ''; }
@@ -922,26 +975,28 @@ function pageHost() {
 	function hostPut(body) { return api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid), body); }
 	function accessForm(a) {
 		var t = a ? a.type : 'agent', c = (a && a.config) || {};
-		var types = ['agent', 'ssh', 'pve', 'pbs', 'docker'];
+		var types = ['agent', 'ssh', 'pve', 'pbs', 'docker'].concat(DEVAPI);
 		return '<div class="row g-3"><div class="col-md-6"><label class="form-label" for="m64-af-type">' + esc(L('acc.type')) + '</label><select class="form-select" id="m64-af-type"' + (a ? ' disabled' : '') + '>' + types.map(function (x) { return '<option value="' + x + '"' + (x === t ? ' selected' : '') + '>' + esc(accLabel(x)) + '</option>'; }).join('') + '</select></div>' +
 			'<div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-af-en"' + (!a || a.enabled ? ' checked' : '') + '><label class="form-check-label" for="m64-af-en">' + esc(L('acc.enabled')) + '</label></div></div>' +
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + (c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
-			'<div class="col-md-8" data-af="ssh"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
+			'<div class="col-md-8" data-af="ssh prom nut truenas redfish"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
-			'<div class="col-12" data-af="pve pbs docker"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.10:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
+			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.10:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
 			'<div class="col-md-6" data-af="pve"><label class="form-label" for="m64-af-node">' + esc(L('new.node')) + '</label><input class="form-control" id="m64-af-node" maxlength="64" value="' + esc(c.node || '') + '"></div>' +
-			'<div class="col-12" data-af="pve pbs docker"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
-			'<div class="col-12" data-af="ssh pve pbs"><label class="form-label" for="m64-af-secret">' + esc(L('acc.secret')) + '</label><input class="form-control" id="m64-af-secret" type="password" autocomplete="new-password" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '') + '">' +
-			'<div class="form-text">' + esc(L('acc.secret_hint')) + '</div></div>' +
+			devFields(c, 'af') +
+			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
+			'<div class="col-12" data-af="ssh pve pbs ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-secret">' + esc(L('acc.secret')) + '</label><input class="form-control" id="m64-af-secret" type="password" autocomplete="new-password" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '') + '">' +
+			'<div class="form-text" id="m64-af-shint">' + esc(L('acc.secret_hint')) + '</div></div>' +
 			'<div class="col-12" data-af="docker"><label class="form-label" for="m64-af-dsecret">' + esc(L('acc.docker_secret')) + '</label><textarea class="form-control font-monospace small" id="m64-af-dsecret" rows="4" spellcheck="false" autocomplete="off" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '-----BEGIN …') + '"></textarea>' +
 			'<div class="form-text">' + esc(L('acc.docker_secret_hint')) + '</div></div>' +
-			(a && a.secret_set ? '<div class="col-12" data-af="ssh pve pbs docker"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-clear"><label class="form-check-label small" for="m64-af-clear">' + esc(L('acc.secret_clear')) + '</label></div></div>' : '') + '</div>';
+			(a && a.secret_set ? '<div class="col-12" data-af="ssh pve pbs docker ' + DEVAPI.join(' ') + '"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-clear"><label class="form-check-label small" for="m64-af-clear">' + esc(L('acc.secret_clear')) + '</label></div></div>' : '') + '</div>';
 	}
 	function accessShow(body) {
 		var t = $('#m64-af-type', body).value;
 		$$('[data-af]', body).forEach(function (x) { x.classList.toggle('d-none', x.dataset.af.split(' ').indexOf(t) < 0); });
-		$('#m64-af-url', body).placeholder = t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.10') + ':' + (t === 'pbs' ? 8007 : 8006);
+		$('#m64-af-url', body).placeholder = DEVAPI.indexOf(t) >= 0 ? devURL(t, H.host.address) : t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.10') + ':' + (t === 'pbs' ? 8007 : 8006);
+		$('#m64-af-shint', body).textContent = DEVAPI.indexOf(t) >= 0 ? devSecretHint(t) : L('acc.secret_hint');
 	}
 	function accessFromForm(body) {
 		var t = $('#m64-af-type', body).value, cfg = {};
@@ -951,6 +1006,13 @@ function pageHost() {
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = $('#m64-af-url', body).value.trim(); cfg.pin = $('#m64-af-pin', body).value.trim(); }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = $('#m64-af-tid', body).value.trim(); }
 		if (t === 'pve') { cfg.node = $('#m64-af-node', body).value.trim(); }
+		if (DEVAPI.indexOf(t) >= 0) {
+			var m = devCfg(t, function (id) { var x = $('#m64-af-' + id, body); return x ? (x.type === 'checkbox' ? x.checked : x.value.trim()) : ''; });
+			if (m === null) { throw new Error(L('acc.metrics_bad')); }
+			cfg.url = $('#m64-af-url', body).value.trim();
+			cfg.pin = $('#m64-af-pin', body).value.trim();
+			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
+		}
 		var out = { type: t, config: cfg, secret: t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value, enabled: $('#m64-af-en', body).checked };
 		var cl = $('#m64-af-clear', body);
 		if (cl && cl.checked) { out.clear_secret = true; }
@@ -992,6 +1054,12 @@ function pageHost() {
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { o.url = c.url || ''; o.pin = c.pin || ''; }
 		if (t === 'pve' || t === 'pbs') { o.token_id = c.token_id || ''; }
 		if (t === 'pve') { o.node = c.node || ''; }
+		if (DEVAPI.indexOf(t) >= 0) {
+			o.url = c.url || '';
+			o.pin = c.pin || '';
+			var m = devCfg(t, function (id) { return id === 'metrics' ? (c.metrics ? JSON.stringify(c.metrics) : '') : id === 'session' ? !!c.session : (c[id] || ''); }) || {};
+			Object.keys(m).forEach(function (x) { o[x] = m[x]; });
+		}
 		return o;
 	}
 	root.addEventListener('click', function (ev) {
@@ -1647,9 +1715,10 @@ function pageSettings() {
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
 	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
+		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '',
 		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {} };
 	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
-	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart'];
+	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics'];
 	var key = D.public_key || L('new.no_key');
 	function kind() { var k = null; (D.host_kinds || []).forEach(function (x) { if (x.kind === WZ.kind) { k = x; } }); return k; }
 	function kl(k) { return ((D.host_kind_labels || {})[k] || [k, ''])[0]; }
@@ -1669,6 +1738,14 @@ function pageNew() {
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = WZ.token_id; out.secret = WZ.token_secret; }
 		if (t === 'docker') { out.secret = WZ.docker_secret; }
 		if (t === 'pve') { cfg.node = WZ.node; }
+		if (DEVAPI.indexOf(t) >= 0) {
+			var m = devCfg(t, function (id) { return id === 'user' ? WZ.duser : WZ[id]; });
+			if (m === null) { throw new Error(L('acc.metrics_bad')); }
+			cfg.url = WZ.url;
+			cfg.pin = WZ.pin;
+			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
+			out.secret = WZ.dsecret;
+		}
 		return out;
 	}
 	function collect() {
@@ -1691,7 +1768,9 @@ function pageNew() {
 		} else if (WZ.step === 2) {
 			html = '<div class="row g-3"><div class="col-md-6">' + field('name', L('f.name'), WZ.name, ' data-w="name" maxlength="100" placeholder="nas02"') + '</div><div class="col-md-6">' + field('addr', L('f.address'), WZ.address, ' data-w="address" maxlength="253" placeholder="10.0.0.21"') + '</div>';
 			if (k.access === 'agent') {
-				var cmd = 'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"';
+				var cmd = WZ.kind === 'windows' ? '& ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "' + key + '"' :
+					WZ.kind === 'freebsd' ? L('new.bsd_cmd', { k: key }) :
+					'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"';
 				html += '<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(cmd) + '</div>' +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(L('new.agent_safe', { p: D.port || 6465 })) + '</div></div>' +
 					'<div class="col-12"><div class="form-label">' + esc(L('new.agent_step2')) + '</div><div class="small">' + esc(L('new.agent_fp')) + '</div></div>' +
@@ -1718,6 +1797,14 @@ function pageNew() {
 						'proxmox-backup-manager user create monitor@pbs\nproxmox-backup-manager user generate-token monitor@pbs node64\nproxmox-backup-manager acl update / Audit --auth-id \'monitor@pbs!node64\'') + '</div>' +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.api_hint')) + '</div></div>' +
 					'<div class="col-12"><details' + (WZ.pin || WZ.node ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
+			} else if (DEVAPI.indexOf(k.access) >= 0) {
+				var ta = k.access, open = WZ.pin || WZ.ups || WZ.tls || WZ.api || WZ.session || WZ.metrics;
+				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="' + esc(devURL(ta, WZ.address)) + '"') + '</div>' +
+					(DEVSPEC[ta].user ? '<div class="col-md-6">' + field('duser', L('acc.user'), WZ.duser, ' data-w="duser" maxlength="32"') + '</div>' : '') +
+					'<div class="col-md-6">' + field('dsec', L('acc.secret'), WZ.dsecret, ' data-w="dsecret" type="password" autocomplete="new-password"') + '</div>' +
+					'<div class="col-12 small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(devHint(ta)) + '<div class="mt-1">' + esc(devSecretHint(ta)) + '</div></div>' +
+					'<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' +
+					devFields(WZ, 'w', ta) + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (k.access === 'docker') {
 				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="unix:///var/run/docker.sock"') + '<div class="form-text">' + esc(L('new.docker_hint')) + '</div></div>' +
 					'<div class="col-12"><details' + (WZ.pin || WZ.docker_secret ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2"><div class="col-12">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div>' +
@@ -1768,7 +1855,7 @@ function pageNew() {
 		if (t) { t.onclick = function () { lock(t, testConn); }; }
 	}
 	function selectedNodes() { return otherNodes().filter(function (n) { return WZ.nodes[n.name]; }); }
-	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
+	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
 		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { WZ.nodeAddr = r.addr; render(); } }).catch(failQuiet);

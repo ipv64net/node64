@@ -1,0 +1,19 @@
+{
+ "@odata.type": "#Chassis.v1_23_0.Chassis",
+ "Id": "1U",
+ "Name": "Computer System Chassis",
+ "ChassisType": "RackMount",
+ "Manufacturer": "Contoso",
+ "Model": "3500RX",
+ "Status": {
+  "State": "Enabled",
+  "Health": "OK"
+ },
+ "Thermal": {
+  "@odata.id": "/redfish/v1/Chassis/1U/Thermal"
+ },
+ "Power": {
+  "@odata.id": "/redfish/v1/Chassis/1U/Power"
+ },
+ "@odata.id": "/redfish/v1/Chassis/1U"
+}

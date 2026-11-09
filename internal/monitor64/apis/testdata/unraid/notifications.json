@@ -1,0 +1,3 @@
+{"data": {"notifications": {"overview": {"unread": {"warning": 2, "alert": 1}},
+ "alerts": [{"subject": "Notice [TOWER] - array health report [FAIL]", "description": "Array has 1 disk with read errors"}],
+ "warnings": [{"subject": "Warning [TOWER] - disk3 is high on usage (85%)", "description": "ST8000VN004-2M2101_WSD0XYZ3 (sde)"}, {"subject": "Warning [TOWER] - cache pool <b>full</b>", "description": ""}]}}}

@@ -36,6 +36,12 @@ const (
 	KindGuestDown       = "guest.down"           // Gast/Container laeuft nicht, obwohl er soll
 	KindSystemdFailed   = "systemd.failed"       // fehlgeschlagene systemd-Dienste
 	KindWinSvcStopped   = "winsvc.stopped"       // Windows-Dienst mit Starttyp Automatisch laeuft nicht
+	KindUPSLowBattery   = "ups.low_battery"      // USV: Batterie schwach bzw. Zwangsabschaltung
+	KindUPSReplace      = "ups.replace_battery"  // USV: Batterie ersetzen
+	KindUPSOverload     = "ups.overload"         // USV: Ueberlast
+	KindDeviceWarn      = "device.warn"          // Geraet meldet Warnung (Alarm, Health Warning)
+	KindDeviceCrit      = "device.crit"          // Geraet meldet kritisch (Alarm, Health Critical)
+	KindParityErrors    = "raid.parity_errors"   // Paritaetspruefung mit Fehlern (Unraid)
 	KindServiceGone     = "svc.vanished"         // Dienst verschwunden (bleibt bis "Entfernen")
 	KindAccessFailed    = "access.failed"        // einzelner Zugang antwortet nicht
 	KindCtrUnhealthy    = "ctr.unhealthy"        // Container meldet unhealthy
@@ -120,6 +126,12 @@ func Defaults() Table {
 		KindGuestDown:       stateRule(SevCrit, 0),
 		KindSystemdFailed:   stateRule(SevWarn, 0),
 		KindWinSvcStopped:   stateRule(SevWarn, 5*time.Minute),
+		KindUPSLowBattery:   stateRule(SevCrit, 0),
+		KindUPSReplace:      stateRule(SevWarn, 0),
+		KindUPSOverload:     stateRule(SevWarn, 0),
+		KindDeviceWarn:      stateRule(SevWarn, 0),
+		KindDeviceCrit:      stateRule(SevCrit, 0),
+		KindParityErrors:    stateRule(SevWarn, 0),
 		KindServiceGone:     stateRule(SevWarn, 0),
 		KindAccessFailed:    stateRule(SevWarn, 0),
 		KindCtrUnhealthy:    stateRule(SevWarn, 0),

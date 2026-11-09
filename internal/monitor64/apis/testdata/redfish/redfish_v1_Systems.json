@@ -1,0 +1,11 @@
+{
+ "@odata.type": "#ComputerSystemCollection.ComputerSystemCollection",
+ "Name": "ComputerSystem Collection",
+ "Members@odata.count": 1,
+ "Members": [
+  {
+   "@odata.id": "/redfish/v1/Systems/437XR1138R2"
+  }
+ ],
+ "@odata.id": "/redfish/v1/Systems"
+}

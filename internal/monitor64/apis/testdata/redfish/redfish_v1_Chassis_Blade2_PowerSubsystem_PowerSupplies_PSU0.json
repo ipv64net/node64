@@ -1,0 +1,14 @@
+{
+ "@odata.type": "#PowerSupply.v1_5_0.PowerSupply",
+ "Id": "PSU0",
+ "Name": "Blade PSU",
+ "Status": {
+  "State": "Enabled",
+  "Health": "OK"
+ },
+ "Model": "BLD-650",
+ "Metrics": {
+  "@odata.id": "/redfish/v1/Chassis/Blade2/PowerSubsystem/PowerSupplies/PSU0/Metrics"
+ },
+ "@odata.id": "/redfish/v1/Chassis/Blade2/PowerSubsystem/PowerSupplies/PSU0"
+}

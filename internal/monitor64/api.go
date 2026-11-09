@@ -242,8 +242,25 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	} else if len(c.Metrics) > 0 {
 		return nil, errBad("metrics")
 	}
+	c.UPS, c.TLS, c.API = strings.TrimSpace(c.UPS), strings.TrimSpace(c.TLS), strings.TrimSpace(c.API)
+	switch {
+	case len(c.UPS) > 512 || (typ != "nut" && c.UPS != ""):
+		return nil, errBad("ups")
+	case c.TLS != "" && (typ != "nut" || (c.TLS != "off" && c.TLS != "require")):
+		return nil, errBad("tls")
+	case c.API != "" && (typ != "truenas" || (c.API != "jsonrpc" && c.API != "rest")):
+		return nil, errBad("api")
+	case c.Session && typ != "redfish":
+		return nil, errBad("session")
+	}
 	if c.URL != "" && typ != "prom" {
 		ok := strings.HasPrefix(c.URL, "https://") || strings.HasPrefix(c.URL, "http://")
+		switch typ {
+		case "nut": // host[:3493] oder nut://
+			ok = !strings.Contains(c.URL, "/") || strings.HasPrefix(c.URL, "nut://")
+		case "truenas", "redfish": // TrueNAS widerruft ueber http benutzte API-Keys; BMC nur https
+			ok = strings.HasPrefix(c.URL, "https://")
+		}
 		if typ == "docker" {
 			ok = ok || strings.HasPrefix(c.URL, "unix://") || strings.HasPrefix(c.URL, "tcp://") || strings.HasPrefix(c.URL, "ssh://")
 		}

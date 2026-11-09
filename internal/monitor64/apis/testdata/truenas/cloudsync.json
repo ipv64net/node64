@@ -1,0 +1,3 @@
+[
+ {"id": 3, "description": "B2 Fotos", "direction": "PUSH", "transfer_mode": "SYNC", "path": "/mnt/tank/fotos", "enabled": true, "job": {"id": 4711, "method": "cloudsync.sync", "state": "FAILED", "error": "[EFAULT] Transfer failed: 403 Forbidden", "time_started": {"$date": 1731110000000}, "time_finished": {"$date": 1731110400000}}}
+]

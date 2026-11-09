@@ -1,0 +1,16 @@
+{
+ "@odata.type": "#Drive.v1_17_0.Drive",
+ "Id": "Disk.Bay.2",
+ "Name": "Physical Disk 0:1:2",
+ "Status": {
+  "State": "Enabled",
+  "Health": "Critical"
+ },
+ "Model": "ST2000NM0055",
+ "CapacityBytes": 2000398934016,
+ "FailurePredicted": true,
+ "Protocol": "SATA",
+ "MediaType": "HDD",
+ "SerialNumber": "ZC2ABCDE",
+ "@odata.id": "/redfish/v1/Systems/437XR1138R2/Storage/1/Drives/Disk.Bay.2"
+}

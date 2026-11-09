@@ -1,0 +1,23 @@
+{
+ "@odata.type": "#SensorCollection.SensorCollection",
+ "Name": "Sensor Collection",
+ "Members@odata.count": 5,
+ "Members": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors/CPU1Temp"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors/Fan1"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors/PS1Voltage"
+  },
+  {
+   "@odata.id": "https://bmc.example/redfish/v1/Chassis/Blade2/Sensors/Inlet"
+  },
+  {
+   "@odata.id": "/etc/passwd"
+  }
+ ],
+ "@odata.id": "/redfish/v1/Chassis/Blade2/Sensors"
+}

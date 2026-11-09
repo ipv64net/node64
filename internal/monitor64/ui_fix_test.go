@@ -359,8 +359,8 @@ func TestUIMetaPhase(t *testing.T) {
 			t.Errorf("rule kind %s missing", k)
 		}
 	}
-	if k, _ := hostKindOf("windows"); !k.Soon {
-		t.Error("windows must be 'soon'")
+	if k, _ := hostKindOf("windows"); k.Soon { // Windows-Agent seit Phase 2
+		t.Error("windows must not be 'soon'")
 	}
 	if strings.Contains(string(bundleJS), "/monitor64/agent/") {
 		t.Error("script points to /monitor64/agent/ (route does not exist)")
@@ -370,7 +370,8 @@ func TestUIMetaPhase(t *testing.T) {
 	}
 	e := newEnv(t)
 	body := e.do("GET", "/monitor64/new", nil).Body.String()
-	mustContain(t, "new", body, `kind-tile disabled" data-kind="windows"`)
+	mustContain(t, "new", body, `kind-tile" data-kind="windows"`)
+	mustContain(t, "new", body, `kind-tile disabled" data-kind="snmp"`)
 	set := e.do("GET", "/monitor64/settings", nil).Body.String()
 	if strings.Contains(set, "/monitor64/agent/") {
 		t.Error("settings point to /monitor64/agent/")

@@ -1,0 +1,74 @@
+{
+ "@odata.type": "#Power.v1_7_1.Power",
+ "Id": "Power",
+ "Name": "Power",
+ "PowerControl": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Power#/PowerControl/0",
+   "MemberId": "0",
+   "Name": "System Input Power",
+   "PowerConsumedWatts": 344.0,
+   "PowerCapacityWatts": 800,
+   "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+   }
+  }
+ ],
+ "PowerSupplies": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Power#/PowerSupplies/0",
+   "MemberId": "0",
+   "Name": "Power Supply Bay 1",
+   "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+   },
+   "PowerSupplyType": "AC",
+   "LineInputVoltageType": "AC240V",
+   "LineInputVoltage": 238,
+   "PowerCapacityWatts": 400,
+   "LastPowerOutputWatts": 192,
+   "PowerInputWatts": 210,
+   "Model": "499253-B21",
+   "Manufacturer": "ManufacturerName"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Power#/PowerSupplies/1",
+   "MemberId": "1",
+   "Name": "Power Supply Bay 2",
+   "Status": {
+    "State": "UnavailableOffline",
+    "Health": "Critical"
+   },
+   "LineInputVoltage": 0,
+   "PowerCapacityWatts": 400,
+   "PowerInputWatts": null,
+   "LastPowerOutputWatts": null,
+   "Model": "499253-B21"
+  },
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Power#/PowerSupplies/2",
+   "MemberId": "2",
+   "Name": "Power Supply Bay 3",
+   "Status": {
+    "State": "Absent"
+   }
+  }
+ ],
+ "Redundancy": [
+  {
+   "@odata.id": "/redfish/v1/Chassis/1U/Power#/Redundancy/0",
+   "MemberId": "0",
+   "Name": "PowerSupply Redundancy Group 1",
+   "Mode": "Failover",
+   "MaxNumSupported": 2,
+   "MinNumNeeded": 1,
+   "Status": {
+    "State": "Enabled",
+    "Health": "Warning"
+   }
+  }
+ ],
+ "@odata.id": "/redfish/v1/Chassis/1U/Power"
+}

@@ -15,6 +15,8 @@
 - Prometheus export at `/api/metrics`, config export/import (secrets only with export password).
 - Phase 2/3: agent for Windows (service, PowerShell one-liner) and FreeBSD/OPNsense, query Prometheus exporters
   (node_exporter, windows_exporter, custom metrics), entries on status pages, rule "Windows service stopped".
+- New accesses: NUT (UPS), TrueNAS, Unraid, Redfish (server BMC); wizard tiles for Windows, FreeBSD, TrueNAS,
+  Unraid, server BMC, UPS and Prometheus; new rules for UPS, device alerts and Unraid parity.
 - Code review fixes: intentionally missing values (stopped VM, sleeping disk) stay OK, reminders are not lost after
   quiet hours, no duplicate messages to default channels, ZFS device errors on ONLINE pools, Proxmox cluster services
   evaluated by a monitored node, hung VMs even when allowed to be off, thousands separator and hysteresis in the shown unit.
