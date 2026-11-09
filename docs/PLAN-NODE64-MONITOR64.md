@@ -437,7 +437,10 @@ Monitor64 liest nur, führt nichts aus und gibt keine Geheimnisse heraus.
   Schlüsseln, startet beim nächsten Mal die alte); Versionen mit/ohne „v“ gelten als gleich.
 - **Updates:** ed25519-Signatur über Datei, Version und Plattform; Release-Schlüssel im Agent eingebaut, privater
   Schlüssel nur im Release-Prozess (GitHub-Actions-Secret); **kein Downgrade** (Version muss steigen); bei Fehler
-  bleibt die alte Datei.
+  bleibt die alte Datei. **Schlüssel (entschieden 2026-11-09):** derselbe Release-Schlüssel wie für die
+  Selbst-Updates von Node64 (`internal/selfupdate/keys.go`, Secret `NODE64_SIGNING_KEY`); signiert wird mit
+  `node64-release agent-sign` (Kopfzeile `<datei>.update.json`). Der Release-Ablauf für die Agent-Dateien kommt mit
+  der Freigabe.
 - systemd-Härtung (`ProtectSystem=strict`, `ProtectHome`, `NoNewPrivileges`, `PrivateTmp`, nur nötige
   Schreibpfade). Windows: Dienst als LocalSystem (für Speicher-/Update-Abfragen nötig), Datei nur für Admins
   schreibbar.
@@ -595,7 +598,8 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   21 Stellen (Agent-Sperren bei NAT/IPv6, `from=`, Update-Rückfall, `#!`-Interpreter, gewollt fehlende Messwerte,
   Erinnerung nach der Ruhezeit, doppelte Meldungen, ZFS-Gerätefehler, Proxmox-Cluster-Zuständigkeit u. a.) – behoben
   in 4b5dbd0e und dem folgenden Agent-Commit, Tests mit `-race` auf der Box grün.
-- Offene Punkte aus den Teilberichten: Release-Signierschlüssel für Agent-Updates fehlt (bis dahin Update aus);
+- Offene Punkte aus den Teilberichten: Release-Ablauf für Agent-Dateien (bauen, `agent-sign`, auf node64.de/GitHub,
+  Download über die Node) kommt mit der Freigabe – Schlüssel entschieden (der von Node64);
   Ruhezeit-Prüfung für Erinnerungen (Dispatcher exportieren); Dienstnamen/-texte aus Mapper/m64linux noch deutsch
   (i18n); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit ändern
   (`tsdb.SetRetention`); FreeBSD/Windows-Agent Phase 2/3.

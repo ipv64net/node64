@@ -6,6 +6,9 @@
 //	                                                        Manifest aus den Programmen bauen (Name: node64-linux-<arch>)
 //	node64-release sign -key <datei> manifest.json          signieren -> manifest.json.sig
 //	                                                        (ohne -key: Umgebungsvariable NODE64_SIGNING_KEY)
+//	node64-release agent-sign -key <datei> -version V -os O -arch A monitor64-agent-O-A
+//	                                                        Update des Monitor64-Agents signieren -> <datei>.update.json
+//	                                                        (Kopfzeile fuer die Anfrage "update"; ohne -key wie sign)
 package main
 
 import (
@@ -23,16 +26,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/m64proto"
 	"github.com/ipv64net/node64/internal/selfupdate"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: node64-release keygen|manifest|sign ...")
+		fmt.Fprintln(os.Stderr, "usage: node64-release keygen|manifest|sign|agent-sign ...")
 		os.Exit(2)
 	}
 	var err error
 	switch os.Args[1] {
+	case "agent-sign":
+		err = agentSign(os.Args[2:])
 	case "keygen":
 		err = keygen(os.Args[2:])
 	case "manifest":
@@ -107,6 +113,61 @@ func manifest(args []string) error {
 	return os.WriteFile(*out, append(b, '\n'), 0o644)
 }
 
+// signingKey liest den privaten Schluessel aus der Datei bzw. der Umgebungsvariablen NODE64_SIGNING_KEY.
+func signingKey(keyFile string) (ed25519.PrivateKey, error) {
+	raw := os.Getenv("NODE64_SIGNING_KEY")
+	if keyFile != "" {
+		b, err := os.ReadFile(keyFile)
+		if err != nil {
+			return nil, err
+		}
+		raw = string(b)
+	}
+	seed, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil || len(seed) != ed25519.SeedSize {
+		return nil, errors.New("no valid signing key")
+	}
+	return ed25519.NewKeyFromSeed(seed), nil
+}
+
+// agentSign schreibt die signierte Kopfzeile (m64proto.UpdateHeader) fuer ein Update des Monitor64-Agents.
+func agentSign(args []string) error {
+	fs := flag.NewFlagSet("agent-sign", flag.ExitOnError)
+	keyFile := fs.String("key", "", "private key file (default: env NODE64_SIGNING_KEY)")
+	version := fs.String("version", "", "agent version (without v)")
+	goos := fs.String("os", "", "GOOS of the binary")
+	arch := fs.String("arch", "", "GOARCH of the binary")
+	_ = fs.Parse(args)
+	if fs.NArg() != 1 || *version == "" || *goos == "" || *arch == "" {
+		return errors.New("usage: agent-sign -key <file> -version V -os O -arch A <binary>")
+	}
+	key, err := signingKey(*keyFile)
+	if err != nil {
+		return err
+	}
+	h, err := agentHeader(fs.Arg(0), strings.TrimPrefix(*version, "v"), *goos, *arch, key)
+	if err != nil {
+		return err
+	}
+	b, _ := json.Marshal(h)
+	return os.WriteFile(fs.Arg(0)+".update.json", append(b, '\n'), 0o644)
+}
+
+// agentHeader baut die Kopfzeile: Groesse, SHA-256 und Signatur ueber m64proto.SignedMessage.
+func agentHeader(path, version, goos, arch string, key ed25519.PrivateKey) (m64proto.UpdateHeader, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return m64proto.UpdateHeader{}, err
+	}
+	if len(b) == 0 || int64(len(b)) > m64proto.MaxUpdateBytes {
+		return m64proto.UpdateHeader{}, fmt.Errorf("%s: invalid size %d", path, len(b))
+	}
+	sum := sha256.Sum256(b)
+	h := m64proto.UpdateHeader{Version: version, OS: goos, Arch: arch, Size: int64(len(b)), SHA256: hex.EncodeToString(sum[:])}
+	h.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(key, m64proto.SignedMessage(h.Version, h.OS, h.Arch, h.SHA256)))
+	return h, nil
+}
+
 func sign(args []string) error {
 	fs := flag.NewFlagSet("sign", flag.ExitOnError)
 	keyFile := fs.String("key", "", "private key file (default: env NODE64_SIGNING_KEY)")
@@ -114,19 +175,10 @@ func sign(args []string) error {
 	if fs.NArg() != 1 {
 		return errors.New("manifest file required")
 	}
-	raw := os.Getenv("NODE64_SIGNING_KEY")
-	if *keyFile != "" {
-		b, err := os.ReadFile(*keyFile)
-		if err != nil {
-			return err
-		}
-		raw = string(b)
+	key, err := signingKey(*keyFile)
+	if err != nil {
+		return err
 	}
-	seed, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
-	if err != nil || len(seed) != ed25519.SeedSize {
-		return errors.New("no valid signing key")
-	}
-	key := ed25519.NewKeyFromSeed(seed)
 	m, err := os.ReadFile(fs.Arg(0))
 	if err != nil {
 		return err

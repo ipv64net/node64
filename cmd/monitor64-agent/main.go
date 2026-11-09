@@ -37,9 +37,11 @@ import (
 // Version wird beim Build gesetzt: -ldflags "-X main.Version=0.1.0"
 var Version = "dev"
 
-// ReleaseKeys sind die oeffentlichen Release-Schluessel fuer update (base64 ed25519, durch Komma getrennt), gesetzt
-// beim Release-Build: -ldflags "-X main.ReleaseKeys=..." . Leer = update abgelehnt.
-var ReleaseKeys = ""
+// ReleaseKeys sind die oeffentlichen Release-Schluessel fuer update (base64 ed25519, durch Komma getrennt). Standard:
+// derselbe Release-Schluessel wie fuer die Selbst-Updates von Node64 (internal/selfupdate/keys.go, privater Teil nur
+// als GitHub-Secret NODE64_SIGNING_KEY; Entscheidung 2026-11-09). Ueberschreibbar beim Build mit
+// -ldflags "-X main.ReleaseKeys=..." ; leer = update abgelehnt.
+var ReleaseKeys = "CKADRKNeeSdwpqmdt9saWJw1i92EQJdsxmQOs6m/iAw=" // 2026-10-26
 
 // memLimit ist die weiche Speichergrenze, wenn GOMEMLIMIT nicht gesetzt ist (Ziel unter 15 MB).
 const memLimit = 24 << 20
