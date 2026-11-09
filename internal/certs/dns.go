@@ -253,16 +253,19 @@ type nsLookup struct {
 	ip    func(ctx context.Context, fam, host string) []netip.Addr
 }
 
+// Namen gehen absolut (mit Punkt) an den System-Resolver: sonst haengt er die Suchdomains aus resolv.conf an, wenn der
+// Name selbst keine NS hat - mit einem Wildcard-CNAME in der Suchdomain kamen deren Nameserver zurueck (z. B.
+// Cloudflare statt ipv64, Forum 5085).
 var systemNS = nsLookup{
 	cname: func(ctx context.Context, name string) string {
-		cn, err := net.DefaultResolver.LookupCNAME(ctx, name)
+		cn, err := net.DefaultResolver.LookupCNAME(ctx, dns.Fqdn(name))
 		if err != nil {
 			return ""
 		}
 		return cn
 	},
 	ns: func(ctx context.Context, name string) ([]string, error) {
-		ns, err := net.DefaultResolver.LookupNS(ctx, name)
+		ns, err := net.DefaultResolver.LookupNS(ctx, dns.Fqdn(name))
 		var out []string
 		for _, n := range ns {
 			out = append(out, n.Host)
@@ -270,7 +273,7 @@ var systemNS = nsLookup{
 		return out, err
 	},
 	ip: func(ctx context.Context, fam, host string) []netip.Addr {
-		ips, _ := net.DefaultResolver.LookupNetIP(ctx, fam, host)
+		ips, _ := net.DefaultResolver.LookupNetIP(ctx, fam, dns.Fqdn(host))
 		return ips
 	},
 }

@@ -717,7 +717,7 @@ func (m *Module) nameservers(ctx context.Context, domain string) ([]string, erro
 	name := domain
 	var hosts []string
 	for strings.Count(name, ".") >= 1 {
-		ns, err := net.DefaultResolver.LookupNS(ctx, name)
+		ns, err := net.DefaultResolver.LookupNS(ctx, name+".") // absolut: ohne Suchdomains aus resolv.conf (Forum 5085)
 		if err == nil && len(ns) > 0 {
 			for _, n := range ns {
 				hosts = append(hosts, strings.TrimSuffix(n.Host, "."))
@@ -728,7 +728,7 @@ func (m *Module) nameservers(ctx context.Context, domain string) ([]string, erro
 	}
 	var addrs []string
 	for _, h := range hosts {
-		ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", h)
+		ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", h+".")
 		if err != nil {
 			continue
 		}

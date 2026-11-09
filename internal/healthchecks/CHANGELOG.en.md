@@ -5,6 +5,9 @@
 ### Changed
 - Docker host via SSH: the “User” field is prefilled with `node64`, matching the commands in the guide.
 
+### Fixed
+- DNS check at the authoritative nameservers: the nameservers are looked up without the search domains from `resolv.conf` (otherwise a wildcard CNAME in the search domain could make the check ask foreign nameservers).
+
 ## 2.54.0 – 2026-11-08
 
 ### New

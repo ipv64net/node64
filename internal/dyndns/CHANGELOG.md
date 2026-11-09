@@ -1,5 +1,10 @@
 # Änderungen – DynDNS-Updater
 
+## 1.6.1 – 2026-11-09
+
+### Behoben
+- Die Nameserver einer Domain werden ohne die Suchdomains aus `resolv.conf` gesucht. Mit einer Suchdomain (z. B. der eigenen Domain mit Wildcard-CNAME) fragte die Node sonst deren Nameserver statt die der DynDNS-Domain (Forum 5085).
+
 ## 1.6.0 – 2026-11-06
 
 ### Neu

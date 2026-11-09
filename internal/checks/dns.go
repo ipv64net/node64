@@ -317,13 +317,13 @@ func authoritativeServers(ctx context.Context, name string, timeout time.Duratio
 	labels := dns.SplitDomainName(name)
 	for i := 0; i < len(labels); i++ {
 		zone := strings.Join(labels[i:], ".")
-		nss, err := net.DefaultResolver.LookupNS(rctx, zone)
+		nss, err := net.DefaultResolver.LookupNS(rctx, dns.Fqdn(zone)) // absolut: ohne Suchdomains aus resolv.conf
 		if err != nil || len(nss) == 0 {
 			continue
 		}
 		var out []string
 		for _, ns := range nss {
-			addrs, err := net.DefaultResolver.LookupIPAddr(rctx, strings.TrimSuffix(ns.Host, "."))
+			addrs, err := net.DefaultResolver.LookupIPAddr(rctx, dns.Fqdn(ns.Host))
 			if err != nil {
 				continue
 			}

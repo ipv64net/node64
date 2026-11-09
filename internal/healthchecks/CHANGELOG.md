@@ -5,6 +5,9 @@
 ### Geändert
 - Docker-Host über SSH: Das Feld „Benutzer“ ist mit `node64` vorausgefüllt, passend zu den Befehlen der Anleitung.
 
+### Behoben
+- DNS-Check bei den zuständigen Nameservern: Die Nameserver werden ohne die Suchdomains aus `resolv.conf` gesucht (sonst konnten mit einem Wildcard-CNAME in der Suchdomain fremde Nameserver gefragt werden).
+
 ## 2.54.0 – 2026-11-08
 
 ### Neu
