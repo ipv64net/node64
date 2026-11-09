@@ -32,18 +32,31 @@ func (a *apiCollector) closeFn() {
 }
 
 // newAPICollector baut den Sammler fuer Proxmox VE, PBS und Docker.
-func newAPICollector(typ string, h *Host, cfg accessConfig, secret string) (collector, error) {
+func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret string) (collector, error) {
 	addr := cfg.URL
+	typ := a.Type
 	switch typ {
 	case "pve":
 		if addr == "" {
 			addr = "https://" + hostPort(h.Address, 8006)
 		}
-		c, err := apis.NewPVE(apis.PVEConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin, Node: cfg.Node})
+		c, err := apis.NewPVE(apis.PVEConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin, Node: cfg.Node, Seen: m.pveSeen})
 		if err != nil {
 			return nil, err
 		}
-		return &apiAdapter{apiCollector{src: c}}, nil
+		ad := &apiAdapter{apiCollector: apiCollector{src: c}}
+		if cfg.Node == "" {
+			// erkannte Node speichern: nach Neustart oder Aenderung am Zugang nicht still eine andere Node abfragen,
+			// wenn die erste Adresse gerade nicht antwortet (Failover-Adressen)
+			uid := a.UID
+			ad.node = c.Node
+			ad.saveNode = func(n string) {
+				if err := m.store.SetAccessNode(context.Background(), uid, n); err != nil {
+					m.log.Warn("monitor64: save pve node", "err", err)
+				}
+			}
+		}
+		return ad, nil
 	case "pbs":
 		if addr == "" {
 			addr = "https://" + hostPort(h.Address, 8007)
@@ -52,22 +65,34 @@ func newAPICollector(typ string, h *Host, cfg accessConfig, secret string) (coll
 		if err != nil {
 			return nil, err
 		}
-		return &apiAdapter{apiCollector{src: c}}, nil
+		return &apiAdapter{apiCollector: apiCollector{src: c}}, nil
 	case "docker":
 		c, err := apis.NewDocker(apis.DockerConfig{Host: addr, Pin: cfg.Pin, Secret: secret})
 		if err != nil {
 			return nil, err
 		}
-		return &apiAdapter{apiCollector{src: c, close: c.Close}}, nil
+		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
 	}
 	return nil, fmt.Errorf("unbekannter Zugang %q", typ)
 }
 
 // apiAdapter erfuellt das collector-Interface des Kerns.
-type apiAdapter struct{ apiCollector }
+type apiAdapter struct {
+	apiCollector
+	node     func() string // Proxmox VE ohne eingestellte Node: erkannte Node
+	saveNode func(string)
+	saved    bool
+}
 
 func (a *apiAdapter) collect(ctx context.Context) ([]model.Service, error) {
-	return a.apiCollector.collect(ctx)
+	svcs, err := a.apiCollector.collect(ctx)
+	if !a.saved && a.saveNode != nil && len(svcs) > 0 {
+		if n := a.node(); n != "" {
+			a.saved = true
+			a.saveNode(n)
+		}
+	}
+	return svcs, err
 }
 func (a *apiAdapter) close() { a.closeFn() }
 

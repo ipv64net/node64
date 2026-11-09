@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -839,6 +840,30 @@ func (m *Module) apiProblemAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// txReq uebersetzt Texte des Kerns im Format "i18n:<schluessel>?k=v" fuer Ausgaben ohne Browser (CSV); die
+// Oberflaeche uebersetzt selbst (tx in monitor64.js).
+func (m *Module) txReq(r *http.Request, s string) string {
+	rest, ok := strings.CutPrefix(s, "i18n:")
+	if !ok || m.g.T == nil {
+		return s
+	}
+	key, query, _ := strings.Cut(rest, "?")
+	if !strings.HasPrefix(key, "monitor64.") {
+		return s
+	}
+	vals, err := url.ParseQuery(query)
+	if err != nil {
+		return s
+	}
+	var args []any
+	for k, v := range vals {
+		if len(v) > 0 {
+			args = append(args, k, v[0])
+		}
+	}
+	return m.g.T(r, key, args...)
+}
+
 // csvCell schuetzt vor Formel-Einschleusung (Tabellenprogramme werten = + - @ am Anfang aus).
 func csvCell(s string) string {
 	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
@@ -901,7 +926,7 @@ func (m *Module) apiProblemsCSV(w http.ResponseWriter, r *http.Request) {
 		if !p.Closed.IsZero() {
 			closedBy = who(p.ClosedBy)
 		}
-		row := []string{p.State, p.Worst, p.Host, firstNonEmpty(p.Name, "-"), tm(p.Opened), tm(p.Closed), strconv.FormatInt(p.Duration/60, 10), p.How, closedBy, ackBy, ackC, strings.Join(p.Channels, ", ")}
+		row := []string{p.State, p.Worst, p.Host, firstNonEmpty(m.txReq(r, p.Name), "-"), tm(p.Opened), tm(p.Closed), strconv.FormatInt(p.Duration/60, 10), p.How, closedBy, ackBy, ackC, strings.Join(p.Channels, ", ")}
 		for i := range row {
 			row[i] = csvCell(row[i])
 		}

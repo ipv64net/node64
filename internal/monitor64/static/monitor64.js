@@ -47,6 +47,8 @@ function parseNum(s) {
 		var t = dots ? '.' : ',';
 		if (!thousandsOK(s, t)) { return NaN; }
 		s = s.split(t).join('');
+	} else if ((dots ? '.' : ',') === (LOC === 'de-DE' ? '.' : ',') && /^[1-9][0-9]{0,2}[.,][0-9]{3}$/.test(s)) {
+		s = s.replace(/[.,]/, ''); // einzelner Tausendertrenner der Sprache ("1.000" auf Deutsch, "1,000" auf Englisch)
 	} else {
 		s = s.replace(',', '.');
 	}
@@ -739,6 +741,10 @@ function pageHost() {
 		var meta = kindMeta(lv.kind) || {}, f = meta.factor || 1, e = lv.eff, unit = unitOf(lv, s), mt = metricByName(s, lv.metric), cur = lv.service || lv.host_kind || {};
 		var b = { el: el, lv: lv, f: f, store: !!meta.store, unit: unit };
 		function q(c) { return $('.' + c, el); }
+		if (q('rb-h')) { // Hysterese in der angezeigten Einheit (wie Warnung/Kritisch; gespeichert in der Basiseinheit)
+			q('rb-h').placeholder = L('sd.inherits', { v: fmtNum(e.hyst == null ? e.hyst : e.hyst / f) });
+			q('rb-h').value = cur.hyst == null ? '' : numIn(cur.hyst / f);
+		}
 		b.mode = function () { var r = $('.rb-mode:checked', el); return r ? r.value : (e.mode === 'free' ? 'free' : 'used'); };
 		function capGB() { return mt && mt.max ? mt.max / 1e9 : 0; }
 		function setMode(changed) {
@@ -759,7 +765,7 @@ function pageHost() {
 			} else { q('rb-w').value = ''; q('rb-c').value = ''; }
 			var hint = '';
 			if (b.store && mt) { hint = free ? L('sd.hint_free', { f: fmtNum(capGB() * (100 - mt.value) / 100), c: fmtNum(capGB()) }) : L('sd.hint_used', { v: fmtNum(mt.value) }); }
-			else if (!free && lim(e.warn) !== null) { hint = L('sd.hyst_hint', { v: fmtNum(lim(e.warn) / f), h: fmtNum(e.hyst) }); }
+			else if (!free && lim(e.warn) !== null) { hint = L('sd.hyst_hint', { v: fmtNum(lim(e.warn) / f), h: fmtNum(e.hyst == null ? e.hyst : e.hyst / f) }); }
 			q('rb-hint').textContent = hint;
 		}
 		if (!lv.state) {
@@ -782,7 +788,7 @@ function pageHost() {
 			if (b.store && (free !== (lv.eff.mode === 'free') || (lv.service || lv.host_kind || {}).mode)) { rule.mode = free ? 'free' : 'used'; }
 			if (w !== null) { rule[free ? 'warn_free' : 'warn'] = free ? w : w * b.f; }
 			if (c !== null) { rule[free ? 'crit_free' : 'crit'] = free ? c : c * b.f; }
-			if (h !== null) { rule.hyst = h; }
+			if (h !== null) { rule.hyst = h * b.f; }
 		}
 		if (v('rb-for') !== '') { rule['for'] = parseInt(v('rb-for'), 10); }
 		if (v('rb-r')) { rule.report = v('rb-r'); }
@@ -1832,9 +1838,15 @@ function pageNew() {
 				var chain = Promise.resolve(), failed = [];
 				nodes.forEach(function (n) {
 					var na = { type: 'pve', config: { url: acc.config.url || ('https://' + (WZ.address.indexOf(':') >= 0 ? '[' + WZ.address + ']' : WZ.address) + ':8006'), token_id: acc.config.token_id, pin: acc.config.pin, node: n.name }, secret: acc.secret };
+					var addr = n.ip || n.name;
 					chain = chain.then(function () {
-						return api('POST', '/api/monitor64/hosts', { name: n.name, address: n.ip || n.name, kind: 'pve', group: WZ.group, tags: tags, interval_sec: iv, notes: '', paused: false, agent_autoupdate: true, accesses: [na] })
-							.catch(function () { failed.push(n.name); });
+						// Dienste der Node erkennen und die vorgeschlagenen gleich uebernehmen (wie beim ersten Host im
+						// Assistenten); scheitert der Test, entsteht der Host ohne Dienste (Erkennung in der Runde)
+						return api('POST', '/api/monitor64/test', { address: addr, access: na }).catch(function () { return {}; }).then(function (t) {
+							var svcs = (t && t.ok && t.services) || [];
+							return api('POST', '/api/monitor64/hosts', { name: n.name, address: addr, kind: 'pve', group: WZ.group, tags: tags, interval_sec: iv, notes: '', paused: false, agent_autoupdate: true, accesses: [na],
+								services: svcs, adopt: svcs.filter(function (x) { return x['default']; }).map(function (x) { return x.key; }) });
+						}).catch(function () { failed.push(n.name); });
 					});
 				});
 				return chain.then(function () {

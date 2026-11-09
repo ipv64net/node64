@@ -329,7 +329,8 @@ func TestNotifyReminder(t *testing.T) {
 		t.Fatalf("Warnung erinnert: %+v", res.Lines)
 	}
 
-	// Ruhezeit: keine Erinnerung; die naechste kommt einen Tag nach der Ruhezeit
+	// Ruhezeit: keine Erinnerung; die faellige kommt direkt nach der Ruhezeit (die Sammelmeldung des Dispatchers
+	// enthaelt sie nicht), die naechste wieder einen Tag spaeter
 	g = newRig(t)
 	g.one(0, "c", Crit)
 	for m := day; m <= day+8*60; m += 60 { // 8 h Ruhezeit ab Faelligkeit
@@ -337,11 +338,14 @@ func TestNotifyReminder(t *testing.T) {
 			t.Fatalf("Erinnerung in der Ruhezeit (min %v)", m)
 		}
 	}
-	if res := g.one(day+8*60+1, "c", Crit); len(res.Lines) != 0 {
-		t.Fatal("Erinnerung direkt nach der Ruhezeit")
+	if res := g.one(day+8*60+1, "c", Crit); len(res.Lines) != 1 || res.Lines[0].Kind != LineReminder {
+		t.Fatalf("Erinnerung nach der Ruhezeit fehlt: %+v", res.Lines)
 	}
-	if res := g.one(2*day+8*60, "c", Crit); len(res.Lines) != 1 || res.Lines[0].Kind != LineReminder {
-		t.Fatalf("Erinnerung einen Tag nach der Ruhezeit fehlt: %+v", res.Lines)
+	if res := g.one(2*day+8*60, "c", Crit); len(res.Lines) != 0 {
+		t.Fatal("Erinnerung zu frueh nach der nachgeholten")
+	}
+	if res := g.one(2*day+8*60+1, "c", Crit); len(res.Lines) != 1 || res.Lines[0].Kind != LineReminder {
+		t.Fatalf("Erinnerung einen Tag nach der nachgeholten fehlt: %+v", res.Lines)
 	}
 
 	// Quittiert: keine Erinnerung

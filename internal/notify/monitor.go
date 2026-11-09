@@ -216,10 +216,10 @@ func explodeMonitor(list []Alert) []Alert {
 			b.Data = cloneData(a.Data)
 			raw, _ := json.Marshal([]MonitorLine{l})
 			b.Data["lines"], b.Data["key"], b.Data["severity"] = string(raw), l.Key, l.State
-			switch l.Kind {
-			case "ok", "reachable":
+			switch {
+			case l.Kind == "ok" || l.Kind == "reachable" || l.State == "ok":
 				b.Kind = KindMonitorOK
-			case "unreachable":
+			case l.Kind == "unreachable":
 				b.Kind = KindMonitorUnreachable
 			default:
 				b.Kind = KindMonitorProblem

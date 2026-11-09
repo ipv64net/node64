@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/transport"
 	"github.com/ipv64net/node64/internal/notify"
@@ -87,6 +88,8 @@ type Module struct {
 	notifier *eval.Notifier // Gedaechtnis der Meldungen (je Host in m64_runtime gespeichert)
 	cfg      atomic.Pointer[cfgCache]
 	rtMu     sync.Mutex
+	reloadMu sync.Mutex
+	pveSeen  *apis.ClusterSeen // Proxmox: welche Nodes hier erfolgreich abgefragt werden (Zustaendigkeit Cluster)
 	rts      map[string]*hostRT
 	pool     *transport.Pool
 	locMu    sync.Mutex
@@ -105,7 +108,8 @@ type Module struct {
 
 // New legt das Modul an (laeuft erst nach Start).
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dataDir, nodeVersion string) *Module {
-	return &Module{st: core, log: log.With("module", Name), box: box, dataDir: dataDir, nodeVersion: nodeVersion, store: newStore(core)}
+	return &Module{st: core, log: log.With("module", Name), box: box, dataDir: dataDir, nodeVersion: nodeVersion, store: newStore(core),
+		pveSeen: &apis.ClusterSeen{}}
 }
 
 // SetQuiet verbindet die Ruhezeit-Pruefung der Benachrichtigung (fuer Erinnerungen).

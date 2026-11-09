@@ -3,10 +3,13 @@ package monitor64
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ipv64net/node64/internal/m64proto"
+	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/notify"
@@ -194,5 +197,32 @@ func TestNonFiniteMetricsDropped(t *testing.T) {
 	out := finiteMetrics([]model.Metric{{Name: "ok", Value: 1}, nan})
 	if len(out) != 1 || out[0].Name != "ok" {
 		t.Fatalf("got %+v", out)
+	}
+}
+
+func TestZFSErrorsOnline(t *testing.T) {
+	for in, want := range map[string]string{
+		"No known data errors": "",
+		"":                     "",
+		"No known data errors; Geraetefehler READ 0 WRITE 0 CKSUM 12": "Geraetefehler READ 0 WRITE 0 CKSUM 12",
+		"2 data errors, use '-v' for a list":                          "2 data errors, use '-v' for a list",
+	} {
+		if got := zfsErrors(in); got != want {
+			t.Errorf("zfsErrors(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSectionErrorsPrefixes(t *testing.T) {
+	rep := &m64proto.Report{Errors: []m64proto.SectionErr{{Section: "smart", Error: "timeout"}, {Section: "updates", Error: "apt"}}}
+	pe, ok := sectionErrors(rep).(*apis.PartialError)
+	if !ok {
+		t.Fatalf("no PartialError")
+	}
+	if strings.Join(pe.Prefixes, ",") != "disk:,updates" {
+		t.Fatalf("prefixes %v", pe.Prefixes)
+	}
+	if sectionErrors(&m64proto.Report{}) != nil {
+		t.Fatal("error without section errors")
 	}
 }

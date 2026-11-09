@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/m64linux"
 	"github.com/ipv64net/node64/internal/m64proto"
+	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/transport"
 	"github.com/ipv64net/node64/internal/secrets"
@@ -28,7 +30,7 @@ const (
 )
 
 // slowTimeout: Zeitlimit des langsamen SSH-Laufs (SMART, Updates), getrennt von der Abfragerunde.
-var slowTimeout = 2 * time.Minute
+var slowTimeout = 5 * time.Minute
 
 // nodeKeyMu verhindert, dass zwei gleichzeitige erste Aufrufe je einen Schluessel erzeugen.
 var nodeKeyMu sync.Mutex
@@ -109,7 +111,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 	switch a.Type {
 	case "agent", "ssh":
 	default:
-		return newAPICollector(a.Type, h, cfg, secret)
+		return m.newAPICollector(a, h, cfg, secret)
 	}
 	pool := m.pool
 	if pool == nil {
@@ -243,14 +245,34 @@ func sectionErrors(rep *m64proto.Report) error {
 	if rep == nil || len(rep.Errors) == 0 {
 		return nil
 	}
-	var parts []string
+	pe := &apis.PartialError{}
+	seen := map[string]bool{}
 	for _, e := range rep.Errors {
-		parts = append(parts, e.Section+": "+e.Error)
-		if len(parts) == 5 {
-			break
+		if len(pe.Errs) < 5 {
+			pe.Errs = append(pe.Errs, transport.CleanError(errors.New(e.Section+": "+e.Error)).Error())
+		}
+		sec, _, _ := strings.Cut(e.Section, ":")
+		for _, p := range sectionPrefixes[sec] {
+			if !seen[p] {
+				seen[p] = true
+				pe.Prefixes = append(pe.Prefixes, p)
+			}
+		}
+		if len(sectionPrefixes[sec]) == 0 && !seen["?"] { // unbekannter Abschnitt: vorsichtig alle Dienste halten
+			seen["?"] = true
+			pe.Prefixes = append(pe.Prefixes, "")
 		}
 	}
-	return transport.CleanError(errors.New(strings.Join(parts, "; ")))
+	sort.Strings(pe.Prefixes)
+	return pe
+}
+
+// sectionPrefixes: welche Dienste ein Abschnitt des Berichts liefert (fuer "verschwunden" bei Teilfehlern).
+var sectionPrefixes = map[string][]string{
+	m64proto.SecCPU: {"cpu"}, m64proto.SecMem: {"mem", "swap"}, m64proto.SecLoad: {"load"}, m64proto.SecFS: {"fs:"},
+	m64proto.SecDisk: {"disk:"}, m64proto.SecSmart: {"disk:"}, m64proto.SecNet: {"if:"}, m64proto.SecBond: {"bond:"},
+	m64proto.SecRAID: {"raid:"}, m64proto.SecZFS: {"zfs:"}, m64proto.SecTemp: {"temp:"}, m64proto.SecSystemd: {"systemd"},
+	m64proto.SecUpdates: {"updates"}, m64proto.SecReboot: {"reboot"}, m64proto.SecLocal: {"local:"}, m64proto.SecWinSvc: {"winsvc:"},
 }
 
 func (a *agentCollector) close() { a.ref.close() }

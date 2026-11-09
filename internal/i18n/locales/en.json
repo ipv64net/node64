@@ -6203,7 +6203,7 @@
       "token_secret": "API token (secret)",
       "token_cmd": "Create a read-only token (run on the server)",
       "api_hint": "Read-only (role PVEAuditor or Audit). For bonding, per-port errors and temperatures, add SSH or the agent afterwards.",
-      "node": "Node name (empty = all)",
+      "node": "Node name (empty = the node behind the address, fixed on first contact)",
       "pin": "Pin fingerprint (certificate SHA-256 or SSH host key, optional)",
       "docker_hint": "Local: unix:///var/run/docker.sock (mount the socket into the Node64 container). Remote: tcp://host:2375, https://host:2376 with TLS or ssh://user@host.",
       "test": "Test connection",

@@ -33,6 +33,8 @@ func (m *Module) startHosts(ctx context.Context) error {
 // ReloadHost plant einen Host nach einer Aenderung neu ein (bzw. entfernt ihn). Der Laufzeitstand im Speicher
 // (Tracker, Gedaechtnis der Meldungen) bleibt erhalten, damit eine Aenderung nichts doppelt meldet.
 func (m *Module) ReloadHost(ctx context.Context, uid string) {
+	m.reloadMu.Lock() // gleichzeitige Aenderungen nacheinander (sonst laufen Planer und Laufzeitstand auseinander)
+	defer m.reloadMu.Unlock()
 	h, err := m.store.Host(ctx, uid)
 	if errors.Is(err, ErrNotFound) {
 		m.removeHost(uid)

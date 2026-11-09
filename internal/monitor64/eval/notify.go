@@ -428,8 +428,7 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 					break
 				}
 				if r.Quiet {
-					// In der Ruhezeit keine Erinnerung; das Offene steht in der Sammelmeldung.
-					s.LastSent = at
+					// In der Ruhezeit keine Erinnerung; sie kommt in der ersten Runde danach (LastSent bleibt).
 					break
 				}
 				chans := s.Chans

@@ -100,7 +100,7 @@ func factKind(code string) string {
 		return eval.KindRebootRequired
 	case "systemd_failed":
 		return eval.KindSystemdFailed
-	case "guest_down":
+	case "guest_down", "guest_fault": // guest_fault: gestartet, steht aber (io-error, Absturz)
 		return eval.KindGuestDown
 	case "ups_on_battery":
 		return eval.KindUPSOnBattery
@@ -254,11 +254,12 @@ type accRT struct {
 }
 
 const (
-	discoverEvery = time.Hour
-	vanishRounds  = 3                // so viele Runden in Folge ohne Dienst (bei vollstaendig antwortendem Zugang) = verschwunden
-	risingHold    = 30 * time.Minute // "ausstehende Sektoren steigen" gilt so lange (SMART wird nur alle 30 min gelesen)
-	trendEvery    = time.Hour        // Trend "voll in N Tagen" hoechstens so oft neu rechnen
-	dbTimeout     = 20 * time.Second // Datenbank-Schritte einer Runde (eigenes Zeitlimit, unabhaengig von den Zugaengen)
+	discoverEvery  = time.Hour
+	vanishRounds   = 3                  // so viele Runden in Folge ohne Dienst (bei vollstaendig antwortendem Zugang) = verschwunden
+	risingHold     = 30 * time.Minute   // "ausstehende Sektoren steigen" gilt so lange (SMART wird nur alle 30 min gelesen)
+	trendEvery     = time.Hour          // Trend "voll in N Tagen" hoechstens so oft neu rechnen
+	dbTimeout      = 20 * time.Second   // Datenbank-Schritte einer Runde (eigenes Zeitlimit, unabhaengig von den Zugaengen)
+	staleKindAfter = 7 * 24 * time.Hour // Messgroesse so lange nicht geliefert: Tracker vergessen
 )
 
 // i18nText baut einen uebersetzbaren Text ("i18n:<schluessel>?k=v"); Oberflaeche und Meldungen uebersetzen ihn.
@@ -491,7 +492,16 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 			tr := rt.Trackers[key]
 			if tr == nil {
+				delete(rt.Kinds, key)
 				continue
+			}
+			if !tr.LastAt.IsZero() && now.Sub(tr.LastAt) > staleKindAfter { // lange nicht mehr geliefert: vergessen
+				delete(rt.Kinds, key)
+				delete(rt.Trackers, key)
+				continue
+			}
+			if ok && tr.Level == eval.OK {
+				continue // Dienst geliefert, Wert gewollt weggelassen (gestoppte VM, schlafende Platte, Port ohne Link)
 			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind)
 			st := tr.Status(e, now)
@@ -551,7 +561,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 					}
 					switch r.Soll {
 					case "off":
-						cond = false
+						_, cond = facts["guest_fault"] // darf aus sein, haengt aber nicht
 					case "run":
 						if hasRun {
 							cond = running == 0 && locked == 0
@@ -816,6 +826,19 @@ func (m *Module) dispatch(ctx context.Context, h *Host, msg eval.Message, unreac
 		data["after_maint"] = "1"
 	}
 	base := notify.CheckInfo{Token: "m64:" + h.UID, Name: h.Name, Type: "monitor64", Target: h.Address, Local: true, NotifyDown: true, NotifyUp: true, Critical: msg.CritInQuiet}
+	// Ist "Standardkanaele" irgendwo im Routing dieses Hosts gewaehlt, folgen die Standardkanaele diesem Weg; ein
+	// zusaetzlich ausdruecklich gewaehlter Standardkanal bekaeme sonst dieselbe Zeile doppelt (getrennte Meldungen).
+	cfg := m.config()
+	routeDefault := false
+	for _, c := range eval.ResolveRouting(cfg.notify, cfg.notifyOverrides, hostRef(h)).Channels {
+		if c.ID == defaultChannels && (c.Warn || c.Crit) {
+			routeDefault = true
+		}
+	}
+	var defaults map[int64]bool
+	if routeDefault {
+		defaults = m.defaultChannelIDs(ctx)
+	}
 	withDefault := false
 	var explicit []int64
 	for _, id := range msg.Channels {
@@ -823,7 +846,7 @@ func (m *Module) dispatch(ctx context.Context, h *Host, msg eval.Message, unreac
 			withDefault = true
 			continue
 		}
-		if n, err := strconv.ParseInt(id, 10, 64); err == nil {
+		if n, err := strconv.ParseInt(id, 10, 64); err == nil && !defaults[n] {
 			explicit = append(explicit, n)
 		}
 	}
@@ -834,19 +857,6 @@ func (m *Module) dispatch(ctx context.Context, h *Host, msg eval.Message, unreac
 	}
 	if withDefault {
 		send(nil)
-		if len(explicit) > 0 {
-			defaults := m.defaultChannelIDs(ctx)
-			var rest []int64
-			for _, id := range explicit {
-				if !defaults[id] {
-					rest = append(rest, id)
-				}
-			}
-			if len(rest) > 0 {
-				send(rest)
-			}
-		}
-		return
 	}
 	if len(explicit) > 0 {
 		send(explicit)

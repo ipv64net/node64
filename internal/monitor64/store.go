@@ -293,6 +293,13 @@ func (s *Store) SetHostKey(ctx context.Context, accessUID, fp string) error {
 	return err
 }
 
+// SetAccessNode traegt die erkannte Proxmox-Node in die Konfiguration ein, falls dort noch keine steht (System).
+func (s *Store) SetAccessNode(ctx context.Context, accessUID, node string) error {
+	_, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_access SET config = json_set(CASE WHEN json_valid(config) THEN config ELSE '{}' END, '$.node', ?), updated_at = ?
+		WHERE uid = ? AND deleted = 0 AND COALESCE(json_extract(CASE WHEN json_valid(config) THEN config ELSE '{}' END, '$.node'), '') = ''`, node, tsNow(), accessUID)
+	return err
+}
+
 // DeleteAccess setzt den Loeschvermerk eines Zugangs.
 func (s *Store) DeleteAccess(ctx context.Context, uid string, by Actor) error {
 	res, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_access SET deleted = 1, updated_at = ?, updated_by = ? WHERE uid = ? AND deleted = 0`, tsNow(), by.json(), uid)

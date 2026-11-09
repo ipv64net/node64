@@ -502,10 +502,22 @@ func mapZFS(z m64proto.ZPool) Service {
 	s.Text = fmt.Sprintf("%s · %s frei", z.Health, bytesText(z.Free))
 	if !strings.EqualFold(z.Health, "ONLINE") {
 		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: z.Health + " " + z.Errors})
-	} else if e := strings.TrimSpace(z.Errors); e != "" && !strings.Contains(strings.ToLower(e), "no known data errors") {
+	} else if e := zfsErrors(z.Errors); e != "" {
 		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: e}) // ONLINE, aber Daten-/Pruefsummenfehler
 	}
 	return s
+}
+
+// zfsErrors: Fehlertext ohne den Hinweis "No known data errors" ("" = keine Fehler). Geraetefehler stehen dahinter
+// ("No known data errors; Geraetefehler READ 0 WRITE 0 CKSUM 12") und zaehlen auch bei ONLINE.
+func zfsErrors(raw string) string {
+	var out []string
+	for _, p := range strings.Split(raw, ";") {
+		if p = strings.TrimSpace(p); p != "" && !strings.EqualFold(p, "no known data errors") {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, "; ")
 }
 
 func mapLocal(l m64proto.LocalCheck) Service {

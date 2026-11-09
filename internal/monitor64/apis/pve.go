@@ -45,6 +45,41 @@ type PVEConfig struct {
 	Timeout      time.Duration // ganze Runde (0 = DefaultTimeout)
 	SmartEvery   time.Duration // 0 = DefaultSmartEvery
 	UpdatesEvery time.Duration // 0 = DefaultUpdatesEvery
+	// Seen: gemeinsam fuer alle PVE-Zugaenge einer Node64 (nil = jede Node online gilt als ueberwacht). Die
+	// clusterweiten Dienste bewertet die kleinste Node-ID unter den Nodes, die hier gerade erfolgreich abgefragt
+	// werden - nicht eine Node, die in Monitor64 fehlt, pausiert oder deren API nicht antwortet.
+	Seen *ClusterSeen
+}
+
+// ClusterSeen merkt, welche Proxmox-Nodes zuletzt erfolgreich abgefragt wurden (je Cluster).
+type ClusterSeen struct {
+	mu sync.Mutex
+	at map[string]time.Time
+}
+
+// seenFresh: so lange gilt eine Node nach der letzten erfolgreichen Runde als ueberwacht.
+const seenFresh = 15 * time.Minute
+
+func (c *ClusterSeen) mark(cluster, node string, at time.Time) {
+	if c == nil || cluster == "" || node == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.at == nil {
+		c.at = map[string]time.Time{}
+	}
+	c.at[cluster+"/"+node] = at
+}
+
+func (c *ClusterSeen) fresh(cluster, node string, now time.Time) bool {
+	if c == nil {
+		return true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	t, ok := c.at[cluster+"/"+node]
+	return ok && now.Sub(t) < seenFresh
 }
 
 func (c PVEConfig) system() proxmox.System {
@@ -258,7 +293,9 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	if stErr != nil {
 		part.add("cluster/status", stErr, "cluster")
 	} else {
-		p.owner = clusterOwner(st) // bei Fehler gilt der vorige Stand
+		cl, _ := parseNodes(st)
+		p.cfg.Seen.mark(cl, node, now)
+		p.owner = clusterOwner(st, node, func(n string) bool { return p.cfg.Seen.fresh(cl, n, now) }) // bei Fehler gilt der vorige Stand
 		if svc, ok := clusterService(st); ok {
 			cw = append(cw, svc)
 		}
@@ -276,9 +313,9 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	return out, part.result()
 }
 
-// clusterOwner: die Node, die die clusterweiten Dienste bewertet – kleinste Node-ID unter den Nodes online
-// ("" = kein Cluster bzw. keine Angabe: jede Node bewertet selbst).
-func clusterOwner(st []pveStatus) string {
+// clusterOwner: die Node, die die clusterweiten Dienste bewertet – kleinste Node-ID unter den Nodes online, die
+// hier ueberwacht werden (self immer; "" = kein Cluster bzw. keine Angabe: jede Node bewertet selbst).
+func clusterOwner(st []pveStatus, self string, watched func(string) bool) string {
 	isCluster := false
 	for _, e := range st {
 		isCluster = isCluster || e.Type == "cluster"
@@ -290,7 +327,7 @@ func clusterOwner(st []pveStatus) string {
 	best := -1
 	owner := ""
 	for _, n := range nodes {
-		if n.Online && (best < 0 || n.ID < best) {
+		if n.Online && (n.Name == self || watched == nil || watched(n.Name)) && (best < 0 || n.ID < best) {
 			best, owner = n.ID, n.Name
 		}
 	}
@@ -858,7 +895,7 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	}
 	switch {
 	case fault: // gestartet, steht aber: unabhaengig vom Soll-Zustand eine Stoerung
-		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: "VM steht (" + qmp + ")"})
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: "VM steht (" + qmp + ")"}) // gilt auch bei Soll "aus"
 	case !active && cfgKnown && cfg.onboot && !lockOK:
 		t := parts[0] + ", soll laufen (beim Booten starten)"
 		if g.Lock != "" {

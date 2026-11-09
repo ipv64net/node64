@@ -534,14 +534,14 @@ func TestPVEGuestState(t *testing.T) {
 		t.Fatal(err)
 	}
 	vm101 := svcByKey(t, svcs, "vm:101")
-	if !hasFact(vm101, "guest_down") || mustMetric(t, vm101, "running").Value != 0 || !strings.Contains(vm101.Text, "gestört (io-error)") {
+	if !hasFact(vm101, "guest_fault") || mustMetric(t, vm101, "running").Value != 0 || !strings.Contains(vm101.Text, "gestört (io-error)") {
 		t.Errorf("vm:101 (io-error) = %+v", vm101)
 	}
 	vm102 := svcByKey(t, svcs, "vm:102")
 	if !hasFact(vm102, "guest_down") || mustMetric(t, vm102, "running").Value != 0 || !strings.Contains(vm102.Text, "pausiert") {
 		t.Errorf("vm:102 (pausiert, onboot) = %+v", vm102)
 	}
-	if vm103 := svcByKey(t, svcs, "vm:103"); !hasFact(vm103, "guest_down") {
+	if vm103 := svcByKey(t, svcs, "vm:103"); !hasFact(vm103, "guest_fault") {
 		t.Errorf("vm:103 (guest-panicked, ohne onboot) = %+v", vm103)
 	}
 	vm104 := svcByKey(t, svcs, "vm:104")
@@ -698,5 +698,27 @@ func TestPVENodeFixed(t *testing.T) {
 	}
 	if p.Node() != "pve1" || !hasSvc(svcs, "cpu") || fb.count("/nodes/pve1/status") != 1 || fb.count("/nodes/pve2/status") != 0 {
 		t.Errorf("Node nach Failover: %q, pve1 %d, pve2 %d", p.Node(), fb.count("/nodes/pve1/status"), fb.count("/nodes/pve2/status"))
+	}
+}
+
+// Cluster-Dienste bewertet die kleinste Node-ID unter den hier ueberwachten Nodes (nicht eine fehlende Node).
+func TestClusterOwnerWatched(t *testing.T) {
+	st := []pveStatus{{Type: "cluster", Name: "c1"}, {Type: "node", Name: "pve1", NodeID: 1, Online: 1}, {Type: "node", Name: "pve2", NodeID: 2, Online: 1}, {Type: "node", Name: "pve3", NodeID: 3, Online: 1}}
+	seen := &ClusterSeen{}
+	now := time.Now()
+	fresh := func(n string) bool { return seen.fresh("c1", n, now) }
+	if o := clusterOwner(st, "pve2", fresh); o != "pve2" {
+		t.Fatalf("only pve2 watched: owner %q", o)
+	}
+	seen.mark("c1", "pve1", now.Add(-time.Minute))
+	if o := clusterOwner(st, "pve2", fresh); o != "pve1" {
+		t.Fatalf("pve1 watched: owner %q", o)
+	}
+	seen.mark("c1", "pve1", now.Add(-time.Hour))
+	if o := clusterOwner(st, "pve3", fresh); o != "pve3" {
+		t.Fatalf("pve1 stale: owner %q", o)
+	}
+	if o := clusterOwner(st, "pve3", nil); o != "pve1" {
+		t.Fatalf("without seen: owner %q", o)
 	}
 }

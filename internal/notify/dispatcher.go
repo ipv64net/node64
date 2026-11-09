@@ -534,8 +534,8 @@ func (d *Dispatcher) releaseHeld(ctx context.Context) {
 // heldKey: wofuer in der Sammelmeldung der letzte Stand zaehlt – je Check; bei Proxmox VE je System und Ressource,
 // getrennt nach Zustand, Schwelle (cpu, mem, disk) und Neustart.
 func heldKey(a Alert) string {
-	if IsMonitor(a.Kind) { // je Host und Dienst (Data["key"], leer = mehrere bzw. der Host selbst)
-		return "m64|" + a.Check.Token + "|" + a.Data["key"]
+	if IsMonitor(a.Kind) { // je Host, Dienst und Kanalgruppe (Data["key"], leer = mehrere bzw. der Host selbst)
+		return "m64|" + a.Check.Token + "|" + a.Data["key"] + "|" + fmt.Sprint(a.Check.Channels)
 	}
 	if !IsProxmox(a.Kind) {
 		return a.Check.Token
