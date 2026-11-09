@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Weiterleitung bei verweigertem Zugriff je Location – wer von der Zugriffsliste abgewiesen wird, landet mit 302 auf einer einstellbaren Adresse statt auf der Fehlerseite (z. B. Vaultwarden `/admin` nur aus dem LAN); Anmeldungen bleiben unverändert (#55).
 - DNS64: Block- und Freigabe-Listen verstehen AdGuard-Regeln mit einem Strich – `@@|name^` nimmt genau diesen Namen aus, `|name^` sperrt genau ihn (bisher still ignoriert).
 - Zertifikate: Wildcards wie `*.lab.domain.tld` bei Cloudflare und anderen DNS-Anbietern klappen auch, wenn ein Wildcard-CNAME alle Subdomains nach Hause zeigt (z. B. auf eine DynDNS-Domain).
 - Healthchecks: Beim Docker-Host über SSH ist der Benutzer mit `node64` vorausgefüllt (verhindert Tippfehler in den Befehlen der Anleitung).
