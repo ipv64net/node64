@@ -32,6 +32,8 @@ type SSHConfig struct {
 	User     string     // Pflicht, empfohlen "monitor64"
 	Signer   ssh.Signer // Schluessel der Node (Standard)
 	Password string     // nur als Ausnahme fuer Systeme ohne Schluessel-Anmeldung
+	// Extra: weitere Schluessel der Node nach Signer (Cluster: alter Schluessel)
+	Extra []ssh.Signer
 	// HostKey, OnHostKey: TOFU wie bei AgentConfig.
 	HostKey     string
 	OnHostKey   func(fingerprint string)
@@ -52,7 +54,7 @@ func NewSSHClient(cfg SSHConfig) (*SSHClient, error) {
 	}
 	var auth []ssh.AuthMethod
 	if cfg.Signer != nil {
-		auth = append(auth, ssh.PublicKeys(cfg.Signer))
+		auth = append(auth, ssh.PublicKeys(append([]ssh.Signer{cfg.Signer}, cfg.Extra...)...))
 	}
 	if cfg.Password != "" {
 		pw := cfg.Password

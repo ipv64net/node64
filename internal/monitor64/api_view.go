@@ -541,11 +541,19 @@ func (m *Module) apiSeries(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
+	var sources []seriesSource
+	if h, err := m.store.Host(r.Context(), host); err == nil { // Cluster: Stuecke der anderen Nodes (cluster_series.go)
+		res, sources = m.clusterSeries(r.Context(), h, ss, res, from, to, pts)
+	}
 	out := make([]seriesOut, len(res))
 	for i, s := range res {
 		out[i] = seriesOut{S: ss[i], Res: s.Res, Step: s.Step, Points: s.Points}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"from": from.Unix(), "to": to.Unix(), "series": out})
+	resp := map[string]any{"from": from.Unix(), "to": to.Unix(), "series": out}
+	if sources != nil {
+		resp["cluster"] = sources
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // apiSparks: GET Mini-Verlaeufe (24 Std., 48 Punkte, Mittelwerte): ohne host die CPU je Host (Kacheln), mit host

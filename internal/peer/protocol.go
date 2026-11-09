@@ -191,6 +191,7 @@ func (m *Manager) Register(mux *http.ServeMux) {
 	mux.Handle("GET /peer/v1/measurements", m.Handle(m.handleMeasurements))
 	mux.Handle("GET /peer/v1/relay", m.Handle(m.handleRelay))
 	m.registerSync2(mux) // allgemeiner Abgleich der Module (sync2.go)
+	m.registerCall(mux)  // Anfragen der Module an andere Nodes (call.go)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

@@ -154,6 +154,7 @@ func (m *Module) saveRuntime(ctx context.Context, rt *hostRT, mem []byte) {
 	if v != nil {
 		rt.lastSavedState, rt.lastSavedView = v.State, v.View
 	}
+	m.publishState(ctx, rt, b) // Cluster: Zustand an die anderen Nodes (cluster_state.go)
 }
 
 // Views liefert den aktuellen Stand aller Hosts (fuer die Oberflaeche).

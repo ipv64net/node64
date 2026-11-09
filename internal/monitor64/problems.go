@@ -25,7 +25,9 @@ var stateRank = map[string]int{"ok": 0, "warn": 1, "unknown": 2, "crit": 3, "unr
 // loadOpen liest die offenen Probleme eines Hosts (Schluessel: Dienst, "" = Host).
 func (m *Module) loadOpen(ctx context.Context, hostUID string) map[string]*openProblem {
 	out := map[string]*openProblem{}
-	rows, err := m.st.Reader().QueryContext(ctx, `SELECT uid, service_key, state, worst, ack FROM m64_problems WHERE host_uid = ? AND closed_at = '' AND deleted = 0`, hostUID)
+	// im Cluster koennen zwei Nodes dasselbe Problem offen haben (Split-Brain): das eigene gilt (zuletzt gelesen)
+	rows, err := m.st.Reader().QueryContext(ctx, `SELECT uid, service_key, state, worst, ack FROM m64_problems WHERE host_uid = ? AND closed_at = '' AND deleted = 0
+		ORDER BY node_id = ?, id`, hostUID, m.nodeID())
 	if err != nil {
 		m.log.Warn("monitor64: load problems", "err", err)
 		return out
@@ -211,6 +213,7 @@ func (m *Module) CloseHostProblems(ctx context.Context, hostUID string, by Actor
 // purgeProblems loescht geschlossene Probleme und ihre Ereignisse nach der Aufbewahrung (wie die Stundenwerte).
 func (m *Module) purgeProblems(ctx context.Context, now time.Time) {
 	cut := ts(now.Add(-keepProblems))
+	m.purgeTombstones(ctx, cut) // Cluster: entfernte Probleme vermerken (cluster_problems.go)
 	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_events WHERE ts < ? AND problem_uid IN (SELECT uid FROM m64_problems WHERE closed_at != '' AND closed_at < ?)`, cut, cut); err != nil {
 		m.log.Warn("monitor64: purge events", "err", err)
 	}

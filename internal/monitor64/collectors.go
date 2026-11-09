@@ -137,7 +137,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 	if pool == nil {
 		return nil, transport.ErrClosed
 	}
-	signer, err := m.nodeSigner(ctx)
+	signer, extra, err := m.nodeSigners(ctx) // extra: alte Schluessel, bis die Agents umgestellt sind (cluster_keys.go)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 		}
 	}
 	if a.Type == "agent" {
-		ac := transport.AgentConfig{Addr: accessAddr(h.Address, cfg.Port, m64proto.DefaultPort), Signer: signer, OnHostKey: onKey}
+		ac := transport.AgentConfig{Addr: accessAddr(h.Address, cfg.Port, m64proto.DefaultPort), Signer: signer, Extra: extra, OnHostKey: onKey}
 		if cfg.Mode == "push" { // Agent verbindet sich selbst (Host hinter NAT/VPS); Adresse nur zur Anzeige
 			m.mu.Lock()
 			pl := m.push
@@ -158,7 +158,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 			if pl == nil {
 				return nil, transport.ErrClosed
 			}
-			ac = transport.AgentConfig{Addr: h.Address, Signer: signer, OnHostKey: onKey, Push: pl, PushToken: cfg.Token}
+			ac = transport.AgentConfig{Addr: h.Address, Signer: signer, Extra: extra, OnHostKey: onKey, Push: pl, PushToken: cfg.Token}
 		}
 		if _, err := ref.agent(ac); err != nil {
 			return nil, err
@@ -169,7 +169,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 	if secret != "" {
 		sc.Password = secret // Ausnahme: System ohne Schluessel-Anmeldung
 	} else {
-		sc.Signer = signer
+		sc.Signer, sc.Extra = signer, extra
 	}
 	if _, err := ref.ssh(sc); err != nil {
 		return nil, err

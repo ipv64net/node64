@@ -1106,6 +1106,9 @@ func (m *Module) viewOf(uid string) *HostView {
 
 // repoll stoesst eine sofortige Runde an (Neubewertung nach einer Aenderung).
 func (m *Module) repoll(uid string) {
+	if m.forwardRepoll(uid) { // Cluster: eine andere Node ueberwacht den Host (Anstoss weiterreichen)
+		return
+	}
 	if s := m.scheduler(); s != nil {
 		s.RunNow("host:" + uid)
 	}

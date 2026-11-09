@@ -29,6 +29,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | GET | `/peer/v1/measurements` | Messwerte der anderen Node (Healthchecks) |
 | GET | `/peer/v1/relay` | hub-Daten einer verknüpften Node für nicht verknüpfte |
 | GET | `/peer/v2/sync?since=&items=` | allgemeiner Abgleich der übrigen Module und Bereiche (Zertifikate, DNS64, Proxmox VE/Docker, Statusseiten, Kanäle) |
+| POST | `/peer/v2/call/{modul}/{name}` | Anfrage eines Moduls an die andere Node (live abfragen statt abgleichen, z. B. Verlauf von Monitor64); nur mit einem Bereich des Moduls auf beiden Seiten, sonst 404 |
 
 ## Sicherheit
 
@@ -96,6 +97,8 @@ liefernde prüft ihre); neue Bereiche der anderen Nodes erfährt eine Node beim 
 | `users` | `accounts` (Benutzer samt Passwort-Hash, App-2FA, SSO-Verknüpfungen), `sso` (OIDC-Einrichtung samt Client-Secret) | aus | `/peer/v2/sync` |
 
 | `dyndns` | `config` (Namen samt Token, Einstellungen, bevorzugte und zuständige Node) | aus | `/peer/v2/sync`; nur eine Node aktualisiert (siehe „DynDNS: zuständige Node“) |
+
+| `monitor64` | `config` (Hosts, Zugänge samt Geheimnissen, Dienste, Schwellen, Abweichungen, Benachrichtigung, Wartung, Einstellungen, zuständige Node, Cluster-Schlüssel), `status` (Probleme mit Ablauf, Zustand je Host und Node) | aus (Modul nur mit `NODE64_MONITOR64=1`) | `/peer/v2/sync`, Anfragen `/peer/v2/call/monitor64/*`; eine Node je Host (siehe „Monitor64“) |
 
 **Statusseiten** (`healthchecks/statuspages`): Kennung je Seite (`hc_status_pages.uid`, gleich auf allen Nodes; die
 lokale Nummer bleibt, PROXY64-Hosts verweisen weiter auf sie und gehören zu ihrer Node). Mit geht alles, was die Seite
@@ -216,6 +219,68 @@ zuständige Node, beide aktualisieren – in verschiedenen Netzen wechseln die N
 „von außen geändert“ pausiert sie nach mehreren Wechseln). Nach der Wiederverbindung gilt der jüngere `leader`-Eintrag,
 danach greift wieder die Regel oben. Seite DynDNS: Karte der Namen zeigt, welche Node aktualisiert, und die Wahl der
 bevorzugten Node (`POST /dyndns/cluster`); `GET /api/dyndns/status` → `cluster`.
+
+### Monitor64
+
+Code: `internal/monitor64/cluster*.go`, Anbindung `internal/monitor64/m64cluster` (Provider, Mitglieder, Anfragen).
+Plan: [PLAN-NODE64-MONITOR64.md](PLAN-NODE64-MONITOR64.md), Abschnitt „Cluster“. Kennungen der Einträge: `art:uid`.
+
+| Bereich | Einträge | Regel |
+|---|---|---|
+| `config` | `host:` (ohne zuständige Node; bevorzugte Node leer = die liefernde Node), `access:` (Geheimnis im Klartext über die Cluster-Verbindung, auf der Empfängerin mit ihrem Schlüssel gespeichert; nicht lesbar → `incomplete`, drüben nicht übernommen; Hostschlüssel mit), `service:`, `hostrule:`, `override:`, `maint:`, `setting:` (`monitor64.std`, `.notify`, `.interval`, `.prometheus`, `.prom_tags`), `owner:` (zuständige Node + letzte 20 Übernahmen), `key:cluster` | jüngere Änderung gewinnt, als Ganzes |
+| `status` | `problem:` (Problem mit Ablauf, Ereignisse je mit Node-Kennung), `state:<host>:<node>` (Ansicht, Laufzeitstand und Gedächtnis der Meldungen einer Node) | gehört einer Node; Ereignisse werden nur ergänzt, ein geschlossenes Problem öffnet keine ältere Fassung wieder |
+| nur lokal | Verlauf (`monitor64.db`), Arbeiter-Zahl, Trap-Port/Engine-ID, Push-Port/-Adresse, Agent-Download, `m64_runtime` | – |
+
+**Eigene Änderungen** erkennt die Node an allen Schreibstellen über Änderungszeit, Löschvermerk (und bei Problemen die
+Zahl der Ereignisse) gegenüber dem zuletzt gemeldeten bzw. übernommenen Stand (`m64_csync`), alle 2 s. Übernommene
+Zeilen behalten die Änderungszeit der Urheberin. Kanäle stehen im Cluster als `uid:<nf_channels.uid>` (lokal: Nummer);
+unbekannte Kanäle entfallen beim Übernehmen (`default` bleibt). **Doppel:** Dienste und Einstellungen am Host sind je
+Host eindeutig – kommen sie auf zwei Nodes mit eigener Kennung an, gilt die kleinere (die andere geht als gelöscht
+hinaus). Hosts werden **nie** zusammengeführt (zwei gleich angelegte Hosts sind zwei Überwachungen; einen von Hand
+löschen), Abweichungen und Wartungsfenster ebenfalls nicht.
+
+**Zuständige Node je Host** (fragt ab, speichert Verlauf, meldet):
+
+| Was | Regel |
+|---|---|
+| Kandidatinnen | bevorzugte Node (Standard: die anlegende), dann die Ersatz-Nodes in ihrer Reihenfolge (Standard: keine) |
+| zuständig | Eintrag `owner:` (lokal `m64_hosts.owner_node`, leer = bevorzugte Node); ändert sich die bevorzugte Node, bleibt die bisherige zuständig, bis die Rückgabe-Regel greift |
+| Übernahme | zuständige Node offline (Karenz des Clusters, 2 min), ausgesetzt, Bereich oder Modul dort aus → die erste Kandidatin, die seit **5 min** erreichbar ist (diese Node zählt immer), trägt sich ein – nur mit **Mehrheit** (mehr als die Hälfte der Mitglieder des Bereichs inkl. sich selbst erreichbar); **2 Nodes**: immer erlaubt |
+| Rückgabe | die zuständige Node gibt ab, sobald eine Kandidatin vor ihr seit **5 min** erreichbar ist |
+| Blick | alle 30 s; nach dem Start 1 min Wartezeit |
+| ohne Mehrheit | eigene Hosts laufen weiter; hat der Host eine Ersatz-Node, misst die Node weiter (Verlauf ohne Lücke), meldet aber nicht und öffnet keine Probleme |
+| ohne erreichbare zuständige Node | die anderen zeigen „zuständige Node nicht erreichbar“ (Unbekannt), keine Meldung |
+| ohne Cluster (allein, Bereich aus) | jede Node meldet die Hosts, für die sie bevorzugt ist; übernommene fremde Hosts bleiben stehen (Unbekannt) |
+| Ereignis | jede Übernahme/Rückgabe im Verlauf des Hosts (`takeover`/`handover`, Akteur System, Node-Kennung) |
+
+**Weitermachen statt doppelt melden:** Die zuständige Node führt offene Probleme anderer Nodes weiter (sie gehören dann
+ihr, Quittierung und „gemeldet an“ bleiben). Wird eine Node (wieder) zuständig, übernimmt sie das Gedächtnis der
+Meldungen der Node, die zuletzt gemeldet hat (und deren Laufzeitstand, wenn er jünger ist als der eigene) – kein
+zweites „Problem“, die Entwarnung kommt von ihr. **Doppelt offene Probleme** (Split-Brain mit 2 Nodes) schließt die
+nicht zuständige Node mit `handover` („durch Übergabe beendet“), sobald sie die zuständige erreicht; ist die andere Node
+kein Mitglied mehr, schließt die zuständige.
+
+**Zustand fremder Hosts:** jede Node schickt ihren Zustand je Host bei Änderung, sonst höchstens alle 5 min (`state:`);
+die Übersicht zeigt fremde Hosts mit „überwacht von“ (`HostView.cluster`). Statusseiten und Problem-Historie nutzen
+denselben Stand. Prometheus exportiert nur selbst überwachte Hosts.
+
+**Anfragen zwischen den Nodes** (`POST /peer/v2/call/monitor64/<name>`, signiert wie alle Anfragen; nur mit Bereich auf
+beiden Seiten): `series` (Verlauf live: das Diagramm fragt zuständige, bevorzugte und Ersatz-Nodes sowie Nodes aus
+Übernahmen im Zeitraum und legt die Stücke zusammen, bei Überschneidung gelten die Punkte der bevorzugten Node; nicht
+erreichbare Nodes stehen als Hinweis in `cluster` der Antwort), `repoll` (Trap an eine nicht zuständige Node → Anstoß an
+die zuständige; ist sie offline, fängt die nächste Runde es auf), `reach` (Zugänge eines Hosts von dieser Node aus
+testen, Vorschlag der Ersatz-Nodes; Agents im Push-Betrieb nur von ihrer Node).
+
+**Cluster-Schlüssel:** Gibt es keinen, bringt ihn die Node mit der kleinsten Kennung ein (nach 2 min; eine beigetretene
+Node wartet 10 min, sie soll den des Clusters übernehmen). Übernimmt eine Node einen anderen Schlüssel (Beitritt,
+„Schlüssel wechseln“), behält sie bis zu 3 alte und bietet sie Agents und SSH-Hosts nach dem neuen an, bis ihre Agents
+per Anfrage `keys` umgestellt sind (Hosts, für die sie zuständig oder bevorzugt ist; nicht erreichbare alle 5 min erneut,
+Liste „Schlüssel veraltet“). SSH-Hosts ohne Agent bekommen die neue Zeile für `authorized_keys` und werden von Hand
+bestätigt. Danach sind die alten Schlüssel weg. Achtung: `keys` setzt die ganze Liste des Agents (Schlüssel anderer
+Nodes außerhalb des Clusters fallen weg). Ein Löschvermerk des Schlüssels wird nie übernommen.
+
+**Split-Brain:** wie oben; nach der Wiederverbindung gilt je Eintrag die jüngere Änderung – der `owner:`-Eintrag der
+Mehrheit (die abgehängte Node schreibt keinen), danach die Rückgabe-Regel. Problem-Ereignisse beider Seiten bleiben.
 
 ### Zertifikate: gleiche Einträge und ACME-Konto
 

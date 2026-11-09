@@ -26,3 +26,7 @@
   Erinnerungen gehen nach der Ruhezeit nicht verloren, keine doppelten Meldungen an Standardkanäle,
   ZFS-Gerätefehler an ONLINE-Pools, Proxmox-Cluster-Dienste von einer überwachten Node, hängende VMs auch bei
   „darf aus sein“, Tausendertrenner und Hysterese in der angezeigten Einheit.
+- Phase 4 (Backend): Monitor64 im Cluster (Bereiche „Konfiguration“ und „Zustand“): eine zuständige Node je Host
+  mit bevorzugter und Ersatz-Nodes, Übernahme nach 2 min und Rückgabe nach 5 min stabil, Mehrheitsregel bei
+  getrennten Teilen, gemeinsamer Cluster-Schlüssel (Agents werden automatisch umgestellt, „Schlüssel wechseln“),
+  Gesamtübersicht „überwacht von“, Verlauf live von der überwachenden Node, Traps an die zuständige Node.

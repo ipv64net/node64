@@ -23,6 +23,9 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 	}
 	tags := m.st.SettingOr(ctx, setPromTags, "1") != "0"
 	for _, v := range m.Views() {
+		if v.Cluster != nil && !v.Cluster.Here { // Cluster: Werte liefert die ueberwachende Node
+			continue
+		}
 		h := v.Host
 		base := []string{"host", h.Name, "group", h.Group}
 		if tags && len(h.Tags) > 0 {

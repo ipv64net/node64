@@ -212,6 +212,7 @@ type HostView struct {
 	New      int               `json:"new_services"`
 	Maint    *eval.Window      `json:"maintenance,omitempty"`
 	Errors   map[string]string `json:"errors,omitempty"`
+	Cluster  *ClusterRef       `json:"cluster,omitempty"` // im Cluster: welche Node ueberwacht (cluster_state.go)
 }
 
 // AccessView ist ein Zugang mit Laufzeitstand.
@@ -369,6 +370,12 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	// Datenbank-Schritte mit eigenem Zeitlimit: ein langsamer Zugang darf die Runde nicht abbrechen.
 	dbctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
+	// Cluster: nur die zustaendige Node fragt ab und meldet (cluster_owner.go)
+	role, owner := m.clusterRole(dbctx, rt)
+	if role == roleIdle {
+		m.idleView(rt, owner)
+		return
+	}
 
 	// 1. Zugaenge abfragen
 	type got struct {
@@ -425,7 +432,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	reachable := !hres0.Unreachable && len(found) > 0
 
 	// 2. Dienste erkennen (beim ersten Mal und stuendlich); nie automatisch uebernehmen
-	if reachable && (rt.LastDisc.IsZero() || now.Sub(rt.LastDisc) >= discoverEvery) {
+	if reachable && role == roleReport && (rt.LastDisc.IsZero() || now.Sub(rt.LastDisc) >= discoverEvery) {
 		var offer []model.Service
 		for _, g := range found {
 			if g.svc.Default {
@@ -723,6 +730,19 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		}
 		unreachDetail = strings.Join(errs, "; ")
 	}
+	if role != roleReport { // ohne Mehrheit (Ersatz-Node vorhanden): messen, nicht melden
+		sort.SliceStable(views, func(i, j int) bool { return kindOrder(views[i].Kind) < kindOrder(views[j].Kind) })
+		rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win,
+			Cluster: m.clusterSelfRef(role)})
+		m.notifyMu.Lock()
+		var mem []byte
+		if m.notifier != nil {
+			mem, _ = json.Marshal(m.notifier.Hosts[h.UID])
+		}
+		m.notifyMu.Unlock()
+		m.saveRuntime(dbctx, rt, mem)
+		return
+	}
 	m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
 	round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
 	m.notifyMu.Lock()
@@ -743,7 +763,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 
 	// 5. Stand fuer die Oberflaeche und speichern
 	sort.SliceStable(views, func(i, j int) bool { return kindOrder(views[i].Kind) < kindOrder(views[j].Kind) })
-	rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win})
+	rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win,
+		Cluster: m.clusterSelfRef(role)})
 	m.saveRuntime(dbctx, rt, hostMem)
 }
 

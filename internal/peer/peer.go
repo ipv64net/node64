@@ -133,6 +133,8 @@ type Manager struct {
 
 	nmu    sync.Mutex
 	nonces map[string]time.Time // gesehene Nonces der Anfragen (Wiederholungsschutz, transport.go)
+
+	calls map[string]CallHandler // Anfragen der Module an andere Nodes, "modul/name" (call.go, unter mu)
 }
 
 // New laedt bzw. erzeugt den Schluessel.

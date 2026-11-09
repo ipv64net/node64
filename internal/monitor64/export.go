@@ -109,6 +109,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		return 0, err
 	}
 	seal := module.SecretSealerOf(ctx)
+	known := m.knownNodes(ctx) // vor der Transaktion (liest ueber den Cluster aus derselben Datenbank)
 	tx, err := m.st.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -126,6 +127,9 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			}
 			if t.name == "m64_overrides" && fmt.Sprint(row["scope"]) == "notify" {
 				row["data"] = remapNotifyOverride(ctx, fmt.Sprint(row["data"]))
+			}
+			if t.name == "m64_hosts" {
+				importNodes(row, known) // Nodes ausserhalb dieses Clusters (z. B. Umzug auf neue Hardware): diese Node
 			}
 			if err := upsertRow(ctx, tx, t.name, t.cols, row); err != nil {
 				return n, fmt.Errorf("%s %s: %w", t.name, uid, err)

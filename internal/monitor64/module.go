@@ -108,6 +108,8 @@ type Module struct {
 	series Series
 	load   *loadGen
 	start  time.Time
+
+	cl clusterRT // Cluster (cluster*.go)
 }
 
 // New legt das Modul an (laeuft erst nach Start).
@@ -184,10 +186,14 @@ func (m *Module) Start(ctx context.Context) error {
 	}
 	m.syncPush(ctx)
 	m.traps.start()
-	m.wg.Add(3)
+	m.cl.mu.Lock()
+	m.cl.started, m.cl.roles = m.cl.clock(), nil // nach dem Start: Stand der anderen abholen, Rollen neu bestimmen
+	m.cl.mu.Unlock()
+	m.wg.Add(4)
 	go func() { defer m.wg.Done(); sched.Run(life) }()
 	go func() { defer m.wg.Done(); m.housekeeping(life) }()
 	go func() { defer m.wg.Done(); m.trapLoop(life) }()
+	go func() { defer m.wg.Done(); m.clusterLoop(life) }()
 	m.kickTraps() // Trap-Empfaenger nur, wenn ein SNMP-Zugang Traps nutzt
 
 	if n, _ := strconv.Atoi(os.Getenv(EnvLoadGen)); n > 0 {

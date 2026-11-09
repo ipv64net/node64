@@ -105,6 +105,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/monitor64/push/token", api(m.apiPushToken))
 	mux.Handle("GET /api/monitor64/hosts/{uid}/traps", api(m.apiHostTraps))
 	mux.Handle("POST /api/monitor64/hosts/{uid}/traps/reset", api(m.apiHostTrapsReset))
+	m.clusterRoutes(mux, api) // Cluster (cluster_api.go)
 }
 
 // statusView ist der technische Stand (Planer, Verlauf, Lastgenerator) – unter Einstellungen.

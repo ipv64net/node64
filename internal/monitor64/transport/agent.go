@@ -30,6 +30,9 @@ const AgentUser = "monitor64"
 type AgentConfig struct {
 	Addr   string     // Host oder Host:Port (Standard-Port m64proto.DefaultPort)
 	Signer ssh.Signer // privater Schluessel der Node (Pflicht)
+	// Extra: weitere Schluessel der Node, die nach Signer angeboten werden (Cluster: alter Schluessel, bis der Agent
+	// umgestellt ist)
+	Extra []ssh.Signer
 	// HostKey ist der gemerkte Fingerabdruck ("SHA256:..."); leer = ersten akzeptieren (TOFU) und ueber
 	// OnHostKey bzw. HostKey() zurueckmelden. Abweichend = *HostKeyError (errors.Is ErrHostKeyChanged).
 	HostKey string
@@ -75,7 +78,7 @@ func NewAgentClient(cfg AgentConfig) (*AgentClient, error) {
 	c := &AgentClient{cfg: cfg, conn: newConn(connConfig{
 		addr:        addr,
 		user:        AgentUser,
-		auth:        []ssh.AuthMethod{ssh.PublicKeys(cfg.Signer)},
+		auth:        []ssh.AuthMethod{ssh.PublicKeys(append([]ssh.Signer{cfg.Signer}, cfg.Extra...)...)},
 		hostKey:     cfg.HostKey,
 		onHostKey:   cfg.OnHostKey,
 		dialTimeout: cfg.DialTimeout,

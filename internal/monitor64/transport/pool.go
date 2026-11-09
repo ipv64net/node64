@@ -45,7 +45,7 @@ func NewPool(forget time.Duration) *Pool {
 
 // Agent liefert den Client fuer key (neu angelegt oder ersetzt, wenn sich cfg geaendert hat).
 func (p *Pool) Agent(key string, cfg AgentConfig) (*AgentClient, error) {
-	sig := "agent|" + cfg.Addr + "|" + signerSig(cfg.Signer) + "|" + fmt.Sprint(cfg.DialTimeout, cfg.IdleTimeout)
+	sig := "agent|" + cfg.Addr + "|" + signerSig(cfg.Signer) + extraSig(cfg.Extra) + "|" + fmt.Sprint(cfg.DialTimeout, cfg.IdleTimeout)
 	if cfg.Push != nil {
 		sig += fmt.Sprintf("|push|%p|%s|%s", cfg.Push, cfg.PushToken, cfg.PushWait)
 	}
@@ -77,7 +77,7 @@ func (p *Pool) SSH(key string, cfg SSHConfig) (*SSHClient, error) {
 		h := sha256.Sum256([]byte(cfg.Password))
 		pw = hex.EncodeToString(h[:])
 	}
-	sig := "ssh|" + cfg.Addr + "|" + cfg.User + "|" + signerSig(cfg.Signer) + "|" + pw + "|" +
+	sig := "ssh|" + cfg.Addr + "|" + cfg.User + "|" + signerSig(cfg.Signer) + extraSig(cfg.Extra) + "|" + pw + "|" +
 		fmt.Sprint(cfg.DialTimeout, cfg.IdleTimeout)
 	p.mu.Lock()
 	if p.closed {
@@ -198,6 +198,15 @@ func closeConn(c *conn) {
 // der noch keinen gelernt hat - sonst entsteht ein neuer Client, der beim naechsten Kontakt neu lernt.
 func sameHostKey(c *conn, want string) bool {
 	return NormalizeFingerprint(want) == c.HostKey()
+}
+
+// extraSig: weitere Schluessel (Reihenfolge zaehlt), leer ohne.
+func extraSig(l []ssh.Signer) string {
+	out := ""
+	for _, s := range l {
+		out += "+" + signerSig(s)
+	}
+	return out
 }
 
 func signerSig(s ssh.Signer) string {

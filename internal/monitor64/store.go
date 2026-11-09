@@ -198,9 +198,10 @@ func (s *Store) SaveHost(ctx context.Context, h *Host, by Actor) error {
 			h.UID, h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.OwnerNode, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, h.Notes, now, by.json(), now, by.json())
 		return err
 	}
-	res, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET name = ?, address = ?, kind = ?, group_name = ?, tags = ?, interval_sec = ?, owner_node = ?, preferred_node = ?, backup_nodes = ?, agent_autoupd = ?, paused = ?, notes = ?, updated_at = ?, updated_by = ?
+	// owner_node fuehrt der Cluster (cluster_owner.go), eine Aenderung am Host laesst sie stehen
+	res, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET name = ?, address = ?, kind = ?, group_name = ?, tags = ?, interval_sec = ?, preferred_node = ?, backup_nodes = ?, agent_autoupd = ?, paused = ?, notes = ?, updated_at = ?, updated_by = ?
 		WHERE uid = ? AND deleted = 0`,
-		h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.OwnerNode, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, h.Notes, now, by.json(), h.UID)
+		h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, h.Notes, now, by.json(), h.UID)
 	return affected(res, err)
 }
 

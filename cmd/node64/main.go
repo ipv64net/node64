@@ -50,6 +50,7 @@ import (
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/monitor64"
+	"github.com/ipv64net/node64/internal/monitor64/m64cluster"
 	"github.com/ipv64net/node64/internal/nodecfg"
 	"github.com/ipv64net/node64/internal/nodecfg/nodecluster"
 	"github.com/ipv64net/node64/internal/notify"
@@ -299,8 +300,9 @@ func run() error {
 		portReg.Provide(sonar64.Name, s64Module.Claims)
 		modules.Register(s64Module)
 	}
-	if monitor64.Enabled() { // Monitor64 bis zur Freigabe nur mit NODE64_MONITOR64=1 (Plan: Veroeffentlichung)
-		m64Module := monitor64.New(st, logger.Slog(), box, cfg.DataDir, Version)
+	var m64Module *monitor64.Module // Cluster: Anmeldung unten beim peer-Manager
+	if monitor64.Enabled() {        // Monitor64 bis zur Freigabe nur mit NODE64_MONITOR64=1 (Plan: Veroeffentlichung)
+		m64Module = monitor64.New(st, logger.Slog(), box, cfg.DataDir, Version)
 		m64Module.SetNotifier(dispatcher.Dispatch)
 		m64Module.SetQuiet(dispatcher.InQuietHours)
 		modules.Register(m64Module)
@@ -393,6 +395,9 @@ func run() error {
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
 	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
 	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster
+	if m64Module != nil {
+		m64cluster.Register(peerMgr, m64Module, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Monitor64 ueber den Cluster
+	}
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

@@ -25,3 +25,7 @@
 - Code review fixes: intentionally missing values (stopped VM, sleeping disk) stay OK, reminders are not lost after
   quiet hours, no duplicate messages to default channels, ZFS device errors on ONLINE pools, Proxmox cluster services
   evaluated by a monitored node, hung VMs even when allowed to be off, thousands separator and hysteresis in the shown unit.
+- Phase 4 (backend): Monitor64 in the cluster (areas "configuration" and "status"): one responsible node per host with
+  preferred and backup nodes, takeover after 2 min and handback after 5 min stable, majority rule for separated parts,
+  shared cluster key (agents are switched automatically, "change key"), overall view "monitored by", history live from
+  the monitoring node, traps forwarded to the responsible node.
