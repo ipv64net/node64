@@ -3,14 +3,23 @@
 package m64agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
+)
+
+// "#!"-Zeile wie binfmt_script unter Linux: hoechstens 256 Byte, Interpreter bis 4 Ebenen verschachtelt.
+const (
+	shebangMax   = 256
+	shebangDepth = 4
 )
 
 // checkDir: Ordner (Symlinks aufgeloest) gehoert root und ist nicht fuer Gruppe/andere schreibbar, ebenso alle
@@ -49,8 +58,13 @@ func checkScript(path string) (string, error) {
 
 // openScript oeffnet ein Skript (aufgeloester Pfad) ohne einem Symlink zu folgen und prueft den geoeffneten
 // Deskriptor: regulaere Datei, gehoert root, nicht fuer Gruppe/andere schreibbar, ausfuehrbar; alle Vorfahren
-// gehoeren root und sind nicht fuer Gruppe/andere schreibbar. Ausgefuehrt wird dann genau diese Datei (scriptCmd).
+// gehoeren root und sind nicht fuer Gruppe/andere schreibbar. Dasselbe gilt fuer den Interpreter aus der "#!"-Zeile
+// (checkShebang). Ausgefuehrt wird dann genau diese Datei (scriptCmd).
 func openScript(real string) (*os.File, error) {
+	return openExec(real, 0)
+}
+
+func openExec(real string, depth int) (*os.File, error) {
 	if err := checkAncestors(real); err != nil {
 		return nil, err
 	}
@@ -69,11 +83,144 @@ func openScript(real string) (*os.File, error) {
 			err = checkOwner(fi)
 		}
 	}
+	if err == nil {
+		err = checkShebang(f, depth)
+	}
 	if err != nil {
 		_ = f.Close()
 		return nil, err
 	}
 	return f, nil
+}
+
+// checkShebang prueft den Interpreter aus der "#!"-Zeile der geoeffneten Datei wie das Skript selbst (sonst liefe
+// z. B. "#!/home/dienst/venv/bin/python" als root mit einer Datei, die der Dienstbenutzer aendern kann):
+// absoluter Pfad, aufgeloest, root-eigen, nicht fuer Gruppe/andere schreibbar, samt Vorfahren. "/usr/bin/env name"
+// nur mit einem Namen ohne Optionen, der im PATH der Skripte auf einen ebenso geprueften Pfad fuehrt (alle Ordner
+// davor muessen ebenfalls sicher sein, sonst koennte dort jemand eine Datei unterschieben). Ein weiteres Argument
+// mit absolutem Pfad muss ebenfalls root gehoeren.
+func checkShebang(f *os.File, depth int) error {
+	buf := make([]byte, shebangMax)
+	n, err := f.ReadAt(buf, 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	buf = buf[:n]
+	if !bytes.HasPrefix(buf, []byte("#!")) {
+		return nil
+	}
+	if depth >= shebangDepth {
+		return errors.New("interpreter nested too deeply")
+	}
+	line := buf[2:]
+	if i := bytes.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	} else if n == shebangMax {
+		return errors.New("#! line too long")
+	}
+	// wie der Kern: Interpreter bis zum ersten Leerzeichen/Tab, der Rest ist ein einziges Argument
+	interp, arg := strings.Trim(string(line), " \t"), ""
+	if i := strings.IndexAny(interp, " \t"); i >= 0 {
+		interp, arg = interp[:i], strings.Trim(interp[i+1:], " \t")
+	}
+	if interp == "" {
+		return errors.New("#! line without interpreter")
+	}
+	if !filepath.IsAbs(interp) {
+		return fmt.Errorf("interpreter %s: path must be absolute", interp)
+	}
+	real, err := checkInterp(interp, depth)
+	if err != nil {
+		return fmt.Errorf("interpreter %s: %w", interp, err)
+	}
+	if filepath.Base(interp) == "env" || filepath.Base(real) == "env" {
+		if err := checkEnvCommand(arg, depth); err != nil {
+			return fmt.Errorf("interpreter %s %s: %w", interp, arg, err)
+		}
+		return nil
+	}
+	if filepath.IsAbs(arg) {
+		r, err := resolve(arg)
+		if err == nil {
+			err = checkAncestors(r)
+		}
+		if err == nil {
+			var fi os.FileInfo
+			if fi, err = os.Stat(r); err == nil {
+				err = checkOwner(fi)
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("interpreter argument %s: %w", arg, err)
+		}
+	}
+	return nil
+}
+
+// checkInterp prueft einen Interpreter (Symlinks aufgeloest, wie das Skript, auch dessen "#!"-Zeile).
+func checkInterp(p string, depth int) (string, error) {
+	real, err := resolve(p)
+	if err != nil {
+		return "", err
+	}
+	f, err := openExec(real, depth+1)
+	if err != nil {
+		return "", err
+	}
+	_ = f.Close()
+	return real, nil
+}
+
+// checkEnvCommand prueft das Programm hinter "#!/usr/bin/env": genau ein Name ohne Optionen; mit "/" ein absoluter
+// Pfad, sonst die erste ausfuehrbare Datei im PATH der Skripte (wie env sie findet).
+func checkEnvCommand(cmd string, depth int) error {
+	const hint = " - use the full interpreter path"
+	switch {
+	case cmd == "":
+		return errors.New("no command" + hint)
+	case strings.HasPrefix(cmd, "-") || strings.ContainsAny(cmd, " \t="):
+		return errors.New("options or several arguments not supported" + hint)
+	case strings.Contains(cmd, "/"):
+		if !filepath.IsAbs(cmd) {
+			return errors.New("relative path not supported" + hint)
+		}
+		_, err := checkInterp(cmd, depth)
+		return err
+	}
+	for _, d := range filepath.SplitList(localPATH) {
+		if err := checkPathDir(d); err != nil {
+			return fmt.Errorf("PATH directory %s: %w%s", d, err, hint)
+		}
+		c := filepath.Join(d, cmd)
+		fi, err := os.Stat(c)
+		if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm()&0o111 == 0 {
+			continue
+		}
+		if _, err := checkInterp(c, depth); err != nil {
+			return fmt.Errorf("%s: %w", c, err)
+		}
+		return nil
+	}
+	return errors.New("not found in PATH" + hint)
+}
+
+// checkPathDir: ein Ordner aus dem PATH ist sicher (wie checkDir); fehlt er, muss der naechste vorhandene Vorfahr
+// sicher sein (sonst koennte ihn jemand anlegen und ein Programm unterschieben).
+func checkPathDir(d string) error {
+	for {
+		_, err := os.Lstat(d)
+		if err == nil {
+			return checkDir(d)
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return err
+		}
+		d = parent
+	}
 }
 
 // resolve liefert den absoluten Pfad ohne Symlinks.
@@ -152,10 +299,13 @@ func prepareCmd(cmd *exec.Cmd) {
 	}
 }
 
+// localPATH ist der PATH der eigenen Skripte (auch fuer "#!/usr/bin/env name", checkEnvCommand).
+const localPATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 // localEnv: schlanke Umgebung fuer eigene Skripte (keine Variablen des Agents).
 func localEnv() []string {
 	return []string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"PATH=" + localPATH,
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
 		"HOME=" + localHome,

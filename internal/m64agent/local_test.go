@@ -416,3 +416,112 @@ func TestLocalSecurity(t *testing.T) {
 		t.Fatalf("ran %q (err %v), want the checked file", out, err)
 	}
 }
+
+// S1-K7: der Interpreter aus der "#!"-Zeile wird geprueft wie das Skript (z. B. venv eines Dienstbenutzers);
+// "/usr/bin/env name" nur, wenn der Name im PATH auf einen sicheren Pfad fuehrt.
+func TestLocalInterpreter(t *testing.T) {
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		t.Skip("needs root on linux")
+	}
+	shReal, err := filepath.EvalSymlinks("/bin/sh")
+	if err != nil {
+		t.Skip("no /bin/sh")
+	}
+	shBin, err := os.ReadFile(shReal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat("/usr/bin/env"); err != nil {
+		t.Skip("no /usr/bin/env")
+	}
+	base := t.TempDir()
+	_ = os.Chmod(base, 0o755)
+	mkdir := func(name string, uid int) string {
+		d := filepath.Join(base, name)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chown(d, uid, uid); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	write := func(p string, data []byte, mode os.FileMode, uid int) {
+		if err := os.WriteFile(p, data, mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chown(p, uid, uid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	local := mkdir("local.d", 0)
+	venv := mkdir("venv", 1000) // gehoert dem Dienstbenutzer
+	tools := mkdir("tools", 0)
+	write(filepath.Join(venv, "sh"), shBin, 0o755, 1000)
+	write(filepath.Join(tools, "sh"), shBin, 0o755, 0)
+	write(filepath.Join(tools, "gw-sh"), shBin, 0o775, 0) // fuer die Gruppe schreibbar
+	if err := os.Symlink(filepath.Join(venv, "sh"), filepath.Join(tools, "link-sh")); err != nil {
+		t.Fatal(err)
+	}
+	// verschachtelt: root-eigener Wrapper, dessen Interpreter dem Dienstbenutzer gehoert
+	write(filepath.Join(tools, "wrap"), []byte("#!"+filepath.Join(venv, "sh")+"\n"), 0o755, 0)
+	write(filepath.Join(tools, "wrap-ok"), []byte("#!/bin/sh\nexec /bin/sh \"$@\"\n"), 0o755, 0)
+
+	scripts := map[string]string{
+		"venv.sh":     "#!" + filepath.Join(venv, "sh"),
+		"link.sh":     "#!" + filepath.Join(tools, "link-sh"),
+		"gw.sh":       "#!" + filepath.Join(tools, "gw-sh"),
+		"nested.sh":   "#!" + filepath.Join(tools, "wrap"),
+		"relative.sh": "#!sh",
+		"envopt.sh":   "#!/usr/bin/env -S sh -e",
+		"envvenv.sh":  "#!/usr/bin/env " + filepath.Join(venv, "sh"),
+		"envnone.sh":  "#!/usr/bin/env no-such-interpreter-m64",
+		"argvenv.sh":  "#! " + filepath.Join(tools, "sh") + " " + filepath.Join(venv, "sh"),
+		"tools.sh":    "#! " + filepath.Join(tools, "sh"),
+		"env.sh":      "#!/usr/bin/env sh",
+		"wrapok.sh":   "#!" + filepath.Join(tools, "wrap-ok"),
+		"plain.sh":    "#!/bin/sh",
+	}
+	for name, first := range scripts {
+		body := first + "\necho '0 " + strings.TrimSuffix(name, ".sh") + " - ran'\n"
+		write(filepath.Join(local, name), []byte(body), 0o755, 0)
+	}
+	r := newLocalRunner(local)
+	defer r.close()
+	rep := &m64proto.Report{}
+	r.run(context.Background(), rep)
+	ran := map[string]bool{}
+	for _, c := range rep.Local {
+		ran[c.Name] = true
+	}
+	notes := ""
+	for _, n := range rep.Notes {
+		notes += n.Note + "\n"
+	}
+	for _, ok := range []string{"tools", "env", "wrapok", "plain"} {
+		if !ran[ok] {
+			t.Errorf("%s did not run:\n%s", ok, notes)
+		}
+	}
+	for name, want := range map[string]string{
+		"venv":     "venv.sh ignored: interpreter " + filepath.Join(venv, "sh") + ": " + venv + " not owned by root",
+		"link":     "link.sh ignored: interpreter " + filepath.Join(tools, "link-sh") + ": " + venv + " not owned by root",
+		"gw":       "gw.sh ignored: interpreter " + filepath.Join(tools, "gw-sh") + ": writable by group or others",
+		"nested":   "nested.sh ignored: interpreter " + filepath.Join(tools, "wrap") + ": interpreter " + filepath.Join(venv, "sh"),
+		"relative": "relative.sh ignored: interpreter sh: path must be absolute",
+		"envopt":   "envopt.sh ignored: interpreter /usr/bin/env -S sh -e: options or several arguments not supported - use the full interpreter path",
+		"envvenv":  "envvenv.sh ignored: interpreter /usr/bin/env " + filepath.Join(venv, "sh") + ": " + venv + " not owned by root",
+		"envnone":  "envnone.sh ignored: interpreter /usr/bin/env no-such-interpreter-m64: not found in PATH",
+		"argvenv":  "argvenv.sh ignored: interpreter argument " + filepath.Join(venv, "sh") + ": " + venv + " not owned by root",
+	} {
+		if ran[name] {
+			t.Errorf("%s ran with an unsafe interpreter", name)
+		}
+		if !strings.Contains(notes, want) {
+			t.Errorf("note %q missing in:\n%s", want, notes)
+		}
+	}
+}

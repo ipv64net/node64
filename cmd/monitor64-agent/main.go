@@ -120,7 +120,32 @@ func parseRunFlags(args []string, errOut io.Writer) (runFlags, error) {
 	return f, nil
 }
 
-func run(args []string) int {
+// restartFn ersetzt den Prozess durch die Programmdatei (Tests setzen einen Ersatz).
+var restartFn = restartSelf
+
+func run(args []string) int { return runAgent(selfPath(), args) }
+
+func runAgent(exe string, args []string) int {
+	// Rueckfall nach einem Update: kam die neue Version beim letzten Start nicht hoch, laeuft wieder die alte. Das
+	// steht vor allem anderen (Flags, Release-Schluessel, Hostschluessel, Port): scheitert die neue Version schon
+	// daran, ist ihr Start trotzdem gezaehlt und der naechste Start faellt zurueck.
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	pending := false
+	if exe != "" {
+		var rolledBack bool
+		var err error
+		pending, rolledBack, err = m64agent.UpdateStart(exe, Version)
+		if err != nil {
+			log.Warn("monitor64-agent: update check", "err", err)
+		}
+		if rolledBack {
+			log.Warn("monitor64-agent: new version did not start properly - previous version restored", "failed", Version)
+			if err := restartFn(exe); err != nil {
+				log.Error("monitor64-agent: restart", "err", err)
+				return 1
+			}
+		}
+	}
 	f, err := parseRunFlags(args, os.Stderr)
 	if err != nil {
 		return 2
@@ -128,32 +153,13 @@ func run(args []string) int {
 	if os.Getenv("GOMEMLIMIT") == "" {
 		debug.SetMemoryLimit(memLimit)
 	}
-	lvl := slog.LevelInfo
 	if f.debug {
-		lvl = slog.LevelDebug
+		log = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 	relKeys, err := m64agent.ParseReleaseKeys(ReleaseKeys)
 	if err != nil {
 		log.Error("monitor64-agent: built-in release keys invalid", "err", err)
 		return 1
-	}
-	// Rueckfall nach einem Update: kam die neue Version beim letzten Start nicht hoch, laeuft wieder die alte.
-	exe := selfPath()
-	pending := false
-	if exe != "" {
-		var rolledBack bool
-		pending, rolledBack, err = m64agent.UpdateStart(exe, Version)
-		if err != nil {
-			log.Warn("monitor64-agent: update check", "err", err)
-		}
-		if rolledBack {
-			log.Warn("monitor64-agent: new version did not start properly - previous version restored", "failed", Version)
-			if err := restartSelf(exe); err != nil {
-				log.Error("monitor64-agent: restart", "err", err)
-				return 1
-			}
-		}
 	}
 	hk, err := m64agent.LoadOrCreateHostKey(f.hostKey)
 	if err != nil {
@@ -194,7 +200,7 @@ func run(args []string) int {
 	var confirm *time.Timer
 	if pending {
 		confirm = time.AfterFunc(m64agent.HealthyAfter, func() {
-			m64agent.ConfirmUpdate(exe)
+			m64agent.ConfirmUpdate(exe, Version)
 			log.Info("monitor64-agent: update confirmed", "version", Version)
 		})
 	}
@@ -210,9 +216,14 @@ func run(args []string) int {
 		log.Info("monitor64-agent: stopping")
 		// Sauber beendet (nicht abgestuerzt): eine neue Version gilt damit als gestartet.
 		if confirm != nil && confirm.Stop() {
-			m64agent.ConfirmUpdate(exe)
+			m64agent.ConfirmUpdate(exe, Version)
 		}
 	case v := <-updated:
+		// Bestaetigung dieser (noch unbestaetigten) Version anhalten: der Merker gehoert jetzt der neuen Version
+		// (ConfirmUpdate prueft zusaetzlich die Zielversion, falls der Timer schon laeuft).
+		if confirm != nil {
+			confirm.Stop()
+		}
 		// Antwort ist geschrieben; kurz warten, dann die neue Datei im selben Prozess starten (geht auch ohne
 		// systemd; mit systemd bleibt Restart=always als Netz).
 		log.Info("monitor64-agent: restarting after update", "version", v)
@@ -232,14 +243,14 @@ func run(args []string) int {
 	}
 	if restart != "" && exe != "" {
 		_ = ln.Close()
-		err := restartSelf(exe)
+		err := restartFn(exe)
 		// Exec fehlgeschlagen: alte Datei zurueck und diese starten; geht auch das nicht, beenden (systemd startet neu).
 		log.Error("monitor64-agent: starting the new version failed - restoring the previous one", "err", err)
 		if rerr := m64agent.RollbackUpdate(exe, restart); rerr != nil {
 			log.Error("monitor64-agent: rollback", "err", rerr)
 			return 1
 		}
-		if err := restartSelf(exe); err != nil {
+		if err := restartFn(exe); err != nil {
 			log.Error("monitor64-agent: restart", "err", err)
 			return 1
 		}

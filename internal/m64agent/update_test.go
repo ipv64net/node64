@@ -177,7 +177,7 @@ func TestUpdateFallback(t *testing.T) {
 	if pending, _, _ := UpdateStart(exe, "2.0.1"); !pending {
 		t.Fatal("pending expected")
 	}
-	ConfirmUpdate(exe)
+	ConfirmUpdate(exe, "2.0.1")
 	if pending, rolled, _ := UpdateStart(exe, "2.0.1"); pending || rolled {
 		t.Fatal("confirmed update rolled back")
 	}
@@ -190,6 +190,79 @@ func TestUpdateFallback(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(exe); string(b) != "new" {
 		t.Fatalf("exe = %q", b)
+	}
+}
+
+// S1-K4: Schreibweise der Version ("v1.3.0" / "1.3.0") darf den Rueckfall nicht ausschalten, auch nicht fuer die
+// Sperre einer gescheiterten Version.
+func TestUpdateFallbackVersionSpelling(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "monitor64-agent")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("new")
+	h := signedUpdate(priv, "v1.3.0", runtime.GOOS, runtime.GOARCH, body)
+	if err := applyUpdate(bytes.NewReader(body), h, exe); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteUpdateMarker(exe, "1.2.0", "v1.3.0"); err != nil {
+		t.Fatal(err)
+	}
+	if pending, rolled, err := UpdateStart(exe, "1.3.0"); !pending || rolled || err != nil {
+		t.Fatalf("first start: pending %v rolled %v err %v", pending, rolled, err)
+	}
+	if pending, rolled, err := UpdateStart(exe, "1.3.0+build7"); pending || !rolled || err != nil {
+		t.Fatalf("second start: pending %v rolled %v err %v", pending, rolled, err)
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "old" {
+		t.Fatalf("exe after rollback = %q", b)
+	}
+	// gescheiterte Version wird auch in der anderen Schreibweise nicht erneut angenommen
+	h2 := signedUpdate(priv, "v1.3.0", runtime.GOOS, runtime.GOARCH, body)
+	if err := applyUpdate(bytes.NewReader(body), h2, exe); err == nil || !strings.Contains(err.Error(), "did not start") {
+		t.Fatalf("failed version accepted again: %v", err)
+	}
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"v1.3.0", "1.3.0", true}, {"1.3.0\n", "1.3.0", true}, {"1.3.0+x", "v1.3.0", true}, {"1.3.0-rc.1", "1.3.0", false},
+		{"dev", "vdev", true}, {"1.3.1", "1.3.0", false}} {
+		if got := sameVersion(c.a, c.b); got != c.want {
+			t.Errorf("sameVersion(%q, %q) = %v", c.a, c.b, got)
+		}
+	}
+}
+
+// S1-K6: der Bestaetigungs-Timer der laufenden (unbestaetigten) Version loescht den Merker eines weiteren Updates
+// nicht.
+func TestConfirmUpdateKeepsNewerMarker(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "monitor64-agent")
+	if err := os.WriteFile(exe, []byte("c"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteUpdateMarker(exe, "2.0.0", "2.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	ConfirmUpdate(exe, "2.0.0")
+	if _, err := os.Stat(exe + markerSuffix); err != nil {
+		t.Fatal("marker of the next update removed by the old version")
+	}
+	if pending, _, _ := UpdateStart(exe, "2.1.0"); !pending {
+		t.Fatal("next version not pending")
+	}
+	ConfirmUpdate(exe, "v2.1.0")
+	if _, err := os.Stat(exe + markerSuffix); !os.IsNotExist(err) {
+		t.Fatal("own marker not removed")
+	}
+	// kaputter Merker wird weggeraeumt
+	if err := os.WriteFile(exe+markerSuffix, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ConfirmUpdate(exe, "2.1.0")
+	if _, err := os.Stat(exe + markerSuffix); !os.IsNotExist(err) {
+		t.Fatal("broken marker left")
 	}
 }
 

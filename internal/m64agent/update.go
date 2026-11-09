@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ipv64net/node64/internal/m64proto"
@@ -113,7 +114,7 @@ func checkUpdateHeader(h m64proto.UpdateHeader, current string, keys []ed25519.P
 // applyUpdate liest genau h.Size Byte, prueft SHA256 und ersetzt exe atomar (neue Datei daneben, dann umbenennen).
 // Die bisherige Datei bleibt als <exe>.old fuer den Rueckfall. Bei jedem Fehler bleibt die alte Datei unveraendert.
 func applyUpdate(r io.Reader, h m64proto.UpdateHeader, exe string) error {
-	if b, err := os.ReadFile(exe + failedSuffix); err == nil && strings.TrimSpace(string(b)) == h.Version {
+	if b, err := os.ReadFile(exe + failedSuffix); err == nil && sameVersion(string(b), h.Version) {
 		return fmt.Errorf("version %s did not start on this host before - refused", h.Version)
 	}
 	dir := filepath.Dir(exe)
@@ -197,42 +198,68 @@ type updateMarker struct {
 	Starts int    `json:"starts"` // Starts der neuen Version ohne Bestaetigung
 }
 
+// markerMu schuetzt den Merker innerhalb des Prozesses: der Bestaetigungs-Timer der laufenden Version darf den
+// Merker eines gerade eingespielten weiteren Updates nicht zwischen Lesen und Loeschen erwischen.
+var markerMu sync.Mutex
+
 // WriteUpdateMarker merkt ein Update von from nach to (vor dem Neustart).
 func WriteUpdateMarker(exe, from, to string) error {
+	markerMu.Lock()
+	defer markerMu.Unlock()
 	b, _ := json.Marshal(updateMarker{From: from, To: to})
 	return writeFileAtomic(exe+markerSuffix, b, 0o600)
+}
+
+// readMarker liest den Merker (ok=false: kaputt).
+func readMarker(mp string) (updateMarker, bool, error) {
+	var m updateMarker
+	b, err := os.ReadFile(mp)
+	if err != nil {
+		return m, false, err
+	}
+	return m, json.Unmarshal(b, &m) == nil, nil
 }
 
 // UpdateStart wertet beim Start den Merker aus. Erster Start der neuen Version: zaehlt den Start und liefert
 // pending (der Aufrufer ruft nach HealthyAfter ConfirmUpdate). Weiterer Start ohne Bestaetigung (die neue Version ist
 // abgestuerzt oder kam nicht hoch): alte Datei zurueck, die Version wird kuenftig abgelehnt, rolledBack (der Aufrufer
-// startet die alte Datei).
+// startet die alte Datei). Der Aufrufer ruft UpdateStart als Erstes beim Start auf, vor allem, was scheitern kann
+// (Flags, Schluessel, Port) - sonst greift der Rueckfall nicht, wenn die neue Version schon daran scheitert.
+// Versionen werden unabhaengig von der Schreibweise verglichen ("v1.3.0" = "1.3.0").
 func UpdateStart(exe, version string) (pending, rolledBack bool, err error) {
+	markerMu.Lock()
 	mp := exe + markerSuffix
-	b, err := os.ReadFile(mp)
+	m, ok, err := readMarker(mp)
 	if errors.Is(err, os.ErrNotExist) {
+		markerMu.Unlock()
 		return false, false, nil
 	}
 	if err != nil {
+		markerMu.Unlock()
 		return false, false, err
 	}
-	var m updateMarker
-	if json.Unmarshal(b, &m) != nil || m.To != version {
+	if !ok || !sameVersion(m.To, version) {
 		// kaputt oder fremd (z. B. Datei von Hand ersetzt): nichts tun
 		_ = os.Remove(mp)
+		markerMu.Unlock()
 		return false, false, nil
 	}
 	if m.Starts == 0 {
 		m.Starts++
-		b, _ = json.Marshal(m)
-		return true, false, writeFileAtomic(mp, b, 0o600)
+		b, _ := json.Marshal(m)
+		err = writeFileAtomic(mp, b, 0o600)
+		markerMu.Unlock()
+		return true, false, err
 	}
+	markerMu.Unlock()
 	return false, true, RollbackUpdate(exe, version)
 }
 
 // RollbackUpdate setzt die vorherige Version wieder ein und merkt die fehlgeschlagene (wird nicht erneut angenommen).
 func RollbackUpdate(exe, failed string) error {
+	markerMu.Lock()
 	_ = os.Remove(exe + markerSuffix)
+	markerMu.Unlock()
 	if err := restoreOld(exe); err != nil {
 		return fmt.Errorf("restore previous version: %w", err)
 	}
@@ -240,9 +267,30 @@ func RollbackUpdate(exe, failed string) error {
 	return nil
 }
 
-// ConfirmUpdate: die neue Version laeuft (Merker weg, <exe>.old bleibt fuer den Notfall).
-func ConfirmUpdate(exe string) {
-	_ = os.Remove(exe + markerSuffix)
+// ConfirmUpdate: die laufende Version (version) laeuft gesund - ihr Merker kommt weg, <exe>.old bleibt fuer den
+// Notfall. Gehoert der Merker schon zu einem weiteren Update (andere Zielversion), bleibt er stehen: sonst haette die
+// naechste Version keinen Rueckfall.
+func ConfirmUpdate(exe, version string) {
+	markerMu.Lock()
+	defer markerMu.Unlock()
+	mp := exe + markerSuffix
+	m, ok, err := readMarker(mp)
+	if err != nil || (ok && !sameVersion(m.To, version)) {
+		return
+	}
+	_ = os.Remove(mp)
+}
+
+// sameVersion vergleicht Versionen unabhaengig von der Schreibweise ("v1.3.0" = "1.3.0", Build-Angabe nach "+"
+// zaehlt nicht); keine SemVer: Text ohne fuehrendes "v".
+func sameVersion(a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	va, oka := parseSemver(a)
+	vb, okb := parseSemver(b)
+	if oka && okb {
+		return compareSemver(va, vb) == 0
+	}
+	return strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
 }
 
 // semver ist eine Version MAJOR.MINOR.PATCH[-pre] (Build-Angaben nach "+" zaehlen nicht).

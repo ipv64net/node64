@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -245,31 +246,202 @@ func TestSilentConnections(t *testing.T) {
 	_ = ca.Close()
 }
 
+// closer merkt, ob die Verbindung geschlossen wurde.
+type closer struct{ closed bool }
+
+func (c *closer) Close() error { c.closed = true; return nil }
+
+func testPeer(s string) peer { return peerOf(&net.TCPAddr{IP: net.ParseIP(s), Port: 1}) }
+
 func TestPreAuthGate(t *testing.T) {
 	var g preAuthGate
-	for range preAuthPerIP {
-		if !g.acquire("a", false) {
-			t.Fatal("per-IP slot refused too early")
+	now := time.Now()
+	a := testPeer("192.0.2.1")
+	var held []*preAuthSlot
+	for range preAuthPerNet {
+		sl := g.acquire(a, false, nil, now)
+		if sl == nil {
+			t.Fatal("per-net slot refused too early")
 		}
+		held = append(held, sl)
 	}
-	if g.acquire("a", false) || g.acquire("a", true) {
-		t.Fatal("per-IP limit not applied")
+	if g.acquire(a, false, nil, now) != nil {
+		t.Fatal("per-net limit not applied")
 	}
-	for i := preAuthPerIP; i < preAuthMax; i++ {
-		if !g.acquire(string(rune('b'+i)), false) {
+	for i := preAuthPerNet; i < preAuthMax; i++ {
+		if g.acquire(testPeer("198.51.100."+strconv.Itoa(i)), false, nil, now) == nil {
 			t.Fatal("global slot refused too early")
 		}
 	}
-	if g.acquire("z", false) {
+	if g.acquire(testPeer("203.0.113.1"), false, nil, now) != nil {
 		t.Fatal("global limit not applied")
 	}
-	if !g.acquire("known", true) {
+	k := g.acquire(testPeer("203.0.113.9"), true, nil, now)
+	if k == nil {
 		t.Fatal("known address must bypass the global limit")
 	}
-	g.release("known")
-	g.release("a")
-	if !g.acquire("a", false) {
+	g.release(k)
+	g.release(held[0])
+	g.release(held[0]) // doppelt freigeben zaehlt nicht doppelt
+	if g.acquire(a, false, nil, now) == nil {
 		t.Fatal("release did not free the slot")
+	}
+	if g.acquire(a, false, nil, now) != nil || g.total != preAuthMax {
+		t.Fatalf("double release freed two slots (total %d)", g.total)
+	}
+}
+
+// S1-K1: bekannte Adresse (NAT, Nachbar im /64) hat einen eigenen, groesseren Topf; ist er voll, wird ein Platz
+// geraeumt, dessen Handshake schon zu lange laeuft - frische Plaetze nicht.
+func TestPreAuthGateKnown(t *testing.T) {
+	g := preAuthGate{evictAge: time.Second}
+	now := time.Now()
+	node := testPeer("2001:db8:1:2::1")
+	// Nachbar im selben /64 fuellt den Topf fuer unbekannte Adressen
+	for i := range preAuthPerNet {
+		if g.acquire(testPeer("2001:db8:1:2::"+strconv.Itoa(100+i)), false, nil, now) == nil {
+			t.Fatal("setup")
+		}
+	}
+	if g.acquire(testPeer("2001:db8:1:2::200"), false, nil, now) != nil {
+		t.Fatal("per-/64 limit not applied")
+	}
+	// die bekannte Adresse kommt trotzdem an, mehr als preAuthPerNet Mal
+	var cs []*closer
+	for range preAuthPerKnown {
+		c := &closer{}
+		if g.acquire(node, true, c, now) == nil {
+			t.Fatal("known address refused although its pot has room")
+		}
+		cs = append(cs, c)
+	}
+	// Topf voll, alle Plaetze frisch: abgewiesen, nichts geschlossen
+	if g.acquire(node, true, &closer{}, now.Add(500*time.Millisecond)) != nil || cs[0].closed {
+		t.Fatal("fresh slot evicted")
+	}
+	// aeltester Platz laeuft zu lange: wird geraeumt (Verbindung zu), neuer Platz frei
+	sl := g.acquire(node, true, &closer{}, now.Add(1500*time.Millisecond))
+	if sl == nil || !cs[0].closed || cs[1].closed {
+		t.Fatalf("eviction: slot %v closed %v/%v", sl != nil, cs[0].closed, cs[1].closed)
+	}
+	if len(g.known[node.ip]) != preAuthPerKnown || g.knownTotal != preAuthPerKnown {
+		t.Fatalf("known pot: %d/%d", len(g.known[node.ip]), g.knownTotal)
+	}
+	g.release(sl)
+	if g.knownTotal != preAuthPerKnown-1 {
+		t.Fatalf("release: %d", g.knownTotal)
+	}
+}
+
+// S1-K2: viele /64 aus einem /48 belegen nicht alle Plaetze.
+func TestPreAuthGateGroup(t *testing.T) {
+	var g preAuthGate
+	now := time.Now()
+	n := 0
+	for i := range 10 {
+		if g.acquire(testPeer("2001:db8:1:"+strconv.Itoa(i)+"::1"), false, nil, now) != nil {
+			n++
+		}
+	}
+	if n != preAuthPerGroup {
+		t.Fatalf("one /48 got %d slots, want %d", n, preAuthPerGroup)
+	}
+	if g.acquire(testPeer("2001:db8:2::1"), false, nil, now) == nil {
+		t.Fatal("other /48 refused")
+	}
+}
+
+// S1-K1: eine Node hinter derselben Adresse wie stille Verbindungen eines Nachbarn kommt an (deren Plaetze werden
+// geraeumt), stille Verbindungen einer bekannten Adresse zaehlen nicht als Fehlversuch.
+func TestKnownAddressNotLockedOut(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(dir, "keys")
+	sa, la := testSigner(t)
+	if err := WriteKeysFile(keys, []byte(la+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	s, addr := startServer(t, Config{KeysFile: keys, HandshakeTimeout: 5 * time.Second},
+		func(s *Server) { s.gate.evictAge = 200 * time.Millisecond })
+	ca, err := dialAgent(addr, sa, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = ca.Close()
+	// Nachbar hinter derselben Adresse belegt alle Plaetze der bekannten Adresse mit stillen Verbindungen
+	var open []net.Conn
+	defer func() {
+		for _, c := range open {
+			_ = c.Close()
+		}
+	}()
+	for range preAuthPerKnown {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		open = append(open, c)
+	}
+	time.Sleep(400 * time.Millisecond)
+	ca, err = dialAgent(addr, sa, nil)
+	if err != nil {
+		t.Fatalf("known node locked out by silent connections from its address: %v", err)
+	}
+	if _, err := runAgent(ca, "info", nil); err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	_ = ca.Close()
+	if s.lim.blocked("127.0.0.1", time.Now()) {
+		t.Fatal("known address blocked")
+	}
+}
+
+// S1-K2: Abweisungen wegen voller Plaetze zaehlen nicht als Fehlversuch - eine neue Node wird nicht gesperrt,
+// waehrend Angreifer die Plaetze belegen, und kommt an, sobald einer frei ist.
+func TestFullGateNoFailure(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(dir, "keys")
+	sa, la := testSigner(t)
+	if err := WriteKeysFile(keys, []byte(la+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	s, addr := startServer(t, Config{KeysFile: keys, HandshakeTimeout: 5 * time.Second}, nil)
+	var open []net.Conn
+	defer func() {
+		for _, c := range open {
+			_ = c.Close()
+		}
+	}()
+	for i := range preAuthMax {
+		d := net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP("127.0.3." + strconv.Itoa(i+1))}, Timeout: 2 * time.Second}
+		c, err := d.Dial("tcp", addr)
+		if err != nil {
+			t.Skipf("dial from 127.0.3.%d: %v", i+1, err)
+		}
+		open = append(open, c)
+	}
+	time.Sleep(100 * time.Millisecond)
+	node := &net.TCPAddr{IP: net.ParseIP("127.0.4.1")}
+	for range 2 * failFree {
+		if c, err := dialAgent(addr, sa, node); err == nil {
+			_ = c.Close()
+			t.Fatal("got a slot beyond the pre-auth limit")
+		}
+	}
+	if s.lim.blocked("127.0.4.1", time.Now()) {
+		t.Fatal("refusals because of a full gate counted as failures")
+	}
+	_ = open[0].Close()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		c, err := dialAgent(addr, sa, node)
+		if err == nil {
+			_ = c.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("new node not admitted after a slot was freed: %v", err)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -294,6 +466,34 @@ func TestLimiterEvicts(t *testing.T) {
 	}
 	if !l.blocked("blocked", now) {
 		t.Fatal("blocked address evicted before older unblocked ones")
+	}
+	if len(l.m) > failMaxIPs {
+		t.Fatalf("list grew to %d", len(l.m))
+	}
+}
+
+// S1-K2: ist die Liste voller Sperren, verdraengen frische Eintraege eines Angreifers nicht seine lange Sperre,
+// sondern zuerst Eintraege mit wenigen Fehlversuchen bzw. die kuerzesten Sperren.
+func TestLimiterEvictKeepsLongBlocks(t *testing.T) {
+	var l limiter
+	now := time.Now()
+	for i := range failFree + 5 {
+		l.fail("long", now.Add(-time.Duration(failFree+5-i)*time.Second)) // laengste Sperre (30 min)
+	}
+	for i := range failMaxIPs - 1 {
+		k := "b" + strconv.Itoa(i)
+		for range failFree {
+			l.fail(k, now)
+		}
+	}
+	if len(l.m) != failMaxIPs {
+		t.Fatalf("setup: %d", len(l.m))
+	}
+	for i := range failMaxIPs + 10 {
+		l.fail("n"+strconv.Itoa(i), now.Add(time.Second))
+	}
+	if !l.blocked("long", now.Add(time.Second)) {
+		t.Fatal("long block evicted by a flood of new addresses")
 	}
 	if len(l.m) > failMaxIPs {
 		t.Fatalf("list grew to %d", len(l.m))

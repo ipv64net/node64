@@ -180,24 +180,23 @@ func (s *Server) Serve(ln net.Listener) error {
 			return err
 		}
 		delay = 0
-		key := limiterKey(c.RemoteAddr())
+		p := peerOf(c.RemoteAddr())
 		now := time.Now()
-		known := s.lim.known(key, now)
-		if !known && s.lim.blocked(key, now) {
+		if s.lim.refused(p, now) {
 			_ = c.Close()
 			continue
 		}
-		// Bis zur Anmeldung zaehlt die Verbindung nur gegen die kleinere Grenze fuer Verbindungen ohne Anmeldung.
-		if !s.gate.acquire(key, known) {
+		// Bis zur Anmeldung zaehlt die Verbindung nur gegen die kleineren Grenzen fuer Verbindungen ohne Anmeldung.
+		// Abgewiesen ist kein Fehlversuch (volle Plaetze kann ein Angreifer verursachen); seine eigenen Verbindungen
+		// zaehlen ueber das Zeitlimit des Handshakes.
+		slot := s.gate.acquire(p, s.lim.known(p.ip, now), c, now)
+		if slot == nil {
 			s.log.Debug("monitor64-agent: too many connections without login", "remote", c.RemoteAddr().String())
-			if !known {
-				s.lim.fail(key, now)
-			}
 			_ = c.Close()
 			continue
 		}
 		if !s.track(c, true) {
-			s.gate.release(key)
+			s.gate.release(slot)
 			_ = c.Close()
 			return ErrServerClosed
 		}
@@ -206,7 +205,7 @@ func (s *Server) Serve(ln net.Listener) error {
 			defer s.wg.Done()
 			defer s.track(c, false)
 			defer c.Close()
-			s.handleConn(c, key)
+			s.handleConn(c, p, slot)
 		}()
 	}
 }
@@ -274,19 +273,16 @@ func (s *Server) sshConfig(rejected *atomic.Bool) *ssh.ServerConfig {
 	return cfg
 }
 
-func (s *Server) handleConn(c net.Conn, limKey string) {
+func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot) {
 	remote := c.RemoteAddr().String()
 	_ = c.SetDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
 	var rejected atomic.Bool
 	sc, chans, reqs, err := ssh.NewServerConn(c, s.sshConfig(&rejected))
-	s.gate.release(limKey)
+	s.gate.release(slot)
 	if err != nil {
 		// Jede Verbindung ohne Anmeldung zaehlt als Fehlversuch (auch Zeitlimit und abgebrochener Handshake),
-		// sonst koennten stille Verbindungen beliebig oft Plaetze belegen.
-		now := time.Now()
-		if !s.lim.known(limKey, now) {
-			s.lim.fail(limKey, now)
-		}
+		// sonst koennten stille Verbindungen beliebig oft Plaetze belegen (bekannte Adressen: siehe failPeer).
+		s.lim.failPeer(p, time.Now())
 		var ae *ssh.ServerAuthError
 		if errors.As(err, &ae) && rejected.Load() {
 			s.log.Warn("monitor64-agent: login refused", "remote", remote)
@@ -297,7 +293,7 @@ func (s *Server) handleConn(c net.Conn, limKey string) {
 	}
 	defer sc.Close()
 	_ = c.SetDeadline(time.Time{})
-	s.lim.ok(limKey, time.Now())
+	s.lim.ok(p.ip, time.Now())
 	select {
 	case s.sem <- struct{}{}:
 		defer func() { <-s.sem }()

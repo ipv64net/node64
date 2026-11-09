@@ -73,12 +73,31 @@ func TestFromAllows(t *testing.T) {
 		{[]string{"2001:db8::/32"}, "2001:db8::1", true},
 		{[]string{"nas.example.com"}, "1.2.3.4", false},
 		{[]string{"127.0.0.1"}, "::ffff:127.0.0.1", true},
-		// Zone zaehlt nicht: verneintes Netz greift auch fuer fe80::1%eth0
+		// Netz und Muster ohne Zone passen auf jede Zone: verneintes Netz greift auch fuer fe80::1%eth0
 		{[]string{"::/0", "!fe80::/10"}, "fe80::1%eth0", false},
 		{[]string{"fe80::/10"}, "fe80::1%eth0", true},
 		{[]string{"fe80::1"}, "fe80::1%eth0", true},
-		{[]string{"fe80::1%eth1"}, "fe80::1%eth0", true},
-		{[]string{"fe80::*"}, "fe80::1%eth0", true},
+		// S1-K3: Zone im Muster muss stimmen (nicht verworfen)
+		{[]string{"fe80::1%eth1"}, "fe80::1%eth0", false},
+		{[]string{"fe80::1%eth0"}, "fe80::1%eth0", true},
+		{[]string{"fe80::1%eth0"}, "fe80::1", false},
+		{[]string{"::/0", "!fe80::1%eth0"}, "fe80::1%eth1", true},
+		{[]string{"::/0", "!fe80::1%eth0"}, "fe80::1%eth0", false},
+		// S1-K3: IPv6-Joker werden abgelehnt (Kurzschreibweise), IPv4-Joker passen nur auf IPv4, "*" auf alles
+		{[]string{"fe80::*"}, "fe80::1%eth0", false},
+		{[]string{"2001:db8:0:0:*"}, "2001:db8::1", false},
+		{[]string{"1*"}, "1::1", false},
+		{[]string{"1*"}, "10.0.0.1", true},
+		{[]string{"*"}, "2001:db8::1", true},
+		{[]string{"::/0", "!*"}, "2001:db8::1", false},
+		// S1-K3: IPv4-gemappte Netze zaehlen als IPv4
+		{[]string{"::ffff:10.0.0.0/104"}, "10.1.2.3", true},
+		{[]string{"::ffff:10.0.0.0/104"}, "::ffff:10.1.2.3", true},
+		{[]string{"::ffff:10.0.0.0/104"}, "11.0.0.1", false},
+		{[]string{"10.0.0.0/8", "!::ffff:10.1.0.0/112"}, "10.1.2.3", false},
+		{[]string{"10.0.0.0/8", "!::ffff:10.1.0.0/112"}, "10.2.0.1", true},
+		{[]string{"::ffff:0.0.0.0/96"}, "192.0.2.1", true},
+		{[]string{"::ffff:0:0/80"}, "192.0.2.1", false},
 		// ungueltiges Muster verweigert immer (parseKeyLine laesst es gar nicht durch)
 		{[]string{"10.0.0.0/8", "!10.1.2.300"}, "10.9.9.9", false},
 	}
@@ -86,6 +105,16 @@ func TestFromAllows(t *testing.T) {
 		if got := fromAllows(c.pats, ip(c.ip)); got != c.want {
 			t.Errorf("%v %s: got %v", c.pats, c.ip, got)
 		}
+	}
+	// Zone als Name oder Nummer derselben Schnittstelle
+	if ifs, err := net.Interfaces(); err == nil && len(ifs) > 0 {
+		n := strconv.Itoa(ifs[0].Index)
+		if !zoneEqual(n, ifs[0].Name) || !zoneEqual(ifs[0].Name, n) || zoneEqual(n+"0", ifs[0].Name) {
+			t.Errorf("zone %s/%s not matched", n, ifs[0].Name)
+		}
+	}
+	if zoneEqual("eth0", "") || zoneEqual("", "1") || !zoneEqual("", "") {
+		t.Error("empty zone")
 	}
 }
 
@@ -141,10 +170,54 @@ func TestLimiter(t *testing.T) {
 	if !l.known("1.2.3.4", now) || l.known("1.2.3.4", now.Add(goodForget)) || l.known("5.6.7.8", now) {
 		t.Fatal("known address wrong")
 	}
-	a := &net.TCPAddr{IP: net.ParseIP("2001:db8:1:2:3:4:5:6"), Port: 1}
-	b := &net.TCPAddr{IP: net.ParseIP("2001:db8:1:2:ffff::1"), Port: 2}
-	if limiterKey(a) != limiterKey(b) {
-		t.Fatal("IPv6 must be grouped per /64")
+	a := peerOf(&net.TCPAddr{IP: net.ParseIP("2001:db8:1:2:3:4:5:6"), Port: 1})
+	b := peerOf(&net.TCPAddr{IP: net.ParseIP("2001:db8:1:2:ffff::1"), Port: 2})
+	if a.net != b.net || a.ip == b.ip || a.net != "2001:db8:1:2::/64" || a.grp != "2001:db8:1::/48" {
+		t.Fatalf("IPv6 peer: %+v %+v", a, b)
+	}
+	v4 := peerOf(&net.TCPAddr{IP: net.ParseIP("::ffff:192.0.2.1"), Port: 1})
+	if v4.ip != "192.0.2.1" || v4.net != v4.ip || v4.grp != "" {
+		t.Fatalf("IPv4 peer: %+v", v4)
+	}
+}
+
+// S1-K1: Fehlversuche zaehlen je exakter Adresse und je /64. Ein Angreifer im /64 einer Node wird gesperrt (auch
+// wenn er die Adresse wechselt), die Node mit ihrer bekannten Adresse nicht; ihre Anmeldung hebt die Sperre des
+// Netzes nicht auf.
+func TestLimiterNeighbour(t *testing.T) {
+	var l limiter
+	now := time.Now()
+	pe := func(s string) peer { return peerOf(&net.TCPAddr{IP: net.ParseIP(s), Port: 1}) }
+	node, evil := pe("2001:db8:1:2::1"), pe("2001:db8:1:2::bad")
+	l.ok(node.ip, now)
+	for range failFree {
+		l.failPeer(evil, now)
+	}
+	if !l.refused(evil, now) {
+		t.Fatal("attacker in the /64 of a known node not blocked")
+	}
+	if l.refused(node, now) {
+		t.Fatal("known node blocked by its neighbour")
+	}
+	// neue Adresse des Angreifers im selben /64: das Netz ist gesperrt
+	if !l.refused(pe("2001:db8:1:2::bad2"), now) {
+		t.Fatal("address change in the /64 escapes the block")
+	}
+	// Anmeldung der Node hebt die Sperre des Netzes nicht auf
+	l.ok(node.ip, now)
+	if !l.refused(pe("2001:db8:1:2::bad3"), now) || l.refused(node, now) {
+		t.Fatal("login of the node lifted the block of the /64")
+	}
+	// Fehlversuche der bekannten Adresse zaehlen nicht (NAT: Nachbar hinter derselben Adresse)
+	for range 2 * failFree {
+		l.failPeer(node, now)
+	}
+	if l.refused(node, now) || l.blocked(node.ip, now) {
+		t.Fatal("known address blocked")
+	}
+	// anderes /64: unberuehrt
+	if l.refused(pe("2001:db8:1:3::1"), now) {
+		t.Fatal("other /64 blocked")
 	}
 }
 
@@ -202,6 +275,9 @@ func TestParseKeysFrom(t *testing.T) {
 		`from="fe80::1%eth0"`,
 		`from="2001:db8::/32,!2001:db8::1"`,
 		`from="1.2.3.4",restrict`,
+		`from="::ffff:10.0.0.0/104"`,
+		`from="*"`,
+		`from="10.0.*,!10.0.0.?"`,
 	} {
 		if _, err := ParseKeys([]byte(opt + " " + k)); err != nil {
 			t.Errorf("%s refused: %v", opt, err)
@@ -218,6 +294,14 @@ func TestParseKeysFrom(t *testing.T) {
 		`from=""`,
 		`from="1.2.3.[4]"`,
 		`from="10.0.0.0/8",from="1.2.3.4"`,
+		// S1-K3: was der Abgleich nicht meinen kann, wird schon hier abgelehnt
+		`from="fe80::*"`,
+		`from="2001:db8::*"`,
+		`from="!2001:db8:*"`,
+		`from="::ffff:0:0/80"`,
+		`from="2001:db8::1%eth0"`,
+		`from="!2001:db8::1%eth0"`,
+		`from="fe80::*%eth0"`,
 	} {
 		if _, err := ParseKeys([]byte(opt + " " + k)); err == nil {
 			t.Errorf("%s accepted", opt)

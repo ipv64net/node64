@@ -423,8 +423,18 @@ Monitor64 liest nur, führt nichts aus und gibt keine Geheimnisse heraus.
   je IP gebremst. Keine Shell, kein `exec` beliebiger Befehle, keine Weiterleitungen, keine Subsysteme – nur `info`,
   `collect`, `update`, `keys`. `keys` muss den Schlüssel der anfragenden Verbindung nicht enthalten, lehnt aber eine
   leere Liste ab (sonst sperrt man sich aus).
+- Bremse vor der Anmeldung: Fehlversuche je exakter IP und je IPv6-/64; gesperrt wird eine unbekannte IP, deren
+  Adresse oder /64 gesperrt ist – eine IP, die sich schon angemeldet hat, nie (Nachbar im selben /64 bzw. hinter
+  derselben NAT-IP sperrt die Node nicht aus). Offene Handshakes: je IP, je /48 (4) und gesamt (8); bekannte IPs
+  haben einen eigenen Topf (8 je IP, 32 gesamt). Abweisen wegen voller Plätze zählt nicht als Fehlversuch.
+- `from=` in `authorized_keys`: IPv4/IPv6/CIDR, `::ffff:a.b.c.d/n` ab /96, Joker `*` nur für IPv4; Zone nur bei
+  Link-Local (`fe80::1%eth0`), sonst wird die Zeile abgelehnt.
 - **Eigene Skripte** (`local.d`): nur root-eigene Dateien, nicht für andere schreibbar (sonst ignoriert und als
-  Warnung gemeldet), Zeitlimit und Größengrenze je Skript.
+  Warnung gemeldet), Zeitlimit und Größengrenze je Skript. Der Interpreter aus der `#!`-Zeile wird genauso geprüft
+  (absoluter Pfad, root-eigen samt Ordnern, bis 4 Ebenen); `#!/usr/bin/env name` nur mit einem Namen ohne Optionen
+  im festen PATH der Skripte.
+- Update-Rückfall: Die neue Version zählt ihren Start, bevor sie irgendetwas prüft (scheitert sie an Flags oder
+  Schlüsseln, startet beim nächsten Mal die alte); Versionen mit/ohne „v“ gelten als gleich.
 - **Updates:** ed25519-Signatur über Datei, Version und Plattform; Release-Schlüssel im Agent eingebaut, privater
   Schlüssel nur im Release-Prozess (GitHub-Actions-Secret); **kein Downgrade** (Version muss steigen); bei Fehler
   bleibt die alte Datei.
@@ -581,6 +591,10 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   nicht, Fehlalarm „verschwunden“ bei Teilausfall, Standardkanäle schluckten gewählte Kanäle, geteilte Zeiger in der
   Standard-Tabelle, Host-Schwelle für alle Messgrößen eines Dienstes, NaN von Hosts brach die Oberfläche). Behebung aller
   Funde parallel nach Bereichen; Liste: Review-Kandidaten im Scratchpad der Sitzung.
+- 2026-11-09: Alle Funde behoben (06f42134, 2366c849); zweite Runde Prüfung („Sweep“) nach Bereichen fand weitere
+  21 Stellen (Agent-Sperren bei NAT/IPv6, `from=`, Update-Rückfall, `#!`-Interpreter, gewollt fehlende Messwerte,
+  Erinnerung nach der Ruhezeit, doppelte Meldungen, ZFS-Gerätefehler, Proxmox-Cluster-Zuständigkeit u. a.) – behoben
+  in 4b5dbd0e und dem folgenden Agent-Commit, Tests mit `-race` auf der Box grün.
 - Offene Punkte aus den Teilberichten: Release-Signierschlüssel für Agent-Updates fehlt (bis dahin Update aus);
   Ruhezeit-Prüfung für Erinnerungen (Dispatcher exportieren); Dienstnamen/-texte aus Mapper/m64linux noch deutsch
   (i18n); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit ändern
