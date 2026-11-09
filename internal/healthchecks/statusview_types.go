@@ -36,7 +36,8 @@ type StatusViewGroup struct {
 	Items   []StatusViewItem `json:"items"`
 }
 
-// StatusViewItem ist ein Eintrag (Check). ID ist die Eintrags-ID (fuer Details und Badges), nie der Token.
+// StatusViewItem ist ein Eintrag (Check oder Monitor64). ID ist die Eintrags-ID (fuer Details und Badges), nie der
+// Token bzw. die Quelle.
 type StatusViewItem struct {
 	ID     int64           `json:"id"`
 	Label  string          `json:"label"`
@@ -56,8 +57,8 @@ type StatusViewDay struct {
 // StatusViewMaint ist ein Wartungsfenster (nur Titel und Zeit).
 type StatusViewMaint struct {
 	Title  string    `json:"title"`
-	Start  time.Time `json:"start"`
-	End    time.Time `json:"end"`
+	Start  time.Time `json:"start,omitzero"`
+	End    time.Time `json:"end,omitzero"` // leer = bis beendet (Monitor64)
 	Active bool      `json:"active"`
 	Items  []string  `json:"items"` // betroffene Eintraege (Anzeigenamen)
 }

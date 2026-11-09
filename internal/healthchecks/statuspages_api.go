@@ -151,7 +151,7 @@ func (m *Module) apiStatusPageUpdate(w http.ResponseWriter, r *http.Request) {
 
 // apiStatusItemsAdd haengt Checks (tokens) und Nodes, Gaeste bzw. Container (resources: system_id und key) an eine
 // Gruppe an (group_id, 0 = erste) – wie „Hinzufuegen“ auf der Seite: fehlt der Check einer Ressource, wird er angelegt
-// wie mit „als Check fuehren“. Schon vorhandene Eintraege bleiben einmal.
+// wie mit „als Check fuehren“. Schon vorhandene Eintraege bleiben einmal. tokens darf auch Monitor64-Quellen enthalten.
 func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
 	p := m.apiStatusPage(w, r)
 	if p == nil {
@@ -189,6 +189,32 @@ func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Monitor64-Eintraege ("m64:host:<uid>", "m64:svc:<uid>/<key>") nur, wenn Monitor64 laeuft und sie kennt
+	var checkToks, m64Toks []string
+	var m64Known map[string]bool
+	for _, t := range in.Tokens {
+		if !isM64Source(t) {
+			checkToks = append(checkToks, t)
+			continue
+		}
+		if m64Known == nil {
+			list, on := m.statusM64Targets(ctx)
+			if !on {
+				bad("tokens", "monitor64 is not running: "+t)
+				return
+			}
+			m64Known = map[string]bool{}
+			for _, x := range list {
+				m64Known[x.Source] = true
+			}
+		}
+		if !m64Known[t] {
+			bad("tokens", "monitor64 entry not found: "+t)
+			return
+		}
+		m64Toks = append(m64Toks, t)
+	}
+	in.Tokens = checkToks
 	for _, t := range in.Tokens {
 		if c, err := m.st.Check(ctx, t); err != nil || c == nil {
 			bad("tokens", "check not found: "+t)
@@ -218,6 +244,10 @@ func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := m.statusAddTokens(ctx, g, append(in.Tokens, toks...)); err != nil {
+		m.writeStatusErr(w, err)
+		return
+	}
+	if err := m.statusAddM64(ctx, g, m64Toks); err != nil {
 		m.writeStatusErr(w, err)
 		return
 	}

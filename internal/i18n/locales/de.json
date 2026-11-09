@@ -2508,6 +2508,8 @@
     "next_est": "geschätzt: misst eine andere Messstelle",
     "target": "Ziel",
     "reasons": {
+      "m64_crit": "Kritischer Zustand",
+      "m64_unreachable": "Nicht erreichbar",
       "ok": "OK",
       "timeout": "Zeitüberschreitung",
       "dns_failed": "DNS-Fehler",
@@ -2832,6 +2834,12 @@
       "majority": "… die Mehrheit der Messstellen gestört meldet"
     },
     "status": {
+      "m64_host": "Host",
+      "m64_service": "Dienst",
+      "m64_hint": "Monitor64: Öffentlich erscheinen nur Bezeichnung und Zustand – keine Werte, Adressen oder Dienstnamen (außer bei einem einzeln aufgenommenen Dienst).",
+      "m64_off": "Monitor64 ist ausgeschaltet: Seine Einträge werden auf der Seite ausgeblendet, bleiben aber gespeichert.",
+      "m64_hidden": "Monitor64-Eintrag (ausgeblendet)",
+      "m64_gone": "Monitor64-Eintrag nicht gefunden (entfernt oder von einer anderen Node)",
       "pub": {
         "reason_other": "Nicht erreichbar",
         "too_many": "Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.",

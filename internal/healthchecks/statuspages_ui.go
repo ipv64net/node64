@@ -20,7 +20,8 @@ import (
 // Statusseiten: Verwaltung (Liste, Formular mit Gruppen und Eintraegen, Ankuendigungen, Vorschau).
 // Das Formular kommt ohne JavaScript aus: Gruppen und Eintraege stehen als Felder im Formular, Knoepfe mit
 // name="op" aendern den Stand und zeigen das Formular erneut (gespeichert wird erst mit "Speichern").
-// statuspages.js schlaegt nur den Slug vor und filtert die Auswahl der Checks.
+// statuspages.js schlaegt nur den Slug vor und filtert die Auswahl der Checks. Mit Monitor64 stehen dessen Hosts und
+// Dienste mit in der Auswahl (Gruppe "Monitor64", Feld add_m64, statusm64.go).
 
 const statusPagesPath = "/healthchecks/status-pages"
 
@@ -49,11 +50,14 @@ type statusCheckOpt struct {
 	Res   bool
 	Value string
 	Type  string // i18n-Schluessel des Typs (pve.type.*)
+	M64   bool   // Host bzw. Dienst aus Monitor64: Value ist die Quelle (add_m64)
 }
 
 // statusPageItem ist ein Eintrag der Seite im Formular (eine Liste, gruppiert wird nach den Healthchecks-Gruppen).
 type statusPageItem struct {
 	Token, Name, Label, Group string
+	M64                       bool   // Eintrag aus Monitor64 (Name "" = Monitor64 aus bzw. Host/Dienst unbekannt)
+	Link                      string // Monitor64: Seite des Hosts
 }
 
 // statusResSys ist ein System bzw. Docker-Host mit Nodes, Gaesten bzw. Containern.
@@ -87,6 +91,8 @@ type statusFormData struct {
 	Themes   []string
 	DaysOpts []int
 	Items    int
+	M64On    bool // Monitor64 laeuft (Auswahl enthaelt Hosts und Dienste)
+	M64Off   bool // Seite hat Monitor64-Eintraege, Monitor64 laeuft aber nicht (Hinweis: ausgeblendet)
 }
 
 // Crumb: letzte Stufe der Brotkrumen.
@@ -218,6 +224,12 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 			d.Names[c.Token], byTok[c.Token] = c.Name, c
 		}
 	}
+	m64, m64On := m.statusM64Targets(r.Context())
+	d.M64On = m64On
+	m64Group := map[string]string{}
+	for _, t := range m64 {
+		d.Names[t.Source], m64Group[t.Source] = statusM64Label(t), t.Group
+	}
 	for _, g := range d.Page.Groups {
 		for _, it := range g.Items {
 			if on[it.Token] {
@@ -227,6 +239,10 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 			pi := statusPageItem{Token: it.Token, Name: d.Names[it.Token], Label: it.Label}
 			if c := byTok[it.Token]; c != nil {
 				pi.Group = statusGroupName(c)
+			}
+			if isM64Source(it.Token) {
+				pi.M64, pi.Group, pi.Link = true, m64Group[it.Token], "/monitor64/host/"+statusM64HostUID(it.Token)
+				d.M64Off = d.M64Off || !m64On
 			}
 			d.PageList = append(d.PageList, pi)
 		}
@@ -262,6 +278,15 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 		}
 	}
 	sort.SliceStable(d.Checks, func(i, j int) bool { return strings.ToLower(d.Checks[i].Name) < strings.ToLower(d.Checks[j].Name) })
+	// Monitor64 hinten in der Reihenfolge von Monitor64 (je Host der Host, dann seine Dienste)
+	for _, t := range m64 {
+		o := statusCheckOpt{M64: true, Value: t.Source, Name: t.Host, Group: statusM64Group, Paused: t.Paused, OnPage: on[t.Source], Type: "hc.status.m64_host"}
+		if t.Name != "" {
+			o.Name, o.Sub, o.Type = t.Name, t.Host, "hc.status.m64_service"
+		}
+		d.Checks = append(d.Checks, o)
+		groups[statusM64Group] = true
+	}
 	d.Tags, d.HCGroups = sortedKeys(tags), sortedKeys(groups)
 	title := "hc.status.new"
 	if d.Edit {
@@ -431,6 +456,9 @@ func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPag
 	}
 	toks, opErr := m.statusResTokens(r, r.PostForm["add_res"]) // Nodes, Gaeste, Container: fehlende Checks anlegen
 	if err := m.statusAddTokens(ctx, g, append(r.PostForm["add_tok"], toks...)); err != nil {
+		return err
+	}
+	if err := m.statusAddM64(ctx, g, r.PostForm["add_m64"]); err != nil {
 		return err
 	}
 	return opErr

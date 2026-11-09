@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/scheduler"
 )
 
@@ -32,6 +33,9 @@ import (
 //   maintenance: sonst, wenn Wartungsfenster mindestens die Haelfte des Tages abdecken
 //   partial:     sonst, wenn eine Messung fehlschlug oder eine kurze Stoerung (< 15 min) lief
 //   up:          alle Messungen in Ordnung
+//
+// Eintraege aus Monitor64 (Quelle "m64:..." statt Token) liefern Zustand, Balken, Stoerungen und Wartungen fertig,
+// siehe statusm64.go.
 //
 // Gesamtzustand (Gruppe und Seite) aus dem aktuellen Zustand der Eintraege, nicht aus den Balken: down, wenn einer
 // down ist; sonst degraded, wenn einer degraded ist; sonst maintenance, wenn einer in Wartung ist; sonst up, wenn
@@ -454,20 +458,20 @@ func (m *Module) statusDayAggs(ctx context.Context, tokens []string, n int, idx 
 }
 
 // statusGroupsFor: alle Eintraege nach der Healthchecks-Gruppe ihres Checks (Proxmox VE und Docker mit dem Namen des
-// Systems; eigene Gruppen der Seite werden nicht mehr angezeigt). Gruppen in der Reihenfolge ihres ersten Auftretens,
-// Eintraege in Seitenreihenfolge, Checks ohne Gruppe in einer Gruppe ohne Namen am Ende; geloeschte Checks bilden
-// keine Gruppe. Ohne HCGroups (Gruppennamen sind oeffentlich) eine Liste ohne Ueberschriften.
-func statusGroupsFor(p *StatusPage, byTok map[string]*Check) []StatusGroup {
+// Systems; Monitor64-Eintraege nach der Gruppe des Hosts; eigene Gruppen der Seite werden nicht mehr angezeigt).
+// Gruppen in der Reihenfolge ihres ersten Auftretens, Eintraege in Seitenreihenfolge, Eintraege ohne Gruppe in einer
+// Gruppe ohne Namen am Ende; geloeschte Checks (groupOf: ok = false) bilden keine Gruppe. Ohne HCGroups
+// (Gruppennamen sind oeffentlich) eine Liste ohne Ueberschriften.
+func statusGroupsFor(p *StatusPage, groupOf func(tok string) (string, bool)) []StatusGroup {
 	var out []StatusGroup
 	pos := map[string]int{}
 	var rest []StatusItem
 	for _, g := range p.Groups {
 		for _, it := range g.Items {
-			c := byTok[it.Token]
-			if c == nil {
+			name, ok := groupOf(it.Token)
+			if !ok {
 				continue
 			}
-			name := statusGroupName(c)
 			if name == "" || !p.HCGroups {
 				rest = append(rest, it)
 				continue
@@ -675,6 +679,15 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 			}
 		}
 	}
+	var m64src []string // Eintraege aus Monitor64 (statusm64.go)
+	for _, g := range p.Groups {
+		for _, it := range g.Items {
+			if isM64Source(it.Token) && !seen[it.Token] {
+				seen[it.Token] = true
+				m64src = append(m64src, it.Token)
+			}
+		}
+	}
 
 	var bounds []time.Time
 	var labels []string
@@ -739,6 +752,37 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		}
 		tv[tok] = x
 	}
+	// Monitor64: Zustand, Balken, Stoerungen und Wartungen kommen fertig aus dem Modul (ohne Monitor64 fallen die
+	// Eintraege weg)
+	var m64Hist time.Time
+	if p.ShowHistory {
+		m64Hist = now.Add(-statusHistory)
+	}
+	m64 := m.statusM64Sources(ctx, m64src, module.StatusQuery{Bounds: bounds, History: m64Hist, Ahead: statusMaintAhead, Now: now})
+	for _, tok := range m64src {
+		s := m64[tok]
+		if s == nil {
+			continue
+		}
+		x := &tokView{state: statusM64State(s.State), bars: make([]StatusViewDay, n)}
+		var total statusAgg
+		for i := 0; i < n; i++ {
+			var b module.StatusBar
+			if i < len(s.Bars) {
+				b = s.Bars[i]
+			}
+			total.add(statusM64Agg(b))
+			x.bars[i] = statusM64Bar(labels[i], b, bounds[i+1].Sub(bounds[i]))
+			if !p.ShowUptime {
+				x.bars[i].Uptime = -1
+			}
+		}
+		x.uptime = statusPct(total)
+		if !p.ShowUptime {
+			x.uptime = -1
+		}
+		tv[tok] = x
+	}
 
 	// Gruppen und Eintraege in der Reihenfolge der Seite; Gruppen ohne (vorhandene) Checks fallen weg
 	var pageStates []string
@@ -748,19 +792,31 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		tok   string
 	}
 	var incItems []incItem
-	for _, g := range statusGroupsFor(p, byTok) {
+	groupOf := func(tok string) (string, bool) {
+		if c := byTok[tok]; c != nil {
+			return statusGroupName(c), true
+		}
+		if s := m64[tok]; s != nil {
+			return s.Group, true
+		}
+		return "", false
+	}
+	for _, g := range statusGroupsFor(p, groupOf) {
 		vg := StatusViewGroup{Name: g.Name, Items: []StatusViewItem{}}
 		var states []string
 		for _, it := range g.Items {
-			c := byTok[it.Token]
-			if c == nil {
+			x := tv[it.Token]
+			if x == nil {
 				continue
 			}
 			label := it.Label
 			if label == "" {
-				label = c.Name
+				if c := byTok[it.Token]; c != nil {
+					label = c.Name
+				} else if s := m64[it.Token]; s != nil {
+					label = s.Name
+				}
 			}
-			x := tv[it.Token]
 			vg.Items = append(vg.Items, StatusViewItem{ID: it.ID, Label: label, State: x.state, Uptime: x.uptime, Bars: x.bars})
 			states = append(states, x.state)
 			labelOf[it.Token] = append(labelOf[it.Token], label)
@@ -793,6 +849,27 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		o := next[0]
 		v.Maintenance = append(v.Maintenance, StatusViewMaint{Title: mw.Name, Start: o.from.UTC(), End: o.to.UTC(), Active: !o.from.After(now), Items: items})
 	}
+	// Wartungen aus Monitor64: ein Fenster einmal, mit allen betroffenen Eintraegen (Ende leer = bis beendet)
+	m64Maint := map[string]int{}
+	for _, tok := range m64src {
+		s := m64[tok]
+		if s == nil || len(labelOf[tok]) == 0 {
+			continue
+		}
+		for _, mw := range s.Maintenance {
+			key := mw.ID
+			if key == "" {
+				key = mw.Title + "|" + mw.Start.String()
+			}
+			if i, ok := m64Maint[key]; ok {
+				v.Maintenance[i].Items = append(v.Maintenance[i].Items, labelOf[tok]...)
+				continue
+			}
+			m64Maint[key] = len(v.Maintenance)
+			v.Maintenance = append(v.Maintenance, StatusViewMaint{Title: mw.Title, Start: mw.Start.UTC(), End: mw.End.UTC(), Active: mw.Active,
+				Items: append([]string(nil), labelOf[tok]...)})
+		}
+	}
 	sort.SliceStable(v.Maintenance, func(i, j int) bool { return v.Maintenance[i].Start.Before(v.Maintenance[j].Start) })
 
 	// Stoerungen der letzten 30 Tage und Ankuendigungen
@@ -800,6 +877,14 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	if p.ShowHistory {
 		since = now.Add(-statusHistory)
 		for _, ii := range incItems {
+			if s := m64[ii.tok]; s != nil {
+				for _, i := range s.Incidents {
+					if i.End.IsZero() || !i.End.Before(since) {
+						v.Incidents = append(v.Incidents, statusM64Incident(tr, ii.label, i))
+					}
+				}
+				continue
+			}
 			for _, i := range incs[ii.tok] {
 				if !i.end.IsZero() && i.end.Before(since) {
 					continue
@@ -840,6 +925,9 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	}
 	if it == nil || itemID == 0 {
 		return nil, ErrStatusPageNotFound
+	}
+	if isM64Source(it.Token) {
+		return m.statusM64Detail(ctx, p, it, lang)
 	}
 	c, err := m.st.Check(ctx, it.Token)
 	if err != nil {

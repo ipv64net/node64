@@ -304,6 +304,12 @@ func run() error {
 		m64Module.SetNotifier(dispatcher.Dispatch)
 		m64Module.SetQuiet(dispatcher.InQuietHours)
 		modules.Register(m64Module)
+		hcModule.SetMonitor64Status(func() module.StatusFeed { // Statusseiten: Monitor64-Eintraege, nur solange Monitor64 laeuft
+			if !modules.IsRunning(monitor64.Name) {
+				return nil
+			}
+			return m64Module
+		})
 	}
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()

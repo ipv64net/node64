@@ -25,7 +25,7 @@
 <div class="ban s-{{.Overall}}" role="status">{{template "icon" .Overall}}<span>{{.OverallText}}</span><span class="sub" id="upd">{{$.T "hc.status.pub.updated"}} <time datetime="{{$.ISO .Generated}}" data-f="t">{{$.Clock .Generated}}</time></span></div>
 {{- if ne .Layout "compact"}}
 {{- range .Active}}
-<div class="ntc card lv-maint"><div class="nh"><span class="tag">{{$.T "hc.status.pub.maint.active"}}</span> <strong>{{.Title}}</strong></div><p class="mu">{{$.T "hc.status.pub.maint.until"}} <time datetime="{{$.ISO .End}}">{{$.When .End}}</time>{{if .Items}} · {{$.T "hc.status.pub.maint.affects"}} {{.Items}}{{end}}</p></div>
+<div class="ntc card lv-maint"><div class="nh"><span class="tag">{{$.T "hc.status.pub.maint.active"}}</span> <strong>{{.Title}}</strong></div><p class="mu">{{if not .End.IsZero}}{{$.T "hc.status.pub.maint.until"}} <time datetime="{{$.ISO .End}}">{{$.When .End}}</time>{{if .Items}} · {{end}}{{end}}{{if .Items}}{{$.T "hc.status.pub.maint.affects"}} {{.Items}}{{end}}</p></div>
 {{- end}}
 {{- range .OpenNotices}}{{template "notice" .}}{{end}}
 {{- if .Problems}}
@@ -59,7 +59,7 @@
 {{- if ne .Layout "compact"}}
 {{- if .Planned}}
 <section class="hs"><h2>{{$.T "hc.status.pub.maint.planned"}}</h2><ul class="hl">
-{{- range .Planned}}<li><strong>{{.Title}}</strong><br><span class="mu"><time datetime="{{$.ISO .Start}}">{{$.When .Start}}</time> – <time datetime="{{$.ISO .End}}">{{$.When .End}}</time>{{if .Items}} · {{$.T "hc.status.pub.maint.affects"}} {{.Items}}{{end}}</span></li>{{end}}
+{{- range .Planned}}<li><strong>{{.Title}}</strong><br><span class="mu"><time datetime="{{$.ISO .Start}}">{{$.When .Start}}</time>{{if not .End.IsZero}} – <time datetime="{{$.ISO .End}}">{{$.When .End}}</time>{{end}}{{if .Items}} · {{$.T "hc.status.pub.maint.affects"}} {{.Items}}{{end}}</span></li>{{end}}
 </ul></section>
 {{- end}}
 {{- if .OldNotices}}

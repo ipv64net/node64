@@ -2508,6 +2508,8 @@
     "next_est": "estimated: measured by another source",
     "target": "Target",
     "reasons": {
+      "m64_crit": "Critical state",
+      "m64_unreachable": "Unreachable",
       "ok": "OK",
       "timeout": "Timeout",
       "dns_failed": "DNS failed",
@@ -2832,6 +2834,12 @@
       "majority": "… the majority of measuring points report down"
     },
     "status": {
+      "m64_host": "Host",
+      "m64_service": "Service",
+      "m64_hint": "Monitor64: only the label and the state are shown publicly – no values, addresses or service names (except for a service added on its own).",
+      "m64_off": "Monitor64 is switched off: its entries are hidden on the page but stay saved.",
+      "m64_hidden": "Monitor64 entry (hidden)",
+      "m64_gone": "Monitor64 entry not found (removed or from another node)",
       "pub": {
         "reason_other": "Not reachable",
         "too_many": "Too many failed attempts. Please try again in a few minutes.",

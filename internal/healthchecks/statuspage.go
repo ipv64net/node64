@@ -52,10 +52,10 @@ type StatusGroup struct {
 	Items []StatusItem `json:"items"`
 }
 
-// StatusItem ist ein Check auf der Seite.
+// StatusItem ist ein Check auf der Seite (bzw. ein Eintrag aus Monitor64, statusm64.go).
 type StatusItem struct {
 	ID    int64  `json:"id"`
-	Token string `json:"token"`
+	Token string `json:"token"` // Check-Token oder Quelle "m64:host:<uid>" / "m64:svc:<uid>/<key>"
 	Label string `json:"label"` // "" = Name des Checks
 }
 
@@ -130,7 +130,8 @@ func (p *StatusPage) normalize() error {
 		}
 		for ii := range g.Items {
 			g.Items[ii].Label = strings.TrimSpace(g.Items[ii].Label)
-			if g.Items[ii].Token == "" || len(g.Items[ii].Label) > 120 {
+			tok := g.Items[ii].Token
+			if tok == "" || len(g.Items[ii].Label) > 120 || (isM64Source(tok) && !validM64Source(tok)) {
 				return fieldErr("groups", "hc.status.err.item")
 			}
 			n++
