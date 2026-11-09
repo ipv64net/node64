@@ -5,6 +5,7 @@
 //	monitor64-agent install --key "<pubkey>" [--port 6465]   Datei, Schluessel und systemd-Dienst anlegen
 //	monitor64-agent uninstall                                 alles wieder entfernen
 //	monitor64-agent run [--port 6465] [--keys ...]            im Vordergrund laufen (systemd ruft das auf)
+//	monitor64-agent run --connect token@node:6466 --no-listen  Push: Verbindung zur Node selbst aufbauen (NAT/VPS)
 //	monitor64-agent fingerprint                               Fingerabdruck des Hostschluessels
 //	monitor64-agent version                                   Version
 package main
@@ -44,9 +45,12 @@ var ReleaseKeys = ""
 const memLimit = 24 << 20
 
 const usage = `usage: monitor64-agent <command>
-  install --key "<public key>" [--port 6465]   install file, key and service, print the host key fingerprint
+  install --key "<public key>" [--port 6465] [--connect token@node[:6466]] [--no-listen]
+                                                install file, key and service, print the host key fingerprint
   uninstall                                     remove service, file and settings
   run [--port 6465] [--listen addr] [--dir path] run in the foreground
+      [--connect token@node[:6466]] [--no-listen] connect to the node yourself (host behind NAT, VPS); nodes
+                                                are also read from <dir>/connect
   fingerprint                                   print the host key fingerprint
   version                                       print the version`
 
@@ -85,6 +89,8 @@ type runFlags struct {
 	localDir string
 	maxConns int
 	debug    bool
+	connect  []m64agent.PushTarget // --connect (zusaetzlich <dir>/connect)
+	noListen bool                  // nur Push, kein Lauschen
 }
 
 func parseRunFlags(args []string, errOut io.Writer) (runFlags, error) {
@@ -99,6 +105,15 @@ func parseRunFlags(args []string, errOut io.Writer) (runFlags, error) {
 	fs.StringVar(&f.localDir, "local", "", "local check scripts (default: <dir>/local.d)")
 	fs.IntVar(&f.maxConns, "max-conns", m64agent.DefaultMaxConns, "maximum concurrent connections")
 	fs.BoolVar(&f.debug, "debug", false, "debug log")
+	fs.Func("connect", "connect to a node yourself: token@host[:port] (repeatable, default port 6466)", func(v string) error {
+		t, err := m64agent.ParsePushTarget(v)
+		if err != nil {
+			return err
+		}
+		f.connect = append(f.connect, t)
+		return nil
+	})
+	fs.BoolVar(&f.noListen, "no-listen", false, "do not listen (push only, needs --connect or <dir>/connect)")
 	if err := fs.Parse(args); err != nil {
 		return f, err
 	}
@@ -173,6 +188,11 @@ func runAgent(exe string, args []string) int {
 		log.Error("monitor64-agent: host key", "err", err)
 		return 1
 	}
+	targets, err := pushTargets(f)
+	if err != nil {
+		log.Error("monitor64-agent: push", "err", err)
+		return 1
+	}
 	updated := make(chan string, 1)
 	srv, err := m64agent.New(m64agent.Config{
 		HostKey:     hk,
@@ -196,13 +216,21 @@ func runAgent(exe string, args []string) int {
 		log.Error("monitor64-agent: start", "err", err)
 		return 1
 	}
-	addr := net.JoinHostPort(f.listen, strconv.Itoa(f.port))
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Error("monitor64-agent: listen", "addr", addr, "err", err)
-		return 1
+	var ln net.Listener
+	listenAddr := "off"
+	if !f.noListen {
+		addr := net.JoinHostPort(f.listen, strconv.Itoa(f.port))
+		if ln, err = net.Listen("tcp", addr); err != nil {
+			log.Error("monitor64-agent: listen", "addr", addr, "err", err)
+			return 1
+		}
+		listenAddr = ln.Addr().String()
 	}
-	log.Info("monitor64-agent: running", "version", Version, "addr", ln.Addr().String(),
+	pushTo := make([]string, 0, len(targets))
+	for _, t := range targets {
+		pushTo = append(pushTo, t.String()) // ohne Token
+	}
+	log.Info("monitor64-agent: running", "version", Version, "addr", listenAddr, "push", strings.Join(pushTo, ","),
 		"fingerprint", m64agent.Fingerprint(hk.PublicKey()), "update", len(relKeys) > 0)
 	var confirm *time.Timer
 	if pending {
@@ -215,7 +243,12 @@ func runAgent(exe string, args []string) int {
 	ctx, stop := signal.NotifyContext(baseContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	served := make(chan error, 1)
-	go func() { served <- srv.Serve(ln) }()
+	if ln != nil {
+		go func() { served <- srv.Serve(ln) }()
+	}
+	for _, t := range targets {
+		go func() { _ = srv.Push(t) }()
+	}
 	code := 0
 	restart := ""
 	select {
@@ -249,7 +282,9 @@ func runAgent(exe string, args []string) int {
 	case <-time.After(5 * time.Second):
 	}
 	if restart != "" && exe != "" {
-		_ = ln.Close()
+		if ln != nil {
+			_ = ln.Close()
+		}
 		err := restartFn(exe)
 		// Exec fehlgeschlagen: alte Datei zurueck und diese starten; geht auch das nicht, beenden (systemd startet neu).
 		log.Error("monitor64-agent: starting the new version failed - restoring the previous one", "err", err)
@@ -263,6 +298,48 @@ func runAgent(exe string, args []string) int {
 		}
 	}
 	return code
+}
+
+// pushFlags sind die Optionen fuer den Push-Betrieb (install unter Linux und Windows; Ziele landen in <dir>/connect).
+type pushFlags struct {
+	connect  []m64agent.PushTarget
+	noListen bool
+}
+
+func (p *pushFlags) register(fs *flag.FlagSet) {
+	fs.Func("connect", "connect to the node yourself: token@host[:port] (repeatable, host behind NAT or VPS)", func(v string) error {
+		t, err := m64agent.ParsePushTarget(v)
+		if err != nil {
+			return err
+		}
+		p.connect = append(p.connect, t)
+		return nil
+	})
+	fs.BoolVar(&p.noListen, "no-listen", false, "do not listen (push only, needs --connect)")
+}
+
+// pushTargets fasst --connect und <dir>/connect zusammen (doppelte einmal). --no-listen ohne Ziel ist ein Fehler
+// (der Agent waere sonst unerreichbar).
+func pushTargets(f runFlags) ([]m64agent.PushTarget, error) {
+	file, err := m64agent.ReadPushFile(filepath.Join(f.dir, m64agent.PushFile))
+	if err != nil {
+		return nil, err
+	}
+	var out []m64agent.PushTarget
+	seen := map[m64agent.PushTarget]bool{}
+	for _, t := range append(append([]m64agent.PushTarget(nil), f.connect...), file...) {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	if len(out) > 8 {
+		return nil, errors.New("more than 8 nodes to connect to")
+	}
+	if f.noListen && len(out) == 0 {
+		return nil, fmt.Errorf("--no-listen needs a node to connect to (--connect or %s)", filepath.Join(f.dir, m64agent.PushFile))
+	}
+	return out, nil
 }
 
 // selfPath liefert die eigene Programmdatei ohne Symlinks ("" wenn unbekannt).

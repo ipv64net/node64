@@ -123,6 +123,11 @@ type connConfig struct {
 	// uebrigen Arten versuchen. Der Agent hat genau einen ed25519-Schluessel (keine Wiederholung, sie zaehlt dort
 	// als Fehlversuch).
 	multiKey bool
+	// push: der Agent baut die Verbindung auf (push.go); statt zu waehlen wird hoechstens pushWait auf eine
+	// Verbindung mit pushToken gewartet.
+	push      *PushListener
+	pushToken string
+	pushWait  time.Duration
 }
 
 // conn haelt eine SSH-Verbindung offen und baut sie bei Bedarf neu auf. Der Aufbau laeuft ohne c.mu (eigene
@@ -142,6 +147,7 @@ type conn struct {
 	lastUse time.Time
 	idle    *time.Timer
 	closed  bool
+	probing bool // probeStale laeuft
 }
 
 func newConn(cfg connConfig) *conn {
@@ -150,6 +156,9 @@ func newConn(cfg connConfig) *conn {
 	}
 	if cfg.idleTimeout <= 0 {
 		cfg.idleTimeout = DefaultIdleTimeout
+	}
+	if cfg.pushWait <= 0 {
+		cfg.pushWait = DefaultPushWait
 	}
 	life, cancel := context.WithCancel(context.Background())
 	return &conn{cfg: cfg, fp: NormalizeFingerprint(cfg.hostKey), sess: make(chan struct{}, maxSessionsPerConn),
@@ -183,6 +192,9 @@ func (c *conn) Close() error {
 	c.mu.Unlock()
 	if cl != nil {
 		_ = cl.Close()
+	}
+	if c.cfg.push != nil {
+		c.cfg.push.unregister(c.cfg.pushToken, c)
 	}
 	return nil
 }
@@ -285,6 +297,9 @@ func (c *conn) closeIdle() {
 // dial baut die Verbindung auf (ohne c.mu, unter c.dialing) und prueft den Hostschluessel. learned ist der beim
 // ersten Kontakt uebernommene Fingerabdruck (TOFU), sonst "".
 func (c *conn) dial(ctx context.Context) (cl *ssh.Client, learned string, err error) {
+	if c.cfg.push != nil {
+		return c.dialPush(ctx)
+	}
 	cl, learned, err = c.dialOnce(ctx, hostKeyAlgos)
 	var hk *HostKeyError
 	if err == nil || !errors.As(err, &hk) || !c.cfg.multiKey {
@@ -344,10 +359,76 @@ func (c *conn) dialOnce(ctx context.Context, algos []string) (cl *ssh.Client, le
 		}
 		return nil, "", err
 	}
+	return c.handshake(ctx, dctx, nc, deadline, algos, "")
+}
+
+// dialPush holt eine Verbindung des Agents vom Lauscher (statt zu waehlen) und baut SSH darauf auf. Scheitert der
+// Handshake (falscher Hostschluessel, Agent inzwischen weg), wird die naechste wartende Verbindung versucht: eine
+// fremde Verbindung mit dem Token verdraengt so keine passende des echten Agents. Passt keine, ist der Fehler ein
+// *HostKeyError mit dem nachweislich angebotenen Schluessel (wie beim Abfragen) bzw. der letzte Handshake-Fehler;
+// ohne Verbindung innerhalb von pushWait ErrNotConnected.
+func (c *conn) dialPush(ctx context.Context) (*ssh.Client, string, error) {
+	until := time.Now().Add(c.cfg.pushWait)
+	if d, ok := ctx.Deadline(); ok && d.Before(until) {
+		until = d
+	}
+	var hkErr, lastErr error
+	for range pushMaxAttempts {
+		pc, err := c.cfg.push.take(ctx, c.life, c.cfg.pushToken, c.HostKey(), until)
+		if err != nil {
+			switch {
+			case c.life.Err() != nil:
+				return nil, "", ErrClosed
+			case ctx.Err() != nil:
+				return nil, "", ctx.Err()
+			case hkErr != nil:
+				return nil, "", hkErr
+			case lastErr != nil:
+				return nil, "", lastErr
+			}
+			return nil, "", err
+		}
+		deadline := time.Now().Add(c.cfg.dialTimeout)
+		if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+			deadline = d
+		}
+		dctx, cancel := context.WithDeadline(ctx, deadline)
+		stopLife := context.AfterFunc(c.life, cancel)
+		cl, learned, err := c.handshake(ctx, dctx, pc.c, deadline, hostKeyAlgos, pc.claimed)
+		stopLife()
+		cancel()
+		if err == nil {
+			return cl, learned, nil
+		}
+		if errors.Is(err, ErrClosed) || ctx.Err() != nil {
+			return nil, "", err
+		}
+		c.cfg.push.rejected(pc, err)
+		var hk *HostKeyError
+		if errors.As(err, &hk) {
+			hkErr = err
+		} else {
+			lastErr = err
+		}
+	}
+	if hkErr != nil {
+		return nil, "", hkErr
+	}
+	return nil, "", lastErr
+}
+
+// handshake baut SSH auf einer bestehenden TCP-Verbindung auf (schliesst nc bei Fehler) und prueft den
+// Hostschluessel. claim (Push) ist der angekuendigte Fingerabdruck: ist noch keiner gemerkt, muss der angebotene
+// Schluessel dazu passen (er wird dann gemerkt).
+func (c *conn) handshake(ctx, dctx context.Context, nc net.Conn, deadline time.Time, algos []string, claim string) (cl *ssh.Client, learned string, err error) {
 	_ = nc.SetDeadline(deadline)
 	stop := context.AfterFunc(dctx, func() { _ = nc.SetDeadline(time.Unix(1, 0)) })
 	defer stop()
 
+	addr := c.cfg.addr
+	if c.cfg.push != nil {
+		addr = nc.RemoteAddr().String()
+	}
 	want := c.HostKey()
 	var seen string
 	var hkErr error
@@ -361,13 +442,17 @@ func (c *conn) dialOnce(ctx context.Context, algos []string) (cl *ssh.Client, le
 				hkErr = &HostKeyError{Want: want, Got: seen, GotType: key.Type()}
 				return hkErr
 			}
+			if want == "" && claim != "" && seen != claim {
+				hkErr = errors.New("monitor64: push: host key does not match the announced fingerprint")
+				return hkErr
+			}
 			return nil
 		},
 		HostKeyAlgorithms: algos,
 		ClientVersion:     "SSH-2.0-node64-monitor64",
 		Timeout:           c.cfg.dialTimeout,
 	}
-	sc, chans, reqs, err := ssh.NewClientConn(nc, c.cfg.addr, cfg)
+	sc, chans, reqs, err := ssh.NewClientConn(nc, addr, cfg)
 	if err != nil {
 		_ = nc.Close()
 		switch {
@@ -397,6 +482,49 @@ func (c *conn) dialOnce(ctx context.Context, algos []string) (cl *ssh.Client, le
 	}
 	c.mu.Unlock()
 	return ssh.NewClient(sc, chans, reqs), learned, nil
+}
+
+// probeStale prueft die offene Verbindung mit einem Keepalive und schliesst sie, wenn die Antwort innerhalb von
+// wait ausbleibt (Push: eine neue Verbindung des Agents ist angekommen, die alte ist dann oft tot). Laeuft im
+// Hintergrund, hoechstens einmal gleichzeitig.
+func (c *conn) probeStale(wait time.Duration) {
+	c.mu.Lock()
+	cl := c.client
+	if cl == nil || c.probing || c.closed {
+		c.mu.Unlock()
+		return
+	}
+	c.probing = true
+	c.mu.Unlock()
+	go func() {
+		defer func() {
+			c.mu.Lock()
+			c.probing = false
+			c.mu.Unlock()
+		}()
+		res := make(chan error, 1)
+		go func() {
+			_, _, err := cl.SendRequest("keepalive@openssh.com", true, nil)
+			res <- err
+		}()
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case err := <-res:
+			if err == nil {
+				return
+			}
+		case <-t.C:
+		case <-c.life.Done():
+			return
+		}
+		c.mu.Lock()
+		if c.client == cl {
+			c.client = nil
+		}
+		c.mu.Unlock()
+		_ = cl.Close()
+	}()
 }
 
 // exec fuehrt cmd in einem neuen Kanal aus, schickt stdin (falls gesetzt) und liest hoechstens limit Byte.

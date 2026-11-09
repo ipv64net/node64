@@ -60,10 +60,12 @@ func install(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	key := fs.String("key", "", `public key of the node ("ssh-ed25519 AAAA... comment")`)
 	port := fs.Int("port", m64proto.DefaultPort, "TCP port")
+	var pf pushFlags
+	pf.register(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := doInstall(*key, *port); err != nil {
+	if err := doInstall(*key, *port, pf); err != nil {
 		fmt.Fprintln(os.Stderr, "monitor64-agent: ERROR:", err)
 		return 1
 	}
@@ -88,10 +90,16 @@ func checkInstallArgs(key string, port int) (string, error) {
 	return key, nil
 }
 
-func doInstall(key string, port int) error {
+func doInstall(key string, port int, pf pushFlags) error {
 	key, err := checkInstallArgs(key, port)
 	if err != nil {
 		return err
+	}
+	connectPath := filepath.Join(defaultDir, m64agent.PushFile)
+	if pf.noListen && len(pf.connect) == 0 {
+		if t, _ := m64agent.ReadPushFile(connectPath); len(t) == 0 {
+			return errors.New("--no-listen needs --connect token@node[:port]")
+		}
 	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("please run as Administrator")
@@ -117,6 +125,9 @@ func doInstall(key string, port int) error {
 		say("key added to %s", keysPath)
 	} else {
 		say("key already in %s", keysPath)
+	}
+	if err := writePushTargets(connectPath, pf.connect); err != nil {
+		return err
 	}
 
 	m, err := mgr.Connect()
@@ -158,6 +169,9 @@ func doInstall(key string, port int) error {
 	cfg := mgr.Config{DisplayName: serviceDisplay, Description: serviceDesc, StartType: mgr.StartAutomatic,
 		ErrorControl: mgr.ErrorNormal}
 	runArgs := []string{"run", "--port", strconv.Itoa(port)}
+	if pf.noListen {
+		runArgs = append(runArgs, "--no-listen") // Ziele in <dir>\connect (nicht in der Befehlszeile)
+	}
 	if s == nil {
 		if s, err = m.CreateService(serviceName, exePath, cfg, runArgs...); err != nil {
 			return fmt.Errorf("create service: %w", err)
@@ -185,8 +199,12 @@ func doInstall(key string, port int) error {
 		say("WARNING: recovery on errors not set: %v", err)
 	}
 
-	// Firewall (eingehend TCP-Port, nur fuer diese Datei)
-	if err := setFirewall(exePath, port); err != nil {
+	// Firewall (eingehend TCP-Port, nur fuer diese Datei); nur Push: keine eingehende Regel
+	if pf.noListen {
+		netsh := netshPath()
+		del, _ := firewallCmdLines(netsh, "", 0)
+		_, _ = runCmdLine(netsh, del)
+	} else if err := setFirewall(exePath, port); err != nil {
 		say("WARNING: firewall rule not created - allow %d/tcp yourself: %v", port, err)
 	} else {
 		say("firewall rule %q: %d/tcp allowed for %s", firewallRule, port, exeName)
@@ -198,7 +216,11 @@ func doInstall(key string, port int) error {
 	if err := waitState(s, svc.Running, 20*time.Second); err != nil {
 		return fmt.Errorf("start service: %w (see %s)", err, filepath.Join(defaultDir, "agent.log"))
 	}
-	say("service %s started (port %d/tcp)", serviceName, port)
+	if pf.noListen {
+		say("service %s started (push only, not listening)", serviceName)
+	} else {
+		say("service %s started (port %d/tcp)", serviceName, port)
+	}
 	fmt.Println()
 	say("host key fingerprint (compare it in Node64):")
 	fmt.Println("  " + m64agent.Fingerprint(hk.PublicKey()))
@@ -322,6 +344,29 @@ func setFirewall(exe string, port int) error {
 	return nil
 }
 
+// writePushTargets nimmt die Ziele aus --connect in <dir>\connect auf (wie unter Linux).
+func writePushTargets(path string, add []m64agent.PushTarget) error {
+	if len(add) == 0 {
+		return nil
+	}
+	old, err := m64agent.ReadPushFile(path)
+	if err != nil {
+		say("WARNING: %v - file replaced", err)
+		old = nil
+	}
+	all, err := m64agent.AddPushTargets(old, add)
+	if err != nil {
+		return fmt.Errorf("--connect: %w", err)
+	}
+	if err := m64agent.WritePushFile(path, all); err != nil {
+		return err
+	}
+	for _, t := range add {
+		say("connects to node %s (push, %s)", t.String(), path)
+	}
+	return nil
+}
+
 // addKey haengt den Schluessel an die Liste an, falls er fehlt (wie unter Linux).
 func addKey(path, key string) (bool, error) {
 	old, err := os.ReadFile(path)
@@ -409,7 +454,7 @@ func uninstall(args []string) int {
 	del, _ := firewallCmdLines(netsh, "", 0)
 	_, _ = runCmdLine(netsh, del)
 
-	for _, f := range []string{"keys", "hostkey", "agent.log", "agent.log.1", "crash.log"} {
+	for _, f := range []string{"keys", "hostkey", m64agent.PushFile, "agent.log", "agent.log.1", "crash.log"} {
 		_ = os.Remove(filepath.Join(defaultDir, f))
 	}
 	local := filepath.Join(defaultDir, "local.d")

@@ -38,6 +38,13 @@ type AgentConfig struct {
 	OnHostKey   func(fingerprint string)
 	DialTimeout time.Duration // 0 = 10 s
 	IdleTimeout time.Duration // offene Verbindung ohne Anfrage schliessen (0 = 5 min)
+
+	// Push-Betrieb (Hosts hinter NAT/VPS, push.go): der Agent verbindet sich selbst mit dem Lauscher Push und meldet
+	// sich mit PushToken. Statt zu waehlen wartet eine Anfrage hoechstens PushWait (0 = 5 s) auf seine Verbindung,
+	// sonst ErrNotConnected. Addr ist dann nur Anzeige (darf leer sein).
+	Push      *PushListener
+	PushToken string
+	PushWait  time.Duration
 }
 
 // AgentClient spricht mit einem Monitor64-Agent. Sicher fuer gleichzeitige Nutzung.
@@ -51,18 +58,36 @@ func NewAgentClient(cfg AgentConfig) (*AgentClient, error) {
 	if cfg.Signer == nil {
 		return nil, errors.New("monitor64: node key missing")
 	}
-	if cfg.Addr == "" {
-		return nil, errors.New("monitor64: address missing")
+	addr := "push"
+	if cfg.Push != nil {
+		if !ValidPushToken(cfg.PushToken) {
+			return nil, errors.New("monitor64: invalid push token")
+		}
+		if cfg.Addr != "" {
+			addr = cfg.Addr
+		}
+	} else {
+		if cfg.Addr == "" {
+			return nil, errors.New("monitor64: address missing")
+		}
+		addr = HostPort(cfg.Addr, m64proto.DefaultPort)
 	}
-	return &AgentClient{cfg: cfg, conn: newConn(connConfig{
-		addr:        HostPort(cfg.Addr, m64proto.DefaultPort),
+	c := &AgentClient{cfg: cfg, conn: newConn(connConfig{
+		addr:        addr,
 		user:        AgentUser,
 		auth:        []ssh.AuthMethod{ssh.PublicKeys(cfg.Signer)},
 		hostKey:     cfg.HostKey,
 		onHostKey:   cfg.OnHostKey,
 		dialTimeout: cfg.DialTimeout,
 		idleTimeout: cfg.IdleTimeout,
-	})}, nil
+		push:        cfg.Push,
+		pushToken:   cfg.PushToken,
+		pushWait:    cfg.PushWait,
+	})}
+	if cfg.Push != nil {
+		cfg.Push.register(cfg.PushToken, c.conn)
+	}
+	return c, nil
 }
 
 // Info fragt Version, System und Faehigkeiten ab.

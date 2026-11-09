@@ -46,6 +46,9 @@ func NewPool(forget time.Duration) *Pool {
 // Agent liefert den Client fuer key (neu angelegt oder ersetzt, wenn sich cfg geaendert hat).
 func (p *Pool) Agent(key string, cfg AgentConfig) (*AgentClient, error) {
 	sig := "agent|" + cfg.Addr + "|" + signerSig(cfg.Signer) + "|" + fmt.Sprint(cfg.DialTimeout, cfg.IdleTimeout)
+	if cfg.Push != nil {
+		sig += fmt.Sprintf("|push|%p|%s|%s", cfg.Push, cfg.PushToken, cfg.PushWait)
+	}
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()

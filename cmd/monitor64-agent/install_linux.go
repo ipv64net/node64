@@ -43,7 +43,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=` + libBin + ` run --port %d
+ExecStart=` + libBin + ` run --port %d%s
 Restart=always
 RestartSec=5
 UMask=0077
@@ -73,22 +73,31 @@ WantedBy=multi-user.target
 const zypperPaths = "ReadWritePaths=/run -/var/log/zypper.log\n"
 
 // unitText baut den Dienst fuer den Port (zypper-Pfade nur, wenn zypper installiert ist).
-func unitText(port int, zypper bool) string {
-	extra := ""
+func unitText(port int, zypper bool) string { return unitTextPush(port, zypper, false) }
+
+// unitTextPush: wie unitText; noListen = nur Push (die Ziele stehen in <dir>/connect, nicht in der Befehlszeile:
+// der Token soll nicht fuer alle Benutzer lesbar sein).
+func unitTextPush(port int, zypper, noListen bool) string {
+	extra, nl := "", ""
 	if zypper {
 		extra = zypperPaths
 	}
-	return fmt.Sprintf(unitFile, port, extra)
+	if noListen {
+		nl = " --no-listen"
+	}
+	return fmt.Sprintf(unitFile, port, nl, extra)
 }
 
 func install(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	key := fs.String("key", "", `public key of the node ("ssh-ed25519 AAAA... comment")`)
 	port := fs.Int("port", m64proto.DefaultPort, "TCP port")
+	var pf pushFlags
+	pf.register(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := doInstall(*key, *port); err != nil {
+	if err := doInstall(*key, *port, pf); err != nil {
 		fmt.Fprintln(os.Stderr, "monitor64-agent: ERROR:", err)
 		return 1
 	}
@@ -97,7 +106,7 @@ func install(args []string) int {
 
 func say(format string, a ...any) { fmt.Printf("monitor64-agent: "+format+"\n", a...) }
 
-func doInstall(key string, port int) error {
+func doInstall(key string, port int, pf pushFlags) error {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return errors.New(`--key is missing (public key of the node)`)
@@ -110,6 +119,12 @@ func doInstall(key string, port int) error {
 	}
 	if port <= 0 || port > 65535 {
 		return fmt.Errorf("invalid port %d", port)
+	}
+	connectPath := filepath.Join(defaultDir, m64agent.PushFile)
+	if pf.noListen && len(pf.connect) == 0 {
+		if t, _ := m64agent.ReadPushFile(connectPath); len(t) == 0 {
+			return errors.New("--no-listen needs --connect token@node[:port]")
+		}
 	}
 	if os.Geteuid() != 0 {
 		return errors.New("please run as root")
@@ -136,6 +151,9 @@ func doInstall(key string, port int) error {
 		say("key added to %s", keysPath)
 	} else {
 		say("key already in %s", keysPath)
+	}
+	if err := writePushTargets(connectPath, pf.connect); err != nil {
+		return err
 	}
 
 	// Programmdatei
@@ -170,7 +188,7 @@ func doInstall(key string, port int) error {
 	// Dienst
 	if systemd {
 		_, zerr := exec.LookPath("zypper")
-		if err := os.WriteFile(unitPath, []byte(unitText(port, zerr == nil)), 0o644); err != nil {
+		if err := os.WriteFile(unitPath, []byte(unitTextPush(port, zerr == nil, pf.noListen)), 0o644); err != nil {
 			return err
 		}
 		for _, a := range [][]string{{"daemon-reload"}, {"enable", unitName}, {"restart", unitName}} {
@@ -178,13 +196,40 @@ func doInstall(key string, port int) error {
 				return fmt.Errorf("systemctl %s: %v: %s", strings.Join(a, " "), err, bytes.TrimSpace(out))
 			}
 		}
-		say("service %s started (port %d/tcp)", unitName, port)
+		if pf.noListen {
+			say("service %s started (push only, not listening)", unitName)
+		} else {
+			say("service %s started (port %d/tcp)", unitName, port)
+		}
 	} else {
 		say("WARNING: systemd not found - start the agent yourself: %s run --port %d", libBin, port)
 	}
 	fmt.Println()
 	say("host key fingerprint (compare it in Node64):")
 	fmt.Println("  " + m64agent.Fingerprint(hk.PublicKey()))
+	return nil
+}
+
+// writePushTargets nimmt die Ziele aus --connect in <dir>/connect auf (gleiche Adresse = neuer Token).
+func writePushTargets(path string, add []m64agent.PushTarget) error {
+	if len(add) == 0 {
+		return nil
+	}
+	old, err := m64agent.ReadPushFile(path)
+	if err != nil {
+		say("WARNING: %v - file replaced", err)
+		old = nil
+	}
+	all, err := m64agent.AddPushTargets(old, add)
+	if err != nil {
+		return fmt.Errorf("--connect: %w", err)
+	}
+	if err := m64agent.WritePushFile(path, all); err != nil {
+		return err
+	}
+	for _, t := range add {
+		say("connects to node %s (push, %s)", t.String(), path)
+	}
 	return nil
 }
 
@@ -283,7 +328,7 @@ func uninstall(args []string) int {
 	}
 	_ = os.RemoveAll(libDir)
 	_ = os.RemoveAll(stateDir)
-	for _, f := range []string{"keys", "hostkey"} {
+	for _, f := range []string{"keys", "hostkey", m64agent.PushFile} {
 		_ = os.Remove(filepath.Join(defaultDir, f))
 	}
 	local := filepath.Join(defaultDir, "local.d")

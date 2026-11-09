@@ -16,7 +16,10 @@
 #   monitor64_agent_enable  YES/NO (Standard NO)
 #   monitor64_agent_port    TCP-Port (Standard 6465)
 #   monitor64_agent_dir     Einstellungen (Standard /usr/local/etc/monitor64-agent)
-#   monitor64_agent_args    weitere Optionen fuer "run", z. B. "--listen 192.168.1.1"
+#   monitor64_agent_args    weitere Optionen fuer "run", z. B. "--listen 192.168.1.1"; "--no-listen" fuer nur Push
+#
+# Push-Betrieb (Firewall hinter NAT, VPS): die Nodes stehen in /usr/local/etc/monitor64-agent/connect (Modus 0600,
+# eine Zeile je Node: token@host[:6466], Befehl zeigt Node64); der Agent baut die Verbindung dann selbst auf.
 #
 # daemon(8) startet den Agent nach einem Absturz neu (-r, 5 s Pause) und schreibt die Ausgabe ins syslog
 # (Kennung monitor64-agent). Nach einem Update ersetzt sich der Agent selbst (exec, gleiche Prozessnummer).

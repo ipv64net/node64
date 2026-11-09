@@ -5,6 +5,8 @@
 #
 # Optionen: -Key "<oeffentlicher Schluessel>" (Pflicht), -Port 6465, -Base <URL> (Ordner mit den Dateien, Standard
 # https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
+# Push-Betrieb (Host hinter NAT, VPS): -Connect "token@node[:6466]" (auch mehrere, durch Komma) baut die Verbindung
+# zur Node selbst auf; -NoListen zusaetzlich, wenn der Agent nicht lauschen soll (dann auch keine Firewall-Regel).
 # Die Datei monitor64-agent-windows-amd64.exe wird gegen SHA256SUMS aus demselben Ordner geprueft und ruft dann
 # "monitor64-agent install" auf (Datei, Schluessel, Dienst, Firewall-Regel, Fingerabdruck des Hostschluessels).
 # Entfernen: & "$env:ProgramFiles\monitor64-agent\monitor64-agent.exe" uninstall
@@ -13,7 +15,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$Key,
     [int]$Port = 0,
-    [string]$Base = 'https://node64.de/agent/'
+    [string]$Base = 'https://node64.de/agent/',
+    [string[]]$Connect = @(),
+    [switch]$NoListen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +28,10 @@ function Say([string]$Msg) { Write-Host "monitor64-agent: $Msg" }
 $Key = $Key.Trim()
 if (-not $Key) { throw 'monitor64-agent: -Key is missing (public key of the node, shown in Node64)' }
 if ($Port -lt 0 -or $Port -gt 65535) { throw "monitor64-agent: invalid port: $Port" }
+foreach ($c in $Connect) {
+    if ($c -notmatch '^[a-z0-9]{16,64}@[A-Za-z0-9.:_\[\]-]+$') { throw "monitor64-agent: invalid -Connect value: $c (token@host[:port])" }
+}
+if ($NoListen -and $Connect.Count -eq 0) { throw 'monitor64-agent: -NoListen needs -Connect "token@node[:port]"' }
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -114,6 +122,8 @@ try {
 
     $installArgs = @('install', '--key', $Key)
     if ($Port -gt 0) { $installArgs += @('--port', [string]$Port) }
+    foreach ($c in $Connect) { $installArgs += @('--connect', $c) }
+    if ($NoListen) { $installArgs += '--no-listen' }
     & $exe @installArgs
     if ($LASTEXITCODE -ne 0) { throw "monitor64-agent: install failed (exit code $LASTEXITCODE)" }
 } finally {

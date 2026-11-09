@@ -70,6 +70,11 @@ type Config struct {
 	HandshakeTimeout time.Duration // 0 = 10 s
 	IdleTimeout      time.Duration // Verbindung ohne offenen Kanal schliessen (0 = 15 min)
 	CollectTimeout   time.Duration // 0 = 15 s, hoechstens 20 s
+
+	// Push-Betrieb (push.go): Wartezeit vor dem naechsten Verbindungsversuch nach einem Fehlschlag, verdoppelt sich
+	// von PushRetryMin (0 = 5 s) bis PushRetryMax (0 = 5 min).
+	PushRetryMin time.Duration
+	PushRetryMax time.Duration
 }
 
 // Server ist der laufende Agent.
@@ -87,6 +92,8 @@ type Server struct {
 	authed      map[*ssh.ServerConn][]byte // angemeldete Verbindungen -> Schluessel (Wire-Format)
 	sweepOnce   sync.Once
 	done        chan struct{}
+
+	pushKeepaliveEvery time.Duration // Push-Betrieb: Keepalive-Abstand (Tests setzen weniger)
 
 	collectMu chan struct{} // collect nacheinander (mehrere Nodes gleichzeitig)
 	updateMu  sync.Mutex
@@ -122,6 +129,13 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Version == "" {
 		cfg.Version = "0.0.0"
 	}
+	if cfg.PushRetryMin <= 0 {
+		cfg.PushRetryMin = defaultPushRetryMin
+	}
+	if cfg.PushRetryMax <= 0 {
+		cfg.PushRetryMax = defaultPushRetryMax
+	}
+	cfg.PushRetryMax = max(cfg.PushRetryMax, cfg.PushRetryMin)
 	log := cfg.Logger
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -138,6 +152,8 @@ func New(cfg Config) (*Server, error) {
 		revokeEvery: revokeEvery,
 		authed:      map[*ssh.ServerConn][]byte{},
 		done:        make(chan struct{}),
+
+		pushKeepaliveEvery: pushKeepaliveEvery,
 	}
 	if cfg.LocalDir != "" {
 		s.local = newLocalRunner(cfg.LocalDir)
@@ -154,10 +170,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		return ErrServerClosed
 	}
 	s.ln[ln] = struct{}{}
-	s.sweepOnce.Do(func() {
-		s.wg.Add(1)
-		go s.sweepLoop()
-	})
+	s.startSweepLocked()
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
@@ -205,9 +218,17 @@ func (s *Server) Serve(ln net.Listener) error {
 			defer s.wg.Done()
 			defer s.track(c, false)
 			defer c.Close()
-			s.handleConn(c, p, slot)
+			s.handleConn(c, p, slot, false)
 		}()
 	}
+}
+
+// startSweepLocked startet die Pruefung offener Verbindungen gegen die Schluesselliste (einmal; s.mu gehalten).
+func (s *Server) startSweepLocked() {
+	s.sweepOnce.Do(func() {
+		s.wg.Add(1)
+		go s.sweepLoop()
+	})
 }
 
 // Close beendet alle Listener und Verbindungen und wartet auf laufende Anfragen.
@@ -273,7 +294,10 @@ func (s *Server) sshConfig(rejected *atomic.Bool) *ssh.ServerConfig {
 	return cfg
 }
 
-func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot) {
+// handleConn bedient eine Verbindung; liefert, ob sich die Node angemeldet hat. push: die Verbindung hat der Agent
+// selbst aufgebaut (push.go) - Fehlversuche zaehlen dann nicht im Limiter (die Wartezeit des Push-Betriebs bremst),
+// und ein Keepalive erkennt tote Verbindungen.
+func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot, push bool) bool {
 	remote := c.RemoteAddr().String()
 	_ = c.SetDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
 	var rejected atomic.Bool
@@ -282,24 +306,28 @@ func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot) {
 	if err != nil {
 		// Jede Verbindung ohne Anmeldung zaehlt als Fehlversuch (auch Zeitlimit und abgebrochener Handshake),
 		// sonst koennten stille Verbindungen beliebig oft Plaetze belegen (bekannte Adressen: siehe failPeer).
-		s.lim.failPeer(p, time.Now())
+		if !push {
+			s.lim.failPeer(p, time.Now())
+		}
 		var ae *ssh.ServerAuthError
 		if errors.As(err, &ae) && rejected.Load() {
 			s.log.Warn("monitor64-agent: login refused", "remote", remote)
 		} else {
 			s.log.Debug("monitor64-agent: handshake failed", "remote", remote, "err", err)
 		}
-		return
+		return false
 	}
 	defer sc.Close()
 	_ = c.SetDeadline(time.Time{})
-	s.lim.ok(p.ip, time.Now())
+	if !push {
+		s.lim.ok(p.ip, time.Now())
+	}
 	select {
 	case s.sem <- struct{}{}:
 		defer func() { <-s.sem }()
 	default:
 		s.log.Warn("monitor64-agent: too many connections", "remote", remote)
-		return
+		return true
 	}
 	wire := []byte(sc.Permissions.Extensions["key"])
 	s.authMu.Lock()
@@ -330,6 +358,10 @@ func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot) {
 	defer wg.Wait() // laeuft nach cancel: laufende Anfragen sehen das Ende der Verbindung
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if push {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.pushKeepalive(ctx, sc) }()
+	}
 
 	// Leerlauf: ohne offenen Kanal wird die Verbindung nach IdleTimeout geschlossen.
 	var active atomic.Int32
@@ -369,6 +401,7 @@ func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot) {
 			}
 		}()
 	}
+	return true
 }
 
 // sweepLoop prueft regelmaessig die offenen Verbindungen gegen die Schluesselliste (Datei geaendert).

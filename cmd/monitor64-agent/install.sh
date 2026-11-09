@@ -6,6 +6,9 @@
 #
 # Optionen: --key "<oeffentlicher Schluessel>" (Pflicht), --port 6465, --base <URL> (Ordner mit den Dateien,
 # Standard https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
+# Push-Betrieb (Host hinter NAT, VPS): --connect token@node[:6466] (auch mehrfach, z. B. Cluster) baut die Verbindung
+# zur Node selbst auf; --no-listen zusaetzlich, wenn der Agent nicht lauschen soll. Die Ziele landen in
+# /etc/monitor64-agent/connect (nur fuer root lesbar), nicht in der Befehlszeile des Dienstes.
 # Die Datei monitor64-agent-linux-<arch> wird gegen SHA256SUMS aus demselben Ordner geprueft und ruft dann
 # "monitor64-agent install" auf (Datei, Schluessel, systemd-Dienst, Fingerabdruck des Hostschluessels).
 # Entfernen: monitor64-agent uninstall
@@ -14,6 +17,8 @@ set -eu
 BASE="https://node64.de/agent/"
 KEY=""
 PORT=""
+CONNECT=""
+NOLISTEN=""
 
 say() { printf '%s\n' "monitor64-agent: $*"; }
 die() { printf '%s\n' "monitor64-agent: ERROR: $*" >&2; exit 1; }
@@ -26,8 +31,11 @@ while [ $# -gt 0 ]; do
 	--port=*) PORT=${1#--port=}; shift ;;
 	--base) [ $# -ge 2 ] || die "--base needs a value"; BASE=$2; shift 2 ;;
 	--base=*) BASE=${1#--base=}; shift ;;
+	--connect) [ $# -ge 2 ] || die "--connect needs a value"; CONNECT="$CONNECT $2"; shift 2 ;;
+	--connect=*) CONNECT="$CONNECT ${1#--connect=}"; shift ;;
+	--no-listen) NOLISTEN=1; shift ;;
 	-h | --help)
-		say 'usage: sh install.sh --key "ssh-ed25519 AAAA... comment" [--port 6465] [--base URL]'
+		say 'usage: sh install.sh --key "ssh-ed25519 AAAA... comment" [--port 6465] [--base URL] [--connect token@node[:6466]] [--no-listen]'
 		exit 0
 		;;
 	*) die "unknown option: $1" ;;
@@ -39,6 +47,17 @@ case "$PORT" in
 "" | [0-9] | [0-9][0-9] | [0-9][0-9][0-9] | [0-9][0-9][0-9][0-9] | [0-9][0-9][0-9][0-9][0-9]) ;;
 *) die "invalid port: $PORT" ;;
 esac
+# --connect: nur Zeichen aus token@host:port (IPv6 in Klammern); genaue Pruefung macht "monitor64-agent install".
+for c in $CONNECT; do
+	case "$c" in
+	*@*) ;;
+	*) die "--connect expects token@host[:port]: $c" ;;
+	esac
+	case "$c" in
+	*[!]a-z0-9A-Z@.:_[-]*) die "invalid --connect value: $c" ;;
+	esac
+done
+[ -z "$NOLISTEN" ] || [ -n "$CONNECT" ] || die "--no-listen needs --connect token@node[:port]"
 [ "$(id -u)" = 0 ] || die "please run as root (sudo sh -s -- ...)"
 [ "$(uname -s)" = Linux ] || die "only Linux is supported by this script"
 
@@ -105,8 +124,15 @@ fi
 say "checksum ok"
 
 chmod 755 "$TMP/monitor64-agent"
+set -f # [2001:db8::1] nicht als Dateimuster auswerten
+set -- install --key "$KEY"
 if [ -n "$PORT" ]; then
-	"$TMP/monitor64-agent" install --key "$KEY" --port "$PORT"
-else
-	"$TMP/monitor64-agent" install --key "$KEY"
+	set -- "$@" --port "$PORT"
 fi
+for c in $CONNECT; do
+	set -- "$@" --connect "$c"
+done
+if [ -n "$NOLISTEN" ]; then
+	set -- "$@" --no-listen
+fi
+"$TMP/monitor64-agent" "$@"

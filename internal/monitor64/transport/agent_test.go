@@ -201,10 +201,35 @@ func TestAgentRateLimit(t *testing.T) {
 			t.Fatal("wrong key accepted")
 		}
 	}
+	// Der Agent zaehlt den Fehlversuch erst, nachdem der Client die Ablehnung schon gesehen hat: warten, bis er
+	// beim Annehmen sperrt (sonst kaeme der richtige Schluessel noch durch, und die Adresse gaelte danach als bekannt).
+	waitRefused(t, e.addr)
 	// jetzt ist 127.0.0.1 gesperrt - auch der richtige Schluessel
 	c := e.client(t, e.addr, e.node, "")
 	if _, err := c.Info(ctx(t)); err == nil {
 		t.Fatal("blocked address accepted")
+	}
+}
+
+// waitRefused wartet, bis der Agent Verbindungen von 127.0.0.1 gleich beim Annehmen schliesst (ohne SSH-Kennung).
+func waitRefused(t *testing.T, addr string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c, err := net.DialTimeout("tcp", addr, time.Second)
+		if err == nil {
+			_ = c.SetReadDeadline(time.Now().Add(time.Second))
+			var b [4]byte
+			n, rerr := io.ReadFull(c, b[:])
+			_ = c.Close()
+			if n == 0 && rerr != nil && !errors.Is(rerr, os.ErrDeadlineExceeded) {
+				return // geschlossen ohne Kennung: gesperrt
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("address not refused after failed logins")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
