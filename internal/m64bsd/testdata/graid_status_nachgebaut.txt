@@ -1,0 +1,6 @@
+   Name   Status  Components
+raid/r0  OPTIMAL  ada0 (ACTIVE (ACTIVE))
+                  ada1 (ACTIVE (ACTIVE))
+raid/r1  DEGRADED  ada2 (ACTIVE (ACTIVE))
+                   ada3 (ACTIVE (REBUILD 23%))
+raid/r2  BROKEN  ada4 (FAILED)

@@ -120,9 +120,7 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 	for _, l := range cur.Local {
 		out = append(out, mapLocal(l))
 	}
-	for _, w := range cur.WinSvc {
-		out = append(out, Service{Key: "winsvc:" + w.Name, Name: firstNonEmpty(w.Display, w.Name), Kind: "winsvc", Default: w.StartType == "auto", Text: w.State})
-	}
+	out = append(out, mapWinSvc(cur.WinSvc)...) // Sammeldienst "Windows-Dienste" plus je Dienst (nicht vorgeschlagen)
 	sort.SliceStable(out, func(i, j int) bool { return kindOrder(out[i].Kind) < kindOrder(out[j].Kind) })
 	out = dedupeKeys(out)
 	return out
@@ -499,7 +497,10 @@ func mapZFS(z m64proto.ZPool) Service {
 			Metric{Name: "used", Value: round2(float64(z.Alloc) / float64(z.Size) * 100), Unit: "%", Rule: RuleStore, Max: float64(z.Size)},
 			Metric{Name: "free", Value: float64(z.Free), Unit: "B", Max: float64(z.Size)})
 	}
-	s.Text = fmt.Sprintf("%s · %s frei", z.Health, bytesText(z.Free))
+	s.Text = z.Health
+	if z.Size > 0 { // ohne Groesse (z. B. node_exporter) kein "0 B frei"
+		s.Text = fmt.Sprintf("%s · %s frei", z.Health, bytesText(z.Free))
+	}
 	if !strings.EqualFold(z.Health, "ONLINE") {
 		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: z.Health + " " + z.Errors})
 	} else if e := zfsErrors(z.Errors); e != "" {

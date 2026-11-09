@@ -123,7 +123,14 @@ func parseRunFlags(args []string, errOut io.Writer) (runFlags, error) {
 // restartFn ersetzt den Prozess durch die Programmdatei (Tests setzen einen Ersatz).
 var restartFn = restartSelf
 
-func run(args []string) int { return runAgent(selfPath(), args) }
+// platformRun startet runAgent (Windows: als Dienst, siehe run_windows.go); baseContext endet, wenn der Agent
+// aufhoeren soll (zusaetzlich zu Strg+C/SIGTERM; Windows: Stopp durch den Dienst-Manager).
+var (
+	platformRun = runAgent
+	baseContext = context.Background
+)
+
+func run(args []string) int { return platformRun(selfPath(), args) }
 
 func runAgent(exe string, args []string) int {
 	// Rueckfall nach einem Update: kam die neue Version beim letzten Start nicht hoch, laeuft wieder die alte. Das
@@ -205,7 +212,7 @@ func runAgent(exe string, args []string) int {
 		})
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(baseContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()

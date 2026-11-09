@@ -1,0 +1,9 @@
+{
+  "json_format_version": [1, 0],
+  "smartctl": {"version": [7, 4], "argv": ["smartctl", "--scan-open", "-j"], "exit_status": 0},
+  "devices": [
+    {"name": "/dev/ada0", "info_name": "/dev/ada0", "type": "atacam", "protocol": "ATA"},
+    {"name": "/dev/ada1", "info_name": "/dev/ada1", "type": "atacam", "protocol": "ATA"},
+    {"name": "/dev/nvme0", "info_name": "/dev/nvme0", "type": "nvme", "protocol": "NVMe"}
+  ]
+}

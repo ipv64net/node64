@@ -1,0 +1,12 @@
+curl-8.10.1 is vulnerable:
+  curl -- netrc and redirect credential leak
+  CVE: CVE-2024-11053
+  WWW: https://vuxml.FreeBSD.org/freebsd/0a5b7c3d-b7a3-11ef-8e5a-589cfc0f81b0.html
+
+libxml2-2.11.8 is vulnerable:
+  libxml2 -- multiple vulnerabilities
+  CVE: CVE-2024-56171
+  CVE: CVE-2025-24928
+  WWW: https://vuxml.FreeBSD.org/freebsd/7a2d1b6c-f0b1-11ef-a7f2-b42e991fc52e.html
+
+2 problem(s) in 2 installed package(s) found.

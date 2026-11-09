@@ -13,6 +13,8 @@
 - Maintenance for hosts, groups and tags (now, scheduled, recurring).
 - History in its own file `monitor64.db` (1 min / 5 min / 1 h), charts with zoom.
 - Prometheus export at `/api/metrics`, config export/import (secrets only with export password).
+- Phase 2/3: agent for Windows (service, PowerShell one-liner) and FreeBSD/OPNsense, query Prometheus exporters
+  (node_exporter, windows_exporter, custom metrics), entries on status pages, rule "Windows service stopped".
 - Code review fixes: intentionally missing values (stopped VM, sleeping disk) stay OK, reminders are not lost after
   quiet hours, no duplicate messages to default channels, ZFS device errors on ONLINE pools, Proxmox cluster services
   evaluated by a monitored node, hung VMs even when allowed to be off, thousands separator and hysteresis in the shown unit.

@@ -1,0 +1,98 @@
+igb0: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	description: WAN (wan)
+	options=4e527bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,WOL_MAGIC,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:0d:b9:5a:1b:2c
+	inet 203.0.113.10 netmask 0xffffff00 broadcast 203.0.113.255
+	inet6 fe80::20d:b9ff:fe5a:1b2c%igb0 prefixlen 64 scopeid 0x1
+	media: Ethernet autoselect (1000baseT <full-duplex>)
+	status: active
+	nd6 options=23<PERFORMNUD,ACCEPT_RTADV,AUTO_LINKLOCAL>
+igb1: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	description: LAN (lan)
+	options=4e527bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,WOL_MAGIC,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:0d:b9:5a:1b:2d
+	inet 192.168.1.1 netmask 0xffffff00 broadcast 192.168.1.255
+	inet6 fe80::20d:b9ff:fe5a:1b2d%igb1 prefixlen 64 scopeid 0x2
+	media: Ethernet autoselect (2500Base-T <full-duplex>)
+	status: active
+	nd6 options=21<PERFORMNUD,AUTO_LINKLOCAL>
+igb2: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	options=4e527bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,WOL_MAGIC,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:0d:b9:5a:1b:2e
+	media: Ethernet autoselect (1000baseT <full-duplex>)
+	status: active
+	nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+igb3: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	options=4e527bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,WOL_MAGIC,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:0d:b9:5a:1b:2e
+	hwaddr 00:0d:b9:5a:1b:2f
+	media: Ethernet autoselect (1000baseT <full-duplex>)
+	status: active
+	nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+igb4: flags=8802<BROADCAST,SIMPLEX,MULTICAST> metric 0 mtu 1500
+	options=4e527bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,WOL_MAGIC,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:0d:b9:5a:1b:30
+	media: Ethernet autoselect
+	status: no carrier
+	nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+enc0: flags=0 metric 0 mtu 1536
+	options=0
+	groups: enc
+	nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+lo0: flags=1008049<UP,LOOPBACK,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 16384
+	options=680003<RXCSUM,TXCSUM,LINKSTATE,RXCSUM_IPV6,TXCSUM_IPV6>
+	inet 127.0.0.1 netmask 0xff000000
+	inet6 ::1 prefixlen 128
+	inet6 fe80::1%lo0 prefixlen 64 scopeid 0x7
+	groups: lo
+	nd6 options=21<PERFORMNUD,AUTO_LINKLOCAL>
+pflog0: flags=100<PROMISC> metric 0 mtu 33152
+	options=0
+	groups: pflog
+pfsync0: flags=0 metric 0 mtu 1500
+	options=0
+	maxupd: 128 defer: off version: 1400
+	syncok: 1
+	groups: pfsync
+lagg0: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	options=4e507bb<RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,JUMBO_MTU,VLAN_HWCSUM,TSO4,TSO6,LRO,VLAN_HWFILTER,VLAN_HWTSO,RXCSUM_IPV6,TXCSUM_IPV6,HWSTATS,MEXTPG>
+	ether 00:0d:b9:5a:1b:2e
+	inet 10.20.0.1 netmask 0xffffff00 broadcast 10.20.0.255
+	laggproto lacp lagghash l2,l3,l4
+	laggport: igb2 flags=1c<ACTIVE,COLLECTING,DISTRIBUTING>
+	laggport: igb3 flags=0<>
+	groups: lagg
+	media: Ethernet autoselect
+	status: active
+	nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+vlan01: flags=1008943<UP,BROADCAST,RUNNING,PROMISC,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	description: IOT (opt2)
+	options=4000000<MEXTPG>
+	ether 00:0d:b9:5a:1b:2d
+	inet 10.10.10.1 netmask 0xffffff00 broadcast 10.10.10.255
+	groups: vlan
+	vlan: 10 vlanproto: 802.1q vlanpcp: 0 parent interface: igb1
+	media: Ethernet autoselect (2500Base-T <full-duplex>)
+	status: active
+	nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+wg1: flags=10080c1<UP,RUNNING,NOARP,MULTICAST,LOWER_UP> metric 0 mtu 1420
+	options=80000<LINKSTATE>
+	inet 10.99.0.1 netmask 0xffffff00
+	groups: wg wireguard
+	nd6 options=101<PERFORMNUD,NO_DAD>
+ovpns1: flags=1008051<UP,POINTOPOINT,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	options=80000<LINKSTATE>
+	inet 10.8.0.1 --> 10.8.0.2 netmask 0xffffff00
+	groups: tun openvpn
+	nd6 options=101<PERFORMNUD,NO_DAD>
+	Opened by PID 41234
+bridge0: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+	options=10<VLAN_HWTAGGING>
+	ether 58:9c:fc:10:ff:aa
+	id 00:00:00:00:00:00 priority 32768 hellotime 2 fwddelay 15
+	maxage 20 holdcnt 6 proto rstp maxaddr 2000 timeout 1200
+	root id 00:00:00:00:00:00 priority 32768 ifcost 0 port 0
+	member: igb4 flags=143<LEARNING,DISCOVER,AUTOEDGE,AUTOPTP>
+	        ifmaxaddr 0 port 5 priority 128 path cost 2000000
+	groups: bridge
+	nd6 options=9<PERFORMNUD,IFDISABLED>

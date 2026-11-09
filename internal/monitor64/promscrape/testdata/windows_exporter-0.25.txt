@@ -1,0 +1,42 @@
+# Nachgebaut nach windows_exporter 0.25 (alte Namen: windows_cs_*, windows_os_*, windows_cpu_time_total,
+# windows_system_system_up_time, Label "name"); Werte von Hand, keine echte Ausgabe.
+# TYPE windows_exporter_build_info gauge
+windows_exporter_build_info{branch="heads/tags/v0.25.1",goversion="go1.21.5",revision="d4ae5b7",version="0.25.1"} 1
+# TYPE windows_cpu_time_total counter
+windows_cpu_time_total{core="0,0",mode="dpc"} 5
+windows_cpu_time_total{core="0,0",mode="idle"} 5000
+windows_cpu_time_total{core="0,0",mode="interrupt"} 7
+windows_cpu_time_total{core="0,0",mode="privileged"} 300
+windows_cpu_time_total{core="0,0",mode="user"} 700
+# TYPE windows_cs_logical_processors gauge
+windows_cs_logical_processors 1
+# TYPE windows_cs_physical_memory_bytes gauge
+windows_cs_physical_memory_bytes 4.294967296e+09
+# TYPE windows_os_physical_memory_free_bytes gauge
+windows_os_physical_memory_free_bytes 1.073741824e+09
+# TYPE windows_os_paging_limit_bytes gauge
+windows_os_paging_limit_bytes 1.073741824e+09
+# TYPE windows_os_paging_free_bytes gauge
+windows_os_paging_free_bytes 5.36870912e+08
+# TYPE windows_os_time gauge
+windows_os_time 1.7047e+09
+# TYPE windows_system_system_up_time gauge
+windows_system_system_up_time 1.7046e+09
+# TYPE windows_logical_disk_size_bytes gauge
+windows_logical_disk_size_bytes{volume="C:"} 6.4e+10
+# TYPE windows_logical_disk_free_bytes gauge
+windows_logical_disk_free_bytes{volume="C:"} 1.6e+10
+# TYPE windows_net_bytes_received_total counter
+windows_net_bytes_received_total{nic="vmxnet3 Ethernet Adapter"} 1e+09
+# TYPE windows_net_bytes_sent_total counter
+windows_net_bytes_sent_total{nic="vmxnet3 Ethernet Adapter"} 5e+08
+# TYPE windows_net_current_bandwidth_bytes gauge
+windows_net_current_bandwidth_bytes{nic="vmxnet3 Ethernet Adapter"} 1.25e+09
+# TYPE windows_service_info gauge
+windows_service_info{display_name="Windows-Zeitgeber",name="w32time",process_id="1234",run_as="NT AUTHORITY\\LocalService"} 1
+# TYPE windows_service_start_mode gauge
+windows_service_start_mode{name="w32time",start_mode="auto"} 1
+windows_service_start_mode{name="w32time",start_mode="manual"} 0
+# TYPE windows_service_state gauge
+windows_service_state{name="w32time",state="running"} 1
+windows_service_state{name="w32time",state="stopped"} 0

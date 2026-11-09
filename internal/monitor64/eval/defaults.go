@@ -35,6 +35,7 @@ const (
 	KindRebootRequired  = "reboot.required"      // Neustart noetig
 	KindGuestDown       = "guest.down"           // Gast/Container laeuft nicht, obwohl er soll
 	KindSystemdFailed   = "systemd.failed"       // fehlgeschlagene systemd-Dienste
+	KindWinSvcStopped   = "winsvc.stopped"       // Windows-Dienst mit Starttyp Automatisch laeuft nicht
 	KindServiceGone     = "svc.vanished"         // Dienst verschwunden (bleibt bis "Entfernen")
 	KindAccessFailed    = "access.failed"        // einzelner Zugang antwortet nicht
 	KindCtrUnhealthy    = "ctr.unhealthy"        // Container meldet unhealthy
@@ -118,6 +119,7 @@ func Defaults() Table {
 		KindRebootRequired:  stateRule(SevWarn, 24*time.Hour),
 		KindGuestDown:       stateRule(SevCrit, 0),
 		KindSystemdFailed:   stateRule(SevWarn, 0),
+		KindWinSvcStopped:   stateRule(SevWarn, 5*time.Minute),
 		KindServiceGone:     stateRule(SevWarn, 0),
 		KindAccessFailed:    stateRule(SevWarn, 0),
 		KindCtrUnhealthy:    stateRule(SevWarn, 0),

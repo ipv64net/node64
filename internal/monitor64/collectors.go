@@ -18,6 +18,7 @@ import (
 	"github.com/ipv64net/node64/internal/m64proto"
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/promscrape"
 	"github.com/ipv64net/node64/internal/monitor64/transport"
 	"github.com/ipv64net/node64/internal/secrets"
 )
@@ -94,6 +95,8 @@ type accessConfig struct {
 	TokenID string `json:"token_id,omitempty"`
 	Node    string `json:"node,omitempty"`
 	Pin     string `json:"pin,omitempty"`
+	// Prometheus: eigene Metriken (beliebige Exporter)
+	Metrics []promscrape.CustomMetric `json:"metrics,omitempty"`
 }
 
 // newCollector baut den Sammler eines Zugangs.
@@ -272,7 +275,7 @@ var sectionPrefixes = map[string][]string{
 	m64proto.SecCPU: {"cpu"}, m64proto.SecMem: {"mem", "swap"}, m64proto.SecLoad: {"load"}, m64proto.SecFS: {"fs:"},
 	m64proto.SecDisk: {"disk:"}, m64proto.SecSmart: {"disk:"}, m64proto.SecNet: {"if:"}, m64proto.SecBond: {"bond:"},
 	m64proto.SecRAID: {"raid:"}, m64proto.SecZFS: {"zfs:"}, m64proto.SecTemp: {"temp:"}, m64proto.SecSystemd: {"systemd"},
-	m64proto.SecUpdates: {"updates"}, m64proto.SecReboot: {"reboot"}, m64proto.SecLocal: {"local:"}, m64proto.SecWinSvc: {"winsvc:"},
+	m64proto.SecUpdates: {"updates"}, m64proto.SecReboot: {"reboot"}, m64proto.SecLocal: {"local:"}, m64proto.SecWinSvc: {"winsvc"},
 }
 
 func (a *agentCollector) close() { a.ref.close() }

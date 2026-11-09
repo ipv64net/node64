@@ -1,0 +1,54 @@
+Geom name: ada0
+Providers:
+1. Name: ada0
+   Mediasize: 4000787030016 (3.6T)
+   Sectorsize: 512
+   Stripesize: 4096
+   Stripeoffset: 0
+   Mode: r1w1e3
+   descr: WDC WD40EFRX-68N32N0
+   lunid: 50014ee2b5a1c3d4
+   ident: WD-WCC7K1ABCDEF
+   rotationrate: 5400
+   fwsectors: 63
+   fwheads: 16
+
+Geom name: ada1
+Providers:
+1. Name: ada1
+   Mediasize: 4000787030016 (3.6T)
+   Sectorsize: 512
+   Stripesize: 4096
+   Stripeoffset: 0
+   Mode: r1w1e3
+   descr: WDC WD40EFRX-68N32N0
+   lunid: 50014ee2b5a1c3d5
+   ident: WD-WCC7K1GHIJKL
+   rotationrate: 5400
+   fwsectors: 63
+   fwheads: 16
+
+Geom name: nda0
+Providers:
+1. Name: nda0
+   Mediasize: 500107862016 (466G)
+   Sectorsize: 512
+   Mode: r2w2e5
+   descr: Samsung SSD 970 EVO Plus 500GB
+   lunid: 0025385a91b2c3d4
+   ident: S4EVNX0N123456A
+   rotationrate: 0
+   fwsectors: 0
+   fwheads: 0
+
+Geom name: cd0
+Providers:
+1. Name: cd0
+   Mediasize: 0 (0B)
+   Sectorsize: 2048
+   Mode: r0w0e0
+   descr: QEMU QEMU DVD-ROM
+   ident: (null)
+   rotationrate: unknown
+   fwsectors: 0
+   fwheads: 0

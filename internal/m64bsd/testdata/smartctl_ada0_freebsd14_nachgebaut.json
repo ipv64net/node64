@@ -1,0 +1,33 @@
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 4],
+    "platform_info": "FreeBSD 14.1-RELEASE-p5 amd64",
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "atacam", "/dev/ada0"],
+    "exit_status": 0
+  },
+  "local_time": {"time_t": 1794200000, "asctime": "Sun Nov  8 12:00:00 2026 CET"},
+  "device": {"name": "/dev/ada0", "info_name": "/dev/ada0", "type": "atacam", "protocol": "ATA"},
+  "model_family": "Western Digital Red",
+  "model_name": "WDC WD40EFRX-68N32N0",
+  "serial_number": "WD-WCC7K1ABCDEF",
+  "firmware_version": "82.00A82",
+  "user_capacity": {"blocks": 7814037168, "bytes": 4000787030016},
+  "rotation_rate": 5400,
+  "smart_support": {"available": true, "enabled": true},
+  "smart_status": {"passed": true},
+  "ata_smart_attributes": {
+    "revision": 16,
+    "table": [
+      {"id": 1, "name": "Raw_Read_Error_Rate", "value": 200, "worst": 200, "thresh": 51, "raw": {"value": 0, "string": "0"}},
+      {"id": 5, "name": "Reallocated_Sector_Ct", "value": 200, "worst": 200, "thresh": 140, "raw": {"value": 0, "string": "0"}},
+      {"id": 9, "name": "Power_On_Hours", "value": 52, "worst": 52, "thresh": 0, "raw": {"value": 35123, "string": "35123"}},
+      {"id": 194, "name": "Temperature_Celsius", "value": 116, "worst": 104, "thresh": 0, "raw": {"value": 34, "string": "34"}},
+      {"id": 197, "name": "Current_Pending_Sector", "value": 200, "worst": 200, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+      {"id": 198, "name": "Offline_Uncorrectable", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+      {"id": 199, "name": "UDMA_CRC_Error_Count", "value": 200, "worst": 200, "thresh": 0, "raw": {"value": 0, "string": "0"}}
+    ]
+  },
+  "power_on_time": {"hours": 35123},
+  "temperature": {"current": 34}
+}

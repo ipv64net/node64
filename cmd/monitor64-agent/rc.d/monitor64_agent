@@ -1,0 +1,56 @@
+#!/bin/sh
+#
+# PROVIDE: monitor64_agent
+# REQUIRE: LOGIN NETWORKING
+# KEYWORD: shutdown
+#
+# Monitor64-Agent (Node64) fuer FreeBSD, OPNsense, pfSense und TrueNAS CORE.
+# Ablage: /usr/local/etc/rc.d/monitor64_agent (Modus 0555), Programm /usr/local/sbin/monitor64-agent,
+# Einstellungen (keys, hostkey, local.d) in /usr/local/etc/monitor64-agent.
+#
+# Einschalten (eigene Datei unter /etc/rc.conf.d, bleibt bei OPNsense-Updates erhalten):
+#   sysrc -f /etc/rc.conf.d/monitor64_agent monitor64_agent_enable=YES
+#   service monitor64_agent start
+#
+# Optionen (rc.conf bzw. /etc/rc.conf.d/monitor64_agent):
+#   monitor64_agent_enable  YES/NO (Standard NO)
+#   monitor64_agent_port    TCP-Port (Standard 6465)
+#   monitor64_agent_dir     Einstellungen (Standard /usr/local/etc/monitor64-agent)
+#   monitor64_agent_args    weitere Optionen fuer "run", z. B. "--listen 192.168.1.1"
+#
+# daemon(8) startet den Agent nach einem Absturz neu (-r, 5 s Pause) und schreibt die Ausgabe ins syslog
+# (Kennung monitor64-agent). Nach einem Update ersetzt sich der Agent selbst (exec, gleiche Prozessnummer).
+
+. /etc/rc.subr
+
+name="monitor64_agent"
+rcvar="monitor64_agent_enable"
+desc="Monitor64-Agent (Node64)"
+
+load_rc_config $name
+
+: ${monitor64_agent_enable:="NO"}
+: ${monitor64_agent_port:="6465"}
+: ${monitor64_agent_dir:="/usr/local/etc/monitor64-agent"}
+: ${monitor64_agent_args:=""}
+
+monitor64_agent_bin="/usr/local/sbin/monitor64-agent"
+pidfile="/var/run/${name}.pid"
+required_files="${monitor64_agent_bin}"
+command="/usr/sbin/daemon"
+command_args="-r -R 5 -S -T monitor64-agent -P ${pidfile} ${monitor64_agent_bin} run --port ${monitor64_agent_port} --dir ${monitor64_agent_dir} ${monitor64_agent_args}"
+start_precmd="${name}_prestart"
+
+monitor64_agent_prestart()
+{
+	umask 077
+	if [ ! -d "${monitor64_agent_dir}" ]; then
+		install -d -m 0700 -o root -g wheel "${monitor64_agent_dir}" || return 1
+	fi
+	if [ ! -s "${monitor64_agent_dir}/keys" ]; then
+		warn "${monitor64_agent_dir}/keys fehlt: der Agent lehnt alle Anfragen ab, bis der Schluessel der Node dort steht"
+	fi
+	return 0
+}
+
+run_rc_command "$1"

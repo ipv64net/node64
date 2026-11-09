@@ -1,0 +1,6 @@
+      Name    Status  Components
+mirror/gm0  DEGRADED  ada0 (ACTIVE)
+                      ada1 (SYNCHRONIZING, 45%)
+mirror/gm1  COMPLETE  ada2 (ACTIVE)
+                      ada3 (ACTIVE)
+mirror/swap  DEGRADED  ada2p1 (ACTIVE)

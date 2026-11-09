@@ -332,7 +332,7 @@ func (m *Module) basePage(r *http.Request, page, active string) *pageData {
 		hk[k.Kind] = [2]string{m.t(r, "monitor64.hostkind."+k.Kind+".title"), m.t(r, "monitor64.hostkind."+k.Kind+".sub")}
 	}
 	acc := map[string]string{}
-	for _, a := range append(append([]string{}, accessTypes...), "snmp", "prom") {
+	for _, a := range append(append([]string{}, accessTypes...), "snmp") {
 		acc[a] = m.t(r, "monitor64.access."+a)
 	}
 	csrf, lang := "", "de"

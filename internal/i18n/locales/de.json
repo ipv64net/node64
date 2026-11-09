@@ -6265,6 +6265,7 @@
       "reboot_required": "Neustart nötig",
       "guest_down": "Gast oder Container läuft nicht, obwohl er soll",
       "systemd_failed": "fehlgeschlagene systemd-Dienste",
+      "winsvc_stopped": "Windows-Dienst gestoppt (Starttyp Automatisch, Updater ausgenommen)",
       "svc_vanished": "Dienst verschwunden",
       "access_failed": "ein Zugang antwortet nicht",
       "ctr_unhealthy": "Container meldet „unhealthy“",

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/promscrape"
 )
 
 // API-Zugaenge (Paket apis): Proxmox VE, Proxmox Backup Server, Docker. Teilfehler (eine Abfrage scheitert)
@@ -72,8 +73,23 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 			return nil, err
 		}
 		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
+	case "prom":
+		c, err := newProm(h, cfg, secret)
+		if err != nil {
+			return nil, err
+		}
+		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
 	}
 	return nil, fmt.Errorf("unbekannter Zugang %q", typ)
+}
+
+// newProm: Prometheus-Exporter (ohne Adresse: Host, Port 9100, /metrics); Bericht ueber den Mapper des Kerns.
+func newProm(h *Host, cfg accessConfig, secret string) (*promscrape.Collector, error) {
+	u := cfg.URL
+	if u == "" {
+		u = hostPort(h.Address, promscrape.DefaultPort)
+	}
+	return promscrape.New(promscrape.Config{URL: u, User: cfg.User, Secret: secret, Pin: cfg.Pin, Metrics: cfg.Metrics, Map: MapReport})
 }
 
 // apiAdapter erfuellt das collector-Interface des Kerns.

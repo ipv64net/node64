@@ -1,0 +1,178 @@
+# Nachgebaut nach windows_exporter v0.32.1 (Namen, Labels, HELP/TYPE aus Quelltext und tools/e2e-output.txt);
+# Werte von Hand, keine echte Ausgabe eines Windows-Hosts.
+# HELP windows_exporter_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which windows_exporter was built, and the goos and goarch for the build.
+# TYPE windows_exporter_build_info gauge
+windows_exporter_build_info{branch="HEAD",goarch="amd64",goos="windows",goversion="go1.26.2",revision="0c3a3c0a",tags="unknown",version="0.32.1"} 1
+# HELP windows_exporter_collector_success windows_exporter: Whether the collector was successful.
+# TYPE windows_exporter_collector_success gauge
+windows_exporter_collector_success{collector="cpu"} 1
+windows_exporter_collector_success{collector="cpu_info"} 1
+windows_exporter_collector_success{collector="logical_disk"} 1
+windows_exporter_collector_success{collector="memory"} 1
+windows_exporter_collector_success{collector="net"} 1
+windows_exporter_collector_success{collector="os"} 1
+windows_exporter_collector_success{collector="pagefile"} 1
+windows_exporter_collector_success{collector="physical_disk"} 1
+windows_exporter_collector_success{collector="service"} 1
+windows_exporter_collector_success{collector="system"} 1
+windows_exporter_collector_success{collector="time"} 1
+# HELP windows_cpu_logical_processor Total number of logical processors
+# TYPE windows_cpu_logical_processor gauge
+windows_cpu_logical_processor 2
+# HELP windows_cpu_time_seconds_total Time that processor spent in different modes (dpc, idle, interrupt, privileged, user)
+# TYPE windows_cpu_time_seconds_total counter
+windows_cpu_time_seconds_total{core="0,0",mode="dpc"} 12.5
+windows_cpu_time_seconds_total{core="0,0",mode="idle"} 86000.25
+windows_cpu_time_seconds_total{core="0,0",mode="interrupt"} 20.75
+windows_cpu_time_seconds_total{core="0,0",mode="privileged"} 900.5
+windows_cpu_time_seconds_total{core="0,0",mode="user"} 1500.25
+windows_cpu_time_seconds_total{core="0,1",mode="dpc"} 10
+windows_cpu_time_seconds_total{core="0,1",mode="idle"} 87000.75
+windows_cpu_time_seconds_total{core="0,1",mode="interrupt"} 18.25
+windows_cpu_time_seconds_total{core="0,1",mode="privileged"} 700.5
+windows_cpu_time_seconds_total{core="0,1",mode="user"} 1100.5
+# HELP windows_cpu_processor_utility_total Processor Utility represents is the amount of time the core spends executing instructions
+# TYPE windows_cpu_processor_utility_total counter
+windows_cpu_processor_utility_total{core="0,0"} 2400.5
+windows_cpu_processor_utility_total{core="0,1"} 1800.25
+# HELP windows_memory_available_bytes The amount of physical memory immediately available for allocation to a process or for system use. It is equal to the sum of memory assigned to the standby (cached), free and zero page lists
+# TYPE windows_memory_available_bytes gauge
+windows_memory_available_bytes 4.294967296e+09
+# HELP windows_memory_physical_free_bytes The amount of physical memory currently available, in bytes. This is the amount of physical memory that can be immediately reused without having to write its contents to disk first. It is the sum of the size of the standby, free, and zero lists.
+# TYPE windows_memory_physical_free_bytes gauge
+windows_memory_physical_free_bytes 4.1e+09
+# HELP windows_memory_physical_total_bytes The amount of actual physical memory, in bytes.
+# TYPE windows_memory_physical_total_bytes gauge
+windows_memory_physical_total_bytes 8.589934592e+09
+# HELP windows_pagefile_free_bytes Number of bytes that can be mapped into the operating system paging files without causing any other pages to be swapped out
+# TYPE windows_pagefile_free_bytes gauge
+windows_pagefile_free_bytes{file="\\??\\C:\\pagefile.sys"} 1.5e+09
+# HELP windows_pagefile_limit_bytes Current size of the paging file in bytes
+# TYPE windows_pagefile_limit_bytes gauge
+windows_pagefile_limit_bytes{file="\\??\\C:\\pagefile.sys"} 2e+09
+# HELP windows_logical_disk_info A metric with a constant '1' value labeled with logical disk information
+# TYPE windows_logical_disk_info gauge
+windows_logical_disk_info{disk="0",filesystem="NTFS",serial_number="12AB34CD",type="fixed",volume="C:",volume_name="System"} 1
+windows_logical_disk_info{disk="1",filesystem="NTFS",serial_number="56EF78AB",type="fixed",volume="D:",volume_name="Daten"} 1
+windows_logical_disk_info{disk="0",filesystem="NTFS",serial_number="",type="fixed",volume="HarddiskVolume1",volume_name="Recovery"} 1
+# HELP windows_logical_disk_free_bytes Free space in bytes, updates every 10-15 min (LogicalDisk.PercentFreeSpace)
+# TYPE windows_logical_disk_free_bytes gauge
+windows_logical_disk_free_bytes{volume="C:"} 3.0e+10
+windows_logical_disk_free_bytes{volume="D:"} 4.5e+11
+windows_logical_disk_free_bytes{volume="HarddiskVolume1"} 1.0e+08
+# HELP windows_logical_disk_readonly Whether the logical disk is read-only
+# TYPE windows_logical_disk_readonly gauge
+windows_logical_disk_readonly{volume="C:"} 0
+windows_logical_disk_readonly{volume="D:"} 0
+windows_logical_disk_readonly{volume="HarddiskVolume1"} 0
+# HELP windows_logical_disk_size_bytes Total space in bytes, updates every 10-15 min (LogicalDisk.PercentFreeSpace_Base)
+# TYPE windows_logical_disk_size_bytes gauge
+windows_logical_disk_size_bytes{volume="C:"} 1.27e+11
+windows_logical_disk_size_bytes{volume="D:"} 1.0e+12
+windows_logical_disk_size_bytes{volume="HarddiskVolume1"} 5.24288e+08
+# HELP windows_physical_disk_idle_seconds_total Seconds that the disk was idle (PhysicalDisk.PercentIdleTime)
+# TYPE windows_physical_disk_idle_seconds_total counter
+windows_physical_disk_idle_seconds_total{disk="0 C:"} 86000
+windows_physical_disk_idle_seconds_total{disk="1 D:"} 86300
+# HELP windows_physical_disk_read_bytes_total The number of bytes transferred from the disk during read operations (PhysicalDisk.DiskReadBytesPerSec)
+# TYPE windows_physical_disk_read_bytes_total counter
+windows_physical_disk_read_bytes_total{disk="0 C:"} 1.2e+10
+windows_physical_disk_read_bytes_total{disk="1 D:"} 3.4e+09
+# HELP windows_physical_disk_read_seconds_total Seconds that the disk was busy servicing read requests (PhysicalDisk.PercentDiskReadTime)
+# TYPE windows_physical_disk_read_seconds_total counter
+windows_physical_disk_read_seconds_total{disk="0 C:"} 250
+windows_physical_disk_read_seconds_total{disk="1 D:"} 60
+# HELP windows_physical_disk_reads_total The number of read operations on the disk (PhysicalDisk.DiskReadsPerSec)
+# TYPE windows_physical_disk_reads_total counter
+windows_physical_disk_reads_total{disk="0 C:"} 450000
+windows_physical_disk_reads_total{disk="1 D:"} 90000
+# HELP windows_physical_disk_write_bytes_total The number of bytes transferred to the disk during write operations (PhysicalDisk.DiskWriteBytesPerSec)
+# TYPE windows_physical_disk_write_bytes_total counter
+windows_physical_disk_write_bytes_total{disk="0 C:"} 2.3e+10
+windows_physical_disk_write_bytes_total{disk="1 D:"} 1.1e+09
+# HELP windows_physical_disk_write_seconds_total Seconds that the disk was busy servicing write requests (PhysicalDisk.PercentDiskWriteTime)
+# TYPE windows_physical_disk_write_seconds_total counter
+windows_physical_disk_write_seconds_total{disk="0 C:"} 300
+windows_physical_disk_write_seconds_total{disk="1 D:"} 40
+# HELP windows_physical_disk_writes_total The number of write operations on the disk (PhysicalDisk.DiskWritesPerSec)
+# TYPE windows_physical_disk_writes_total counter
+windows_physical_disk_writes_total{disk="0 C:"} 800000
+windows_physical_disk_writes_total{disk="1 D:"} 20000
+# HELP windows_net_bytes_received_total (Network.BytesReceivedPerSec)
+# TYPE windows_net_bytes_received_total counter
+windows_net_bytes_received_total{nic="Intel[R] Ethernet Connection I219-V"} 5.6e+09
+windows_net_bytes_received_total{nic="Hyper-V Virtual Ethernet Adapter"} 1.2e+08
+windows_net_bytes_received_total{nic="Intel[R] Wi-Fi 6 AX201 160MHz"} 0
+# HELP windows_net_bytes_sent_total (Network.BytesSentPerSec)
+# TYPE windows_net_bytes_sent_total counter
+windows_net_bytes_sent_total{nic="Intel[R] Ethernet Connection I219-V"} 1.3e+09
+windows_net_bytes_sent_total{nic="Hyper-V Virtual Ethernet Adapter"} 9e+07
+windows_net_bytes_sent_total{nic="Intel[R] Wi-Fi 6 AX201 160MHz"} 0
+# HELP windows_net_current_bandwidth_bytes (Network.CurrentBandwidth)
+# TYPE windows_net_current_bandwidth_bytes gauge
+windows_net_current_bandwidth_bytes{nic="Intel[R] Ethernet Connection I219-V"} 1.25e+08
+windows_net_current_bandwidth_bytes{nic="Hyper-V Virtual Ethernet Adapter"} 1.25e+09
+windows_net_current_bandwidth_bytes{nic="Intel[R] Wi-Fi 6 AX201 160MHz"} 0
+# HELP windows_net_nic_info A metric with a constant '1' value labeled with the network interface's general information.
+# TYPE windows_net_nic_info gauge
+windows_net_nic_info{friendly_name="Ethernet",mac="02:00:00:00:01:01",nic="Intel[R] Ethernet Connection I219-V"} 1
+windows_net_nic_info{friendly_name="WLAN",mac="02:00:00:00:01:02",nic="Intel[R] Wi-Fi 6 AX201 160MHz"} 1
+# HELP windows_net_nic_operation_status The operational status for the interface as defined in RFC 2863 as IfOperStatus.
+# TYPE windows_net_nic_operation_status gauge
+windows_net_nic_operation_status{nic="Intel[R] Ethernet Connection I219-V",status="down"} 0
+windows_net_nic_operation_status{nic="Intel[R] Ethernet Connection I219-V",status="up"} 1
+windows_net_nic_operation_status{nic="Intel[R] Wi-Fi 6 AX201 160MHz",status="down"} 1
+windows_net_nic_operation_status{nic="Intel[R] Wi-Fi 6 AX201 160MHz",status="up"} 0
+# HELP windows_net_packets_outbound_discarded_total (Network.PacketsOutboundDiscarded)
+# TYPE windows_net_packets_outbound_discarded_total counter
+windows_net_packets_outbound_discarded_total{nic="Intel[R] Ethernet Connection I219-V"} 0
+# HELP windows_net_packets_outbound_errors_total (Network.PacketsOutboundErrors)
+# TYPE windows_net_packets_outbound_errors_total counter
+windows_net_packets_outbound_errors_total{nic="Intel[R] Ethernet Connection I219-V"} 0
+# HELP windows_net_packets_received_discarded_total (Network.PacketsReceivedDiscarded)
+# TYPE windows_net_packets_received_discarded_total counter
+windows_net_packets_received_discarded_total{nic="Intel[R] Ethernet Connection I219-V"} 12
+# HELP windows_net_packets_received_errors_total (Network.PacketsReceivedErrors)
+# TYPE windows_net_packets_received_errors_total counter
+windows_net_packets_received_errors_total{nic="Intel[R] Ethernet Connection I219-V"} 3
+# HELP windows_net_packets_received_total (Network.PacketsReceivedPerSec)
+# TYPE windows_net_packets_received_total counter
+windows_net_packets_received_total{nic="Intel[R] Ethernet Connection I219-V"} 4.5e+06
+# HELP windows_net_packets_sent_total (Network.PacketsSentPerSec)
+# TYPE windows_net_packets_sent_total counter
+windows_net_packets_sent_total{nic="Intel[R] Ethernet Connection I219-V"} 2.1e+06
+# HELP windows_service_info A metric with a constant '1' value labeled with service information
+# TYPE windows_service_info gauge
+windows_service_info{delayed_start="false",display_name="Themes",path_name="C:\\Windows\\System32\\svchost.exe -k netsvcs -p",run_as="LocalSystem",service="Themes",trigger_start="false"} 1
+windows_service_info{delayed_start="false",display_name="Windows Update",path_name="C:\\Windows\\system32\\svchost.exe -k netsvcs -p",run_as="LocalSystem",service="wuauserv",trigger_start="true"} 1
+windows_service_info{delayed_start="true",display_name="Druckwarteschlange",path_name="C:\\Windows\\System32\\spoolsv.exe",run_as="LocalSystem",service="Spooler",trigger_start="false"} 1
+# HELP windows_service_start_mode The start mode of the service (StartMode)
+# TYPE windows_service_start_mode gauge
+windows_service_start_mode{service="Themes",start_mode="auto"} 1
+windows_service_start_mode{service="Themes",start_mode="boot"} 0
+windows_service_start_mode{service="Themes",start_mode="disabled"} 0
+windows_service_start_mode{service="Themes",start_mode="manual"} 0
+windows_service_start_mode{service="Themes",start_mode="system"} 0
+windows_service_start_mode{service="wuauserv",start_mode="auto"} 0
+windows_service_start_mode{service="wuauserv",start_mode="manual"} 1
+windows_service_start_mode{service="Spooler",start_mode="auto"} 1
+windows_service_start_mode{service="Spooler",start_mode="manual"} 0
+# HELP windows_service_state The state of the service (State)
+# TYPE windows_service_state gauge
+windows_service_state{service="Themes",state="continue pending"} 0
+windows_service_state{service="Themes",state="pause pending"} 0
+windows_service_state{service="Themes",state="paused"} 0
+windows_service_state{service="Themes",state="running"} 1
+windows_service_state{service="Themes",state="start pending"} 0
+windows_service_state{service="Themes",state="stop pending"} 0
+windows_service_state{service="Themes",state="stopped"} 0
+windows_service_state{service="wuauserv",state="running"} 0
+windows_service_state{service="wuauserv",state="stopped"} 1
+windows_service_state{service="Spooler",state="running"} 0
+windows_service_state{service="Spooler",state="stopped"} 1
+# HELP windows_system_boot_time_timestamp Unix timestamp of system boot time
+# TYPE windows_system_boot_time_timestamp gauge
+windows_system_boot_time_timestamp 1.7946e+09
+# HELP windows_time_current_timestamp_seconds Current time as reported by the operating system, in unix time.
+# TYPE windows_time_current_timestamp_seconds gauge
+windows_time_current_timestamp_seconds 1.7947e+09

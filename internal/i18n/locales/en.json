@@ -6265,6 +6265,7 @@
       "reboot_required": "Reboot required",
       "guest_down": "Guest or container not running although it should",
       "systemd_failed": "failed systemd units",
+      "winsvc_stopped": "Windows service stopped (automatic start, updaters ignored)",
       "svc_vanished": "Service vanished",
       "access_failed": "an access method does not answer",
       "ctr_unhealthy": "Container reports “unhealthy”",

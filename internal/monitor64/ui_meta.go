@@ -51,6 +51,7 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindRebootRequired, Group: "fixed", State: true},
 	{Kind: eval.KindGuestDown, Group: "fixed", State: true},
 	{Kind: eval.KindSystemdFailed, Group: "fixed", State: true},
+	{Kind: eval.KindWinSvcStopped, Group: "fixed", State: true},
 	{Kind: eval.KindServiceGone, Group: "fixed", State: true},
 	{Kind: eval.KindAccessFailed, Group: "fixed", State: true},
 	{Kind: eval.KindCtrUnhealthy, Group: "fixed", State: true},
@@ -154,8 +155,8 @@ func hostIcon(kind string) string {
 	return "bi-pc-display"
 }
 
-// accessTypes sind die Zugangsarten, die angelegt werden koennen (SNMP und Prometheus folgen).
-var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker"}
+// accessTypes sind die Zugangsarten, die angelegt werden koennen (SNMP folgt).
+var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker", "prom"}
 
 func validAccessType(t string) bool {
 	for _, a := range accessTypes {

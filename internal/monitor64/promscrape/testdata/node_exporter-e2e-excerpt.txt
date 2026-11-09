@@ -1,0 +1,515 @@
+# Auszug aus prometheus/node_exporter collector/fixtures/e2e-output.txt (Apache-2.0), fuer md/bonding/hwmon/zfs/systemd
+# HELP node_bonding_active Number of active slaves per bonding interface.
+# TYPE node_bonding_active gauge
+node_bonding_active{master="bond0"} 0
+node_bonding_active{master="dmz"} 2
+node_bonding_active{master="int"} 1
+# HELP node_bonding_slaves Number of configured slaves per bonding interface.
+# TYPE node_bonding_slaves gauge
+node_bonding_slaves{master="bond0"} 0
+node_bonding_slaves{master="dmz"} 2
+node_bonding_slaves{master="int"} 2
+# HELP node_boot_time_seconds Node boot time, in unixtime.
+# TYPE node_boot_time_seconds gauge
+node_boot_time_seconds 1.418183276e+09
+# HELP node_disk_info Info of /sys/block/<block_device>.
+# TYPE node_disk_info gauge
+node_disk_info{device="dm-0",major="252",minor="0",model="",path="",revision="",rotational="0",serial="",wwn=""} 1
+node_disk_info{device="dm-1",major="252",minor="1",model="",path="",revision="",rotational="0",serial="",wwn=""} 1
+node_disk_info{device="dm-2",major="252",minor="2",model="",path="",revision="",rotational="0",serial="",wwn=""} 1
+node_disk_info{device="dm-3",major="252",minor="3",model="",path="",revision="",rotational="0",serial="",wwn=""} 1
+node_disk_info{device="dm-4",major="252",minor="4",model="",path="",revision="",rotational="0",serial="",wwn=""} 1
+node_disk_info{device="dm-5",major="252",minor="5",model="",path="",revision="",rotational="0",serial="",wwn=""} 1
+node_disk_info{device="mmcblk0",major="179",minor="0",model="",path="platform-df2969f3.mmc",revision="",rotational="0",serial="0x83e36d93",wwn=""} 1
+node_disk_info{device="mmcblk0p1",major="179",minor="1",model="",path="platform-df2969f3.mmc",revision="",rotational="0",serial="0x83e36d93",wwn=""} 1
+node_disk_info{device="mmcblk0p2",major="179",minor="2",model="",path="platform-df2969f3.mmc",revision="",rotational="0",serial="0x83e36d93",wwn=""} 1
+node_disk_info{device="nvme0n1",major="259",minor="0",model="SAMSUNG EHFTF55LURSY-000Y9",path="pci-0000:02:00.0-nvme-1",revision="4NBTUY95",rotational="0",serial="S252B6CU1HG3M1",wwn="eui.p3vbbiejx5aae2r3"} 1
+node_disk_info{device="sda",major="8",minor="0",model="TOSHIBA_KSDB4U86",path="pci-0000:3b:00.0-sas-phy7-lun-0",revision="0102",rotational="1",serial="2160A0D5FVGG",wwn="0x7c72382b8de36a64"} 1
+node_disk_info{device="sdb",major="8",minor="16",model="SuperMicro_SSD",path="pci-0000:00:1f.2-ata-1",revision="0R",rotational="0",serial="SMC0E1B87ABBB16BD84E",wwn="0xe1b87abbb16bd84e"} 1
+node_disk_info{device="sdc",major="8",minor="32",model="INTEL_SSDS9X9SI0",path="pci-0000:00:1f.2-ata-4",revision="0100",rotational="0",serial="3EWB5Y25CWQWA7EH1U",wwn="0x58907ddc573a5de"} 1
+node_disk_info{device="sr0",major="11",minor="0",model="Virtual_CDROM0",path="pci-0000:00:14.0-usb-0:1.1:1.0-scsi-0:0:0:0",revision="1.00",rotational="0",serial="AAAABBBBCCCC1",wwn=""} 1
+node_disk_info{device="vda",major="254",minor="0",model="",path="pci-0000:00:06.0",revision="",rotational="0",serial="",wwn=""} 1
+# HELP node_disk_io_time_seconds_total Total seconds spent doing I/Os.
+# TYPE node_disk_io_time_seconds_total counter
+node_disk_io_time_seconds_total{device="dm-0"} 11325.968
+node_disk_io_time_seconds_total{device="dm-1"} 0.076
+node_disk_io_time_seconds_total{device="dm-2"} 65.4
+node_disk_io_time_seconds_total{device="dm-3"} 0.016
+node_disk_io_time_seconds_total{device="dm-4"} 0.024
+node_disk_io_time_seconds_total{device="dm-5"} 58.848
+node_disk_io_time_seconds_total{device="mmcblk0"} 0.136
+node_disk_io_time_seconds_total{device="mmcblk0p1"} 0.024
+node_disk_io_time_seconds_total{device="mmcblk0p2"} 0.068
+node_disk_io_time_seconds_total{device="nvme0n1"} 222.766
+node_disk_io_time_seconds_total{device="sda"} 9653.880000000001
+node_disk_io_time_seconds_total{device="sdb"} 60.730000000000004
+node_disk_io_time_seconds_total{device="sdc"} 10.73
+node_disk_io_time_seconds_total{device="sr0"} 0
+node_disk_io_time_seconds_total{device="vda"} 41614.592000000004
+# HELP node_disk_read_bytes_total The total number of bytes read successfully.
+# TYPE node_disk_read_bytes_total counter
+node_disk_read_bytes_total{device="dm-0"} 5.13708655616e+11
+node_disk_read_bytes_total{device="dm-1"} 1.589248e+06
+node_disk_read_bytes_total{device="dm-2"} 1.578752e+08
+node_disk_read_bytes_total{device="dm-3"} 1.98144e+06
+node_disk_read_bytes_total{device="dm-4"} 529408
+node_disk_read_bytes_total{device="dm-5"} 4.3150848e+07
+node_disk_read_bytes_total{device="mmcblk0"} 798720
+node_disk_read_bytes_total{device="mmcblk0p1"} 81920
+node_disk_read_bytes_total{device="mmcblk0p2"} 389120
+node_disk_read_bytes_total{device="nvme0n1"} 2.377714176e+09
+node_disk_read_bytes_total{device="sda"} 5.13713216512e+11
+node_disk_read_bytes_total{device="sdb"} 4.944782848e+09
+node_disk_read_bytes_total{device="sdc"} 8.48782848e+08
+node_disk_read_bytes_total{device="sr0"} 0
+node_disk_read_bytes_total{device="vda"} 1.6727491584e+10
+# HELP node_disk_reads_completed_total The total number of reads completed successfully.
+# TYPE node_disk_reads_completed_total counter
+node_disk_reads_completed_total{device="dm-0"} 5.9910002e+07
+node_disk_reads_completed_total{device="dm-1"} 388
+node_disk_reads_completed_total{device="dm-2"} 11571
+node_disk_reads_completed_total{device="dm-3"} 3870
+node_disk_reads_completed_total{device="dm-4"} 392
+node_disk_reads_completed_total{device="dm-5"} 3729
+node_disk_reads_completed_total{device="mmcblk0"} 192
+node_disk_reads_completed_total{device="mmcblk0p1"} 17
+node_disk_reads_completed_total{device="mmcblk0p2"} 95
+node_disk_reads_completed_total{device="nvme0n1"} 47114
+node_disk_reads_completed_total{device="sda"} 2.5354637e+07
+node_disk_reads_completed_total{device="sdb"} 326552
+node_disk_reads_completed_total{device="sdc"} 126552
+node_disk_reads_completed_total{device="sr0"} 0
+node_disk_reads_completed_total{device="vda"} 1.775784e+06
+# HELP node_disk_writes_completed_total The total number of writes completed successfully.
+# TYPE node_disk_writes_completed_total counter
+node_disk_writes_completed_total{device="dm-0"} 3.9231014e+07
+node_disk_writes_completed_total{device="dm-1"} 74
+node_disk_writes_completed_total{device="dm-2"} 153522
+node_disk_writes_completed_total{device="dm-3"} 0
+node_disk_writes_completed_total{device="dm-4"} 38
+node_disk_writes_completed_total{device="dm-5"} 98918
+node_disk_writes_completed_total{device="mmcblk0"} 0
+node_disk_writes_completed_total{device="mmcblk0p1"} 0
+node_disk_writes_completed_total{device="mmcblk0p2"} 0
+node_disk_writes_completed_total{device="nvme0n1"} 1.07832e+06
+node_disk_writes_completed_total{device="sda"} 2.8444756e+07
+node_disk_writes_completed_total{device="sdb"} 41822
+node_disk_writes_completed_total{device="sdc"} 11822
+node_disk_writes_completed_total{device="sr0"} 0
+node_disk_writes_completed_total{device="vda"} 6.038856e+06
+# HELP node_disk_written_bytes_total The total number of bytes written successfully.
+# TYPE node_disk_written_bytes_total counter
+node_disk_written_bytes_total{device="dm-0"} 2.5891680256e+11
+node_disk_written_bytes_total{device="dm-1"} 303104
+node_disk_written_bytes_total{device="dm-2"} 2.607828992e+09
+node_disk_written_bytes_total{device="dm-3"} 0
+node_disk_written_bytes_total{device="dm-4"} 70144
+node_disk_written_bytes_total{device="dm-5"} 5.89664256e+08
+node_disk_written_bytes_total{device="mmcblk0"} 0
+node_disk_written_bytes_total{device="mmcblk0p1"} 0
+node_disk_written_bytes_total{device="mmcblk0p2"} 0
+node_disk_written_bytes_total{device="nvme0n1"} 2.0199236096e+10
+node_disk_written_bytes_total{device="sda"} 2.58916880384e+11
+node_disk_written_bytes_total{device="sdb"} 1.01012736e+09
+node_disk_written_bytes_total{device="sdc"} 8.852736e+07
+node_disk_written_bytes_total{device="sr0"} 0
+node_disk_written_bytes_total{device="vda"} 1.0938236928e+11
+# HELP node_hwmon_chip_names Annotation metric for human-readable chip names
+# TYPE node_hwmon_chip_names gauge
+node_hwmon_chip_names{chip="ieee80211_phy0_mt7996_phy0_0",chip_name="mt7996_phy0_0"} 1
+node_hwmon_chip_names{chip="ieee80211_phy0_mt7996_phy0_1",chip_name="mt7996_phy0_1"} 1
+node_hwmon_chip_names{chip="ieee80211_phy0_mt7996_phy0_2",chip_name="mt7996_phy0_2"} 1
+node_hwmon_chip_names{chip="nct6779",chip_name="nct6779"} 1
+node_hwmon_chip_names{chip="platform_asus_nb_wmi_asus",chip_name="asus"} 1
+node_hwmon_chip_names{chip="platform_asus_nb_wmi_asus_wmi_sensors",chip_name="asus_wmi_sensors"} 1
+node_hwmon_chip_names{chip="platform_coretemp_0",chip_name="coretemp"} 1
+node_hwmon_chip_names{chip="platform_coretemp_1",chip_name="coretemp"} 1
+# HELP node_hwmon_sensor_label Label for given chip and sensor
+# TYPE node_hwmon_sensor_label gauge
+node_hwmon_sensor_label{chip="hwmon4",label="foosensor",sensor="temp1"} 1
+node_hwmon_sensor_label{chip="hwmon4",label="foosensor",sensor="temp2"} 1
+node_hwmon_sensor_label{chip="hwmon4",label="mclk",sensor="freq2"} 1
+node_hwmon_sensor_label{chip="hwmon4",label="sclk",sensor="freq1"} 1
+node_hwmon_sensor_label{chip="platform_applesmc_768",label="Left side",sensor="fan1"} 1
+node_hwmon_sensor_label{chip="platform_applesmc_768",label="Right side",sensor="fan2"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_0",label="Core 0",sensor="temp2"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_0",label="Core 1",sensor="temp3"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_0",label="Core 2",sensor="temp4"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_0",label="Core 3",sensor="temp5"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_0",label="Physical id 0",sensor="temp1"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_1",label="Core 0",sensor="temp2"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_1",label="Core 1",sensor="temp3"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_1",label="Core 2",sensor="temp4"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_1",label="Core 3",sensor="temp5"} 1
+node_hwmon_sensor_label{chip="platform_coretemp_1",label="Physical id 0",sensor="temp1"} 1
+# HELP node_hwmon_temp_celsius Hardware monitor for temperature (input)
+# TYPE node_hwmon_temp_celsius gauge
+node_hwmon_temp_celsius{chip="hwmon4",sensor="temp1"} 55
+node_hwmon_temp_celsius{chip="hwmon4",sensor="temp2"} 54
+node_hwmon_temp_celsius{chip="ieee80211_phy0_mt7996_phy0_0",sensor="temp1"} 55
+node_hwmon_temp_celsius{chip="ieee80211_phy0_mt7996_phy0_1",sensor="temp1"} 56
+node_hwmon_temp_celsius{chip="ieee80211_phy0_mt7996_phy0_2",sensor="temp1"} 57
+node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp1"} 55
+node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp2"} 54
+node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp3"} 52
+node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp4"} 53
+node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp5"} 50
+node_hwmon_temp_celsius{chip="platform_coretemp_1",sensor="temp1"} 55
+node_hwmon_temp_celsius{chip="platform_coretemp_1",sensor="temp2"} 54
+node_hwmon_temp_celsius{chip="platform_coretemp_1",sensor="temp3"} 52
+node_hwmon_temp_celsius{chip="platform_coretemp_1",sensor="temp4"} 53
+node_hwmon_temp_celsius{chip="platform_coretemp_1",sensor="temp5"} 50
+# HELP node_hwmon_temp_crit_celsius Hardware monitor for temperature (crit)
+# TYPE node_hwmon_temp_crit_celsius gauge
+node_hwmon_temp_crit_celsius{chip="hwmon4",sensor="temp1"} 100
+node_hwmon_temp_crit_celsius{chip="hwmon4",sensor="temp2"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_0",sensor="temp1"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_0",sensor="temp2"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_0",sensor="temp3"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_0",sensor="temp4"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_0",sensor="temp5"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_1",sensor="temp1"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_1",sensor="temp2"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_1",sensor="temp3"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_1",sensor="temp4"} 100
+node_hwmon_temp_crit_celsius{chip="platform_coretemp_1",sensor="temp5"} 100
+# HELP node_hwmon_temp_max_celsius Hardware monitor for temperature (max)
+# TYPE node_hwmon_temp_max_celsius gauge
+node_hwmon_temp_max_celsius{chip="hwmon4",sensor="temp1"} 100
+node_hwmon_temp_max_celsius{chip="hwmon4",sensor="temp2"} 100
+node_hwmon_temp_max_celsius{chip="platform_coretemp_0",sensor="temp1"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_0",sensor="temp2"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_0",sensor="temp3"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_0",sensor="temp4"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_0",sensor="temp5"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_1",sensor="temp1"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_1",sensor="temp2"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_1",sensor="temp3"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_1",sensor="temp4"} 84
+node_hwmon_temp_max_celsius{chip="platform_coretemp_1",sensor="temp5"} 84
+# HELP node_md_blocks Total number of blocks on device.
+# TYPE node_md_blocks gauge
+node_md_blocks{device="md0"} 248896
+node_md_blocks{device="md00"} 4.186624e+06
+node_md_blocks{device="md10"} 3.14159265e+08
+node_md_blocks{device="md101"} 322560
+node_md_blocks{device="md11"} 4.190208e+06
+node_md_blocks{device="md12"} 3.886394368e+09
+node_md_blocks{device="md120"} 2.095104e+06
+node_md_blocks{device="md126"} 1.855870976e+09
+node_md_blocks{device="md127"} 3.12319552e+08
+node_md_blocks{device="md201"} 1.993728e+06
+node_md_blocks{device="md219"} 7932
+node_md_blocks{device="md3"} 5.853468288e+09
+node_md_blocks{device="md4"} 4.883648e+06
+node_md_blocks{device="md6"} 1.95310144e+08
+node_md_blocks{device="md7"} 7.813735424e+09
+node_md_blocks{device="md8"} 1.95310144e+08
+node_md_blocks{device="md9"} 523968
+# HELP node_md_blocks_synced Number of blocks synced on device.
+# TYPE node_md_blocks_synced gauge
+node_md_blocks_synced{device="md0"} 248896
+node_md_blocks_synced{device="md00"} 4.186624e+06
+node_md_blocks_synced{device="md10"} 3.14159265e+08
+node_md_blocks_synced{device="md101"} 322560
+node_md_blocks_synced{device="md11"} 0
+node_md_blocks_synced{device="md12"} 3.886394368e+09
+node_md_blocks_synced{device="md120"} 2.095104e+06
+node_md_blocks_synced{device="md126"} 1.855870976e+09
+node_md_blocks_synced{device="md127"} 3.12319552e+08
+node_md_blocks_synced{device="md201"} 114176
+node_md_blocks_synced{device="md219"} 7932
+node_md_blocks_synced{device="md3"} 5.853468288e+09
+node_md_blocks_synced{device="md4"} 4.883648e+06
+node_md_blocks_synced{device="md6"} 1.6775552e+07
+node_md_blocks_synced{device="md7"} 7.813735424e+09
+node_md_blocks_synced{device="md8"} 1.6775552e+07
+node_md_blocks_synced{device="md9"} 0
+# HELP node_md_degraded Number of degraded disks on device.
+# TYPE node_md_degraded gauge
+node_md_degraded{device="md0"} 0
+node_md_degraded{device="md1"} 0
+node_md_degraded{device="md10"} 0
+node_md_degraded{device="md4"} 0
+node_md_degraded{device="md5"} 1
+node_md_degraded{device="md6"} 1
+# HELP node_md_disks Number of active/failed/spare disks of device.
+# TYPE node_md_disks gauge
+node_md_disks{device="md0",state="active"} 2
+node_md_disks{device="md0",state="failed"} 0
+node_md_disks{device="md0",state="spare"} 0
+node_md_disks{device="md00",state="active"} 1
+node_md_disks{device="md00",state="failed"} 0
+node_md_disks{device="md00",state="spare"} 0
+node_md_disks{device="md10",state="active"} 2
+node_md_disks{device="md10",state="failed"} 0
+node_md_disks{device="md10",state="spare"} 0
+node_md_disks{device="md101",state="active"} 3
+node_md_disks{device="md101",state="failed"} 0
+node_md_disks{device="md101",state="spare"} 0
+node_md_disks{device="md11",state="active"} 2
+node_md_disks{device="md11",state="failed"} 1
+node_md_disks{device="md11",state="spare"} 2
+node_md_disks{device="md12",state="active"} 2
+node_md_disks{device="md12",state="failed"} 0
+node_md_disks{device="md12",state="spare"} 0
+node_md_disks{device="md120",state="active"} 2
+node_md_disks{device="md120",state="failed"} 0
+node_md_disks{device="md120",state="spare"} 0
+node_md_disks{device="md126",state="active"} 2
+node_md_disks{device="md126",state="failed"} 0
+node_md_disks{device="md126",state="spare"} 0
+node_md_disks{device="md127",state="active"} 2
+node_md_disks{device="md127",state="failed"} 0
+node_md_disks{device="md127",state="spare"} 0
+node_md_disks{device="md201",state="active"} 2
+node_md_disks{device="md201",state="failed"} 0
+node_md_disks{device="md201",state="spare"} 0
+node_md_disks{device="md219",state="active"} 0
+node_md_disks{device="md219",state="failed"} 0
+node_md_disks{device="md219",state="spare"} 3
+node_md_disks{device="md3",state="active"} 8
+node_md_disks{device="md3",state="failed"} 0
+node_md_disks{device="md3",state="spare"} 2
+node_md_disks{device="md4",state="active"} 0
+node_md_disks{device="md4",state="failed"} 1
+node_md_disks{device="md4",state="spare"} 1
+node_md_disks{device="md6",state="active"} 1
+node_md_disks{device="md6",state="failed"} 1
+node_md_disks{device="md6",state="spare"} 1
+node_md_disks{device="md7",state="active"} 3
+node_md_disks{device="md7",state="failed"} 1
+node_md_disks{device="md7",state="spare"} 0
+node_md_disks{device="md8",state="active"} 2
+node_md_disks{device="md8",state="failed"} 0
+node_md_disks{device="md8",state="spare"} 2
+node_md_disks{device="md9",state="active"} 4
+node_md_disks{device="md9",state="failed"} 2
+node_md_disks{device="md9",state="spare"} 1
+# HELP node_md_disks_required Total number of disks of device.
+# TYPE node_md_disks_required gauge
+node_md_disks_required{device="md0"} 2
+node_md_disks_required{device="md00"} 1
+node_md_disks_required{device="md10"} 2
+node_md_disks_required{device="md101"} 3
+node_md_disks_required{device="md11"} 2
+node_md_disks_required{device="md12"} 2
+node_md_disks_required{device="md120"} 2
+node_md_disks_required{device="md126"} 2
+node_md_disks_required{device="md127"} 2
+node_md_disks_required{device="md201"} 2
+node_md_disks_required{device="md219"} 0
+node_md_disks_required{device="md3"} 8
+node_md_disks_required{device="md4"} 0
+node_md_disks_required{device="md6"} 2
+node_md_disks_required{device="md7"} 4
+node_md_disks_required{device="md8"} 2
+node_md_disks_required{device="md9"} 4
+# HELP node_md_raid_disks Number of raid disks on device.
+# TYPE node_md_raid_disks gauge
+node_md_raid_disks{device="md0"} 2
+node_md_raid_disks{device="md1"} 2
+node_md_raid_disks{device="md10"} 4
+node_md_raid_disks{device="md4"} 3
+node_md_raid_disks{device="md5"} 3
+node_md_raid_disks{device="md6"} 4
+# HELP node_md_state Indicates the state of md-device.
+# TYPE node_md_state gauge
+node_md_state{device="md0",state="active"} 1
+node_md_state{device="md0",state="check"} 0
+node_md_state{device="md0",state="inactive"} 0
+node_md_state{device="md0",state="recovering"} 0
+node_md_state{device="md0",state="resync"} 0
+node_md_state{device="md00",state="active"} 1
+node_md_state{device="md00",state="check"} 0
+node_md_state{device="md00",state="inactive"} 0
+node_md_state{device="md00",state="recovering"} 0
+node_md_state{device="md00",state="resync"} 0
+node_md_state{device="md10",state="active"} 1
+node_md_state{device="md10",state="check"} 0
+node_md_state{device="md10",state="inactive"} 0
+node_md_state{device="md10",state="recovering"} 0
+node_md_state{device="md10",state="resync"} 0
+node_md_state{device="md101",state="active"} 1
+node_md_state{device="md101",state="check"} 0
+node_md_state{device="md101",state="inactive"} 0
+node_md_state{device="md101",state="recovering"} 0
+node_md_state{device="md101",state="resync"} 0
+node_md_state{device="md11",state="active"} 0
+node_md_state{device="md11",state="check"} 0
+node_md_state{device="md11",state="inactive"} 0
+node_md_state{device="md11",state="recovering"} 0
+node_md_state{device="md11",state="resync"} 1
+node_md_state{device="md12",state="active"} 1
+node_md_state{device="md12",state="check"} 0
+node_md_state{device="md12",state="inactive"} 0
+node_md_state{device="md12",state="recovering"} 0
+node_md_state{device="md12",state="resync"} 0
+node_md_state{device="md120",state="active"} 1
+node_md_state{device="md120",state="check"} 0
+node_md_state{device="md120",state="inactive"} 0
+node_md_state{device="md120",state="recovering"} 0
+node_md_state{device="md120",state="resync"} 0
+node_md_state{device="md126",state="active"} 1
+node_md_state{device="md126",state="check"} 0
+node_md_state{device="md126",state="inactive"} 0
+node_md_state{device="md126",state="recovering"} 0
+node_md_state{device="md126",state="resync"} 0
+node_md_state{device="md127",state="active"} 1
+node_md_state{device="md127",state="check"} 0
+node_md_state{device="md127",state="inactive"} 0
+node_md_state{device="md127",state="recovering"} 0
+node_md_state{device="md127",state="resync"} 0
+node_md_state{device="md201",state="active"} 0
+node_md_state{device="md201",state="check"} 1
+node_md_state{device="md201",state="inactive"} 0
+node_md_state{device="md201",state="recovering"} 0
+node_md_state{device="md201",state="resync"} 0
+node_md_state{device="md219",state="active"} 0
+node_md_state{device="md219",state="check"} 0
+node_md_state{device="md219",state="inactive"} 1
+node_md_state{device="md219",state="recovering"} 0
+node_md_state{device="md219",state="resync"} 0
+node_md_state{device="md3",state="active"} 1
+node_md_state{device="md3",state="check"} 0
+node_md_state{device="md3",state="inactive"} 0
+node_md_state{device="md3",state="recovering"} 0
+node_md_state{device="md3",state="resync"} 0
+node_md_state{device="md4",state="active"} 0
+node_md_state{device="md4",state="check"} 0
+node_md_state{device="md4",state="inactive"} 1
+node_md_state{device="md4",state="recovering"} 0
+node_md_state{device="md4",state="resync"} 0
+node_md_state{device="md6",state="active"} 0
+node_md_state{device="md6",state="check"} 0
+node_md_state{device="md6",state="inactive"} 0
+node_md_state{device="md6",state="recovering"} 1
+node_md_state{device="md6",state="resync"} 0
+node_md_state{device="md7",state="active"} 1
+node_md_state{device="md7",state="check"} 0
+node_md_state{device="md7",state="inactive"} 0
+node_md_state{device="md7",state="recovering"} 0
+node_md_state{device="md7",state="resync"} 0
+node_md_state{device="md8",state="active"} 0
+node_md_state{device="md8",state="check"} 0
+node_md_state{device="md8",state="inactive"} 0
+node_md_state{device="md8",state="recovering"} 0
+node_md_state{device="md8",state="resync"} 1
+node_md_state{device="md9",state="active"} 0
+node_md_state{device="md9",state="check"} 0
+node_md_state{device="md9",state="inactive"} 0
+node_md_state{device="md9",state="recovering"} 0
+node_md_state{device="md9",state="resync"} 1
+# HELP node_network_receive_bytes_total Network device statistic receive_bytes.
+# TYPE node_network_receive_bytes_total counter
+# HELP node_network_speed_bytes Network device property: speed_bytes
+# TYPE node_network_speed_bytes gauge
+node_network_speed_bytes{device="eth0"} 1.25e+08
+# HELP node_network_transmit_bytes_total Network device statistic transmit_bytes.
+# TYPE node_network_transmit_bytes_total counter
+# HELP node_network_up Value is 1 if operstate is 'up', 0 otherwise.
+# TYPE node_network_up gauge
+node_network_up{device="bond0"} 1
+node_network_up{device="eth0"} 1
+# HELP node_scrape_collector_success node_exporter: Whether a collector succeeded.
+# TYPE node_scrape_collector_success gauge
+node_scrape_collector_success{collector="arp"} 1
+node_scrape_collector_success{collector="bcache"} 1
+node_scrape_collector_success{collector="bcachefs"} 1
+node_scrape_collector_success{collector="bonding"} 1
+node_scrape_collector_success{collector="btrfs"} 1
+node_scrape_collector_success{collector="buddyinfo"} 1
+node_scrape_collector_success{collector="cgroups"} 1
+node_scrape_collector_success{collector="conntrack"} 1
+node_scrape_collector_success{collector="cpu"} 1
+node_scrape_collector_success{collector="cpu_vulnerabilities"} 1
+node_scrape_collector_success{collector="cpufreq"} 1
+node_scrape_collector_success{collector="diskstats"} 1
+node_scrape_collector_success{collector="dmi"} 1
+node_scrape_collector_success{collector="dmmultipath"} 1
+node_scrape_collector_success{collector="drbd"} 1
+node_scrape_collector_success{collector="edac"} 1
+node_scrape_collector_success{collector="entropy"} 1
+node_scrape_collector_success{collector="fibrechannel"} 1
+node_scrape_collector_success{collector="filefd"} 1
+node_scrape_collector_success{collector="hwmon"} 1
+node_scrape_collector_success{collector="infiniband"} 1
+node_scrape_collector_success{collector="interrupts"} 1
+node_scrape_collector_success{collector="ipvs"} 1
+node_scrape_collector_success{collector="kernel_hung"} 1
+node_scrape_collector_success{collector="ksmd"} 1
+node_scrape_collector_success{collector="lnstat"} 1
+node_scrape_collector_success{collector="loadavg"} 1
+node_scrape_collector_success{collector="mdadm"} 1
+node_scrape_collector_success{collector="meminfo"} 1
+node_scrape_collector_success{collector="meminfo_numa"} 1
+node_scrape_collector_success{collector="mountstats"} 1
+node_scrape_collector_success{collector="netclass"} 1
+node_scrape_collector_success{collector="netdev"} 1
+node_scrape_collector_success{collector="netstat"} 1
+node_scrape_collector_success{collector="nfs"} 1
+node_scrape_collector_success{collector="nfsd"} 1
+node_scrape_collector_success{collector="nvme"} 1
+node_scrape_collector_success{collector="os"} 1
+node_scrape_collector_success{collector="pcidevice"} 1
+node_scrape_collector_success{collector="powersupplyclass"} 1
+node_scrape_collector_success{collector="pressure"} 1
+node_scrape_collector_success{collector="processes"} 1
+node_scrape_collector_success{collector="qdisc"} 1
+node_scrape_collector_success{collector="rapl"} 1
+node_scrape_collector_success{collector="resctrl"} 1
+node_scrape_collector_success{collector="schedstat"} 1
+node_scrape_collector_success{collector="slabinfo"} 1
+node_scrape_collector_success{collector="sockstat"} 1
+node_scrape_collector_success{collector="softirqs"} 1
+node_scrape_collector_success{collector="softnet"} 1
+node_scrape_collector_success{collector="stat"} 1
+node_scrape_collector_success{collector="sysctl"} 1
+node_scrape_collector_success{collector="tapestats"} 1
+node_scrape_collector_success{collector="textfile"} 1
+node_scrape_collector_success{collector="thermal_zone"} 1
+node_scrape_collector_success{collector="time"} 1
+node_scrape_collector_success{collector="udp_queues"} 1
+node_scrape_collector_success{collector="vmstat"} 1
+node_scrape_collector_success{collector="watchdog"} 1
+node_scrape_collector_success{collector="wifi"} 1
+node_scrape_collector_success{collector="xfrm"} 1
+node_scrape_collector_success{collector="xfs"} 1
+node_scrape_collector_success{collector="zfs"} 1
+node_scrape_collector_success{collector="zoneinfo"} 1
+# HELP node_textfile_scrape_error 1 if there was an error opening or reading a file, 0 otherwise
+# TYPE node_textfile_scrape_error gauge
+node_textfile_scrape_error 0
+# HELP node_thermal_zone_temp Zone temperature in Celsius
+# TYPE node_thermal_zone_temp gauge
+node_thermal_zone_temp{type="cpu-thermal",zone="0"} 12.376
+# HELP node_zfs_zpool_state kstat.zfs.misc.state
+# TYPE node_zfs_zpool_state gauge
+node_zfs_zpool_state{state="degraded",zpool="pool1"} 0
+node_zfs_zpool_state{state="degraded",zpool="pool2"} 0
+node_zfs_zpool_state{state="degraded",zpool="pool3"} 0
+node_zfs_zpool_state{state="degraded",zpool="poolz1"} 1
+node_zfs_zpool_state{state="faulted",zpool="pool1"} 0
+node_zfs_zpool_state{state="faulted",zpool="pool2"} 0
+node_zfs_zpool_state{state="faulted",zpool="pool3"} 0
+node_zfs_zpool_state{state="faulted",zpool="poolz1"} 0
+node_zfs_zpool_state{state="offline",zpool="pool1"} 0
+node_zfs_zpool_state{state="offline",zpool="pool2"} 0
+node_zfs_zpool_state{state="offline",zpool="pool3"} 0
+node_zfs_zpool_state{state="offline",zpool="poolz1"} 0
+node_zfs_zpool_state{state="online",zpool="pool1"} 1
+node_zfs_zpool_state{state="online",zpool="pool2"} 0
+node_zfs_zpool_state{state="online",zpool="pool3"} 1
+node_zfs_zpool_state{state="online",zpool="poolz1"} 0
+node_zfs_zpool_state{state="removed",zpool="pool1"} 0
+node_zfs_zpool_state{state="removed",zpool="pool2"} 0
+node_zfs_zpool_state{state="removed",zpool="pool3"} 0
+node_zfs_zpool_state{state="removed",zpool="poolz1"} 0
+node_zfs_zpool_state{state="suspended",zpool="pool1"} 0
+node_zfs_zpool_state{state="suspended",zpool="pool2"} 1
+node_zfs_zpool_state{state="suspended",zpool="pool3"} 0
+node_zfs_zpool_state{state="suspended",zpool="poolz1"} 0
+node_zfs_zpool_state{state="unavail",zpool="pool1"} 0
+node_zfs_zpool_state{state="unavail",zpool="pool2"} 0
+node_zfs_zpool_state{state="unavail",zpool="pool3"} 0
+node_zfs_zpool_state{state="unavail",zpool="poolz1"} 0

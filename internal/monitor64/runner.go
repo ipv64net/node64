@@ -68,6 +68,7 @@ var factKinds = map[string][]string{
 	"reboot":  {eval.KindRebootRequired},
 	"systemd": {eval.KindSystemdFailed},
 	"vm":      {eval.KindGuestDown},
+	"winsvc":  {eval.KindWinSvcStopped},
 	"ct":      {eval.KindGuestDown},
 	"ctr":     {eval.KindGuestDown, eval.KindCtrUnhealthy},
 	"backup":  {eval.KindBackupOld},
@@ -100,6 +101,8 @@ func factKind(code string) string {
 		return eval.KindRebootRequired
 	case "systemd_failed":
 		return eval.KindSystemdFailed
+	case "winsvc_stopped":
+		return eval.KindWinSvcStopped
 	case "guest_down", "guest_fault": // guest_fault: gestartet, steht aber (io-error, Absturz)
 		return eval.KindGuestDown
 	case "ups_on_battery":

@@ -1,0 +1,13 @@
+{
+    "product_abi": "25.1",
+    "product_arch": "amd64",
+    "product_copyright_owner": "Deciso B.V.",
+    "product_email": "project@opnsense.org",
+    "product_hash": "1a2b3c4d5",
+    "product_id": "opnsense",
+    "product_name": "OPNsense",
+    "product_nickname": "Ultimate Unicorn",
+    "product_series": "25.1",
+    "product_version": "25.1.4_1",
+    "product_website": "https://opnsense.org/"
+}

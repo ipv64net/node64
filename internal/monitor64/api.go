@@ -17,6 +17,7 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/promscrape"
 	"github.com/ipv64net/node64/internal/monitor64/tsdb"
 )
 
@@ -229,7 +230,19 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	case len(c.URL) > 512:
 		return nil, errBad("url")
 	}
-	if c.URL != "" {
+	if typ == "prom" {
+		if err := promscrape.ValidateCustom(c.Metrics); err != nil {
+			return nil, errBad("metrics", "error", err.Error())
+		}
+		if c.URL != "" {
+			if _, err := promscrape.NormalizeURL(c.URL, promscrape.DefaultPort); err != nil {
+				return nil, errBad("url")
+			}
+		}
+	} else if len(c.Metrics) > 0 {
+		return nil, errBad("metrics")
+	}
+	if c.URL != "" && typ != "prom" {
 		ok := strings.HasPrefix(c.URL, "https://") || strings.HasPrefix(c.URL, "http://")
 		if typ == "docker" {
 			ok = ok || strings.HasPrefix(c.URL, "unix://") || strings.HasPrefix(c.URL, "tcp://") || strings.HasPrefix(c.URL, "ssh://")
