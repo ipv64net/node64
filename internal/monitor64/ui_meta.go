@@ -84,7 +84,8 @@ var ruleKinds = []ruleKind{
 // coreTexts sind Texte, die der Kern als "i18n:<schluessel>?..." liefert (Ursache, Zugangsfehler, Ablauf eines
 // Problems); das Skript uebersetzt sie mit diesen Schluesseln (unter monitor64.).
 var coreTexts = []string{"detail.vanished", "detail.not_running", "detail.access", "detail.threshold", "detail.maint_silent", "detail.unack",
-	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "err.not_running", "detail.traps", "detail.trap_last"}
+	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "err.not_running", "detail.traps", "detail.trap_last",
+	"detail.cluster_takeover", "detail.cluster_handover", "detail.handover"}
 
 // ruleGroups ist die Reihenfolge der Abschnitte auf der Seite Schwellen.
 var ruleGroups = []string{"system", "storage", "disks", "network", "devices"}

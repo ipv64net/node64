@@ -57,8 +57,17 @@ type testEnv struct {
 
 func newEnv(t *testing.T) *testEnv {
 	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// newEnvWith: wie newEnv, before laeuft vor dem Start (z. B. Cluster anhaengen).
+func newEnvWith(t *testing.T, before func(*Module)) *testEnv {
+	t.Helper()
 	m, _, _ := newTestModule(t)
 	ctx := context.Background()
+	if before != nil {
+		before(m)
+	}
 	if err := m.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +250,7 @@ func TestTextsComplete(t *testing.T) {
 			}
 		}
 	}
-	for _, code := range []string{"json", "internal", "not_found", "not_running", "name", "address", "kind", "rule", "target", "channel", "maint_time", "interval", "workers"} {
+	for _, code := range []string{"json", "internal", "not_found", "not_running", "name", "address", "kind", "rule", "target", "channel", "maint_time", "interval", "workers", "cluster_node"} {
 		keys = append(keys, "monitor64.err."+code)
 	}
 	for _, lang := range []string{"de", "en"} {

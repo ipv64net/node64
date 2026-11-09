@@ -10,11 +10,13 @@ import (
 	"time"
 )
 
-// JSON-API fuer den Cluster unter /api/monitor64/cluster/... (Oberflaeche folgt in einem eigenen Schritt).
+// JSON-API fuer den Cluster unter /api/monitor64/cluster/... (Oberflaeche in monitor64.js).
 
 // clusterRoutes registriert die Endpunkte (aus uiRoutes).
 func (m *Module) clusterRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http.Handler) {
 	mux.Handle("GET /api/monitor64/cluster", api(m.apiCluster))
+	mux.Handle("GET /api/monitor64/cluster/views", api(m.apiClusterViews))
+	mux.Handle("GET /api/monitor64/cluster/hosts/{uid}", api(m.apiClusterHostInfo))
 	mux.Handle("PUT /api/monitor64/cluster/hosts/{uid}", api(m.apiClusterHost))
 	mux.Handle("POST /api/monitor64/cluster/hosts/{uid}/reach", api(m.apiClusterReach))
 	mux.Handle("GET /api/monitor64/cluster/keys", api(m.apiClusterKeys))
@@ -58,34 +60,113 @@ var roleNames = map[int]string{roleReport: "report", roleMeasure: "measure", rol
 
 // apiCluster: GET Stand des Clusters fuer Monitor64 (Nodes, Zustaendigkeit je Host, Schluessel).
 func (m *Module) apiCluster(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	s := m.clusterRefresh(ctx)
-	out := clusterOut{Active: s.Active, Self: s.Self, Majority: s.Majority, Total: s.Total, Connected: s.Connected,
-		Nodes: []clusterNodeOut{{ID: s.Self, Name: m.st.SettingOr(ctx, "node.name", "Node64"), Self: true, Online: true, Stable: true}}, Hosts: []clusterHostOut{}}
-	for id, p := range s.Peers {
-		out.Nodes = append(out.Nodes, clusterNodeOut{ID: id, Name: p.Name, Online: p.Online, Stable: s.Stable[id]})
-	}
-	sort.SliceStable(out.Nodes[1:], func(i, j int) bool {
-		return strings.ToLower(out.Nodes[i+1].Name) < strings.ToLower(out.Nodes[j+1].Name)
-	})
-	hosts, err := m.store.Hosts(ctx)
+	out, err := m.clusterInfo(r.Context())
 	if err != nil {
 		m.fail(w, r, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// clusterInfo baut den Stand des Clusters (API und Seite Einstellungen).
+func (m *Module) clusterInfo(ctx context.Context) (clusterOut, error) {
+	s := m.clusterRefresh(ctx)
+	out := clusterOut{Active: s.Active, Self: s.Self, Majority: s.Majority, Total: s.Total, Connected: s.Connected, Nodes: m.clusterNodes(ctx, s), Hosts: []clusterHostOut{}}
+	hosts, err := m.store.Hosts(ctx)
+	if err != nil {
+		return out, err
+	}
 	for _, h := range hosts {
-		role, owner := m.roleOf(h)
-		b := h.BackupNodes
-		if b == nil {
-			b = []string{}
-		}
-		out.Hosts = append(out.Hosts, clusterHostOut{UID: h.UID, Name: h.Name, Owner: owner, OwnerName: s.name(owner), Preferred: preferredOf(h, s.Self),
-			Backups: b, Role: roleNames[role], Reachable: s.online(owner)})
+		out.Hosts = append(out.Hosts, m.clusterHostOf(h, s))
 	}
 	if k, err := m.keyInfo(ctx); err == nil {
 		out.Key = &k
 	}
-	writeJSON(w, http.StatusOK, out)
+	return out, nil
+}
+
+// clusterNodes: diese Node zuerst, dann die anderen nach Namen.
+func (m *Module) clusterNodes(ctx context.Context, s *clusterSnap) []clusterNodeOut {
+	out := []clusterNodeOut{{ID: s.Self, Name: m.st.SettingOr(ctx, "node.name", "Node64"), Self: true, Online: true, Stable: true}}
+	for id, p := range s.Peers {
+		out = append(out, clusterNodeOut{ID: id, Name: p.Name, Online: p.Online, Stable: s.Stable[id]})
+	}
+	sort.SliceStable(out[1:], func(i, j int) bool {
+		return strings.ToLower(out[i+1].Name) < strings.ToLower(out[j+1].Name)
+	})
+	return out
+}
+
+func (m *Module) clusterHostOf(h *Host, s *clusterSnap) clusterHostOut {
+	role, owner := m.roleOf(h)
+	b := h.BackupNodes
+	if b == nil {
+		b = []string{}
+	}
+	return clusterHostOut{UID: h.UID, Name: h.Name, Owner: owner, OwnerName: s.name(owner), Preferred: preferredOf(h, s.Self),
+		Backups: b, Role: roleNames[role], Reachable: s.online(owner)}
+}
+
+// clusterViewsOut: welche Node die Hosts ueberwacht (Ansicht der Hosts, Uebersicht und Host-Seite).
+type clusterViewsOut struct {
+	Active   bool                   `json:"active"`
+	Self     string                 `json:"self"`
+	SelfName string                 `json:"self_name"`
+	Refs     map[string]*ClusterRef `json:"refs"`
+}
+
+// clusterViews liest den Hinweis "ueberwacht von" aus dem Stand der Hosts (host = nur dieser; ohne Datenbank).
+func (m *Module) clusterViews(ctx context.Context, host string) clusterViewsOut {
+	s := m.clusterSnapshot()
+	out := clusterViewsOut{Active: s.Active, Self: s.Self, SelfName: m.st.SettingOr(ctx, "node.name", "Node64"), Refs: map[string]*ClusterRef{}}
+	for _, v := range m.Views() {
+		if v.Cluster != nil && (host == "" || v.Host.UID == host) {
+			out.Refs[v.Host.UID] = v.Cluster
+		}
+	}
+	return out
+}
+
+// apiClusterViews: GET Hinweise "ueberwacht von" je Host (?host= nur einer).
+func (m *Module) apiClusterViews(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, m.clusterViews(r.Context(), r.URL.Query().Get("host")))
+}
+
+// clusterHostInfo ist die Zustaendigkeit eines Hosts fuer die Host-Seite (Mitglieder, Einstellung, Ansicht,
+// letzte Uebernahmen und Rueckgaben).
+type clusterHostInfo struct {
+	Active   bool             `json:"active"`
+	Self     string           `json:"self"`
+	Majority bool             `json:"majority"`
+	Nodes    []clusterNodeOut `json:"nodes"`
+	Host     clusterHostOut   `json:"host"`
+	Ref      *ClusterRef      `json:"ref,omitempty"`
+	Events   []eventRow       `json:"events"`
+}
+
+func (m *Module) clusterHostInfo(ctx context.Context, h *Host) clusterHostInfo {
+	s := m.clusterSnapshot()
+	out := clusterHostInfo{Active: s.Active, Self: s.Self, Majority: s.Majority, Nodes: m.clusterNodes(ctx, s), Host: m.clusterHostOf(h, s), Events: []eventRow{}}
+	if v := m.viewOf(h.UID); v != nil {
+		out.Ref = v.Cluster
+	}
+	evs, err := m.store.queryEvents(ctx, `SELECT ts, kind, text, actor, host_uid, service_key, problem_uid FROM m64_events
+		WHERE host_uid = ? AND problem_uid = '' AND kind IN ('takeover', 'handover') ORDER BY ts DESC, id DESC LIMIT 20`, h.UID)
+	if err == nil && evs != nil {
+		out.Events = evs
+	}
+	return out
+}
+
+// apiClusterHostInfo: GET Zustaendigkeit eines Hosts (Host-Seite).
+func (m *Module) apiClusterHostInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, m.clusterHostInfo(ctx, h))
 }
 
 type clusterHostIn struct {

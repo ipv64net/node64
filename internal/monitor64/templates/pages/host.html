@@ -4,7 +4,7 @@
 <div id="m64" data-m64-page="host" data-host="{{$h.UID}}">
 	<div class="d-flex flex-wrap align-items-start gap-3 mb-3">
 		<div class="me-auto min-w-0" id="m64-host-head">
-			<div class="d-flex align-items-center gap-2"><h1 class="h3 mb-0">{{$h.Name}}</h1></div>
+			<div class="d-flex align-items-center gap-2"><h1 class="h3 mb-0">{{$h.Name}}</h1>{{with .Data.ClHost}}{{if .Ref}}<span class="badge text-bg-light border fw-normal" id="m64-cl-badge"><i class="bi bi-diagram-3"></i> {{$.T "monitor64.cluster.by" "n" .OwnerLabel}}</span>{{end}}{{end}}</div>
 			<div class="text-body-secondary small mt-1">{{$h.Address}}{{if $h.Group}} · {{.T "monitor64.host.group"}} {{$h.Group}}{{end}}</div>
 		</div>
 		<div class="d-flex flex-wrap gap-2">
@@ -35,6 +35,7 @@
 		<span class="small text-body-secondary" id="m64-chart-span"></span>
 		<span class="ms-auto" id="m64-zoom"></span>
 	</div>
+	<div class="small text-warning-emphasis mb-2" id="m64-chart-note"></div>
 	<div class="row g-3 mb-3" id="m64-charts"></div>
 	<div class="card mb-3">
 		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.services"}}</span><span class="badge text-bg-secondary ms-2" id="m64-svc-count">0</span><span class="ms-auto small text-body-secondary d-none d-sm-inline">{{.T "monitor64.host.click_hint"}}</span></div>
@@ -48,6 +49,10 @@
 		<div class="list-group list-group-flush" id="m64-accesses"></div>
 	</div>
 	<div id="m64-ignored"></div>
+	{{with .Data.ClHost}}<div class="card mb-3" id="m64-cluster-host">
+		<div class="card-header d-flex align-items-center"><span class="fw-semibold"><i class="bi bi-diagram-3"></i> {{$.T "monitor64.cluster.title"}}</span><button class="btn btn-outline-secondary btn-sm ms-auto{{if not .Active}} d-none{{end}}" type="button" data-act="cluster-edit"><i class="bi bi-pencil"></i> {{$.T "monitor64.cluster.edit"}}</button></div>
+		<div class="card-body small" id="m64-cl-body"><div class="fw-semibold">{{$.T "monitor64.cluster.by" "n" .OwnerLabel}}</div></div>
+	</div>{{end}}
 </div>
 <div class="offcanvas offcanvas-end m64-detail" tabindex="-1" id="m64-detail" aria-labelledby="m64-sd-title">
 	<div class="offcanvas-header border-bottom">

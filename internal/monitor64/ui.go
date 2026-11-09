@@ -197,6 +197,65 @@ type pageData struct {
 	Running   bool
 	Std       []stdGroup
 	Fixed     []fixedRow
+	Cluster   *clusterCard     // Einstellungen: Karte Cluster (nil ohne Cluster)
+	ClHost    *clusterHostInfo // Host-Seite: Zustaendigkeit im Cluster (nil ohne Cluster)
+}
+
+// clusterCard ist die Karte "Cluster" der Einstellungen: Mitglieder mit der Zahl der Hosts, die sie ueberwachen.
+type clusterCard struct {
+	clusterOut
+	Rows    []clusterCardRow
+	Orphans int // Hosts, deren zustaendige Node nicht erreichbar ist
+}
+
+type clusterCardRow struct {
+	clusterNodeOut
+	Hosts   int // zustaendig
+	Measure int // davon nur messen (diese Node ohne Mehrheit)
+}
+
+// clusterCardOf baut die Karte (nil ohne Cluster).
+func (m *Module) clusterCardOf(ctx context.Context) *clusterCard {
+	ci, err := m.clusterInfo(ctx)
+	if err != nil || !ci.Active {
+		return nil
+	}
+	c := &clusterCard{clusterOut: ci}
+	for _, n := range ci.Nodes {
+		row := clusterCardRow{clusterNodeOut: n}
+		for _, h := range ci.Hosts {
+			if h.Owner == n.ID {
+				row.Hosts++
+				if h.Role == "measure" {
+					row.Measure++
+				}
+			}
+		}
+		c.Rows = append(c.Rows, row)
+	}
+	for _, h := range ci.Hosts {
+		if !h.Reachable {
+			c.Orphans++
+		}
+	}
+	return c
+}
+
+// OwnerLabel: Name der Node, die den Host ueberwacht (Kopf der Host-Seite).
+func (c *clusterHostInfo) OwnerLabel() string {
+	if c.Ref != nil && c.Ref.Name != "" {
+		return c.Ref.Name
+	}
+	id := c.Host.Owner
+	if c.Ref != nil && c.Ref.Node != "" {
+		id = c.Ref.Node
+	}
+	for _, n := range c.Nodes {
+		if n.ID == id {
+			return n.Name
+		}
+	}
+	return id
 }
 
 // Zeilen der Standard-Tabelle (Seite Schwellen, serverseitig mit den geltenden Werten).
@@ -365,6 +424,7 @@ func (m *Module) render(w http.ResponseWriter, r *http.Request, name, titleKey s
 func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	d := m.basePage(r, "overview", "/monitor64")
 	d.JS["overview"] = m.overview(r.Context())
+	d.JS["cluster"] = m.clusterViews(r.Context(), "") // "ueberwacht von" je Host
 	m.render(w, r, "overview", "nav.monitor64", d)
 }
 
@@ -378,6 +438,10 @@ func (m *Module) pageHost(w http.ResponseWriter, r *http.Request) {
 	d.Host, d.Title = hd.Host, hd.Host.Name
 	d.JS["host"] = hd
 	d.JS["targets"] = m.targets(r.Context())
+	if ch := m.clusterHostInfo(r.Context(), hd.Host); ch.Active || ch.Ref != nil {
+		d.ClHost = &ch
+		d.JS["cluster"] = ch
+	}
 	m.render(w, r, "host", "monitor64.tab.overview", d)
 }
 
@@ -407,6 +471,10 @@ func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
 	d := m.basePage(r, "settings", "/monitor64/settings")
 	d.Settings = m.settings(r.Context())
 	d.JS["traps"] = d.Settings.Traps
+	if c := m.clusterCardOf(r.Context()); c != nil {
+		d.Cluster = c
+		d.JS["cluster"] = c.clusterOut
+	}
 	m.render(w, r, "settings", "monitor64.tab.settings", d)
 }
 
@@ -421,5 +489,8 @@ func (m *Module) pageNew(w http.ResponseWriter, r *http.Request) {
 	d.JS["port"] = d.Port
 	d.JS["interval"] = m.defaultInterval(ctx)
 	d.JS["targets"] = m.targets(ctx)
+	if s := m.clusterSnapshot(); s.Active { // Assistent: bevorzugte Node und Ersatz-Nodes waehlbar
+		d.JS["cluster"] = map[string]any{"active": true, "self": s.Self, "nodes": m.clusterNodes(ctx, s)}
+	}
 	m.render(w, r, "new", "monitor64.new.title", d)
 }

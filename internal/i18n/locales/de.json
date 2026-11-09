@@ -2033,7 +2033,11 @@
       "mcp_settings": "MCP-Schnittstelle geschaltet",
       "mcp_key_create": "MCP-Schlüssel angelegt",
       "mcp_key_revoke": "MCP-Schlüssel widerrufen",
-      "cdn64_host_maintenance": "Wartungsmodus umgeschaltet"
+      "cdn64_host_maintenance": "Wartungsmodus umgeschaltet",
+      "monitor64_host_cluster": "Monitor64: Zuständigkeit eines Hosts geändert",
+      "monitor64_key_rotate": "Monitor64: Cluster-Schlüssel gewechselt",
+      "monitor64_key_confirm": "Monitor64: Umstellung eines SSH-Hosts bestätigt",
+      "monitor64_key_retire": "Monitor64: alte Schlüssel verworfen"
     }
   },
   "logs": {
@@ -3498,7 +3502,8 @@
       "dns64": "DNS64",
       "node": "Node",
       "users": "Benutzer & Anmeldung",
-      "dyndns": "DynDNS"
+      "dyndns": "DynDNS",
+      "monitor64": "Monitor64"
     },
     "item": {
       "checks": "Checks",
@@ -3527,7 +3532,9 @@
       "node_settings": "Allgemeine Einstellungen (Zeitzone, Selbst-Update, MCP an/aus)",
       "user_accounts": "Benutzer – mit Passwort, App-2FA und SSO-Verknüpfungen (Passkeys, Sitzungen und API-Keys bleiben je Node)",
       "user_sso": "SSO (OIDC) – Anbieter samt Client-Secret (Rückleit-Adresse und Forward-Auth bleiben je Node)",
-      "dyndns_config": "Namen und Einstellungen – samt Tokens; es aktualisiert immer nur eine Node"
+      "dyndns_config": "Namen und Einstellungen – samt Tokens; es aktualisiert immer nur eine Node",
+      "monitor64_config": "Hosts, Zugänge samt Geheimnissen, Schwellen, Benachrichtigung, Wartung und Cluster-Schlüssel – jeden Host überwacht genau eine Node",
+      "monitor64_status": "Probleme, Quittierungen und aktueller Zustand der Hosts"
     },
     "add_title": "Weitere Node aufnehmen",
     "add_hint": "Zeigt einen Code, den du auf der anderen Node unter „Einem Cluster beitreten“ eingibst.",
@@ -3565,7 +3572,8 @@
     "err_url": "Die Adresse muss mit http:// oder https:// beginnen.",
     "link_hint": "Healthchecks lassen sich zusätzlich direkt zwischen den Nodes eines Clusters abgleichen, ergänzend zum Healthchecks-Sync über ipv64. Ein- und ausgeschaltet wird das auf der Cluster-Seite.",
     "link_switch": "Healthchecks auch über den Cluster abgleichen",
-    "link_open": "Cluster verwalten"
+    "link_open": "Cluster verwalten",
+    "monitor64_hint": "Zuständig ist die bevorzugte Node eines Hosts (Standard: die anlegende); Ersatz-Nodes werden auf der Host-Seite gewählt. Der Verlauf bleibt auf der Node, die gemessen hat – Diagramme fragen ihn dort live ab."
   },
   "link": {
     "key_title": "Mit einem Klick verknüpfen",
@@ -6181,7 +6189,9 @@
       "comment": "Kommentar von {w}",
       "resolved": "als gelöst markiert von {w}",
       "maint": "Wartung eingetragen",
-      "maint_end": "Wartung beendet"
+      "maint_end": "Wartung beendet",
+      "takeover": "Zuständigkeit übernommen",
+      "handover": "Zuständigkeit zurückgegeben"
     },
     "how": {
       "auto": "automatisch – Wert wieder in Ordnung",
@@ -6636,7 +6646,8 @@
       "comment": "Bitte einen Kommentar eingeben.",
       "action": "Unbekannte Aktion.",
       "snmp_secret": "SNMP-Zugangsdaten: {error}",
-      "trap_port": "Ungültiger Trap-Port (1 bis 65535)."
+      "trap_port": "Ungültiger Trap-Port (1 bis 65535).",
+      "cluster_node": "Unbekannte Node „{node}“ – nur Nodes dieses Clusters sind möglich."
     },
     "quote": "„{t}“",
     "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",
@@ -6652,7 +6663,10 @@
       "host_removed": "Host entfernt",
       "zfs_errors": "Datenfehler: {text}",
       "traps": "{n} Trap(s) offen, zuletzt {name} ({at})",
-      "trap_last": "Letzter Trap: {name} ({at})"
+      "trap_last": "Letzter Trap: {name} ({at})",
+      "cluster_takeover": "Zuständigkeit übernommen: {to} statt {from}",
+      "cluster_handover": "Zuständigkeit zurückgegeben: von {from} an {to}",
+      "handover": "durch Übergabe beendet"
     },
     "push": {
       "mode_label": "Verbindung",
@@ -6668,6 +6682,78 @@
       "setting_port": "Port für Agents im Push-Betrieb (TCP)",
       "setting_hint": "Nur offen, wenn ein Host den Push-Betrieb nutzt. Docker: Port veröffentlichen.",
       "listening": "Offen: {n} Zugänge, {w} Agents warten."
+    },
+    "cluster": {
+      "by": "überwacht von {n}",
+      "note": {
+        "owner_unreachable": "Zuständige Node {n} nicht erreichbar – Zustand unbekannt, es wird nichts gemeldet.",
+        "no_data": "Noch kein Stand von {n}.",
+        "measure_only": "Ohne Mehrheit im Cluster: diese Node misst weiter, meldet aber nicht.",
+        "remote_measure": "{n} misst nur (ohne Mehrheit im Cluster) und meldet nicht."
+      },
+      "state_at": "Stand von {n}: {t}",
+      "discover_remote": "Dienste erkennt die zuständige Node {n}.",
+      "title": "Zuständigkeit im Cluster",
+      "edit": "Zuständigkeit ändern",
+      "owner": "Überwacht von",
+      "preferred": "Bevorzugte Node",
+      "preferred_hint": "Sie überwacht den Host, solange sie erreichbar ist. Ein Wechsel greift, sobald die neue Node 5 Minuten stabil erreichbar ist.",
+      "backups": "Ersatz-Nodes",
+      "backups_none": "keine",
+      "backups_hint": "Standard: keine Ersatz-Node. Eine Node an einem anderen Standort erreicht das Heimnetz oft nicht und würde den Host fälschlich als nicht erreichbar melden – vorher die Erreichbarkeit prüfen.",
+      "role": {
+        "report": "fragt ab und meldet",
+        "measure": "misst nur (ohne Mehrheit)",
+        "idle": "andere Node"
+      },
+      "this_node": "diese Node",
+      "offline": "offline",
+      "stable": "stabil erreichbar",
+      "unstable": "erst kurz erreichbar",
+      "history_n": "Übernahmen und Rückgaben ({n})",
+      "reach": "Erreichbarkeit von den anderen Nodes prüfen",
+      "reaching": "Zugänge werden von allen Nodes aus getestet …",
+      "reach_ok": "von {n} erreichbar ✓",
+      "reach_fail": "von {n} nicht erreichbar",
+      "reach_offline": "{n} ist offline",
+      "reach_add": "als Ersatz eintragen",
+      "reach_added": "als Ersatz gewählt",
+      "reach_skip": "Push-Betrieb – nur von der eigenen Node",
+      "reach_ms": "OK ({ms} ms)",
+      "saved_toast": "Zuständigkeit gespeichert.",
+      "chart_missing": "Daten auf {n} (nicht erreichbar) – Lücke im Verlauf.",
+      "wiz_title": "Überwachung im Cluster",
+      "wiz_hint": "Standard: diese Node überwacht den Host, keine Ersatz-Node. Nach dem Anlegen lässt sich auf der Host-Seite prüfen, welche Nodes den Host erreichen.",
+      "wiz_failed": "Host angelegt, die Zuständigkeit im Cluster aber nicht gespeichert – bitte auf der Host-Seite setzen.",
+      "card": "Cluster",
+      "to_cluster": "Zur Cluster-Seite",
+      "majority_yes": "Mehrheit: ja ({c} von {t} Nodes erreichbar)",
+      "majority_no": "Mehrheit: nein ({c} von {t} Nodes erreichbar) – diese Node übernimmt keine fremden Hosts.",
+      "members": "Mitglieder",
+      "hosts_n": "überwacht {n} Hosts",
+      "hosts_measure": "davon {n} nur messend",
+      "orphans": "{n} Hosts ohne erreichbare zuständige Node (Unbekannt, keine Meldung).",
+      "card_hint": "Bevorzugte Node und Ersatz-Nodes stehen auf der Seite des Hosts.",
+      "key": "Cluster-Schlüssel",
+      "key_shared": "Gemeinsamer Schlüssel aller Nodes (seit {t}) – Agents und SSH-Hosts brauchen ihn nur einmal.",
+      "key_own": "Noch eigener Schlüssel dieser Node – der Cluster-Schlüssel kommt automatisch.",
+      "key_fp": "Fingerabdruck",
+      "key_line": "Zeile für authorized_keys (SSH-Hosts ohne Agent)",
+      "key_old": "Alte Schlüssel noch angeboten, bis alle Hosts umgestellt sind: {n}",
+      "key_rotate": "Schlüssel wechseln",
+      "key_rotate_confirm": "Neuen Schlüssel für alle Nodes erzeugen? Agents werden automatisch umgestellt; SSH-Hosts ohne Agent brauchen danach die neue Zeile in authorized_keys. Empfohlen, wenn eine Node aus dem Cluster genommen wurde.",
+      "key_rotated_toast": "Neuer Schlüssel – die Agents werden umgestellt.",
+      "pending": "Offene Umstellungen",
+      "pending_none": "Alle Hosts verwenden den aktuellen Schlüssel.",
+      "pending_agent": "Schlüssel veraltet – Agent nicht erreichbar (Versuch {n}, zuletzt {t}); wird alle 5 Minuten erneut versucht.",
+      "pending_ssh": "Neue Zeile in authorized_keys eintragen, dann bestätigen.",
+      "retry": "Erneut versuchen",
+      "retry_toast": "Umstellung erneut versucht.",
+      "confirm": "SSH erledigt",
+      "confirmed_toast": "Umstellung bestätigt.",
+      "retire": "Alte Schlüssel verwerfen",
+      "retire_confirm": "Alte Schlüssel sofort verwerfen? Hosts, die noch nicht umgestellt sind, lassen sich danach nicht mehr abfragen (Agent neu einrichten bzw. neue Zeile in authorized_keys eintragen).",
+      "retired_toast": "Alte Schlüssel verworfen."
     }
   }
 }

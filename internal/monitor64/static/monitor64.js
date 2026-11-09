@@ -355,6 +355,25 @@ function whoTxt(a) {
 	if (a.kind === 'api') { return L('who.api', { n: a.name || '' }); }
 	return a.name || '';
 }
+// Cluster: welche Node einen Host ueberwacht (HostView.cluster: node, name, here, reporting, reachable, note, at).
+// selfName = Name dieser Node (der Kern liefert ihn fuer eigene Hosts nicht mit).
+function clName(ref, selfName) { return ref.name || (ref.here ? selfName : '') || ref.node || ''; }
+function clBy(ref, selfName) {
+	if (!ref) { return ''; }
+	var n = clName(ref, selfName);
+	return '<span class="text-nowrap" title="' + esc(L('cluster.by', { n: n })) + '"><i class="bi bi-diagram-3"></i> ' + esc(n) + '</span>';
+}
+function clNote(ref, selfName) {
+	if (!ref) { return ''; }
+	var n = clName(ref, selfName);
+	switch (ref.note) {
+	case 'owner_unreachable': return L('cluster.note.owner_unreachable', { n: n });
+	case 'no_data': return L('cluster.note.no_data', { n: n });
+	case 'measure_only': return L('cluster.note.measure_only');
+	}
+	return !ref.here && !ref.reporting ? L('cluster.note.remote_measure', { n: n }) : '';
+}
+function clRole(r) { return { report: L('cluster.role.report'), measure: L('cluster.role.measure'), idle: L('cluster.role.idle') }[r] || r || ''; }
 // Schwellen (eval.Effective: Zahl oder "off")
 function lim(x) { return x === 'off' || x === undefined || x === null ? null : x; }
 function durLabel(sec) {
@@ -389,7 +408,9 @@ function pageOverview() {
 	try { var gs = store('groupsel'); OV.group = gs ? JSON.parse(gs) : null; } catch (e) { OV.group = null; }
 	if (OV.group !== null && typeof OV.group !== 'string') { OV.group = null; }
 	var data = D.overview || { hosts: [], problems: [], recent: [], counts: {}, groups: [] };
-	var sparks = {};
+	var sparks = {}, CLV = D.cluster || { refs: {} };
+	function clRef(h) { return (CLV.refs || {})[h.uid] || null; }
+	function clOn() { return !!(CLV.active || Object.keys(CLV.refs || {}).length); }
 	function statCard(cls, label, val, sub, icon) {
 		return '<div class="col-6 col-md-3"><div class="card stat ' + cls + '"><div class="card-body"><div class="stat-text"><div class="stat-label">' + esc(label) + '</div><div class="stat-value">' + esc(String(val)) + '</div><div class="stat-sub">' + esc(sub) + '</div></div><i class="bi ' + icon + ' stat-icon"></i></div></div></div>';
 	}
@@ -399,30 +420,36 @@ function pageOverview() {
 	}
 	function hostState(h) { return h.view === 'unreachable' ? 'unknown' : h.state; }
 	function tile(h) {
-		var st = hostState(h), foot;
-		if (h.maint) { foot = '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>'; }
+		var st = hostState(h), foot, ref = clRef(h), note = clNote(ref, CLV.self_name), away = ref && (ref.note === 'owner_unreachable' || ref.note === 'no_data');
+		if (away) { st = 'unknown'; }
+		if (away && !h.maint && !h.paused) { foot = stBadge('unknown'); }
+		else if (h.maint) { foot = '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>'; }
 		else if (h.paused) { foot = '<span class="st-badge unknown"><i class="bi bi-pause-circle"></i> ' + esc(L('ov.paused')) + '</span>'; }
 		else if (h.view === 'unreachable') { foot = stBadge('unknown', L('state.unreachable')); }
 		else if (h.problems) { foot = stBadge(st, h.problems === 1 ? L('ov.problem_one') : L('ov.problem_n', { n: h.problems })); }
 		else if (!h.checked) { foot = '<span class="small text-body-secondary">' + esc(L('ov.waiting')) + '</span>'; }
 		else { foot = '<span class="small text-body-secondary">' + esc(L('ov.services_ok', { n: h.services })) + '</span>'; }
 		var body = '';
-		if (h.view === 'unreachable') { body = '<div class="small text-body-secondary mt-2"><i class="bi bi-plug"></i> ' + esc(tx(h.unreach) || L('state.unreachable')) + '</div>'; }
+		if (away) { body = ''; } // Stand der zustaendigen Node fehlt: nur der Hinweis
+		else if (h.view === 'unreachable') { body = '<div class="small text-body-secondary mt-2"><i class="bi bi-plug"></i> ' + esc(tx(h.unreach) || L('state.unreachable')) + '</div>'; }
 		else {
 			body = (h.meters || []).map(meter).join('');
 			if (!body && h.text) { body = '<div class="small text-body-secondary mt-2 text-truncate">' + esc(tx(h.text)) + '</div>'; }
 			if (sparks[h.uid]) { body += '<div class="mt-2">' + spark(sparks[h.uid], st === 'ok' ? '' : 's-' + st) + '</div>'; }
 		}
+		if (note) { body += '<div class="small text-body-secondary mt-2" data-cl-note><i class="bi bi-diagram-3"></i> ' + esc(note) + '</div>'; }
 		var extra = '';
 		if (h.new) { extra += ' <span class="badge text-bg-primary" title="' + esc(L('ov.new_services', { n: h.new })) + '">' + esc(L('ov.new_short', { n: h.new })) + '</span>'; }
 		return '<div class="col-12 col-sm-6 col-xl-4 col-xxl-3"><div class="card host-tile s-' + esc(st) + (h.maint ? ' s-maint' : '') + (h.paused ? ' s-paused' : '') + '" data-host="' + esc(h.uid) + '" role="link" tabindex="0"><div class="card-body">' +
 			'<div class="d-flex align-items-center gap-2"><i class="bi ' + esc(h.icon) + ' text-body-secondary"></i><span class="host-name">' + esc(h.name) + '</span>' + extra + '<span class="ms-auto">' + foot + '</span></div>' +
-			'<div class="host-kind">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + (h.address ? ' · ' + esc(h.address) : '') + '</div>' +
+			'<div class="host-kind">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + (h.address ? ' · ' + esc(h.address) : '') + (ref ? ' · ' + clBy(ref, CLV.self_name) : '') + '</div>' +
 			'<div class="mt-1">' + (h.tags || []).map(tag).join('') + '</div>' + body + '</div></div></div>';
 	}
 	function row(h) {
-		var st = hostState(h);
-		return '<tr data-host="' + esc(h.uid) + '" class="clickable"><td><span class="st-dot st-' + esc(st) + '"></span></td><td class="fw-semibold">' + esc(h.name) + '<div class="small text-body-secondary fw-normal">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + '</div></td>' +
+		var st = hostState(h), ref = clRef(h), note = clNote(ref, CLV.self_name);
+		if (ref && (ref.note === 'owner_unreachable' || ref.note === 'no_data')) { st = 'unknown'; }
+		return '<tr data-host="' + esc(h.uid) + '" class="clickable"><td><span class="st-dot st-' + esc(st) + '"></span></td><td class="fw-semibold">' + esc(h.name) + '<div class="small text-body-secondary fw-normal">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + (ref ? ' · ' + clBy(ref, CLV.self_name) : '') + '</div>' +
+			(note ? '<div class="small text-body-secondary fw-normal">' + esc(note) + '</div>' : '') + '</td>' +
 			'<td class="d-none d-md-table-cell small">' + esc(h.address) + '</td><td class="d-none d-lg-table-cell">' + (h.tags || []).map(tag).join('') + '</td>' +
 			'<td class="svc-val">' + (h.has_cpu ? fmtNum(h.cpu, 0) + ' %' : '–') + '</td><td class="svc-val">' + (h.has_ram ? fmtNum(h.ram, 0) + ' %' : '–') + '</td>' +
 			'<td>' + (h.problems ? stBadge(st, String(h.problems)) : '<span class="text-body-secondary small">–</span>') + '</td></tr>';
@@ -519,7 +546,11 @@ function pageOverview() {
 	});
 	$('#m64-only-prob').onchange = function () { OV.only = this.checked; store('only', OV.only ? '1' : '0'); render(); };
 	$('#m64-q').oninput = function () { OV.q = this.value; render(); };
-	function refresh() { api('GET', '/api/monitor64/overview').then(function (d) { data = d; render(); }).catch(failQuiet); }
+	function refresh() {
+		var p = [api('GET', '/api/monitor64/overview')];
+		if (clOn()) { p.push(api('GET', '/api/monitor64/cluster/views').catch(function () { return null; })); } // "ueberwacht von" je Host
+		Promise.all(p).then(function (r) { data = r[0]; if (r[1]) { CLV = r[1]; } render(); }).catch(failQuiet);
+	}
 	function loadSparks() { api('GET', '/api/monitor64/sparks').then(function (s) { sparks = s || {}; render(); }).catch(failQuiet); }
 	render();
 	loadSparks();
@@ -644,8 +675,10 @@ function setHTML(el, html) {
 // ---------- Host ----------
 function pageHost() {
 	var uid = root.dataset.host, H = D.host, sparks = {}, charts = [], HV = { range: store('range') || '24h', off: 0, zoom: null, gen: 0 };
-	var detailFor = null, newSel = {}, ignOpen = false;
+	var detailFor = null, newSel = {}, ignOpen = false, CH = D.cluster || null; // CH: Zustaendigkeit im Cluster (nur mit Cluster)
 	function svcName(s) { return tx(s.name); }
+	// clAway: zustaendige Node nicht erreichbar bzw. noch kein Stand von ihr (Werte veraltet: Zustand unbekannt)
+	function clAway() { var r = CH && CH.ref; return !!(r && (r.note === 'owner_unreachable' || r.note === 'no_data')); }
 	function accState(a) {
 		if (!a.enabled) { return '<i class="bi bi-dash-circle" title="' + esc(L('host.acc_off')) + '"></i>'; }
 		if (!a.known) { return '<i class="bi bi-hourglass-split text-body-secondary" title="' + esc(L('host.acc_wait')) + '"></i>'; }
@@ -655,6 +688,9 @@ function pageHost() {
 		var h = H.host, st = H.view === 'unreachable' ? 'unknown' : H.state;
 		var badge = H.view === 'maintenance' ? '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>' : H.view === 'unreachable' ? stBadge('unknown', L('state.unreachable')) : H.checked ? stBadge(st) : '<span class="st-badge unknown">' + esc(L('ov.waiting')) + '</span>';
 		if (h.paused) { badge += ' <span class="st-badge unknown"><i class="bi bi-pause-circle"></i> ' + esc(L('ov.paused')) + '</span>'; }
+		var ref = CH && CH.ref, away = clAway();
+		if (away && H.view !== 'maintenance') { badge = stBadge('unknown'); }
+		if (ref) { badge += ' <span class="badge text-bg-light border fw-normal" id="m64-cl-badge"><i class="bi bi-diagram-3"></i> ' + esc(L('cluster.by', { n: clName(ref, clSelf()) })) + '</span>'; }
 		var kl = ((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '';
 		setHTML($('#m64-host-head'), '<div class="d-flex align-items-center gap-2"><i class="bi ' + esc(H.icon) + ' fs-4 text-body-secondary"></i><h1 class="h3 mb-0">' + esc(h.name) + '</h1>' + badge + '</div>' +
 			'<div class="text-body-secondary small mt-1">' + esc(kl) + ' · ' + esc(h.address) + (h.group ? ' · ' + esc(L('host.group')) + ' ' + esc(h.group) : '') + ' ' + (h.tags || []).map(tag).join('') +
@@ -665,8 +701,16 @@ function pageHost() {
 		if (pl) { pl.textContent = h.paused ? L('host.resume') : L('host.pause'); }
 		var al = '';
 		if (H.maint) { al += '<div class="alert alert-warning py-2 small"><i class="bi bi-cone-striped"></i> ' + esc(L('host.in_maint', { r: H.maint.reason || '–', t: H.maint.end ? fmtTime(H.maint.end) : L('mt.until_ended') })) + '</div>'; }
-		if (H.view === 'unreachable') { al += '<div class="alert alert-secondary d-flex align-items-center gap-2"><i class="bi bi-plug fs-5"></i><div><strong>' + esc(L('state.unreachable')) + '.</strong> ' + esc(tx(H.unreach || '')) + ' ' + esc(L('host.unreach_hint')) + '</div></div>'; }
+		if (H.view === 'unreachable' && !away) { al += '<div class="alert alert-secondary d-flex align-items-center gap-2"><i class="bi bi-plug fs-5"></i><div><strong>' + esc(L('state.unreachable')) + '.</strong> ' + esc(tx(H.unreach || '')) + ' ' + esc(L('host.unreach_hint')) + '</div></div>'; }
+		var note = clNote(ref, clSelf()), at = ref && !ref.here && toDate(ref.at);
+		if (note || at) {
+			al += '<div class="alert alert-secondary py-2 small d-flex align-items-center gap-2" id="m64-cl-note"><i class="bi bi-diagram-3"></i><div>' + esc(note) +
+				(at ? (note ? ' ' : '') + '<span class="text-body-secondary">' + esc(L('cluster.state_at', { n: clName(ref, clSelf()), t: ago(ref.at) })) + '</span>' : '') + '</div></div>';
+		}
 		setHTML($('#m64-host-alerts'), al);
+		// Dienste erkennen kann nur die Node, die den Host abfragt
+		var db = $('[data-act=discover]'), remote = !!(ref && !ref.here);
+		if (db) { db.disabled = remote; db.title = remote ? L('cluster.discover_remote', { n: clName(ref, clSelf()) }) : ''; }
 	}
 	// Neue Dienste: Haekchen merken (newSel), damit die Aktualisierung die Auswahl nicht zuruecksetzt.
 	function renderNew() {
@@ -686,7 +730,7 @@ function pageHost() {
 	function isFree(lv) { return !!(lv && lv.eff && lv.eff.mode === 'free'); }
 	function valueCell(s) {
 		var mt = s.primary >= 0 ? s.metrics[s.primary] : (s.metrics && s.metrics.length && !s.text ? s.metrics[0] : null);
-		var st = H.view === 'unreachable' ? 'unknown' : s.state, html = '';
+		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, html = '';
 		if (mt) {
 			html = '<span class="fw-semibold">' + esc(fmtVal(mt.value, mt.unit)) + '</span>';
 			if (mt.unit === '%') { html += '<span class="bar"><span class="' + (st === 'ok' ? '' : esc(st)) + '" style="width:' + Math.max(0, Math.min(100, mt.value)) + '%"></span></span>'; }
@@ -724,7 +768,7 @@ function pageHost() {
 			if (!rows.length) { return; }
 			html += '<tr class="svc-cat"><td colspan="6">' + esc((D.cats || {})[c] || c) + '</td></tr>';
 			rows.forEach(function (s) {
-				var st = H.view === 'unreachable' ? 'unknown' : s.state;
+				var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state;
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
 				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) + (s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
 					'<td class="d-none d-lg-table-cell spark-cell">' + (sparks[s.key] ? spark(sparks[s.key], st === 'ok' ? '' : 's-' + st) : '') + '</td>' +
@@ -765,8 +809,100 @@ function pageHost() {
 	}
 	root.addEventListener('toggle', function (ev) { if (ev.target.matches && ev.target.matches('[data-ign-box]')) { ignOpen = ev.target.open; } }, true);
 	root.addEventListener('change', function (ev) { var k = ev.target.dataset && ev.target.dataset.newsel; if (k !== undefined) { newSel[k] = ev.target.checked; } });
-	function renderAll() { renderHead(); renderNew(); renderServices(); renderAccesses(); }
-	function reload() { return api('GET', '/api/monitor64/hosts/' + encodeURIComponent(uid)).then(function (d) { H = d; renderAll(); return d; }); }
+	// Zustaendigkeit im Cluster (Karte unter den Zugaengen): wer ueberwacht, bevorzugte und Ersatz-Nodes, Uebernahmen
+	function clSelf() { var n = ''; ((CH && CH.nodes) || []).forEach(function (x) { if (x.self) { n = x.name; } }); return n; }
+	function clNodeName(id) { var n = id; ((CH && CH.nodes) || []).forEach(function (x) { if (x.id === id) { n = x.name || id; } }); return n; }
+	function renderCluster() {
+		var box = $('#m64-cl-body');
+		if (!box || !CH) { return; }
+		var c = CH.host || {}, ref = CH.ref, html = '<div class="row g-2">';
+		html += '<div class="col-sm-4"><div class="text-body-secondary">' + esc(L('cluster.owner')) + '</div><div class="fw-semibold">' + esc(c.owner_name || clNodeName(c.owner)) +
+			(c.reachable ? '' : ' <span class="badge text-bg-secondary">' + esc(L('cluster.offline')) + '</span>') + '</div><div class="text-body-secondary">' + esc(clRole(c.role)) + '</div></div>';
+		html += '<div class="col-sm-4"><div class="text-body-secondary">' + esc(L('cluster.preferred')) + '</div><div class="fw-semibold">' + esc(clNodeName(c.preferred)) + '</div></div>';
+		html += '<div class="col-sm-4"><div class="text-body-secondary">' + esc(L('cluster.backups')) + '</div><div class="fw-semibold">' + esc((c.backups || []).length ? c.backups.map(clNodeName).join(', ') : L('cluster.backups_none')) + '</div></div></div>';
+		if (!(c.backups || []).length && CH.active) { html += '<div class="text-body-secondary mt-2">' + esc(L('cluster.backups_hint')) + '</div>'; }
+		var evs = CH.events || [];
+		if (evs.length) { html += '<details class="mt-2"><summary class="text-body-secondary">' + esc(L('cluster.history_n', { n: evs.length })) + '</summary>' + timeline(evs, {}) + '</details>'; }
+		setHTML(box, html);
+		var eb = $('[data-act=cluster-edit]');
+		if (eb) { eb.classList.toggle('d-none', !CH.active); }
+	}
+	function reloadCluster() { return api('GET', '/api/monitor64/cluster/hosts/' + encodeURIComponent(uid)).then(function (d) { CH = d; renderHead(); renderCluster(); }); }
+	// clusterDialog: bevorzugte Node und Ersatz-Nodes waehlen; "Erreichbarkeit pruefen" testet die Zugaenge von allen Nodes.
+	function clusterDialog() {
+		var c = CH.host || {}, nodes = CH.nodes || [], back = {};
+		(c.backups || []).forEach(function (b) { back[b] = true; });
+		var body = modal(L('cluster.edit'), '<div class="mb-3"><label class="form-label" for="m64-cl-pref">' + esc(L('cluster.preferred')) + '</label><select class="form-select" id="m64-cl-pref">' +
+			nodes.map(function (n) { return '<option value="' + esc(n.id) + '"' + (n.id === c.preferred ? ' selected' : '') + '>' + esc(n.name + (n.self ? ' (' + L('cluster.this_node') + ')' : '') + (n.online ? '' : ' – ' + L('cluster.offline'))) + '</option>'; }).join('') + '</select>' +
+			'<div class="form-text">' + esc(L('cluster.preferred_hint')) + '</div></div>' +
+			'<div class="form-label">' + esc(L('cluster.backups')) + '</div><div id="m64-cl-backs">' + nodes.map(function (n, i) {
+				return '<div class="form-check" data-cl-node="' + esc(n.id) + '"><input class="form-check-input" type="checkbox" id="m64-cl-b' + i + '" value="' + esc(n.id) + '"' + (back[n.id] ? ' checked' : '') + '><label class="form-check-label" for="m64-cl-b' + i + '">' + esc(n.name) +
+					(n.self ? ' <span class="text-body-tertiary">' + esc(L('cluster.this_node')) + '</span>' : '') + (n.online ? '' : ' <span class="badge text-bg-secondary">' + esc(L('cluster.offline')) + '</span>') + ' <span class="small" data-cl-reach></span></label></div>';
+			}).join('') + '</div><div class="form-text">' + esc(L('cluster.backups_hint')) + '</div>' +
+			'<div class="mt-3"><button class="btn btn-sm btn-outline-primary" type="button" id="m64-cl-reach"><i class="bi bi-broadcast"></i> ' + esc(L('cluster.reach')) + '</button></div><div class="small mt-2" id="m64-cl-reach-res"></div>',
+		[{ label: L('cancel') }, { label: L('save'), cls: 'btn-primary', click: function (close) {
+			var pref = $('#m64-cl-pref', body).value, list = [];
+			(c.backups || []).forEach(function (b) { $$('#m64-cl-backs input:checked', body).forEach(function (x) { if (x.value === b && b !== pref) { list.push(b); } }); }); // bisherige Reihenfolge bleibt
+			$$('#m64-cl-backs input:checked', body).forEach(function (x) { if (x.value !== pref && list.indexOf(x.value) < 0) { list.push(x.value); } });
+			return api('PUT', '/api/monitor64/cluster/hosts/' + encodeURIComponent(uid), { preferred_node: pref, backup_nodes: list }).then(function () { close(); toast(L('cluster.saved_toast')); return reloadCluster(); });
+		} }], true);
+		if (!body) { return; }
+		function backBox(id) { var r = null; $$('#m64-cl-backs [data-cl-node]', body).forEach(function (d) { if (d.dataset.clNode === id) { r = d; } }); return r; }
+		function prefShow() { // die bevorzugte Node ist keine Ersatz-Node
+			var pref = $('#m64-cl-pref', body).value;
+			$$('#m64-cl-backs [data-cl-node]', body).forEach(function (d) { var x = $('input', d), on = d.dataset.clNode === pref; x.disabled = on; if (on) { x.checked = false; } d.classList.toggle('opacity-50', on); });
+		}
+		$('#m64-cl-pref', body).onchange = prefShow;
+		prefShow();
+		var rb = $('#m64-cl-reach', body);
+		rb.onclick = function () {
+			var res = $('#m64-cl-reach-res', body);
+			res.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + esc(L('cluster.reaching'));
+			lock(rb, function () {
+				return api('POST', '/api/monitor64/cluster/hosts/' + encodeURIComponent(uid) + '/reach').then(function (r) {
+					var pref = $('#m64-cl-pref', body).value;
+					res.innerHTML = reachHTML(r.nodes || [], pref, function (id) { var d = backBox(id); return !d || $('input', d).checked; });
+					(r.nodes || []).forEach(function (n) {
+						var d = backBox(n.node), m = d && $('[data-cl-reach]', d);
+						if (m) { m.innerHTML = n.ok ? '<i class="bi bi-check-circle-fill text-success" title="' + esc(L('cluster.reach_ok', { n: n.name })) + '"></i>' : '<i class="bi bi-x-circle-fill text-danger" title="' + esc(L('cluster.reach_fail', { n: n.name })) + '"></i>'; }
+					});
+				}).catch(function (e) { res.innerHTML = '<span class="text-danger">' + esc(tx(e.message)) + '</span>'; });
+			});
+		};
+		// Vorschlag "als Ersatz eintragen": setzt das Haekchen der Node
+		body.addEventListener('click', function (ev) {
+			var a = ev.target.closest('[data-cl-add]');
+			if (!a) { return; }
+			var d = backBox(a.dataset.clAdd), x = d && $('input', d);
+			if (x && !x.disabled) { x.checked = true; a.outerHTML = '<span class="text-success"><i class="bi bi-check2"></i> ' + esc(L('cluster.reach_added')) + '</span>'; }
+		});
+	}
+	// reachHTML: Ergebnis je Node mit Vorschlag "als Ersatz eintragen" (erreichbare Nodes ausser der bevorzugten, noch nicht gewaehlt).
+	function reachHTML(list, pref, chosen) {
+		return '<ul class="list-unstyled mb-0">' + list.map(function (n) {
+			var head;
+			if (n.ok) { head = '<i class="bi bi-check-circle-fill text-success"></i> ' + esc(L('cluster.reach_ok', { n: n.name })) + (n.self ? ' <span class="text-body-tertiary">' + esc(L('cluster.this_node')) + '</span>' : ''); }
+			else if (n.error === 'offline') { head = '<i class="bi bi-dash-circle text-body-secondary"></i> ' + esc(L('cluster.reach_offline', { n: n.name })); }
+			else { head = '<i class="bi bi-x-circle-fill text-danger"></i> ' + esc(L('cluster.reach_fail', { n: n.name })) + (n.error ? ' <span class="text-body-secondary">' + esc(tx(n.error)) + '</span>' : ''); }
+			if (n.ok && n.node !== pref && !chosen(n.node)) { head += ' <button class="btn btn-sm btn-link p-0 ms-1" type="button" data-cl-add="' + esc(n.node) + '"><i class="bi bi-plus"></i> ' + esc(L('cluster.reach_add')) + '</button>'; }
+			var acc = (n.accesses || []).map(function (a) {
+				var st = a.skip ? '<span class="text-body-secondary">' + esc(L('cluster.reach_skip')) + '</span>' : a.ok ? '<span class="text-success">' + esc(L('cluster.reach_ms', { ms: a.ms })) + '</span>' : '<span class="text-danger-emphasis">' + esc(tx(a.error || '')) + '</span>';
+				return '<div class="ps-4">' + esc(accLabel(a.type)) + ': ' + st + '</div>';
+			}).join('');
+			return '<li class="mb-1">' + head + acc + '</li>';
+		}).join('') + '</ul>';
+	}
+	function renderAll() { renderHead(); renderNew(); renderServices(); renderAccesses(); renderCluster(); }
+	function reload() {
+		var p = [api('GET', '/api/monitor64/hosts/' + encodeURIComponent(uid))];
+		if (CH) { p.push(api('GET', '/api/monitor64/cluster/views?host=' + encodeURIComponent(uid)).catch(function () { return null; })); } // "ueberwacht von"
+		return Promise.all(p).then(function (r) {
+			H = r[0];
+			if (r[1] && CH) { CH.ref = (r[1].refs || {})[uid] || null; }
+			renderAll();
+			return H;
+		});
+	}
 	function loadSparks() { api('GET', '/api/monitor64/sparks?host=' + encodeURIComponent(uid)).then(function (s) { sparks = s || {}; renderServices(); }).catch(failQuiet); }
 
 	// Diagramme
@@ -775,7 +911,8 @@ function pageHost() {
 		charts.forEach(function (c) { c.destroy(); });
 		charts = [];
 		var gen = ++HV.gen; // aeltere Antworten werden verworfen
-		var defs = H.charts || [];
+		var defs = H.charts || [], miss = {};
+		setHTML($('#m64-chart-note'), '');
 		$('#m64-chart-bar').classList.toggle('d-none', !defs.length);
 		var box = $('#m64-charts');
 		box.innerHTML = defs.map(function (c) {
@@ -795,6 +932,7 @@ function pageHost() {
 			api('GET', '/api/monitor64/series?' + qs).then(function (res) {
 				var cv = document.getElementById('m64-ch-' + c.id);
 				if (!cv || gen !== HV.gen) { return; }
+				clMissing(res, miss, $('#m64-chart-note'));
 				var old = window.Chart && window.Chart.getChart ? window.Chart.getChart(cv) : null;
 				if (old) { old.destroy(); }
 				var u = unitFmt(c.unit);
@@ -808,6 +946,13 @@ function pageHost() {
 	$$('[data-range]').forEach(function (b) { b.onclick = function () { HV.range = b.dataset.range; HV.off = 0; HV.zoom = null; store('range', HV.range); buildCharts(); }; });
 	$('#m64-older').onclick = function () { HV.zoom = null; HV.off++; buildCharts(); };
 	$('#m64-newer').onclick = function () { if (HV.zoom) { HV.zoom = null; } else { HV.off = Math.max(0, HV.off - 1); } buildCharts(); };
+
+	// clMissing: Cluster – Stuecke des Verlaufs auf nicht erreichbaren Nodes (series.cluster) als Hinweis unter dem Diagramm.
+	function clMissing(res, miss, el) {
+		(res.cluster || []).forEach(function (x) { if (x.missing) { miss[x.name || x.node] = true; } });
+		var names = Object.keys(miss);
+		setHTML(el, names.length ? '<i class="bi bi-diagram-3"></i> ' + esc(L('cluster.chart_missing', { n: names.join(', ') })) : '');
+	}
 
 	// Dienst-Details (Offcanvas): Verlauf, je Messgroesse bzw. Zustandsregel die Stufen der Schwelle mit eigener
 	// Einstellung "dieser Host", Soll-Zustand, Erweitert
@@ -944,7 +1089,7 @@ function pageHost() {
 		detailFor = key;
 		$('#m64-sd-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
 		$('#m64-sd-title').textContent = svcName(s);
-		var st = H.view === 'unreachable' ? 'unknown' : s.state, lv = s.levels, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
+		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, lv = s.levels, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
 		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(tx(s.text || '')) + '</span></div>';
 		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
@@ -960,7 +1105,7 @@ function pageHost() {
 			chartMetric = null;
 			html += '<div class="mb-3" id="m64-sd-traps"><span class="spinner-border spinner-border-sm"></span></div>';
 		}
-		if (chartMetric) { html += '<div class="chart-box mb-3"><canvas id="m64-sd-chart"></canvas><div class="zoom-sel"></div></div>'; }
+		if (chartMetric) { html += '<div class="chart-box mb-1"><canvas id="m64-sd-chart"></canvas><div class="zoom-sel"></div></div><div class="small text-warning-emphasis mb-3" id="m64-sd-chart-note"></div>'; }
 		if (rules.length) {
 			html += '<h6 class="mt-2">' + esc(rules.length > 1 ? L('sd.thresholds') : L('sd.threshold')) + ' <span class="small text-body-secondary fw-normal">– ' + esc(L('sd.threshold_sub')) + '</span></h6>';
 			rules.forEach(function (r, i) { html += ruleBlock(s, r, i); });
@@ -1035,6 +1180,7 @@ function pageHost() {
 				var cv = document.getElementById('m64-sd-chart');
 				if (!cv || detailFor !== key || gen !== sdGen) { return; }
 				if (sdChart) { sdChart.destroy(); sdChart = null; }
+				clMissing(res, {}, document.getElementById('m64-sd-chart-note'));
 				var u = unitFmt(chartMetric.unit), w = null, c = null;
 				if (lv && lv.eff.mode !== 'free' && chartMetric === mt) { w = lim(lv.eff.warn); c = lim(lv.eff.crit); } // Schwellen in der Einheit der Messgroesse
 				sdChart = lineChart(cv, { from: res.from, to: res.to, warn: w, crit: c, fmt: u.fmt, max: chartMetric.unit === '%' ? 100 : undefined, series: [{ label: svcName(s), data: toPoints(res.series[0] || {}, u.factor) }] });
@@ -1239,6 +1385,9 @@ function pageHost() {
 			case 'access-add':
 				accessDialog(null);
 				break;
+			case 'cluster-edit':
+				if (CH && CH.active) { clusterDialog(); }
+				break;
 			}
 			return;
 		}
@@ -1317,7 +1466,8 @@ function pageHost() {
 // ---------- Probleme ----------
 var TLI = { warn: ['bi-exclamation-triangle-fill', 'text-warning'], crit: ['bi-x-octagon-fill', 'text-danger'], unknown: ['bi-question-circle-fill', 'text-body-secondary'], unreachable: ['bi-plug-fill', 'text-danger'],
 	ok: ['bi-check-circle-fill', 'text-success'], bell: ['bi-bell', 'text-body-secondary'], held: ['bi-moon-stars', 'text-body-secondary'], ack: ['bi-check2-square', 'text-primary'], unack: ['bi-arrow-counterclockwise', 'text-body-secondary'],
-	comment: ['bi-chat-left-text', 'text-primary'], resolved: ['bi-person-check', 'text-primary'], maint: ['bi-cone-striped', 'text-body-secondary'], takeover: ['bi-diagram-3', 'text-body-secondary'] };
+	comment: ['bi-chat-left-text', 'text-primary'], resolved: ['bi-person-check', 'text-primary'], maint: ['bi-cone-striped', 'text-body-secondary'], takeover: ['bi-diagram-3', 'text-body-secondary'],
+	handover: ['bi-arrow-left-right', 'text-body-secondary'] };
 function evText(e, chans) {
 	var t = tx(e.text || ''), w = whoTxt(e.actor);
 	switch (e.kind) {
@@ -1335,6 +1485,8 @@ function evText(e, chans) {
 	case 'resolved': return L('ev.resolved', { w: w }) + (t ? ': ' + quote(t) : '');
 	case 'maint': return L('ev.maint') + (t ? ': ' + t : '');
 	case 'maint_end': return L('ev.maint_end') + (t ? ': ' + t : '');
+	case 'takeover': return t || L('ev.takeover'); // Cluster: Text nennt die Nodes ("von node01 an node02")
+	case 'handover': return t || L('ev.handover');
 	}
 	return e.kind + (t ? ': ' + t : '');
 }
@@ -1393,7 +1545,7 @@ function pageProblems() {
 			var badge = open ? stBadge(p.state) : '<span class="st-badge ok"><i class="bi bi-check2"></i> ' + esc(L('pb.resolved')) + '</span>';
 			var maxSt = !open ? ' <span class="small text-body-secondary text-nowrap"><span class="st-dot st-' + esc(p.worst === 'unreachable' ? 'unknown' : p.worst) + '" style="width:.5rem;height:.5rem"></span> ' + esc(L('pb.max', { s: stLabel(p.worst) })) + '</span>' : '';
 			var how = open ? (acked ? '<span class="text-primary small"><i class="bi bi-check2-square"></i> ' + esc(L('ov.acked')) + '</span> ' + who(p.ack.by) : '<span class="text-body-secondary">' + esc(L('pb.open_state')) + '</span>') :
-				(p.how === 'maint' ? '<i class="bi bi-cone-striped"></i> ' + esc(L('pb.maint')) : who(p.closed_by));
+				(p.how === 'maint' ? '<i class="bi bi-cone-striped"></i> ' + esc(L('pb.maint')) : p.how === 'handover' ? '<span class="text-body-secondary"><i class="bi bi-diagram-3"></i> ' + esc(L('how.handover')) + '</span>' : who(p.closed_by));
 			var name = p.key ? tx(p.name) : L('ov.unreachable');
 			html += '<tr data-row="' + esc(p.uid) + '" tabindex="0"><td>' + badge + '</td><td><span class="fw-semibold">' + esc(p.host) + '</span>' + (p.host_gone ? ' <span class="badge text-bg-light">' + esc(L('pb.host_gone')) + '</span>' : '') + ' · ' + esc(name) + maxSt + '</td><td class="d-none d-md-table-cell small">' + esc(fmtTime(p.opened)) + '</td><td class="d-none d-sm-table-cell small">' + esc(fmtDur(p.duration)) + '</td><td class="small">' + how + '</td><td class="d-none d-lg-table-cell small text-body-secondary">' + esc(p.channels.join(', ') || '–') + '</td></tr>';
 			if (PB.open === p.uid) { html += '<tr class="pb-detail"><td colspan="6" id="m64-pb-detail"><span class="spinner-border spinner-border-sm"></span></td></tr>'; }
@@ -1865,6 +2017,42 @@ function pageSettings() {
 	renderUnknown((D.traps && D.traps.unknown) || []);
 	var clr = $('#m64-trap-clear');
 	if (clr) { clr.onclick = function () { lock(clr, function () { return api('DELETE', '/api/monitor64/traps/unknown').then(function () { renderUnknown([]); }); }).catch(fail); }; }
+	if (D.cluster) { clusterKeys(D.cluster.key || {}); clusterKeyActions(); }
+}
+// clusterKeys: Karte Cluster – gemeinsamer Schluessel (Fingerabdruck, Zeile fuer authorized_keys), Schluessel wechseln,
+// offene Umstellungen der Agents bzw. SSH-Hosts, alte Schluessel verwerfen.
+function clusterKeys(k) {
+	var box = $('#m64-cl-key'), pend = $('#m64-cl-pending');
+	if (!box || !pend) { return; }
+	var old = k.old_keys || [], list = k.pending || [];
+	box.innerHTML = '<div>' + esc(k.cluster ? L('cluster.key_shared', { t: fmtTime(k.at) }) : L('cluster.key_own')) + '</div>' +
+		'<div class="mt-1">' + esc(L('cluster.key_fp')) + ' <code id="m64-cl-fp">' + esc(k.fingerprint || '–') + '</code></div>' +
+		'<div class="d-flex align-items-center mt-2">' + esc(L('cluster.key_line')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-cl-line"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div>' +
+		'<div class="cmd" id="m64-cl-line">' + esc(k.authorized_key || '') + '</div>' +
+		(old.length ? '<div class="text-warning-emphasis mt-2"><i class="bi bi-hourglass-split"></i> ' + esc(L('cluster.key_old', { n: old.length })) + ' <span class="text-body-secondary">' + esc(old.join(', ')) + '</span></div>' : '');
+	pend.innerHTML = list.length ? list.map(function (p) {
+		var what = p.manual ? L('cluster.pending_ssh') : L('cluster.pending_agent', { n: p.tries, t: fmtTime(p.last_try) });
+		return '<div class="list-group-item px-0 d-flex flex-wrap align-items-center gap-2"><div class="me-auto min-w-0"><a href="/monitor64/host/' + encodeURIComponent(p.host_uid) + '" class="fw-semibold">' + esc(p.host_name || p.host_uid) + '</a> <span class="text-body-secondary">' + esc(accLabel(p.type)) + '</span>' +
+			'<div class="text-body-secondary">' + esc(what) + '</div>' + (p.error ? '<div class="text-danger-emphasis text-truncate">' + esc(tx(p.error)) + '</div>' : '') + '</div>' +
+			(p.manual ? '<button class="btn btn-sm btn-outline-primary" type="button" data-cl-confirm="' + esc(p.access_uid) + '"><i class="bi bi-check2"></i> ' + esc(L('cluster.confirm')) + '</button>' : '') + '</div>';
+	}).join('') : '<div class="list-group-item px-0 text-body-secondary">' + esc(L('cluster.pending_none')) + '</div>';
+	var retry = $('#m64-cl-retry'), retire = $('#m64-cl-retire');
+	if (retry) { retry.hidden = !list.some(function (p) { return !p.manual; }); }
+	if (retire) { retire.hidden = !old.length && !list.length; }
+}
+function clusterKeyActions() {
+	var card = $('#m64-cluster');
+	if (!card) { return; }
+	function keyCall(path, body, msg) { return api('POST', '/api/monitor64/cluster/keys/' + path, body).then(function (k) { clusterKeys(k); toast(msg); }); }
+	card.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-cl-confirm]');
+		if (b) { lock(b, function () { return keyCall('confirm', { access_uid: b.dataset.clConfirm }, L('cluster.confirmed_toast')); }).catch(fail); return; }
+		var a = ev.target.closest('#m64-cl-rotate, #m64-cl-retry, #m64-cl-retire');
+		if (!a) { return; }
+		if (a.id === 'm64-cl-retry') { lock(a, function () { return keyCall('retry', undefined, L('cluster.retry_toast')); }).catch(fail); }
+		if (a.id === 'm64-cl-rotate') { confirmBox(L('cluster.key_rotate'), L('cluster.key_rotate_confirm'), L('cluster.key_rotate'), function () { return keyCall('rotate', undefined, L('cluster.key_rotated_toast')).catch(fail); }); }
+		if (a.id === 'm64-cl-retire') { confirmBox(L('cluster.retire'), L('cluster.retire_confirm'), L('cluster.retire'), function () { return keyCall('retire', undefined, L('cluster.retired_toast')).catch(fail); }); }
+	});
 }
 
 // ---------- Assistent "Host hinzufuegen" ----------
@@ -1872,7 +2060,9 @@ function pageNew() {
 	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
 		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '', mode: '', pushNode: location.hostname, token: '', pushPort: 0,
 		s_version: '2c', s_port: '', s_community: '', s_user: '', s_level: 'authPriv', s_auth: 'SHA256', s_authpass: '', s_priv: 'AES', s_privpass: '', s_context: '', s_engine: '', s_custom: '', s_traps: false,
-		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {} };
+		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {}, clPref: '', clBack: {} };
+	// Cluster: bevorzugte Node (Standard diese) und Ersatz-Nodes (Standard keine), nur bei aktivem Cluster
+	var CLW = D.cluster && D.cluster.active ? D.cluster : null, clFailed = false;
 	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
 	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics',
 		's_version', 's_port', 's_community', 's_user', 's_level', 's_auth', 's_authpass', 's_priv', 's_privpass', 's_context', 's_engine', 's_custom', 's_traps'];
@@ -2018,7 +2208,7 @@ function pageNew() {
 			html = '<div class="row g-3"><div class="col-md-6"><label class="form-label" for="m64-w-group">' + esc(L('f.group')) + '</label><input class="form-control" id="m64-w-group" data-w="group" list="m64-w-groups" maxlength="64" value="' + esc(WZ.group) + '"><datalist id="m64-w-groups">' + groups.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist></div>' +
 				'<div class="col-md-6"><label class="form-label" for="m64-w-tags">' + esc(L('f.tags')) + '</label><input class="form-control" id="m64-w-tags" data-w="tags" value="' + esc(WZ.tags) + '"><div class="form-text">' + esc(L('new.tags_hint')) + '</div></div>' +
 				'<div class="col-md-6"><label class="form-label" for="m64-w-iv">' + esc(L('f.interval')) + '</label><select class="form-select" id="m64-w-iv" data-w="interval">' + [30, 60, 120, 300, 600, 900].map(function (s) { return '<option value="' + s + '"' + (String(s) === String(WZ.interval) ? ' selected' : '') + '>' + esc(s < 60 ? L('iv.sec', { n: s }) : fmtDur(s)) + '</option>'; }).join('') + '</select></div>' +
-				'<div class="col-12 small text-body-secondary">' + esc(L('new.summary', { n: WZ.name, a: WZ.address, k: kl(WZ.kind), s: Object.keys(WZ.adopt).filter(function (x) { return WZ.adopt[x]; }).length })) + (extra ? ' ' + esc(L('new.summary_nodes', { n: extra })) : '') + '</div></div>';
+				'<div class="col-12 small text-body-secondary">' + esc(L('new.summary', { n: WZ.name, a: WZ.address, k: kl(WZ.kind), s: Object.keys(WZ.adopt).filter(function (x) { return WZ.adopt[x]; }).length })) + (extra ? ' ' + esc(L('new.summary_nodes', { n: extra })) : '') + '</div>' + clusterStep() + '</div>';
 		}
 		$('#m64-wizard').innerHTML = html;
 		var back = $('#m64-back');
@@ -2046,6 +2236,27 @@ function pageNew() {
 		api('GET', '/api/monitor64/push/token').then(function (r) { WZ.token = r.token; WZ.pushPort = r.port; render(); }).catch(fail);
 	}
 	function selectedNodes() { return otherNodes().filter(function (n) { return WZ.nodes[n.name]; }); }
+	// clusterStep: letzter Schritt, Abschnitt "Ueberwachung im Cluster" (zugeklappt, solange nichts gewaehlt ist).
+	function clBackList() { var pref = WZ.clPref || CLW.self; return (CLW.nodes || []).filter(function (n) { return WZ.clBack[n.id] && n.id !== pref; }).map(function (n) { return n.id; }); }
+	function clusterStep() {
+		if (!CLW) { return ''; }
+		var pref = WZ.clPref || CLW.self, open = pref !== CLW.self || clBackList().length;
+		return '<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary"><i class="bi bi-diagram-3"></i> ' + esc(L('cluster.wiz_title')) + '</summary><div class="pt-2 row g-2">' +
+			'<div class="col-md-6"><label class="form-label" for="m64-w-clpref">' + esc(L('cluster.preferred')) + '</label><select class="form-select" id="m64-w-clpref" data-w="clPref">' + (CLW.nodes || []).map(function (n) {
+				return '<option value="' + esc(n.id) + '"' + (n.id === pref ? ' selected' : '') + '>' + esc(n.name + (n.self ? ' (' + L('cluster.this_node') + ')' : '') + (n.online ? '' : ' – ' + L('cluster.offline'))) + '</option>';
+			}).join('') + '</select></div>' +
+			'<div class="col-md-6"><div class="form-label">' + esc(L('cluster.backups')) + '</div>' + (CLW.nodes || []).filter(function (n) { return n.id !== pref; }).map(function (n, i) {
+				return '<div class="form-check"><input class="form-check-input" type="checkbox" id="m64-w-clb' + i + '" data-wcl="' + esc(n.id) + '"' + (WZ.clBack[n.id] ? ' checked' : '') + '><label class="form-check-label small" for="m64-w-clb' + i + '">' + esc(n.name) + (n.online ? '' : ' <span class="badge text-bg-secondary">' + esc(L('cluster.offline')) + '</span>') + '</label></div>';
+			}).join('') + '</div>' +
+			'<div class="col-12 small text-body-secondary">' + esc(L('cluster.wiz_hint')) + '</div></div></details></div>';
+	}
+	// clApply: Wahl im Cluster nach dem Anlegen setzen (nur wenn vom Standard abweichend; Fehler nur melden).
+	function clApply(hostUID) {
+		if (!CLW || !hostUID) { return Promise.resolve(); }
+		var pref = WZ.clPref || CLW.self, back = clBackList();
+		if (pref === CLW.self && !back.length) { return Promise.resolve(); }
+		return api('PUT', '/api/monitor64/cluster/hosts/' + encodeURIComponent(hostUID), { preferred_node: pref, backup_nodes: back }).catch(function () { clFailed = true; });
+	}
 	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
@@ -2084,6 +2295,8 @@ function pageNew() {
 	$('#m64-wizard').addEventListener('change', function (ev) {
 		if (ev.target.dataset.adopt !== undefined) { WZ.adopt[ev.target.dataset.adopt] = ev.target.checked; }
 		if (ev.target.dataset.wnode !== undefined) { WZ.nodes[ev.target.dataset.wnode] = ev.target.checked; }
+		if (ev.target.dataset.wcl !== undefined) { WZ.clBack[ev.target.dataset.wcl] = ev.target.checked; }
+		if (ev.target.id === 'm64-w-clpref') { collect(); render(); }
 	});
 	// Adresse, Port oder Zugangsdaten geaendert: altes Testergebnis (Dienste, Fingerabdruck) verwerfen
 	$('#m64-wizard').addEventListener('input', function (ev) {
@@ -2113,7 +2326,7 @@ function pageNew() {
 		lock(next, function () {
 			return api('POST', '/api/monitor64/hosts', body).then(function (r) {
 				// je weitere Cluster-Node ein Host mit gleichem Token und Pin, Abfrage ueber dieselbe Adresse (Node gesetzt)
-				var chain = Promise.resolve(), failed = [];
+				var chain = clApply(r.uid), failed = [];
 				nodes.forEach(function (n) {
 					var na = { type: 'pve', config: { url: acc.config.url || ('https://' + (WZ.address.indexOf(':') >= 0 ? '[' + WZ.address + ']' : WZ.address) + ':8006'), token_id: acc.config.token_id, pin: acc.config.pin, node: n.name }, secret: acc.secret };
 					var addr = n.ip || n.name;
@@ -2123,13 +2336,14 @@ function pageNew() {
 						return api('POST', '/api/monitor64/test', { address: addr, access: na }).catch(function () { return {}; }).then(function (t) {
 							var svcs = (t && t.ok && t.services) || [];
 							return api('POST', '/api/monitor64/hosts', { name: n.name, address: addr, kind: 'pve', group: WZ.group, tags: tags, interval_sec: iv, notes: '', paused: false, agent_autoupdate: true, accesses: [na],
-								services: svcs, adopt: svcs.filter(function (x) { return x['default']; }).map(function (x) { return x.key; }) });
+								services: svcs, adopt: svcs.filter(function (x) { return x['default']; }).map(function (x) { return x.key; }) }).then(function (r2) { return clApply(r2.uid); });
 						}).catch(function () { failed.push(n.name); });
 					});
 				});
 				return chain.then(function () {
 					if (failed.length) { toast(L('new.nodes_failed', { n: failed.join(', ') }), true); }
-					setTimeout(function () { location.href = '/monitor64/host/' + encodeURIComponent(r.uid); }, failed.length ? 2500 : 0);
+					else if (clFailed) { toast(L('cluster.wiz_failed'), true); }
+					setTimeout(function () { location.href = '/monitor64/host/' + encodeURIComponent(r.uid); }, failed.length || clFailed ? 2500 : 0);
 				});
 			});
 		}).catch(fail);

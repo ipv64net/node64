@@ -22,6 +22,8 @@
   Regeln für Neustart, Ports, USV-Alarm, Drucker, Hardware und PoE.
 - Agent im Push-Betrieb für Hosts hinter NAT bzw. VPS (Agent verbindet sich zur Node, Port 6466/TCP, nur offen
   bei Bedarf); Auswahl „Verbindung“ im Assistenten mit Installationsbefehl.
+- Cluster-Oberfläche: „überwacht von“, bevorzugte und Ersatz-Nodes je Host mit Erreichbarkeitsprüfung, Karte
+  Cluster mit Schlüsselwechsel, Lücken-Hinweis in Diagrammen.
 - Nachbesserungen aus dem Code-Review: gewollt fehlende Messwerte (gestoppte VM, schlafende Platte) bleiben OK,
   Erinnerungen gehen nach der Ruhezeit nicht verloren, keine doppelten Meldungen an Standardkanäle,
   ZFS-Gerätefehler an ONLINE-Pools, Proxmox-Cluster-Dienste von einer überwachten Node, hängende VMs auch bei

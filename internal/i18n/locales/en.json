@@ -2033,7 +2033,11 @@
       "mcp_settings": "MCP interface switched",
       "mcp_key_create": "MCP key created",
       "mcp_key_revoke": "MCP key revoked",
-      "cdn64_host_maintenance": "Maintenance mode switched"
+      "cdn64_host_maintenance": "Maintenance mode switched",
+      "monitor64_host_cluster": "Monitor64: host responsibility changed",
+      "monitor64_key_rotate": "Monitor64: cluster key rotated",
+      "monitor64_key_confirm": "Monitor64: SSH host switch confirmed",
+      "monitor64_key_retire": "Monitor64: old keys discarded"
     }
   },
   "logs": {
@@ -3498,7 +3502,8 @@
       "dns64": "DNS64",
       "node": "Node",
       "users": "Users & login",
-      "dyndns": "DynDNS"
+      "dyndns": "DynDNS",
+      "monitor64": "Monitor64"
     },
     "item": {
       "checks": "Checks",
@@ -3527,7 +3532,9 @@
       "node_settings": "General settings (time zone, self-update, MCP on/off)",
       "user_accounts": "Users – with password, app 2FA and SSO links (passkeys, sessions and API keys stay per node)",
       "user_sso": "SSO (OIDC) – provider including client secret (redirect address and forward auth stay per node)",
-      "dyndns_config": "Names and settings – including tokens; only one node updates at a time"
+      "dyndns_config": "Names and settings – including tokens; only one node updates at a time",
+      "monitor64_config": "Hosts, accesses including secrets, thresholds, notifications, maintenance and cluster key – each host is monitored by exactly one node",
+      "monitor64_status": "Problems, acknowledgements and current state of the hosts"
     },
     "add_title": "Add another node",
     "add_hint": "Shows a code that you enter on the other node under “Join a cluster”.",
@@ -3565,7 +3572,8 @@
     "err_url": "The address must start with http:// or https://.",
     "link_hint": "Healthchecks can additionally be synced directly between the nodes of a cluster, alongside the Healthchecks sync via ipv64. Turn it on or off on the cluster page.",
     "link_switch": "Also sync Healthchecks via the cluster",
-    "link_open": "Manage cluster"
+    "link_open": "Manage cluster",
+    "monitor64_hint": "A host's preferred node is responsible (default: the node that created it); backup nodes are chosen on the host page. History stays on the node that measured it – charts query it there live."
   },
   "link": {
     "key_title": "Link with one click",
@@ -6181,7 +6189,9 @@
       "comment": "comment by {w}",
       "resolved": "marked as resolved by {w}",
       "maint": "Maintenance scheduled",
-      "maint_end": "Maintenance ended"
+      "maint_end": "Maintenance ended",
+      "takeover": "Responsibility taken over",
+      "handover": "Responsibility handed back"
     },
     "how": {
       "auto": "automatically – value back to normal",
@@ -6636,7 +6646,8 @@
       "comment": "Please enter a comment.",
       "action": "Unknown action.",
       "snmp_secret": "SNMP credentials: {error}",
-      "trap_port": "Invalid trap port (1 to 65535)."
+      "trap_port": "Invalid trap port (1 to 65535).",
+      "cluster_node": "Unknown node \"{node}\" – only nodes of this cluster are possible."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",
@@ -6652,7 +6663,10 @@
       "host_removed": "host removed",
       "zfs_errors": "data errors: {text}",
       "traps": "{n} trap(s) open, last {name} ({at})",
-      "trap_last": "Last trap: {name} ({at})"
+      "trap_last": "Last trap: {name} ({at})",
+      "cluster_takeover": "Responsibility taken over: {to} instead of {from}",
+      "cluster_handover": "Responsibility handed back: from {from} to {to}",
+      "handover": "ended by handover"
     },
     "push": {
       "mode_label": "Connection",
@@ -6668,6 +6682,78 @@
       "setting_port": "Port for agents in push mode (TCP)",
       "setting_hint": "Only open when a host uses push mode. Docker: publish the port.",
       "listening": "Open: {n} accesses, {w} agents waiting."
+    },
+    "cluster": {
+      "by": "monitored by {n}",
+      "note": {
+        "owner_unreachable": "Responsible node {n} unreachable – state unknown, nothing is notified.",
+        "no_data": "No state from {n} yet.",
+        "measure_only": "No majority in the cluster: this node keeps measuring but does not notify.",
+        "remote_measure": "{n} only measures (no majority in the cluster) and does not notify."
+      },
+      "state_at": "State from {n}: {t}",
+      "discover_remote": "Services are discovered by the responsible node {n}.",
+      "title": "Cluster responsibility",
+      "edit": "Change responsibility",
+      "owner": "Monitored by",
+      "preferred": "Preferred node",
+      "preferred_hint": "It monitors the host as long as it is reachable. A change takes effect once the new node has been reachable for 5 minutes.",
+      "backups": "Backup nodes",
+      "backups_none": "none",
+      "backups_hint": "Default: no backup node. A node at another site often cannot reach the home network and would wrongly report the host as unreachable – check reachability first.",
+      "role": {
+        "report": "polls and notifies",
+        "measure": "measures only (no majority)",
+        "idle": "other node"
+      },
+      "this_node": "this node",
+      "offline": "offline",
+      "stable": "stably reachable",
+      "unstable": "reachable only briefly",
+      "history_n": "Takeovers and handbacks ({n})",
+      "reach": "Check reachability from the other nodes",
+      "reaching": "Testing the accesses from all nodes …",
+      "reach_ok": "reachable from {n} ✓",
+      "reach_fail": "not reachable from {n}",
+      "reach_offline": "{n} is offline",
+      "reach_add": "add as backup",
+      "reach_added": "chosen as backup",
+      "reach_skip": "push mode – only from its own node",
+      "reach_ms": "OK ({ms} ms)",
+      "saved_toast": "Responsibility saved.",
+      "chart_missing": "Data on {n} (unreachable) – gap in the history.",
+      "wiz_title": "Monitoring in the cluster",
+      "wiz_hint": "Default: this node monitors the host, no backup node. After creating it, the host page can check which nodes reach the host.",
+      "wiz_failed": "Host created, but the cluster responsibility was not saved – please set it on the host page.",
+      "card": "Cluster",
+      "to_cluster": "To the cluster page",
+      "majority_yes": "Majority: yes ({c} of {t} nodes reachable)",
+      "majority_no": "Majority: no ({c} of {t} nodes reachable) – this node does not take over other hosts.",
+      "members": "Members",
+      "hosts_n": "monitors {n} hosts",
+      "hosts_measure": "{n} of them measuring only",
+      "orphans": "{n} hosts without a reachable responsible node (unknown, not notified).",
+      "card_hint": "Preferred and backup nodes are set on the host's page.",
+      "key": "Cluster key",
+      "key_shared": "Shared key of all nodes (since {t}) – agents and SSH hosts need it only once.",
+      "key_own": "Still this node's own key – the cluster key arrives automatically.",
+      "key_fp": "Fingerprint",
+      "key_line": "Line for authorized_keys (SSH hosts without agent)",
+      "key_old": "Old keys still offered until all hosts are switched: {n}",
+      "key_rotate": "Rotate key",
+      "key_rotate_confirm": "Create a new key for all nodes? Agents are switched automatically; SSH hosts without agent then need the new line in authorized_keys. Recommended after removing a node from the cluster.",
+      "key_rotated_toast": "New key – the agents are being switched.",
+      "pending": "Pending switches",
+      "pending_none": "All hosts use the current key.",
+      "pending_agent": "Key outdated – agent unreachable (attempt {n}, last {t}); retried every 5 minutes.",
+      "pending_ssh": "Add the new line to authorized_keys, then confirm.",
+      "retry": "Retry",
+      "retry_toast": "Switch retried.",
+      "confirm": "SSH done",
+      "confirmed_toast": "Switch confirmed.",
+      "retire": "Discard old keys",
+      "retire_confirm": "Discard the old keys now? Hosts that have not been switched can no longer be polled afterwards (set up the agent again or add the new line to authorized_keys).",
+      "retired_toast": "Old keys discarded."
     }
   }
 }

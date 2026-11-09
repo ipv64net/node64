@@ -64,6 +64,25 @@
 					<div class="list-group list-group-flush mt-1" id="m64-trap-unknown"></div>
 				</div>
 			</div>
+			{{with .Data.Cluster}}<div class="card mb-3" id="m64-cluster">
+				<div class="card-header fw-semibold d-flex align-items-center"><span><i class="bi bi-diagram-3"></i> {{$.T "monitor64.cluster.card"}}</span><a class="small fw-normal ms-auto" href="/cluster">{{$.T "monitor64.cluster.to_cluster"}}</a></div>
+				<div class="card-body small">
+					<div id="m64-cl-majority">{{if .Majority}}<span class="text-success"><i class="bi bi-check-circle"></i> {{$.T "monitor64.cluster.majority_yes" "c" .Connected "t" .Total}}</span>{{else}}<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{$.T "monitor64.cluster.majority_no" "c" .Connected "t" .Total}}</span>{{end}}</div>
+					<div class="fw-semibold mt-3">{{$.T "monitor64.cluster.members"}}</div>
+					<div class="list-group list-group-flush" id="m64-cl-nodes">{{range .Rows}}
+						<div class="list-group-item px-0 d-flex flex-wrap align-items-center gap-2" data-cl-row="{{.ID}}"><span class="st-dot {{if not .Online}}st-crit{{else if .Stable}}st-ok{{else}}st-warn{{end}}"></span><span class="fw-semibold">{{.Name}}</span>{{if .Self}}<span class="badge text-bg-light">{{$.T "monitor64.cluster.this_node"}}</span>{{end}}
+							<span class="text-body-secondary">{{if not .Online}}{{$.T "monitor64.cluster.offline"}}{{else if .Stable}}{{$.T "monitor64.cluster.stable"}}{{else}}{{$.T "monitor64.cluster.unstable"}}{{end}}</span>
+							<span class="ms-auto">{{$.T "monitor64.cluster.hosts_n" "n" .Hosts}}{{if .Measure}} <span class="text-warning-emphasis">· {{$.T "monitor64.cluster.hosts_measure" "n" .Measure}}</span>{{end}}</span></div>{{end}}
+					</div>
+					{{if .Orphans}}<div class="text-warning-emphasis mt-1" id="m64-cl-orphans"><i class="bi bi-question-circle"></i> {{$.T "monitor64.cluster.orphans" "n" .Orphans}}</div>{{end}}
+					<div class="text-body-secondary mt-1">{{$.T "monitor64.cluster.card_hint"}}</div>
+					<div class="fw-semibold mt-3">{{$.T "monitor64.cluster.key"}}</div>
+					<div id="m64-cl-key"></div>
+					<div class="d-flex flex-wrap gap-2 mt-2"><button class="btn btn-sm btn-outline-secondary" type="button" id="m64-cl-rotate"><i class="bi bi-arrow-repeat"></i> {{$.T "monitor64.cluster.key_rotate"}}</button><button class="btn btn-sm btn-outline-danger" type="button" id="m64-cl-retire" hidden><i class="bi bi-trash"></i> {{$.T "monitor64.cluster.retire"}}</button></div>
+					<div class="fw-semibold mt-3 d-flex align-items-center">{{$.T "monitor64.cluster.pending"}}<button class="btn btn-sm btn-link ms-auto p-0" type="button" id="m64-cl-retry" hidden><i class="bi bi-arrow-clockwise"></i> {{$.T "monitor64.cluster.retry"}}</button></div>
+					<div class="list-group list-group-flush" id="m64-cl-pending"></div>
+				</div>
+			</div>{{end}}
 			<div class="card mb-3">
 				<div class="card-header fw-semibold">{{.T "monitor64.st.prometheus"}}</div>
 				<div class="card-body small">{{.T "monitor64.st.prometheus_text"}}</div>
