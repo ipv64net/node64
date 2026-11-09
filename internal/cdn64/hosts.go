@@ -10,9 +10,12 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/ports"
@@ -184,6 +187,11 @@ func (h *Host) normalize() error {
 	if err := normalizeLocations(h.Locations); err != nil {
 		return err
 	}
+	for i := range h.Locations { // Weiterleitung bei verweigertem Zugriff darf nicht im Kreis laufen (#55)
+		if l := &h.Locations[i]; deniedLoop(h.Names, h.Locations, l) {
+			return &FieldError{Field: "locations", Key: "cdn64.err.location_denied_loop", Name: l.Path}
+		}
+	}
 	if h.Advanced.OnlyLocations && len(h.Locations) == 0 {
 		return ferr("locations", "cdn64.err.only_locations")
 	}
@@ -344,6 +352,11 @@ func normalizeLocations(list []Location) error {
 		if l.AccessListID < 0 { // vor dem continue: auch sperren/feste Antwort (proxy.go: <= 0 = wie der Host)
 			l.AccessListID = 0
 		}
+		to, ok := cleanDeniedRedirect(l.DeniedRedirect) // gilt fuer jede Aktion (die Zugriffsliste prueft vorher)
+		if !ok {
+			return &FieldError{Field: "locations", Key: "cdn64.err.location_denied", Name: l.Path}
+		}
+		l.DeniedRedirect = to
 		if l.Action != LocProxy { // sperren bzw. feste Antwort: ohne Ziel
 			if err := l.normalizeAction(); err != nil {
 				return err
@@ -373,6 +386,53 @@ func normalizeLocations(list []Location) error {
 		}
 	}
 	return nil
+}
+
+// cleanDeniedRedirect prueft das Ziel der Weiterleitung bei verweigertem Zugriff (#55): relativer Pfad (/..., nicht
+// //... - das waere ein fremder Host) oder http(s)-URL mit Host, ohne Benutzerangabe, Leer- und Steuerzeichen.
+func cleanDeniedRedirect(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", true
+	}
+	if len(s) > 500 || strings.ContainsFunc(s, func(c rune) bool { return c == '\\' || unicode.IsSpace(c) || unicode.IsControl(c) }) {
+		return "", false
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return "", false
+	}
+	if strings.HasPrefix(s, "/") {
+		return s, !strings.HasPrefix(s, "//")
+	}
+	sc := strings.ToLower(u.Scheme)
+	return s, (sc == "http" || sc == "https") && u.Hostname() != "" && u.User == nil && u.Opaque == ""
+}
+
+// deniedLoop: das Ziel der Weiterleitung von l liegt auf diesem Host in einer Location, die selbst bei verweigertem
+// Zugriff weiterleitet (auch l selbst) - abgewiesene Besucher liefen im Kreis.
+func deniedLoop(names []string, list []Location, l *Location) bool {
+	if l.DeniedRedirect == "" {
+		return false
+	}
+	u, err := url.Parse(l.DeniedRedirect)
+	if err != nil {
+		return true
+	}
+	if u.Host != "" && !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, u.Hostname()) }) {
+		return false // anderer Host
+	}
+	p, ok := reqPath(u.Path)
+	if !ok {
+		return true
+	}
+	best, at := -1, 0
+	for i := range list {
+		if pre := path.Clean(list[i].Path); len(pre) > best && pathIn(p, pre) {
+			best, at = len(pre), i
+		}
+	}
+	return best >= 0 && list[at].DeniedRedirect != ""
 }
 
 // normalizeAction prueft eine Location ohne Ziel (sperren, feste Antwort) und leert die Felder des Ziels.

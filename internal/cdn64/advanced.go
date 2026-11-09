@@ -131,6 +131,10 @@ type Location struct {
 	WebSockets   bool   `json:"websockets"`
 	AccessListID int64  `json:"access_list_id"` // 0 = wie der Host
 
+	// Bei verweigertem Zugriff (#55): Weiterleitung (302) statt Fehlerseite, wenn die Zugriffsliste ablehnt (403);
+	// nicht, wenn eine Anmeldung helfen koennte (401, Login-Seite). Relativer Pfad oder http(s)-URL, "" = Fehlerseite.
+	DeniedRedirect string `json:"denied_redirect,omitempty"`
+
 	// Aktion (#11): "" = an das Ziel, block = sperren (Status 400-499, Standard 403), respond = feste Antwort (Status
 	// 200-599, Standard 200, Inhalt hoechstens 64 KB) - beide ohne Ziel
 	Action      string `json:"action,omitempty"`

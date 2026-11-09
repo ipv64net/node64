@@ -444,6 +444,7 @@ type route struct {
 	prefix string // "" = Host selbst
 	ws     bool
 	acl    int64
+	deny   string // Weiterleitung bei verweigertem Zugriff (#55), "" = Fehlerseite
 	next   http.Handler
 }
 
@@ -485,7 +486,11 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		if acl == 0 {
 			acl = h.AccessListID
 		}
-		routes = append(routes, route{prefix: prefix, ws: l.WebSockets, acl: acl, next: ln})
+		deny := l.DeniedRedirect
+		if deniedLoop(h.Names, h.Locations, &l) { // beim Speichern schon abgelehnt; hier nur zur Sicherheit
+			deny = ""
+		}
+		routes = append(routes, route{prefix: prefix, ws: l.WebSockets, acl: acl, deny: deny, next: ln})
 	}
 	sort.SliceStable(routes, func(i, j int) bool { return len(routes[i].prefix) > len(routes[j].prefix) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -510,7 +515,7 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 			r.Header.Del("Upgrade")
 			r.Header.Del("Connection")
 		}
-		if !m.allowed(w, r, h, rt.acl) {
+		if !m.allowedOr(w, r, h, rt.acl, rt.deny) {
 			return
 		}
 		if rt.acl > 0 { // Cache: geschuetzte Antworten nie "public" (cache.go)
@@ -637,6 +642,12 @@ func (m *Module) loginRoute(w http.ResponseWriter, r *http.Request, h *Host, rou
 
 // allowed prueft die Zugriffsliste; false = Antwort ist schon geschrieben (401/403/429).
 func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl int64) bool {
+	return m.allowedOr(w, r, h, acl, "")
+}
+
+// allowedOr wie allowed; deny: statt der 403-Seite dorthin weiterleiten (#55). Nur bei echter Ablehnung - verlangt die
+// Liste eine Anmeldung (401, Login-Seite, Anmeldedienst), bleibt es dabei, sonst koennte sich niemand mehr anmelden.
+func (m *Module) allowedOr(w http.ResponseWriter, r *http.Request, h *Host, acl int64, deny string) bool {
 	if acl <= 0 {
 		return true
 	}
@@ -644,6 +655,10 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 	g := m.acl[acl]
 	m.mu.Unlock()
 	if g == nil { // Liste geloescht: lieber sperren als offen lassen
+		if deny != "" {
+			deniedRedirect(w, r, deny)
+			return false
+		}
 		page(w, http.StatusForbidden)
 		return false
 	}
@@ -741,11 +756,26 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		loginPage(w, r, g, safeNext(r.URL.RequestURI()), "", false)
 		return false
 	}
+	if status == http.StatusForbidden && deny != "" {
+		deniedRedirect(w, r, deny)
+		return false
+	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", `Basic realm="`+strings.ReplaceAll(g.list.Name, `"`, "")+`", charset="UTF-8"`)
 	}
 	page(w, status)
 	return false
+}
+
+// rejACLRedirect: von der Zugriffsliste abgewiesen und weitergeleitet (#55).
+const rejACLRedirect = "acl_redirect"
+
+// deniedRedirect: abgewiesene Anfrage mit 302 weiterleiten (#55); nie zwischenspeichern, die Antwort haengt von der
+// Adresse des Besuchers ab.
+func deniedRedirect(w http.ResponseWriter, r *http.Request, to string) {
+	setReject(r, rejACLRedirect)
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, to, http.StatusFound)
 }
 
 // ctxClient: echte Client-IP (nach den vertrauenswuerdigen Proxys des Hosts), im Kontext der Anfrage.

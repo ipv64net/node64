@@ -555,7 +555,7 @@ func hostFromForm(r *http.Request, h *Host) {
 			l := Location{Path: path, Scheme: r.PostFormValue(k + "scheme"), TargetHost: strings.TrimSpace(r.PostFormValue(k + "host")),
 				TargetPort: port, ForwardPath: r.PostFormValue(k + "forward"), WebSockets: on(k + "ws"), AccessListID: acl,
 				Action: r.PostFormValue(k + "action"), Status: status, Body: strings.ReplaceAll(r.PostFormValue(k+"body"), "\r\n", "\n"),
-				ContentType: strings.TrimSpace(r.PostFormValue(k + "ctype"))}
+				ContentType: strings.TrimSpace(r.PostFormValue(k + "ctype")), DeniedRedirect: strings.TrimSpace(r.PostFormValue(k + "deny"))}
 			la := &LocationAdvanced{RequestHeaders: parseHeaders(r.PostFormValue(k + "req_set")), RequestRemove: lines(r.PostFormValue(k + "req_del")),
 				ResponseHeaders: parseHeaders(r.PostFormValue(k + "resp_set")), ResponseRemove: lines(r.PostFormValue(k + "resp_del")),
 				Buffering: r.PostFormValue(k + "buffering"), TargetHTTP: r.PostFormValue(k + "target_http")}

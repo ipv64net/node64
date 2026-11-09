@@ -2553,6 +2553,10 @@
             "type": "integer",
             "description": "0 = wie der Host"
           },
+          "denied_redirect": {
+            "type": "string",
+            "description": "bei verweigertem Zugriff (Zugriffsliste lehnt ab, 403) Weiterleitung mit 302 hierhin statt Fehlerseite; relativer Pfad (/...) oder http(s)-URL, \"\" = Fehlerseite. Nicht, wenn die Liste eine Anmeldung verlangt (401/Login-Seite)"
+          },
           "action": {
             "type": "string",
             "enum": [
