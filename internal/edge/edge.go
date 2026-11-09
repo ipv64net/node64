@@ -137,6 +137,9 @@ type Route struct {
 	// Handler bleibt nil). Count zaehlt durchgereichte Verbindungen (optional).
 	Passthrough string
 	Count       func()
+	// ProxyProtocol: beim Durchreichen zuerst einen PROXY-Kopf an das Ziel (ProxyV1, ProxyV2; 0 = keinen), damit es
+	// die echte Besucher-Adresse sieht (proxyproto.go). Nur fuer Ziele, die den Kopf erwarten.
+	ProxyProtocol int
 	// Wrap umhuellt beim Durchreichen die Verbindung des Besuchers vor dem Kopieren (z. B. Bandbreite); nil = roh.
 	Wrap func(net.Conn) net.Conn
 	// GetCert liefert das Zertifikat fuer diese Route bei jedem Handshake (z. B. die eigene CA von DNS64, Wechsel
@@ -246,6 +249,9 @@ func (e *Edge) Set(owner string, routes []Route) error {
 		}
 		if rt.Passthrough != "" && (rt.Handler != nil || rt.Path != "") {
 			return errors.New("passthrough route without handler and path")
+		}
+		if rt.ProxyProtocol != 0 && (rt.Passthrough == "" || ProxyHeader(rt.ProxyProtocol, nil, nil) == nil) {
+			return errors.New("proxy protocol only for passthrough (version 1 or 2)")
 		}
 		rt.Names = names
 		norm = append(norm, rt)

@@ -5,6 +5,7 @@
 ### Neu
 - HTTP/2 zum Ziel (#53): Bei https-Zielen spricht PROXY64 jetzt HTTP/2, wenn das Ziel es anbietet – bei Problemen mit NTLM/Exchange den Host auf „Nur HTTP/1.1“ stellen. Neue Auswahl „Protokoll zum Ziel“ unter Erweitert (und je Location): Automatisch (Standard), Nur HTTP/1.1, h2c / HTTP/2 im Klartext für gRPC-Dienste ohne TLS wie NetBird Management/Signal (bei https-Zielen: nur HTTP/2). API: `advanced.target_http`.
 - gRPC durch PROXY64: Trailer (`grpc-status`) kommen beim Client an, Streams laufen in beide Richtungen – lokal und über CDN64 Modus 2; gRPC-Antworten werden nie komprimiert und zählen nicht gegen die Grenze gleichzeitiger Anfragen je Ziel. WebSockets gehen weiter über HTTP/1.1.
+- PROXY-Protokoll zum Ziel (#52): „TLS durchreichen“ und TCP-Streams schicken auf Wunsch einen PROXY-Kopf (v1 oder v2, wie HAProxy `send-proxy`) mit der echten Besucher-Adresse an das Ziel – lokal, hinter einem vertrauten Proxy und über CDN64 (Modus 1 und Portmapper). Z. B. für mailcow (Postfix/Dovecot), damit der Login-Schutz nicht die Node sperrt, oder für einen weiteren Reverse Proxy mit Zugriffslisten/CrowdSec. Standard aus; nur einschalten, wenn das Ziel den Kopf erwartet. UDP-Streams bleiben ohne. API: `advanced.proxy_protocol` bzw. `proxy_protocol` am Stream.
 
 ### Behoben
 - Pfad beim Ziel: Das Zurückschreiben von Weiterleitungen kann keine Adresse auf eine fremde Seite mehr erzeugen (z. B. `/rezepte//evil.com` → `//evil.com`); kodierte Zeichen wie `%2F` bleiben erhalten.

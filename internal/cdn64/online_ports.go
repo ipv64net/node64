@@ -32,6 +32,12 @@ type portKey struct {
 	port int    // Port des Streams (Ziel-Port des Mappings)
 }
 
+// pmRef: Stream zu einem Portmapper-Stream und der Port der Server, auf dem der Besucher ankam (PROXY-Kopf).
+type pmRef struct {
+	stream int64
+	listen int
+}
+
 // onlinePort: ein bei ipv64 angemeldetes Mapping eines Streams.
 type onlinePort struct {
 	StreamID   int64
@@ -67,9 +73,9 @@ func (m *Module) onlinePortsIndex(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	idx := make(map[portKey]int64, len(rows))
+	idx := make(map[portKey]pmRef, len(rows))
 	for _, p := range rows {
-		idx[portKey{udp: p.Transport == "udp", name: strings.ToLower(p.Name), port: p.TargetPort}] = p.StreamID
+		idx[portKey{udp: p.Transport == "udp", name: strings.ToLower(p.Name), port: p.TargetPort}] = pmRef{stream: p.StreamID, listen: p.ListenPort}
 	}
 	m.online.portIdx.Store(&idx)
 }
@@ -240,17 +246,20 @@ func (m *Module) onlinePortsOf(ctx context.Context) (map[int64][]onlinePort, map
 
 // onlinePortStream: Verbindung eines Besuchers aus dem Tunnel (Stream tcp bzw. udp) an den angemeldeten Stream.
 func (m *Module) onlinePortStream(c net.Conn, h tunnel.Header) {
-	var sid int64
+	var ref pmRef
 	ok := false
 	if idx := m.online.portIdx.Load(); idx != nil {
-		sid, ok = (*idx)[portKey{udp: h.Kind == tunnel.KindUDP, name: strings.ToLower(h.Host), port: h.Port}]
+		ref, ok = (*idx)[portKey{udp: h.Kind == tunnel.KindUDP, name: strings.ToLower(h.Host), port: h.Port}]
 	}
 	m.smu.Lock()
-	r := m.runs[sid]
+	r := m.runs[ref.stream]
 	m.smu.Unlock()
 	if !ok || r == nil {
 		_ = c.Close()
 		return
+	}
+	if tc, ok := c.(*tunnelConn); ok && ref.listen > 0 { // der Kopf nennt den Port des Streams, angekommen ist der der Server
+		tc.local = serverAddr(tc.Stream.RemoteAddr(), ref.listen)
 	}
 	ip := netAddr(c.RemoteAddr())
 	where := "cdn64 stream :" + strconv.Itoa(h.Port)

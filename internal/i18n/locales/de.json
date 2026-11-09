@@ -578,6 +578,11 @@
       "target_http_h1": "Nur HTTP/1.1",
       "target_http_h2c": "h2c / HTTP/2 im Klartext",
       "target_http_hint": "Automatisch: HTTP/2 bei https-Zielen, die es anbieten, sonst HTTP/1.1. Nur HTTP/1.1 bei Problemen mit NTLM/Exchange. h2c für gRPC-Dienste im Klartext wie NetBird (bei https-Zielen: nur HTTP/2). WebSockets gehen immer über HTTP/1.1.",
+      "proxy_protocol": "PROXY-Protokoll zum Ziel",
+      "proxy_protocol_off": "Aus (Standard)",
+      "proxy_protocol_v1": "v1 (Text)",
+      "proxy_protocol_v2": "v2 (binär)",
+      "proxy_protocol_hint": "Schickt dem Ziel die echte Adresse des Besuchers (wie HAProxy send-proxy), auch über CDN64. Nur einschalten, wenn das Ziel das PROXY-Protokoll erwartet – z. B. Postfix/Dovecot (mailcow) oder ein weiterer Reverse Proxy; sonst versteht das Ziel die Verbindung nicht.",
       "adv_bw_down": "Download höchstens",
       "adv_bw_up": "Upload höchstens",
       "adv_bw_unlimited": "unbegrenzt",
@@ -639,6 +644,8 @@
       "location_body": "Feste Antwort der Location {name}: Inhalt höchstens 64 KB, Content-Type höchstens 100 Zeichen.",
       "location_limits": "Location {name}: Timeout 0–86400 s, Upload ab -1 MB (-1 = unbegrenzt).",
       "target_http": "Unbekanntes Protokoll zum Ziel: {name} (erlaubt: automatisch, h1, h2c).",
+      "proxy_protocol": "Unbekanntes PROXY-Protokoll: {name} (erlaubt: aus, v1, v2).",
+      "stream_proxy_protocol": "PROXY-Protokoll zum Ziel geht nur bei TCP.",
       "only_locations": "„Nur die Locations erlauben“ braucht mindestens eine Location.",
       "location_target": "Ziel der Location {name} fehlt oder ist ungültig.",
       "acl_unknown": "Unbekannte Zugriffsliste.",
@@ -744,6 +751,7 @@
         "tls": "TLS hier beenden (nur TCP)",
         "tls_none": "Nein – roh weiterreichen",
         "tls_hint": "Mit Zertifikat nimmt der Stream TLS an und reicht unverschlüsselt an das Ziel weiter.",
+        "proxy_protocol": "PROXY-Protokoll zum Ziel (nur TCP)",
         "bw_hint": "Bandbreite für alle Verbindungen dieses Streams zusammen, leer oder 0 = unbegrenzt. Darüber wird gebremst, nicht getrennt. Gilt auch über CDN64.",
 
         "bw_title": "Bandbreite des Streams (Download/Upload)"

@@ -578,6 +578,11 @@
       "target_http_h1": "HTTP/1.1 only",
       "target_http_h2c": "h2c / cleartext HTTP/2",
       "target_http_hint": "Automatic: HTTP/2 for https targets that offer it, otherwise HTTP/1.1. HTTP/1.1 only for problems with NTLM/Exchange. h2c for cleartext gRPC services such as NetBird (for https targets: HTTP/2 only). WebSockets always use HTTP/1.1.",
+      "proxy_protocol": "PROXY protocol to the target",
+      "proxy_protocol_off": "Off (default)",
+      "proxy_protocol_v1": "v1 (text)",
+      "proxy_protocol_v2": "v2 (binary)",
+      "proxy_protocol_hint": "Sends the real visitor address to the target (like HAProxy send-proxy), also via CDN64. Only switch it on if the target expects the PROXY protocol – e.g. Postfix/Dovecot (mailcow) or another reverse proxy; otherwise the target cannot understand the connection.",
       "adv_bw_down": "Download at most",
       "adv_bw_up": "Upload at most",
       "adv_bw_unlimited": "unlimited",
@@ -639,6 +644,8 @@
       "location_body": "Fixed response of location {name}: content at most 64 KB, Content-Type at most 100 characters.",
       "location_limits": "Location {name}: timeout 0–86400 s, upload from -1 MB (-1 = unlimited).",
       "target_http": "Unknown protocol to the target: {name} (allowed: auto, h1, h2c).",
+      "proxy_protocol": "Unknown PROXY protocol: {name} (allowed: off, v1, v2).",
+      "stream_proxy_protocol": "PROXY protocol to the target only works with TCP.",
       "only_locations": "\"Allow only the locations\" needs at least one location.",
       "location_target": "Target of location {name} is missing or invalid.",
       "acl_unknown": "Unknown access list.",
@@ -744,6 +751,7 @@
         "tls": "Terminate TLS here (TCP only)",
         "tls_none": "No – forward raw",
         "tls_hint": "With a certificate the stream accepts TLS and forwards unencrypted to the target.",
+        "proxy_protocol": "PROXY protocol to the target (TCP only)",
         "bw_hint": "Bandwidth for all connections of this stream together, empty or 0 = unlimited. Above it traffic is throttled, not cut. Also applies via CDN64.",
 
         "bw_title": "Bandwidth of the stream (download/upload)"

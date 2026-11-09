@@ -158,7 +158,7 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 	tlsLn.push(&prefixConn{Conn: conn, r: io.MultiReader(bytes.NewReader(data), conn)})
 }
 
-// passthrough verbindet roh mit dem Ziel und kopiert in beide Richtungen.
+// passthrough verbindet roh mit dem Ziel und kopiert in beide Richtungen (auf Wunsch mit PROXY-Kopf vorneweg).
 func (e *Edge) passthrough(conn net.Conn, data []byte, rt *Route) {
 	if rt.Allow != nil {
 		if ip := addrIP(conn.RemoteAddr()); !rt.Allow(ip) {
@@ -178,6 +178,9 @@ func (e *Edge) passthrough(conn net.Conn, data []byte, rt *Route) {
 		return
 	}
 	defer e.untrack(conn, up)
+	if rt.ProxyProtocol != 0 { // PROXY-Kopf vor dem ClientHello (Besucher -> Adresse, auf der er ankam)
+		data = append(ProxyHeader(rt.ProxyProtocol, conn.RemoteAddr(), conn.LocalAddr()), data...)
+	}
 	if _, err := up.Write(data); err != nil {
 		_ = conn.Close()
 		_ = up.Close()

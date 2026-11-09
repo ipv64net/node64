@@ -2398,6 +2398,15 @@
             "minimum": 0,
             "maximum": 100000,
             "description": "Bandbreite vom Besucher in Mbit/s, 0 = unbegrenzt"
+          },
+          "proxy_protocol": {
+            "type": "string",
+            "enum": [
+              "",
+              "v1",
+              "v2"
+            ],
+            "description": "nur TCP: PROXY-Protokoll zum Ziel (#52), \"\" = aus, v1 = Text, v2 = binär (wie HAProxy send-proxy/send-proxy-v2). Der Kopf mit der echten Besucher-Adresse (auch über CDN64) geht vor allen Daten an das Ziel; nur einschalten, wenn das Ziel ihn erwartet (z. B. Postfix/Dovecot bei mailcow). Bei reinen UDP-Streams oder unbekannten Werten 422; ändern startet den Stream nicht neu"
           }
         }
       },
@@ -2502,6 +2511,15 @@
             "minimum": 0,
             "maximum": 100000,
             "description": "Bandbreite vom Besucher in Mbit/s, 0 = unbegrenzt"
+          },
+          "proxy_protocol": {
+            "type": "string",
+            "enum": [
+              "",
+              "v1",
+              "v2"
+            ],
+            "description": "nur TCP: PROXY-Protokoll zum Ziel (#52), \"\" = aus, v1 = Text, v2 = binär (wie HAProxy send-proxy/send-proxy-v2). Der Kopf mit der echten Besucher-Adresse (auch über CDN64) geht vor allen Daten an das Ziel; nur einschalten, wenn das Ziel ihn erwartet (z. B. Postfix/Dovecot bei mailcow). Bei reinen UDP-Streams oder unbekannten Werten 422; ändern startet den Stream nicht neu"
           }
         }
       },
@@ -2676,6 +2694,15 @@
               "h2c"
             ],
             "description": "nur Proxy-Hosts: Protokoll zum Ziel (#53). \"\" bzw. auto = automatisch (https-Ziel: HTTP/2 per ALPN, wenn das Ziel es anbietet, sonst HTTP/1.1; http-Ziel: HTTP/1.1), h1 = nur HTTP/1.1 (NTLM/Kerberos, Exchange/IIS), h2c = http-Ziel: HTTP/2 mit Vorwissen ohne TLS (gRPC, z. B. NetBird), https-Ziel: nur HTTP/2. WebSocket-Upgrades gehen immer über HTTP/1.1; unbekannte Werte werden abgewiesen (400)"
+          },
+          "proxy_protocol": {
+            "type": "string",
+            "enum": [
+              "",
+              "v1",
+              "v2"
+            ],
+            "description": "nur kind passthrough (TLS durchreichen): PROXY-Protokoll zum Ziel (#52), \"\" = aus, v1 = Text, v2 = binär (wie HAProxy send-proxy/send-proxy-v2). Der Kopf mit der echten Besucher-Adresse (auch über CDN64) geht vor dem ClientHello an das Ziel; nur einschalten, wenn das Ziel ihn erwartet (z. B. Postfix/Dovecot, weiterer Reverse Proxy). Bei anderen Arten wird der Wert verworfen, unbekannte Werte werden abgewiesen (422)"
           },
           "request_headers": {
             "type": "array",

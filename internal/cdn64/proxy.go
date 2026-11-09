@@ -1164,7 +1164,7 @@ func (m *Module) routeFor(h *Host) edge.Route {
 	if h.Kind == KindPass { // TLS durchreichen: auf Port 80 nur Weiterleitung auf HTTPS
 		st := m.statsOf(h.ID)
 		rt := edge.Route{Names: h.Names, Passthrough: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), Count: func() { st.requests.Add(1) },
-			HTTP: http.HandlerFunc(m.toHTTPS)}
+			HTTP: http.HandlerFunc(m.toHTTPS), ProxyProtocol: proxyVersion(h.Advanced.ProxyProtocol)}
 		if bw := m.bw.of(h.ID, h.Advanced.BWDownMbit, h.Advanced.BWUpMbit); bw != nil { // Bandbreite: roh, aber gebremst
 			rt.Wrap = func(c net.Conn) net.Conn { return &bwConn{Conn: c, bw: bw} }
 		}

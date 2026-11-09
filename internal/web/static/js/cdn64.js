@@ -139,6 +139,20 @@
 		show();
 	});
 
+	// Stream: PROXY-Kopf zum Ziel nur bei TCP (ohne TCP ausgeblendet und nicht gesendet = aus)
+	var tcpBox = document.getElementById("tcp");
+	var tcpOnly = document.querySelectorAll("[data-tcp-only]");
+	if (tcpBox && tcpOnly.length) {
+		var tcpSync = function () {
+			tcpOnly.forEach(function (el) {
+				el.classList.toggle("d-none", !tcpBox.checked);
+				el.querySelectorAll("select, input").forEach(function (i) { i.disabled = !tcpBox.checked; });
+			});
+		};
+		tcpBox.addEventListener("change", tcpSync);
+		tcpSync();
+	}
+
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");
 	if (reload) {

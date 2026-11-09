@@ -63,6 +63,12 @@
 							<div class="form-text" data-bw-mb></div></div>
 					</div>
 					<div class="form-text mb-3">{{.T "cdn64.f.pass_bw_hint"}}</div>
+					<input type="hidden" name="has_pp" value="1">
+					<label class="form-label fw-semibold" for="adv_proxy_protocol">{{.T "cdn64.f.proxy_protocol"}}</label>
+					<select class="form-select form-select-sm mb-1{{if index $d.Errors "proxy_protocol"}} is-invalid{{end}}" id="adv_proxy_protocol" name="adv_proxy_protocol" data-proxy-protocol>
+						<option value="">{{.T "cdn64.f.proxy_protocol_off"}}</option><option value="v1"{{if eq $h.Advanced.ProxyProtocol "v1"}} selected{{end}}>{{.T "cdn64.f.proxy_protocol_v1"}}</option><option value="v2"{{if eq $h.Advanced.ProxyProtocol "v2"}} selected{{end}}>{{.T "cdn64.f.proxy_protocol_v2"}}</option></select>
+					{{with index $d.Errors "proxy_protocol"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text mb-3">{{.T "cdn64.f.proxy_protocol_hint"}}</div>
 					{{else if eq $h.Kind "status"}}
 					<label class="form-label fw-semibold" for="status_page_id">{{.T "cdn64.f.status_page"}}</label>
 					{{if $d.StatusOn}}

@@ -53,6 +53,9 @@ type Stream struct {
 	// Bandbreite (bandwidth.go) in Mbit/s, 0 = unbegrenzt; aendern startet den Stream nicht neu
 	BWDownMbit int `json:"bw_down_mbit,omitempty"` // zum Besucher
 	BWUpMbit   int `json:"bw_up_mbit,omitempty"`   // vom Besucher
+
+	// PROXY-Protokoll zum Ziel (#52, nur TCP): "" = aus, v1, v2 (proxyVersion); aendern startet den Stream nicht neu
+	ProxyProtocol string `json:"proxy_protocol,omitempty"`
 }
 
 func (s *Stream) target() string { return net.JoinHostPort(s.TargetHost, strconv.Itoa(s.TargetPort)) }
@@ -93,6 +96,14 @@ func (s *Stream) normalize() error {
 	if s.BWDownMbit < 0 || s.BWDownMbit > bwMaxMbit || s.BWUpMbit < 0 || s.BWUpMbit > bwMaxMbit {
 		return ferr("bw", "cdn64.err.bandwidth")
 	}
+	pp, ok := cleanProxyProtocol(s.ProxyProtocol)
+	if !ok {
+		return &FieldError{Field: "proxy_protocol", Key: "cdn64.err.proxy_protocol", Name: s.ProxyProtocol}
+	}
+	if pp != ProxyOff && !s.TCP { // UDP: kein Kopf (jedes Paket muesste einen tragen)
+		return ferr("proxy_protocol", "cdn64.err.stream_proxy_protocol")
+	}
+	s.ProxyProtocol = pp
 	return normalizeGeo(&s.GeoMode, &s.GeoCountries)
 }
 
@@ -115,13 +126,13 @@ func (s *Stream) claims(active map[string]bool) []ports.Claim {
 // ---------------------------------------------------------------- Datenbank
 
 const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at, geo_mode, geo_countries, online_name,
-	bw_down_mbit, bw_up_mbit`
+	bw_down_mbit, bw_up_mbit, proxy_protocol`
 
 func scanStream(row interface{ Scan(...any) error }) (*Stream, error) {
 	var s Stream
 	var ca, ua, geo string
 	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua, &s.GeoMode, &geo, &s.OnlineName,
-		&s.BWDownMbit, &s.BWUpMbit); err != nil {
+		&s.BWDownMbit, &s.BWUpMbit, &s.ProxyProtocol); err != nil {
 		return nil, err
 	}
 	if geo != "" {
@@ -183,17 +194,17 @@ func (m *Module) saveStream(ctx context.Context, s *Stream) error {
 	now := store.Now()
 	w := m.core.Writer()
 	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID, s.GeoMode, strings.Join(s.GeoCountries, ","), s.OnlineName,
-		s.BWDownMbit, s.BWUpMbit}
+		s.BWDownMbit, s.BWUpMbit, s.ProxyProtocol}
 	if s.ID == 0 {
 		res, err := w.ExecContext(ctx, `INSERT INTO cdn_streams (name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, geo_mode, geo_countries,
-			online_name, bw_down_mbit, bw_up_mbit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+			online_name, bw_down_mbit, bw_up_mbit, proxy_protocol, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
 		if err != nil {
 			return err
 		}
 		s.ID, _ = res.LastInsertId()
 	} else {
 		res, err := w.ExecContext(ctx, `UPDATE cdn_streams SET name = ?, enabled = ?, listen_port = ?, tcp = ?, udp = ?, target_host = ?, target_port = ?,
-			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, online_name = ?, bw_down_mbit = ?, bw_up_mbit = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
+			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, online_name = ?, bw_down_mbit = ?, bw_up_mbit = ?, proxy_protocol = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
 		if err != nil {
 			return err
 		}
@@ -260,6 +271,7 @@ type streamRun struct {
 
 	geo atomic.Pointer[Stream] // Laendersperre (GeoMode, GeoCountries), bei jedem Abgleich neu gesetzt
 	bw  atomic.Pointer[bwPair] // Bandbreite (nil = unbegrenzt), bei jedem Abgleich neu gesetzt
+	pp  atomic.Int32           // PROXY-Kopf zum Ziel (edge.ProxyV1/V2, 0 = keiner), bei jedem Abgleich neu gesetzt
 }
 
 // streamGeoBlocked: Laendersperre des Streams; abgewiesen wird mit Statistik wie bei den Blocklisten.
@@ -346,10 +358,11 @@ func (m *Module) applyStreams(ctx context.Context) {
 	}
 	m.sbw.keepIDs(ids)
 	m.smu.Lock()
-	for id, r := range m.runs { // Laendersperre und Bandbreite gelten ohne Neustart
+	for id, r := range m.runs { // Laendersperre, Bandbreite und PROXY-Kopf gelten ohne Neustart
 		if s, ok := want[id]; ok {
 			r.geo.Store(s)
 			r.bw.Store(m.sbw.of(id, s.BWDownMbit, s.BWUpMbit))
+			r.pp.Store(int32(proxyVersion(s.ProxyProtocol)))
 		}
 	}
 	var stop []*streamRun
@@ -392,6 +405,7 @@ func (m *Module) applyStreams(ctx context.Context) {
 func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
 	r := &streamRun{key: s.key(), target: s.target(), errs: map[string]string{}, stats: m.streamStatsOf(s.ID), conns: map[net.Conn]struct{}{}}
 	r.geo.Store(s)
+	r.pp.Store(int32(proxyVersion(s.ProxyProtocol)))
 	if s.TLSCertID > 0 && m.certs != nil {
 		id := s.TLSCertID
 		r.tlsc = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -491,7 +505,8 @@ func (m *Module) serveTCP(r *streamRun, target string) {
 	}
 }
 
-// streamPipe: eine TCP-Verbindung ans Ziel weiterreichen (vom Port des Streams oder aus dem CDN64-Tunnel).
+// streamPipe: eine TCP-Verbindung ans Ziel weiterreichen (vom Port des Streams oder aus dem CDN64-Tunnel), auf Wunsch
+// mit PROXY-Kopf vorneweg.
 func (m *Module) streamPipe(r *streamRun, c net.Conn, target string, release func()) {
 	if release != nil {
 		defer release()
@@ -505,6 +520,18 @@ func (m *Module) streamPipe(r *streamRun, c net.Conn, target string, release fun
 		_ = c.Close()
 		_ = up.Close()
 		return
+	}
+	if v := r.pp.Load(); v != 0 { // PROXY-Kopf vor allen Daten (Besucher -> Port, auf dem er ankam)
+		_ = up.SetWriteDeadline(time.Now().Add(tcpDialTimeout))
+		_, err := up.Write(edge.ProxyHeader(int(v), c.RemoteAddr(), c.LocalAddr()))
+		_ = up.SetWriteDeadline(time.Time{})
+		if err != nil {
+			r.untrack(c)
+			r.untrack(up)
+			_ = c.Close()
+			_ = up.Close()
+			return
+		}
 	}
 	r.stats.conns.Add(1)
 	r.stats.active.Add(1)

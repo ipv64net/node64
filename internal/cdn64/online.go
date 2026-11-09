@@ -51,7 +51,7 @@ type onlineState struct {
 	names   atomic.Pointer[map[string]bool]   // eingeschaltete Namen (geteilter DNS)
 	kick    chan struct{}                     // Abgleich bald
 	want    atomic.Bool                       // Liste geoeffnet: Stand von ipv64 auch ohne eigene Namen holen
-	portIdx atomic.Pointer[map[portKey]int64] // Portmapper: (tcp/udp, Name, Port des Streams) -> Stream
+	portIdx atomic.Pointer[map[portKey]pmRef] // Portmapper: (tcp/udp, Name, Port des Streams) -> Stream, Port der Server
 	portMu  sync.Mutex                        // Fehler je Stream beim Anmelden
 	portErr map[int64]string                  // Stream -> Code (cdn64.online.e.<code>)
 	seenMu  sync.Mutex                        // Selbsttest: Streams je Name
@@ -162,7 +162,7 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 		_ = st.Close()
 		return
 	}
-	c := &tunnelConn{Stream: st, remote: ra}
+	c := &tunnelConn{Stream: st, remote: ra, local: serverAddr(st.RemoteAddr(), h.Port)}
 	m.onlineSeen(h.Host)
 	if h.Kind != tunnel.KindTCP && h.Kind != tunnel.KindUDP && m.isStreamOnly(h.Host) { // nur Streams: kein HTTP/HTTPS
 		_ = st.Close()
@@ -212,13 +212,34 @@ func (m *Module) onlineHTTP3() bool {
 	return cl != nil && cl.AllHave(tunnel.CapQUIC)
 }
 
-// tunnelConn: Stream mit der Besucher-Adresse als Gegenstelle.
+// tunnelConn: Stream mit der Besucher-Adresse als Gegenstelle und der Adresse, auf der der Besucher beim CDN64-Server
+// ankam, als lokaler Adresse (PROXY-Kopf zum Ziel).
 type tunnelConn struct {
 	tunnel.Stream
 	remote net.Addr
+	local  net.Addr
 }
 
 func (c *tunnelConn) RemoteAddr() net.Addr { return c.remote }
+func (c *tunnelConn) LocalAddr() net.Addr {
+	if c.local != nil {
+		return c.local
+	}
+	return c.Stream.LocalAddr()
+}
+
+// serverAddr: Adresse des CDN64-Servers am Tunnel (der Kopf des Streams nennt nur den Port) mit dem Port, auf dem
+// der Besucher ankam; nil = unbekannt.
+func serverAddr(tun net.Addr, port int) net.Addr {
+	if tun == nil || port < 1 || port > 65535 {
+		return nil
+	}
+	ap, err := netip.ParseAddrPort(tun.String())
+	if err != nil {
+		return nil
+	}
+	return net.TCPAddrFromAddrPort(netip.AddrPortFrom(ap.Addr().Unmap().WithZone(""), uint16(port)))
+}
 
 // ---------------------------------------------------------------- API (Status; Tunnel von Hand setzen)
 

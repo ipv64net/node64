@@ -178,6 +178,9 @@ func (h *Host) normalize() error {
 		h.Advanced.TargetPath, h.Advanced.OnlyLocations = "", false // Pfad beim Ziel und "nur Locations" nur bei Proxy-Hosts
 		h.Advanced.TargetHTTP = ""                                  // ebenso das Protokoll zum Ziel
 	}
+	if h.Kind != KindPass {
+		h.Advanced.ProxyProtocol = "" // PROXY-Kopf zum Ziel nur beim Durchreichen (sonst setzt der Proxy X-Forwarded-For)
+	}
 	if err := normalizeLocations(h.Locations); err != nil {
 		return err
 	}
@@ -619,7 +622,8 @@ func (h *Host) summary() string {
 	case KindStatus:
 		return fmt.Sprintf("kind=status page=%d enabled=%v cert=%d force_ssl=%v acl=%d", h.StatusPageID, h.Enabled, h.CertID, h.ForceSSL, h.AccessListID)
 	case KindPass:
-		return fmt.Sprintf("kind=passthrough target=%s enabled=%v", net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), h.Enabled)
+		return fmt.Sprintf("kind=passthrough target=%s enabled=%v proxy_protocol=%s", net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), h.Enabled,
+			h.Advanced.ProxyProtocol)
 	case KindStream:
 		return fmt.Sprintf("kind=stream enabled=%v", h.Enabled)
 	}

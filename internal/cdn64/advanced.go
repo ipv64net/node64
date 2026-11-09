@@ -6,6 +6,8 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+
+	"github.com/ipv64net/node64/internal/edge"
 )
 
 // Erweitert: feste Felder statt freier nginx-Konfiguration.
@@ -61,6 +63,39 @@ type Advanced struct {
 
 	// Protokoll zum Ziel (#53, nur Proxy-Hosts): "" = automatisch, h1 = nur HTTP/1.1, h2c = HTTP/2 ohne Aushandeln
 	TargetHTTP string `json:"target_http,omitempty"`
+
+	// PROXY-Protokoll zum Ziel (#52, nur TLS durchreichen): "" = aus, v1, v2 (proxyVersion)
+	ProxyProtocol string `json:"proxy_protocol,omitempty"`
+}
+
+// PROXY-Protokoll zum Ziel (Advanced.ProxyProtocol bei TLS durchreichen, Stream.ProxyProtocol bei TCP-Streams): der
+// Kopf mit der echten Besucher-Adresse geht vor allen Daten an das Ziel (edge.ProxyHeader). Nur auf Wunsch - ein
+// Ziel, das keinen Kopf erwartet, versteht die Verbindung sonst nicht.
+const (
+	ProxyOff = ""
+	ProxyV1  = "v1"
+	ProxyV2  = "v2"
+)
+
+// cleanProxyProtocol: Wert in Grundform; false = unbekannt.
+func cleanProxyProtocol(s string) (string, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case ProxyOff, ProxyV1, ProxyV2:
+		return s, true
+	}
+	return s, false
+}
+
+// proxyVersion: Version fuer edge.ProxyHeader (0 = kein Kopf).
+func proxyVersion(s string) int {
+	switch s {
+	case ProxyV1:
+		return edge.ProxyV1
+	case ProxyV2:
+		return edge.ProxyV2
+	}
+	return 0
 }
 
 // Protokoll zum Ziel (Advanced.TargetHTTP, LocationAdvanced.TargetHTTP).
@@ -334,6 +369,11 @@ func (a *Advanced) normalize() error {
 		return &FieldError{Field: "advanced", Key: "cdn64.err.target_http", Name: a.TargetHTTP}
 	}
 	a.TargetHTTP = th
+	pp, ok := cleanProxyProtocol(a.ProxyProtocol)
+	if !ok {
+		return &FieldError{Field: "proxy_protocol", Key: "cdn64.err.proxy_protocol", Name: a.ProxyProtocol}
+	}
+	a.ProxyProtocol = pp
 	return nil
 }
 

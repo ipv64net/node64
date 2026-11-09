@@ -575,6 +575,9 @@ func hostFromForm(r *http.Request, h *Host) {
 		h.Advanced.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_down")))
 		h.Advanced.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_up")))
 	}
+	if r.PostFormValue("has_pp") == "1" { // PROXY-Kopf zum Ziel (TLS durchreichen)
+		h.Advanced.ProxyProtocol = r.PostFormValue("adv_proxy_protocol")
+	}
 	if r.PostFormValue("has_advanced") == "1" { // Reiter Erweitert war im Formular
 		a := &h.Advanced
 		a.RequestHeaders, a.RequestRemove = parseHeaders(r.PostFormValue("adv_req_set")), lines(r.PostFormValue("adv_req_del"))

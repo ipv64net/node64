@@ -233,11 +233,17 @@ func streamFromForm(r *http.Request, s *Stream) {
 		s.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("bw_down")))
 		s.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("bw_up")))
 	}
+	if r.PostFormValue("has_pp") == "1" { // PROXY-Kopf war im Formular (nur TCP; ohne TCP aus statt Fehler)
+		s.ProxyProtocol = r.PostFormValue("proxy_protocol")
+		if !s.TCP {
+			s.ProxyProtocol = ProxyOff
+		}
+	}
 }
 
 func (s *Stream) summary() string {
-	return fmt.Sprintf("listen=%d tcp=%v udp=%v target=%s tls_cert=%d enabled=%v geo=%s:%s bw=%d/%d", s.ListenPort, s.TCP, s.UDP, s.target(), s.TLSCertID, s.Enabled,
-		s.GeoMode, strings.Join(s.GeoCountries, ","), s.BWDownMbit, s.BWUpMbit)
+	return fmt.Sprintf("listen=%d tcp=%v udp=%v target=%s tls_cert=%d enabled=%v geo=%s:%s bw=%d/%d proxy_protocol=%s", s.ListenPort, s.TCP, s.UDP, s.target(),
+		s.TLSCertID, s.Enabled, s.GeoMode, strings.Join(s.GeoCountries, ","), s.BWDownMbit, s.BWUpMbit, s.ProxyProtocol)
 }
 
 func (m *Module) pageStreamCreate(w http.ResponseWriter, r *http.Request) {

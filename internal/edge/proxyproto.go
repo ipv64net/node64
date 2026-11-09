@@ -142,11 +142,13 @@ func (l *ppListener) Close() error {
 	return l.Listener.Close()
 }
 
-// ppConn: Verbindung mit der Adresse aus dem PROXY-Kopf; schon gepufferte Bytes kommen zuerst.
+// ppConn: Verbindung mit den Adressen aus dem PROXY-Kopf (Besucher bzw. Ziel beim vorgeschalteten Proxy); schon
+// gepufferte Bytes kommen zuerst.
 type ppConn struct {
 	net.Conn
 	r      *bufio.Reader
 	remote net.Addr
+	local  net.Addr
 }
 
 func (c *ppConn) Read(p []byte) (int, error) { return c.r.Read(p) }
@@ -155,6 +157,14 @@ func (c *ppConn) RemoteAddr() net.Addr {
 		return c.remote
 	}
 	return c.Conn.RemoteAddr()
+}
+
+// LocalAddr: Adresse, auf der der Besucher beim vorgeschalteten Proxy ankam (fuer einen weiteren PROXY-Kopf zum Ziel).
+func (c *ppConn) LocalAddr() net.Addr {
+	if c.local != nil {
+		return c.local
+	}
+	return c.Conn.LocalAddr()
 }
 
 // CloseWrite: halb schliessen wie die TCP-Verbindung darunter (TLS durchreichen).
@@ -184,11 +194,11 @@ func readProxyHeader(c net.Conn) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		addr, err := parseV1(line)
+		src, dst, err := parseV1(line)
 		if err != nil {
 			return nil, err
 		}
-		return &ppConn{Conn: c, r: br, remote: addr}, nil
+		return &ppConn{Conn: c, r: br, remote: src, local: dst}, nil
 	case '\r': // v2
 		sig, err := br.Peek(16)
 		if err != nil || !bytes.Equal(sig[:12], ppV2Sig) {
@@ -202,11 +212,11 @@ func readProxyHeader(c net.Conn) (net.Conn, error) {
 		if _, err := io.ReadFull(br, buf); err != nil {
 			return nil, err
 		}
-		addr, err := parseV2(buf)
+		src, dst, err := parseV2(buf)
 		if err != nil {
 			return nil, err
 		}
-		return &ppConn{Conn: c, r: br, remote: addr}, nil
+		return &ppConn{Conn: c, r: br, remote: src, local: dst}, nil
 	}
 	return &ppConn{Conn: c, r: br}, nil
 }
@@ -229,53 +239,142 @@ func readV1Line(br *bufio.Reader) (string, error) {
 	return "", errors.New("proxy protocol v1: header too long")
 }
 
-// parseV1: "PROXY TCP4 <src> <dst> <sport> <dport>" bzw. "PROXY UNKNOWN ..." (dann Adresse der Verbindung, nil).
-func parseV1(line string) (net.Addr, error) {
+// parseV1: "PROXY TCP4 <src> <dst> <sport> <dport>" bzw. "PROXY UNKNOWN ..." (dann Adressen der Verbindung, nil).
+func parseV1(line string) (src, dst net.Addr, err error) {
 	f := strings.Fields(line)
 	if len(f) >= 2 && f[1] == "UNKNOWN" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if len(f) != 6 || f[0] != "PROXY" || (f[1] != "TCP4" && f[1] != "TCP6") {
-		return nil, errors.New("proxy protocol v1: bad header")
+		return nil, nil, errors.New("proxy protocol v1: bad header")
 	}
 	ip, err := netip.ParseAddr(f[2])
 	if err != nil || (f[1] == "TCP4") != ip.Is4() {
-		return nil, errors.New("proxy protocol v1: bad source address")
+		return nil, nil, errors.New("proxy protocol v1: bad source address")
 	}
 	port, err := strconv.ParseUint(f[4], 10, 16)
 	if err != nil {
-		return nil, errors.New("proxy protocol v1: bad source port")
+		return nil, nil, errors.New("proxy protocol v1: bad source port")
 	}
-	return net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port))), nil
+	src = net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip.Unmap(), uint16(port)))
+	if dip, err := netip.ParseAddr(f[3]); err == nil { // Ziel nur zur Auskunft: ungueltig = Adresse der Verbindung
+		if dport, err := strconv.ParseUint(f[5], 10, 16); err == nil {
+			dst = net.TCPAddrFromAddrPort(netip.AddrPortFrom(dip.Unmap(), uint16(dport)))
+		}
+	}
+	return src, dst, nil
 }
 
 // parseV2: binaerer Kopf (Signatur, Version/Befehl, Familie, Laenge, Adressen, TLVs). LOCAL bzw. unbekannte
-// Familie: Adresse der Verbindung (nil).
-func parseV2(b []byte) (net.Addr, error) {
+// Familie: Adressen der Verbindung (nil).
+func parseV2(b []byte) (src, dst net.Addr, err error) {
 	if len(b) < 16 || b[12]>>4 != 2 {
-		return nil, errors.New("proxy protocol v2: bad version")
+		return nil, nil, errors.New("proxy protocol v2: bad version")
 	}
 	switch b[12] & 0x0f {
 	case 0: // LOCAL (z. B. Health-Check des Proxys)
-		return nil, nil
+		return nil, nil, nil
 	case 1: // PROXY
 	default:
-		return nil, errors.New("proxy protocol v2: bad command")
+		return nil, nil, errors.New("proxy protocol v2: bad command")
 	}
 	body := b[16:]
+	addr := func(ip netip.Addr, port []byte) net.Addr {
+		return net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip.Unmap(), binary.BigEndian.Uint16(port)))
+	}
 	switch b[13] >> 4 {
 	case 1: // AF_INET: src(4) dst(4) sport(2) dport(2)
 		if len(body) < 12 {
-			return nil, errors.New("proxy protocol v2: short ipv4 block")
+			return nil, nil, errors.New("proxy protocol v2: short ipv4 block")
 		}
-		ip := netip.AddrFrom4([4]byte(body[0:4]))
-		return net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, binary.BigEndian.Uint16(body[8:10]))), nil
+		return addr(netip.AddrFrom4([4]byte(body[0:4])), body[8:10]), addr(netip.AddrFrom4([4]byte(body[4:8])), body[10:12]), nil
 	case 2: // AF_INET6: src(16) dst(16) sport(2) dport(2)
 		if len(body) < 36 {
-			return nil, errors.New("proxy protocol v2: short ipv6 block")
+			return nil, nil, errors.New("proxy protocol v2: short ipv6 block")
 		}
-		ip := netip.AddrFrom16([16]byte(body[0:16])).Unmap()
-		return net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, binary.BigEndian.Uint16(body[32:34]))), nil
+		return addr(netip.AddrFrom16([16]byte(body[0:16])), body[32:34]), addr(netip.AddrFrom16([16]byte(body[16:32])), body[34:36]), nil
 	}
-	return nil, nil // AF_UNSPEC/AF_UNIX: Adresse der Verbindung
+	return nil, nil, nil // AF_UNSPEC/AF_UNIX: Adressen der Verbindung
+}
+
+// ---------------------------------------------------------------- ausgehend (zum Ziel)
+
+// PROXY-Kopf zum Ziel (wie HAProxy send-proxy bzw. send-proxy-v2), auf Wunsch beim Durchreichen (TLS durchreichen,
+// TCP-Streams): sonst sieht das Ziel nur die Adresse der Node. Quelle ist die echte Besucher-Adresse (RemoteAddr der
+// Verbindung - auch aus einem vertrauten PROXY-Kopf oder dem CDN64-Tunnel), Ziel die Adresse, auf der der Besucher
+// ankam (LocalAddr). Der Kopf geht direkt nach dem Verbindungsaufbau vor allen Daten raus.
+const (
+	ProxyV1 = 1 // Text
+	ProxyV2 = 2 // binaer
+)
+
+// ProxyHeader baut den Kopf fuer eine Verbindung von src nach dst (version ProxyV1 oder ProxyV2, sonst nil). Die
+// Familie richtet sich nach der Quelle (IPv4-mapped wird entmappt): ein IPv4-Ziel bei IPv6-Quelle geht als
+// ::ffff:a.b.c.d, ein IPv6-Ziel bei IPv4-Quelle als 0.0.0.0 (Port bleibt). Ohne gueltige Quelle: v1 "PROXY UNKNOWN",
+// v2 ohne Adressen (AF_UNSPEC) - das Ziel nimmt dann die Adresse der Verbindung.
+func ProxyHeader(version int, src, dst net.Addr) []byte {
+	if version != ProxyV1 && version != ProxyV2 {
+		return nil
+	}
+	s, ok := ppAddrPort(src)
+	d, dok := ppAddrPort(dst)
+	if ok {
+		switch {
+		case !dok && s.Addr().Is4():
+			d = netip.AddrPortFrom(netip.IPv4Unspecified(), 0)
+		case !dok:
+			d = netip.AddrPortFrom(netip.IPv6Unspecified(), 0)
+		case s.Addr().Is4() && !d.Addr().Is4():
+			d = netip.AddrPortFrom(netip.IPv4Unspecified(), d.Port())
+		case s.Addr().Is6() && d.Addr().Is4():
+			d = netip.AddrPortFrom(netip.AddrFrom16(d.Addr().As16()), d.Port())
+		}
+	}
+	if version == ProxyV1 {
+		if !ok {
+			return []byte("PROXY UNKNOWN\r\n")
+		}
+		fam := "TCP4"
+		if s.Addr().Is6() {
+			fam = "TCP6"
+		}
+		return []byte("PROXY " + fam + " " + s.Addr().String() + " " + d.Addr().String() + " " + strconv.Itoa(int(s.Port())) + " " +
+			strconv.Itoa(int(d.Port())) + "\r\n")
+	}
+	b := append(make([]byte, 0, 16+36), ppV2Sig...)
+	b = append(b, 0x21) // Version 2, PROXY
+	switch {
+	case !ok:
+		return append(b, 0x00, 0, 0) // AF_UNSPEC, keine Adressen
+	case s.Addr().Is4():
+		b = append(b, 0x11, 0, 12) // AF_INET, STREAM
+	default:
+		b = append(b, 0x21, 0, 36) // AF_INET6, STREAM
+	}
+	b = append(b, s.Addr().AsSlice()...)
+	b = append(b, d.Addr().AsSlice()...)
+	b = binary.BigEndian.AppendUint16(b, s.Port())
+	return binary.BigEndian.AppendUint16(b, d.Port())
+}
+
+// ppAddrPort: IP-Adresse und Port einer Verbindung (entmappt, ohne Zone); false = keine IP-Adresse (z. B. net.Pipe).
+func ppAddrPort(a net.Addr) (netip.AddrPort, bool) {
+	var ap netip.AddrPort
+	switch x := a.(type) {
+	case nil:
+		return ap, false
+	case *net.TCPAddr:
+		ap = x.AddrPort()
+	default:
+		p, err := netip.ParseAddrPort(a.String())
+		if err != nil {
+			return ap, false
+		}
+		ap = p
+	}
+	ip := ap.Addr().Unmap().WithZone("")
+	if !ip.IsValid() || ip.IsUnspecified() && ap.Port() == 0 {
+		return netip.AddrPort{}, false
+	}
+	return netip.AddrPortFrom(ip, ap.Port()), true
 }
