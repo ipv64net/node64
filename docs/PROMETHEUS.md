@@ -112,6 +112,14 @@ und `increase()` kommen damit zurecht.
 | `node64_dns64_forward_up` | `domain`, `server` | Server der Weiterleitung gesund |
 | `node64_dns64_forward_requests_total` | `domain`, `server` | Anfragen an den Server der Weiterleitung |
 | `node64_dns64_forward_errors_total` | `domain`, `server` | Fehler des Servers der Weiterleitung |
+| `node64_dns64_dhcp_up` | | DHCP-Server läuft (nur wenn DHCP nicht aus ist) |
+| `node64_dns64_dhcp_observe` | | DHCP im Probelauf |
+| `node64_dns64_dhcp_addresses`, `…_leased`, `…_reserved` | `network`, `interface` | vergebbare, vergebene und feste Adressen im Bereich |
+| `node64_dns64_dhcp_network_error` | `network`, `interface` | Netz mit Fehler (Schnittstelle, Adresse, Port 67) |
+| `node64_dns64_dhcp_standby` | `network`, `interface` | Reserve-Node bleibt still (nur mit Rolle Reserve) |
+| `node64_dns64_dhcp_requests_total` | `type` | DHCP-Anfragen: `discover`, `request`, `decline`, `release`, `inform` |
+| `node64_dns64_dhcp_results_total` | `result` | Ergebnisse: `offer`, `ack`, `nak`, `ignored`, `observe`, `standby`, `full`, `conflict`, `decline`, `release` |
+| `node64_dns64_dhcp_foreign_servers` | | fremde DHCP-Server, die in den letzten 30 Minuten geantwortet haben |
 
 Anteil blockierter Anfragen der letzten Stunde:
 

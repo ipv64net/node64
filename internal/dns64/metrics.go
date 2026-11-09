@@ -13,6 +13,7 @@ import (
 func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 	e := m.running()
 	w.Gauge("node64_dns64_up", "DNS-Server laeuft.", metrics.Bool(e != nil))
+	m.dhcpMetrics(ctx, w) // DHCP laeuft neben dem DNS-Server (dhcp.go)
 	if e == nil {
 		return
 	}

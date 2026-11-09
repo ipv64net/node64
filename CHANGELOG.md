@@ -4,8 +4,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Zertifikate: Bei Domains von ipv64 (und anderen Anbietern) prüft die Node den TXT-Eintrag wieder bei den richtigen Nameservern, auch wenn der Container eine Suchdomain mit Wildcard-CNAME hat (z. B. eigene Domain bei Cloudflare) – bisher scheiterte die Ausstellung mit „not visible on … ns.cloudflare.com“. Gleiche Korrektur für DynDNS und den DNS-Healthcheck.
 - PROXY64: Sicherheits-Header aus „Erweitert“ und HSTS gelten für jede Antwort des Hosts, auch Sperr-, Fehler- und Anmeldeseiten; headers-Middlewares aus Traefik-Labels werden übernommen.
 - DNS64: DHCP-Server als eigener Menüpunkt (opt-in, Standard aus, ohne Einschalten kein Port) – Netze je Schnittstelle/VLAN, feste Adressen, Probelauf, Erkennung fremder DHCP-Server, ARP-Prüfung, PXE/Netboot; nur mit Host-Netz oder macvlan (#59).
+- DNS64 DHCP: Kennzahlen in Prometheus (Belegung je Netz, Anfragen, Ergebnisse, fremde DHCP-Server).
 - DNS64 DHCP: Geräte bekommen Namen wie `laptop.home.lan`, feste Adressen gleich in eine Gerätegruppe, Netze hinter einem DHCP-Relay, Abgleich im Cluster (Netze, feste Adressen, Vergaben) und Reserve-Node, die nur einspringt, wenn die Haupt-Node wirklich weg ist (#59).
 - PROXY64: Weiterleitung bei verweigertem Zugriff je Location – wer von der Zugriffsliste abgewiesen wird, landet mit 302 auf einer einstellbaren Adresse statt auf der Fehlerseite (z. B. Vaultwarden `/admin` nur aus dem LAN); Anmeldungen bleiben unverändert (#55).
 - DNS64: Block- und Freigabe-Listen verstehen AdGuard-Regeln mit einem Strich – `@@|name^` nimmt genau diesen Namen aus, `|name^` sperrt genau ihn (bisher still ignoriert).

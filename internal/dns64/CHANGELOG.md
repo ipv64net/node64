@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.38.0 – 2026-11-09
+
+### Neu
+- DHCP in Prometheus (`/api/metrics`, nur wenn DHCP nicht aus ist): Server läuft, Probelauf, je Netz vergebbare, vergebene und feste Adressen, Fehler und Reserve-Stillstand, Anfragen je Art, Ergebnisse (angeboten, vergeben, abgelehnt …) und fremde DHCP-Server (#59).
+
 ## 1.37.1 – 2026-11-09
 
 ### Behoben (Review des DHCP-Servers)

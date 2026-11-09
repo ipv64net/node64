@@ -4,8 +4,10 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Certificates: for ipv64 domains (and other providers) the node checks the TXT record at the right nameservers again, even if the container has a search domain with a wildcard CNAME (e.g. your own domain at Cloudflare) – so far issuing failed with “not visible on … ns.cloudflare.com”. Same fix for DynDNS and the DNS healthcheck.
 - PROXY64: security headers from “Advanced” and HSTS apply to every response of the host, including block, error and sign-in pages; headers middlewares from Traefik labels are taken over.
 - DNS64: DHCP server as its own menu item (opt-in, off by default, no port until turned on) – networks per interface/VLAN, fixed addresses, dry run, detection of other DHCP servers, ARP check, PXE/netboot; host network or macvlan only (#59).
+- DNS64 DHCP: metrics in Prometheus (usage per network, requests, results, other DHCP servers).
 - DNS64 DHCP: devices get names like `laptop.home.lan`, fixed addresses straight into a device group, networks behind a DHCP relay, cluster sync (networks, fixed addresses, leases) and a standby node that only steps in when the primary node is really gone (#59).
 - PROXY64: redirect on denied access per location – visitors turned away by the access list are sent to a configurable address with 302 instead of the error page (e.g. Vaultwarden `/admin` only from the LAN); logins stay unchanged (#55).
 - DNS64: block and allow lists understand AdGuard rules with a single bar – `@@|name^` exempts exactly this name, `|name^` blocks exactly it (previously ignored silently).

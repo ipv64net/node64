@@ -17,6 +17,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
 	"github.com/ipv64net/node64/internal/dns64/groups"
+	"github.com/ipv64net/node64/internal/metrics"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -452,6 +453,16 @@ func TestDHCPApplyState(t *testing.T) {
 	}
 	if err := m.SetDHCPMode(ctx, dhcpObserve); err != nil || m.dhcpSrv.Load() == nil {
 		t.Fatalf("observe: %v %v", err, m.dhcpSrv.Load())
+	}
+	w := metrics.New()
+	m.Metrics(ctx, w)
+	var sb strings.Builder
+	_, _ = w.WriteTo(&sb)
+	for _, want := range []string{"node64_dns64_dhcp_up 1", "node64_dns64_dhcp_observe 1", `node64_dns64_dhcp_addresses{network="192.168.50.0/24",interface="eth9"} 51`,
+		`node64_dns64_dhcp_network_error{network="192.168.50.0/24",interface="eth9"} 1`, "node64_dns64_dhcp_foreign_servers 0"} {
+		if !strings.Contains(sb.String(), want) {
+			t.Errorf("metrics: %q missing in\n%s", want, sb.String())
+		}
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()

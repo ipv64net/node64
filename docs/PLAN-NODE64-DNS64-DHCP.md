@@ -1,6 +1,6 @@
 # Plan: DHCP-Server in DNS64
 
-Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0, Review-Fixes 1.37.1.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
+Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0, Review-Fixes 1.37.1, Prometheus 1.38.0. Import fester Adressen entfällt (Dennis, 2026-11-09).** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
 (Pi-hole und AdGuard Home haben ihn). Ziel: ein leichter DHCP-Server für Homelab und kleine bis mittlere Firmen, der
 Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md),
 [PLAN-NODE64-DNS64-GRUPPEN.md](PLAN-NODE64-DNS64-GRUPPEN.md), [CLUSTER.md](CLUSTER.md).
@@ -76,8 +76,8 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
   per Klick aus einem Lease, „Freigeben“.
 - **PXE/Netboot** je Netz unter „Erweitert“: Boot-Server (Option 66/`siaddr`) und Boot-Datei (Option 67), getrennt
   für BIOS und UEFI (Option 93 des Clients), z. B. netboot.xyz. Keine freien Optionen.
-- Reservierungen: MAC → IP, Name, Kommentar, Gerätegruppe. Import aus dnsmasq/Pi-hole (`dhcp-host=…`) und CSV,
-  Export als CSV.
+- Reservierungen: MAC → IP, Name, Kommentar, Gerätegruppe. (Import aus dnsmasq/Pi-hole und CSV-Import/-Export
+  entfallen – Entscheidung Dennis 2026-11-09.)
 - API v1 der Node (`/api/v1/dns64/dhcp/…`) wie bei Einträgen und Zonen, im Backup/Export enthalten.
 - Prometheus: Leases je Netz (vergeben/frei), Anfragen nach Art, NAKs, Konflikte. Benachrichtigungen: Pool zu 90 %
   voll, fremder DHCP-Server, Adresskonflikt.

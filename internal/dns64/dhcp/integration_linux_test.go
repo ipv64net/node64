@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -122,5 +123,138 @@ func TestIntegrationForeignAndARP(t *testing.T) {
 	v := s.Snapshot()
 	if len(v.Foreign) != 1 || v.Foreign[0].Server != netip.MustParseAddr("10.99.0.2") {
 		t.Fatalf("foreign %+v", v.Foreign)
+	}
+}
+
+// syncStore speichert Vergaben gemeinsam und gibt sie an den anderen laufenden Server weiter (wie der Cluster).
+type syncStore struct {
+	mem  *memStore
+	peer func() *Server
+}
+
+func (s syncStore) SaveLease(l Lease) error {
+	_ = s.mem.SaveLease(l)
+	if p := s.peer(); p != nil {
+		p.Import(l)
+	}
+	return nil
+}
+
+func (s syncStore) DeleteLease(scope int64, mac string) error {
+	_ = s.mem.DeleteLease(scope, mac)
+	if p := s.peer(); p != nil {
+		p.Forget(scope, mac)
+	}
+	return nil
+}
+
+// Failover simuliert (Bridge im Test-Container, nie im Heimnetz): Haupt-Node auf fp (10.98.0.1), Reserve auf fr
+// (10.98.0.2), Geraet im Namensraum cf. Die Reserve schweigt, solange die Haupt-Node "im Cluster erreichbar" ist; faellt
+// sie aus, bekommt das Geraet von der Reserve seine bisherige Adresse; kommt sie zurueck, schweigt die Reserve wieder
+// und die Haupt-Node kennt die Vergaben der Reserve.
+func TestIntegrationFailover(t *testing.T) {
+	itOn(t)
+	sh := func(args ...string) {
+		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %v %s", args, err, out)
+		}
+	}
+	sh("ip", "netns", "add", "cf")
+	t.Cleanup(func() {
+		_ = exec.Command("ip", "netns", "del", "cf").Run()
+		_ = exec.Command("ip", "link", "del", "brf").Run()
+	})
+	sh("ip", "link", "add", "brf", "type", "bridge")
+	sh("ip", "link", "set", "brf", "up")
+	for _, x := range []string{"fp", "fr", "fc"} {
+		sh("ip", "link", "add", x, "type", "veth", "peer", "name", x+"b")
+		sh("ip", "link", "set", x+"b", "master", "brf")
+		sh("ip", "link", "set", x+"b", "up")
+		t.Cleanup(func() { _ = exec.Command("ip", "link", "del", x+"b").Run() })
+	}
+	sh("ip", "link", "set", "fc", "netns", "cf")
+	sh("ip", "netns", "exec", "cf", "ip", "link", "set", "fc", "up")
+	sh("ip", "addr", "add", "10.98.0.1/24", "dev", "fp")
+	sh("ip", "addr", "add", "10.98.0.2/24", "dev", "fr")
+	sh("ip", "link", "set", "fp", "up")
+	sh("ip", "link", "set", "fr", "up")
+	time.Sleep(time.Second) // Bridge bereit
+
+	scope := func(iface string) Scope {
+		return Scope{ID: 1, Iface: iface, Subnet: netip.MustParsePrefix("10.98.0.0/24"), Start: netip.MustParseAddr("10.98.0.100"),
+			End: netip.MustParseAddr("10.98.0.110"), Router: netip.MustParseAddr("10.98.0.1"), Lease: time.Hour, Authoritative: true}
+	}
+	shared := &memStore{leases: map[string]Lease{}}
+	var primary, reserve atomic.Pointer[Server]
+	var primaryOnline atomic.Bool
+	start := func(s *Server) func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() { defer close(done); s.Run(ctx) }()
+		time.Sleep(300 * time.Millisecond)
+		return func() { cancel(); <-done }
+	}
+	leases := func() []Lease {
+		var out []Lease
+		for _, l := range shared.all() {
+			out = append(out, l)
+		}
+		return out
+	}
+	newPrimary := func() func() {
+		s := New(Config{Scopes: []Scope{scope("fp")}, Leases: leases()}, syncStore{shared, reserve.Load}, nil)
+		primary.Store(s)
+		primaryOnline.Store(true)
+		return start(s)
+	}
+	stopPrimary := newPrimary()
+	r := New(Config{Scopes: []Scope{scope("fr")}}, syncStore{shared, primary.Load}, nil)
+	r.Standby = func(netip.Prefix) bool { return primaryOnline.Load() } // Haupt-Node im Cluster erreichbar
+	reserve.Store(r)
+	stopReserve := start(r)
+	defer stopReserve()
+
+	client := func(extra ...string) string {
+		args := append([]string{"netns", "exec", "cf", "udhcpc", "-i", "fc", "-n", "-q", "-f", "-t", "3", "-T", "1", "-s", "/bin/true"}, extra...)
+		out, _ := exec.Command("ip", args...).CombinedOutput()
+		return string(out)
+	}
+	// 1. Haupt-Node vergibt, Reserve schweigt
+	out := client()
+	if !strings.Contains(out, "obtained from 10.98.0.1") {
+		t.Fatalf("primary lease: %s", out)
+	}
+	ip := strings.Fields(out[strings.Index(out, "lease of ")+len("lease of "):])[0]
+	quiet := func() bool { // Reserve hat nichts angeboten oder vergeben, seit die Haupt-Node lebt
+		for _, e := range r.Snapshot().Events {
+			if e.Result == "offer" || e.Result == "ack" {
+				return false
+			}
+			if e.Result == "standby" {
+				return true
+			}
+		}
+		return false
+	}
+	if !quiet() {
+		t.Fatalf("reserve not in standby: %+v", r.Snapshot().Events)
+	}
+	// 2. Haupt-Node faellt aus: Reserve gibt dem Geraet seine Adresse (bekannt aus dem Abgleich)
+	stopPrimary()
+	primary.Store(nil)
+	primaryOnline.Store(false)
+	out = client("-r", ip)
+	if !strings.Contains(out, "lease of "+ip+" obtained from 10.98.0.2") {
+		t.Fatalf("failover: %s", out)
+	}
+	// 3. Haupt-Node zurueck: Reserve schweigt wieder, die Haupt-Node vergibt dieselbe Adresse
+	stopPrimary = newPrimary()
+	defer stopPrimary()
+	out = client("-r", ip)
+	if !strings.Contains(out, "lease of "+ip+" obtained from 10.98.0.1") {
+		t.Fatalf("failback: %s", out)
+	}
+	if !quiet() {
+		t.Fatalf("reserve answered after failback: %+v", r.Snapshot().Events)
 	}
 }

@@ -878,6 +878,23 @@ func (s *Server) Snapshot() View {
 	return v
 }
 
+// Counters liefert die Zaehler (Anfragen je Art, Ergebnisse als "result_<Ergebnis>") und die Zahl der fremden
+// DHCP-Server, die in den letzten 30 Minuten geantwortet haben (Prometheus).
+func (s *Server) Counters() (map[string]uint64, int) {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	foreign := 0
+	for _, f := range s.foreign {
+		for _, t := range f {
+			if now.Sub(t) <= foreignKeep {
+				foreign++
+			}
+		}
+	}
+	return maps.Clone(s.stats), foreign
+}
+
 // Usage liefert je Netz Zustand und Belegung ohne die Leases (Belegungs-Warnung, Port-Uebersicht).
 func (s *Server) Usage() []ScopeView {
 	now := s.now()

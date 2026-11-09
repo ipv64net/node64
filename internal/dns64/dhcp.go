@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
 	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/dns64/localnet"
+	"github.com/ipv64net/node64/internal/metrics"
 	"github.com/ipv64net/node64/internal/notify"
 )
 
@@ -322,6 +324,55 @@ func (m *Module) dhcpPoolCheck() {
 			delete(m.dh.poolSent, v.ID)
 		}
 	}
+}
+
+// ---- Prometheus ----
+
+// dhcpMetrics: Kennzahlen des DHCP-Servers fuer GET /api/metrics (nur wenn eingeschaltet; Zaehler seit dem Start
+// des Moduls, Neustarts nach Aenderungen uebernehmen sie).
+func (m *Module) dhcpMetrics(ctx context.Context, w *metrics.Writer) {
+	mode := m.dhcpMode(ctx)
+	if mode == dhcpOff {
+		return
+	}
+	s := m.dhcpSrv.Load()
+	w.Gauge("node64_dns64_dhcp_up", "DHCP-Server laeuft (Schalter an oder Probelauf, mindestens ein Netz).", metrics.Bool(s != nil))
+	w.Gauge("node64_dns64_dhcp_observe", "DHCP im Probelauf (hoert nur zu).", metrics.Bool(mode == dhcpObserve))
+	if s == nil {
+		return
+	}
+	byID := map[int64]DHCPScope{}
+	if scopes, err := m.DHCPScopes(ctx); err == nil {
+		for _, sc := range scopes {
+			byID[sc.ID] = sc
+		}
+	}
+	reserve := m.dhcpRole(ctx) == dhcpReserve
+	for _, v := range s.Usage() {
+		sc := byID[v.ID]
+		l := []string{"network", sc.Subnet, "interface", sc.Iface}
+		w.Gauge("node64_dns64_dhcp_addresses", "Vergebbare Adressen im Bereich (ohne Router und Node).", float64(v.Size), l...)
+		w.Gauge("node64_dns64_dhcp_leased", "Vergebene oder angebotene Adressen im Bereich (ohne feste).", float64(v.Used), l...)
+		w.Gauge("node64_dns64_dhcp_reserved", "Feste Adressen im Bereich.", float64(v.Reserved), l...)
+		w.Gauge("node64_dns64_dhcp_network_error", "Netz mit Fehler (Schnittstelle, Adresse oder Port 67).", metrics.Bool(v.Error != ""), l...)
+		if reserve {
+			p, _ := netip.ParsePrefix(sc.Subnet)
+			w.Gauge("node64_dns64_dhcp_standby", "Reserve-Node bleibt still (Haupt-Node lebt oder keine bekannt).", metrics.Bool(m.dhcpStandby(p)), l...)
+		}
+	}
+	stats, foreign := s.Counters()
+	keys := slices.Sorted(maps.Keys(stats))
+	for _, k := range keys {
+		if r, ok := strings.CutPrefix(k, "result_"); ok {
+			w.Counter("node64_dns64_dhcp_results_total", "Ergebnisse (offer, ack, nak, ignored, observe, standby, full, conflict, decline, release).", float64(stats[k]), "result", r)
+		}
+	}
+	for _, k := range keys {
+		if !strings.HasPrefix(k, "result_") {
+			w.Counter("node64_dns64_dhcp_requests_total", "DHCP-Anfragen je Art (discover, request, decline, release, inform).", float64(stats[k]), "type", k)
+		}
+	}
+	w.Gauge("node64_dns64_dhcp_foreign_servers", "Fremde DHCP-Server, die in den letzten 30 Minuten geantwortet haben.", float64(foreign))
 }
 
 // ---- Netze ----
