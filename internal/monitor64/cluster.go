@@ -634,8 +634,14 @@ func validateClRow(t *clTable, row map[string]any) error {
 		}
 		switch spec.typ {
 		case 't':
-			if (s != "" || !spec.opt) && (len(s) != len(dbTime) || parseTS(s).IsZero()) {
-				return bad(c, "not a time")
+			if s != "" || !spec.opt {
+				// RFC 3339 mit und ohne Nachkommastellen (aeltere bzw. importierte Zeilen), gespeichert im eigenen Format
+				t, err := time.Parse(time.RFC3339Nano, s)
+				if err != nil || len(s) > 40 {
+					return bad(c, "not a time")
+				}
+				row[c] = ts(t)
+				continue
 			}
 		case 'u':
 			if !reUID.MatchString(s) {

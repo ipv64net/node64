@@ -458,10 +458,13 @@ func TestClusterRowValidation(t *testing.T) {
 	if hosts, err := c.m.store.Hosts(ctx); err != nil || len(hosts) != 0 {
 		t.Fatalf("hosts on C: %v %v", hosts, err)
 	}
-	if err := c.m.ClusterApply(octx, ClusterItemConfig, "host:"+h.UID, data, false); err != nil {
+	// Zeit ohne Nachkommastellen (aeltere bzw. von Hand angelegte Zeilen, gefunden im Test auf node64-test2) wird
+	// angenommen und im eigenen Format gespeichert
+	if err := c.m.ClusterApply(octx, ClusterItemConfig, "host:"+h.UID, mut("created_at", "2026-11-09T16:54:44Z"), false); err != nil {
 		t.Fatal(err)
 	}
-	if hosts, err := c.m.store.Hosts(ctx); err != nil || len(hosts) != 1 {
+	hosts, err := c.m.store.Hosts(ctx)
+	if err != nil || len(hosts) != 1 || hosts[0].CreatedAt.UTC().Format(time.RFC3339) != "2026-11-09T16:54:44Z" {
 		t.Fatalf("valid host: %v %v", hosts, err)
 	}
 }
