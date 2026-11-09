@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.38.1 – 2026-11-09
+
+### Behoben (zweites Review des DHCP-Servers)
+- Vergaben, die der DHCP-Server kurz vor einem Neustart (nach einer Änderung) noch bestätigt, kennt der neue Server; bisher konnte er die Adresse ein zweites Mal vergeben.
+- „Zwei DHCP-Server“ meldet DNS64 nur noch für erreichbare Nodes – nicht mehr für ausgefallene oder aus dem Cluster entfernte; zwei Haupt-Nodes melden sich nicht zusätzlich als „fremder DHCP-Server“.
+- Der Zustand der Nodes (Reserve-Node, weitere DNS-Server der Geräte) gehört zum Bereich „DHCP-Netze“ – die anderen Nodes stehen damit wie beschrieben schon mit diesem Bereich in Option 6.
+- Feste Adressen aus dem Cluster werden auch übernommen, wenn sie einer Adresse dieser Node entsprechen (bisher scheiterte der Abgleich dauerhaft).
+- Ein wiederholtes DISCOVER während der ARP-Prüfung bekommt kein vorzeitiges zweites Angebot mehr.
+
 ## 1.38.0 – 2026-11-09
 
 ### Neu
@@ -12,7 +21,7 @@
 ## 1.37.1 – 2026-11-09
 
 ### Behoben (Review des DHCP-Servers)
-- Reserve-Node: springt je Netz ein, sobald die Haupt-Node für dieses Netz weg ist – unabhängig von anderen Nodes im Cluster (bisher hielt jede erreichbare Node sie still). Jede Node meldet dafür ihren DHCP-Zustand im Bereich „DHCP-Vergaben“ (Rolle, Schalter, Server-ID je Netz).
+- Reserve-Node: springt je Netz ein, sobald die Haupt-Node für dieses Netz weg ist – unabhängig von anderen Nodes im Cluster (bisher hielt jede erreichbare Node sie still). Jede Node meldet dafür ihren DHCP-Zustand im Bereich „DHCP-Netze“ (Rolle, Schalter, Server-ID je Netz).
 - Zwei Haupt-Nodes im selben Netz werden erkannt und gemeldet; Haupt- und Reserve-Node verschweigen sich gegenseitig nicht mehr als fremde DHCP-Server.
 - DHCP blieb bei einem gleichzeitigen Neustart von DNS64 still aus bzw. lief nach dem Abschalten weiter; „Aus“ und das Ausschalten des letzten Netzes zeigten den Server weiter als aktiv.
 - Benachrichtigungen kommen als DNS64-Meldung mit eigenem, übersetztem Text und Link auf die DHCP-Seite.

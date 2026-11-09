@@ -1,5 +1,14 @@
 # Changes – DNS64
 
+## 1.38.1 – 2026-11-09
+
+### Fixed (second review of the DHCP server)
+- Leases the DHCP server still confirms right before a restart (after a change) are known to the new server; so far it could hand out the address a second time.
+- DNS64 reports “two DHCP servers” only for reachable nodes – no longer for failed nodes or nodes removed from the cluster; two primary nodes no longer additionally report each other as “other DHCP server”.
+- The node state (standby node, further DNS servers of the devices) belongs to the area “DHCP networks” – the other nodes are thus in option 6 with this area as described.
+- Fixed addresses from the cluster are taken over even if they match an address of this node (so far the sync failed permanently).
+- A repeated DISCOVER during the ARP check no longer gets a premature second offer.
+
 ## 1.38.0 – 2026-11-09
 
 ### New
@@ -12,7 +21,7 @@
 ## 1.37.1 – 2026-11-09
 
 ### Fixed (review of the DHCP server)
-- Standby node: steps in per network as soon as the primary node for that network is gone – regardless of other nodes in the cluster (so far any reachable node kept it silent). Every node publishes its DHCP state in the area “DHCP leases” (role, switch, server ID per network).
+- Standby node: steps in per network as soon as the primary node for that network is gone – regardless of other nodes in the cluster (so far any reachable node kept it silent). Every node publishes its DHCP state in the area “DHCP networks” (role, switch, server ID per network).
 - Two primary nodes in the same network are detected and reported; primary and standby node no longer hide each other as other DHCP servers.
 - DHCP stayed off after a simultaneous DNS64 restart or kept running after DNS64 was turned off; “Off” and disabling the last network still showed the server as active.
 - Notifications arrive as DNS64 messages with their own translated text and a link to the DHCP page.

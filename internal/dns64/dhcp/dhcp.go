@@ -153,6 +153,7 @@ type scope struct {
 	resIP map[netip.Addr]string  // IP -> MAC
 	byMAC map[string]*Lease
 	byIP  map[netip.Addr]*Lease
+	probe map[netip.Addr]bool // Adressen in der ARP-Pruefung (kein zweites Angebot, bevor sie fertig ist)
 }
 
 // New baut den Server aus der Konfiguration (ohne Sockets).
@@ -161,7 +162,7 @@ func New(cfg Config, st Store, log *slog.Logger) *Server {
 		probes: map[dhcpv4.TransactionID]bool{}, stats: map[string]uint64{}}
 	for _, c := range cfg.Scopes {
 		sc := &scope{Scope: c, net: c.Subnet.Masked().Addr(), bcast: Broadcast(c.Subnet), res: map[string]Reservation{}, resIP: map[netip.Addr]string{},
-			byMAC: map[string]*Lease{}, byIP: map[netip.Addr]*Lease{}}
+			byMAC: map[string]*Lease{}, byIP: map[netip.Addr]*Lease{}, probe: map[netip.Addr]bool{}}
 		for _, r := range cfg.Reservations {
 			if r.Scope == c.ID && c.Subnet.Contains(r.IP) {
 				sc.res[r.MAC], sc.resIP[r.IP] = r, r.MAC
@@ -206,14 +207,7 @@ func (s *Server) bind(onlyMissing bool) {
 			sc.err, sc.kind = "interface "+sc.Iface+" not found", "iface"
 			continue
 		}
-		for _, p := range addrs {
-			if sc.Subnet.Contains(p.Addr()) || (sc.Relay && !sc.self.IsValid()) {
-				sc.self = p.Addr()
-			}
-			if sc.Subnet.Contains(p.Addr()) {
-				break
-			}
-		}
+		sc.self = ServerAddr(addrs, sc.Subnet, sc.Relay)
 		if !sc.self.IsValid() {
 			sc.err, sc.kind = "no address of "+sc.Iface+" in "+sc.Subnet.String(), "addr"
 		}
@@ -221,6 +215,20 @@ func (s *Server) bind(onlyMissing bool) {
 			sc.mac = ifi.HardwareAddr
 		}
 	}
+}
+
+// ServerAddr waehlt die Server-ID eines Netzes aus den Adressen einer Schnittstelle: die erste im Netz, bei
+// Relay-Netzen sonst die erste ueberhaupt (ungueltig = keine).
+func ServerAddr(addrs []netip.Prefix, subnet netip.Prefix, relay bool) netip.Addr {
+	for _, p := range addrs {
+		if subnet.Contains(p.Addr()) {
+			return p.Addr()
+		}
+	}
+	if relay && len(addrs) > 0 {
+		return addrs[0].Addr()
+	}
+	return netip.Addr{}
 }
 
 func (s *Server) ifaceAddrs(name string) []netip.Prefix {
@@ -463,15 +471,21 @@ func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *rep
 			s.mu.Unlock()
 			return nil
 		}
-		fresh = fresh && !sc.Relay // hinter einem Relay erreicht die ARP-Pruefung das Netz nicht
-		hold := fresh
-		if hold { // Adresse waehrend der ARP-Pruefung festhalten
+		if sc.probe[ip] { // wiederholtes DISCOVER, waehrend die ARP-Pruefung dieser Adresse laeuft: das erste antwortet
+			s.mu.Unlock()
+			return nil
+		}
+		fresh = fresh && !sc.Relay && s.Probe != nil // hinter einem Relay erreicht die ARP-Pruefung das Netz nicht
+		if fresh {                                   // Adresse waehrend der ARP-Pruefung festhalten
 			sc.setLease(Lease{Scope: sc.ID, MAC: mac, IP: ip, Hostname: host, Expires: now.Add(offerHold), State: StateOffered})
+			sc.probe[ip] = true
 		}
 		self := sc.self
 		s.mu.Unlock()
-		if fresh && s.Probe != nil && s.Probe(sc.Iface, self, ip) {
-			s.mu.Lock()
+		inUse := fresh && s.Probe(sc.Iface, self, ip)
+		s.mu.Lock()
+		delete(sc.probe, ip)
+		if inUse {
 			s.conflicts[ip] = s.now().Add(conflictHold)
 			sc.dropLease(mac)
 			s.event(sc, "discover", mac, host, ip, "conflict")
@@ -479,7 +493,6 @@ func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *rep
 			s.logger().Warn("dhcp address in use (arp)", "ip", ip, "iface", sc.Iface)
 			continue
 		}
-		s.mu.Lock()
 		if l := sc.byMAC[mac]; l == nil || l.IP != ip || l.State != StateBound || !l.Active(now) {
 			sc.setLease(Lease{Scope: sc.ID, MAC: mac, IP: ip, Hostname: host, Expires: now.Add(offerHold), State: StateOffered})
 		}

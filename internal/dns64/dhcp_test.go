@@ -314,7 +314,7 @@ func TestDHCPReserve(t *testing.T) {
 	peers := []DHCPPeer{{NodeID: "a", Name: "Node A", Online: true}, {NodeID: "c", Name: "Nur DNS", Online: true}}
 	m.SetDHCPPeers(func(context.Context, string) []DHCPPeer { return peers })
 	apply := func(id string, n clDHCPNode) {
-		if err := m.ClusterApply(ctx, ItemDHCPLeases, "n:"+id, json.RawMessage(jsonString(n)), false); err != nil {
+		if err := m.ClusterApply(ctx, ItemDHCPScopes, "n:"+id, json.RawMessage(jsonString(n)), false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -331,7 +331,7 @@ func TestDHCPReserve(t *testing.T) {
 		t.Fatal("network without primary: reserve stays silent")
 	}
 	// DNS-Server: nur erreichbare Nodes mit DNS64 auf Port 53 in diesem Netz
-	if d := m.dhcpPeerDNS(ctx, netip.MustParsePrefix(net)); len(d) != 1 || d[0] != netip.MustParseAddr("192.168.50.3") {
+	if d := m.dhcpClusterState(ctx).peerDNS(netip.MustParsePrefix(net)); len(d) != 1 || d[0] != netip.MustParseAddr("192.168.50.3") {
 		t.Fatalf("peer dns %v", d)
 	}
 	// Haupt-Node ist fuer die Reserve kein fremder Server, fuer eine Haupt-Node schon
@@ -359,8 +359,45 @@ func TestDHCPReserve(t *testing.T) {
 		t.Skipf("scope on %s: %v", ifs[0].Name, err)
 	}
 	apply("b", clDHCPNode{Role: dhcpPrimary, Mode: dhcpOn, Nets: []clDHCPNodeNet{{p.String(), "1.2.3.4"}}})
-	if c := m.dhcpConflicts(ctx); len(c[p.String()]) != 1 || c[p.String()][0] != "b" {
+	if c := m.dhcpConflicts(ctx); len(c) != 0 { // b ist kein (erreichbares) Mitglied: veralteter Zustand zaehlt nicht
+		t.Fatalf("conflict with a departed node: %v", c)
+	}
+	peers = append(peers, DHCPPeer{NodeID: "b", Name: "Node B", Online: true})
+	if c := m.dhcpConflicts(ctx); len(c[p.String()]) != 1 || c[p.String()][0] != "Node B" {
 		t.Fatalf("conflicts %v", c)
+	}
+	if !m.dhcpExpected(netip.MustParseAddr("1.2.3.4")) { // zweite Haupt-Node: Konflikt-Hinweis statt "fremder Server"
+		t.Fatal("second primary reported as foreign server")
+	}
+	peers[len(peers)-1].Online = false
+	if c := m.dhcpConflicts(ctx); len(c) != 0 || m.dhcpExpected(netip.MustParseAddr("1.2.3.4")) {
+		t.Fatalf("offline primary: conflicts %v", c)
+	}
+}
+
+// Feste Adresse aus dem Cluster auf einer Adresse dieser Node: wird uebernommen (lokal angelegt: abgelehnt).
+func TestDHCPReservationLocalAddr(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	ifs := dhcpInterfaces()
+	if len(ifs) == 0 {
+		t.Skip("keine Schnittstelle mit IPv4")
+	}
+	own := ifs[0].Addrs[0]
+	p := own.Masked()
+	if p.Bits() > 30 {
+		t.Skip("Netz zu klein")
+	}
+	if _, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: p.String(), Start: p.Addr().Next().String(), End: p.Addr().Next().String(), Relay: true}); err != nil {
+		t.Fatal(err)
+	}
+	scopes, _ := m.DHCPScopes(ctx)
+	if _, err := m.AddDHCPReservation(ctx, DHCPReservation{ScopeID: scopes[0].ID, MAC: "02:00:00:00:00:01", IP: own.Addr().String()}); err == nil {
+		t.Fatal("local reservation on this node's address accepted")
+	}
+	data := jsonString(clDHCPRes{p.String(), "02:00:00:00:00:01", own.Addr().String(), "", ""})
+	if err := m.ClusterApply(ctx, ItemDHCPRes, "r:"+p.String()+"|02:00:00:00:00:01", json.RawMessage(data), false); err != nil {
+		t.Fatalf("cluster reservation rejected: %v", err)
 	}
 }
 
@@ -463,6 +500,13 @@ func TestDHCPApplyState(t *testing.T) {
 		if !strings.Contains(sb.String(), want) {
 			t.Errorf("metrics: %q missing in\n%s", want, sb.String())
 		}
+	}
+	// Vergabe, die waehrend des Neustarts noch gespeichert wurde: der neue Server kennt sie
+	scopes0, _ := m.DHCPScopes(ctx)
+	_ = dhcpStore{m}.SaveLease(dhcp.Lease{Scope: scopes0[0].ID, MAC: "02:00:00:00:00:0a", IP: netip.MustParseAddr("192.168.50.120"), Expires: time.Now().Add(time.Hour), State: dhcp.StateBound})
+	m.dhcpApply(ctx)
+	if s := m.dhcpSrv.Load(); s == nil || len(s.Snapshot().Scopes[0].Leases) != 1 {
+		t.Fatal("lease saved before the restart missing in the new server")
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()

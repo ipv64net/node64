@@ -118,13 +118,15 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 	}
 	v.Reserve.Role = m.dhcpRole(ctx)
 	v.Reserve.Cluster = len(m.dhcpPeers(ctx, "")) > 0 || v.Reserve.Role == dhcpReserve // Rolle nur mit anderen Nodes
-	if v.Reserve.Role == dhcpReserve {                                                 // je eigenem Netz: lebt eine Haupt-Node?
+	cl := m.dhcpClusterState(ctx)                                                      // einmal lesen (Peers, Namen, Zustaende)
+	srv := m.dhcpSrv.Load()
+	if v.Reserve.Role == dhcpReserve { // je eigenem Netz: lebt eine Haupt-Node?
 		var names []string
 		for _, s := range scopes {
 			if !s.Enabled {
 				continue
 			}
-			alive, prim := m.dhcpPrimaryAlive(ctx, s.Subnet)
+			alive, prim := cl.primaryAlive(s.Subnet, srv)
 			v.Reserve.Standby = v.Reserve.Standby || (alive && len(prim) > 0)
 			v.Reserve.HasPrimary = v.Reserve.HasPrimary || len(prim) > 0
 			for _, n := range prim {
@@ -135,7 +137,7 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 		}
 		v.Reserve.Names = strings.Join(names, ", ")
 	}
-	v.Conflicts = m.dhcpConflicts(ctx)
+	v.Conflicts = cl.conflicts(m.dhcpOwnNode(ctx))
 	var snap dhcp.View
 	if s := m.dhcpSrv.Load(); s != nil {
 		v.Running, snap = true, s.Snapshot()
@@ -163,7 +165,7 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 	}
 	v.Events = snap.Events
 	for _, f := range snap.Foreign { // die Haupt-Node einer Reserve ist kein fremder Server
-		if !m.dhcpExpected(f.Server) {
+		if !cl.expected(f.Server) {
 			v.Foreign = append(v.Foreign, f)
 		}
 	}

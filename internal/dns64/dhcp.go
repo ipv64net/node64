@@ -144,6 +144,10 @@ func (m *Module) dhcpApplyLocked(ctx context.Context) {
 	old := m.dhcpSrv.Load()
 	m.dhcpHaltLocked()
 	if start {
+		// Vergaben erst jetzt lesen: der alte Server hat bis zum Stopp noch bestaetigt und gespeichert
+		if leases, err := m.dhcpLeaseRows(ctx); err == nil {
+			cfg.Leases = leases
+		}
 		cfg.Observe = mode == dhcpObserve
 		s := dhcp.New(cfg, dhcpStore{m}, m.log.With("part", "dhcp"))
 		s.Probe = dhcp.ARPProbe
@@ -198,10 +202,11 @@ func (m *Module) dhcpConfig(ctx context.Context) (dhcp.Config, error) {
 			noSelf = true
 		}
 	}
+	cl := m.dhcpClusterState(ctx)
 	for _, s := range scopes {
 		if s.Enabled && s.Iface != "" { // aus dem Cluster ohne passende Schnittstelle: aus
 			sc := s.toDHCP()
-			sc.ExtraDNS = m.dhcpPeerDNS(ctx, sc.Subnet)
+			sc.ExtraDNS = cl.peerDNS(sc.Subnet)
 			sc.DNSBind, sc.NoSelfDNS = dnsBind, noSelf
 			cfg.Scopes = append(cfg.Scopes, sc)
 		}
@@ -287,7 +292,7 @@ func (m *Module) dhcpNotify(scope int64, text string, data map[string]string) {
 }
 
 func (m *Module) dhcpForeign(scope int64, server netip.Addr) {
-	if m.dhcpExpected(server) { // Haupt-Node des Clusters, waehrend diese Node Reserve ist
+	if m.dhcpExpected(server) { // Haupt-Node des Clusters (Reserve: erwartet; zwei Haupt-Nodes: eigener Hinweis)
 		return
 	}
 	m.dhcpNotify(scope, "dns64_dhcp_foreign", map[string]string{"server": server.String()})
@@ -647,7 +652,9 @@ func (m *Module) DHCPReservations(ctx context.Context) ([]DHCPReservation, error
 	return out, rows.Err()
 }
 
-func (m *Module) normalizeDHCPReservation(ctx context.Context, r *DHCPReservation) error {
+// normalizeDHCPReservation prueft eine feste Adresse; local = hier angelegt (dann auch nicht auf eine Adresse dieser
+// Node - aus dem Cluster gilt die Pruefung der anlegenden Node, sonst scheiterte der Abgleich hier dauerhaft).
+func (m *Module) normalizeDHCPReservation(ctx context.Context, r *DHCPReservation, local bool) error {
 	hw, err := net.ParseMAC(strings.TrimSpace(r.MAC))
 	if err != nil || len(hw) != 6 {
 		return errCfg("err_dhcp_mac")
@@ -659,7 +666,7 @@ func (m *Module) normalizeDHCPReservation(ctx context.Context, r *DHCPReservatio
 	}
 	p, _ := netip.ParsePrefix(sc.Subnet)
 	ip, err := netip.ParseAddr(strings.TrimSpace(r.IP))
-	if err != nil || !p.Contains(ip) || ip == p.Addr() || ip == dhcp.Broadcast(p) || ip.String() == sc.Router || dhcpLocalAddr(ip) {
+	if err != nil || !p.Contains(ip) || ip == p.Addr() || ip == dhcp.Broadcast(p) || ip.String() == sc.Router || (local && dhcpLocalAddr(ip)) {
 		return errCfg("err_dhcp_res_ip")
 	}
 	r.IP = ip.String()
@@ -685,7 +692,7 @@ func dhcpLocalAddr(ip netip.Addr) bool {
 // AddDHCPReservation legt eine feste Adresse an (MAC und IP je Netz eindeutig); mit GroupID kommt die MAC ausserdem
 // in diese Geraetegruppe (vorher geprueft, Tags bleiben).
 func (m *Module) AddDHCPReservation(ctx context.Context, r DHCPReservation) (DHCPReservation, error) {
-	if err := m.normalizeDHCPReservation(ctx, &r); err != nil {
+	if err := m.normalizeDHCPReservation(ctx, &r, true); err != nil {
 		return r, err
 	}
 	var member groups.Member
@@ -725,7 +732,7 @@ func (m *Module) AddDHCPReservation(ctx context.Context, r DHCPReservation) (DHC
 
 // UpdateDHCPReservation aendert eine feste Adresse.
 func (m *Module) UpdateDHCPReservation(ctx context.Context, id int64, r DHCPReservation) (DHCPReservation, error) {
-	if err := m.normalizeDHCPReservation(ctx, &r); err != nil {
+	if err := m.normalizeDHCPReservation(ctx, &r, true); err != nil {
 		return r, err
 	}
 	r.ID = id

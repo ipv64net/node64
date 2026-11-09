@@ -354,6 +354,23 @@ func TestRelayUnicastRenew(t *testing.T) {
 	}
 }
 
+// Wiederholtes DISCOVER waehrend der ARP-Pruefung: nur das erste antwortet (nach der Pruefung).
+func TestDiscoverDuringProbe(t *testing.T) {
+	s, _, _ := newTest(t, Config{})
+	started, release := make(chan struct{}), make(chan struct{})
+	s.Probe = func(string, netip.Addr, netip.Addr) bool { close(started); <-release; return false }
+	first := make(chan *reply)
+	go func() { first <- s.Handle("eth0", discover(t, macA)) }()
+	<-started
+	if r := s.Handle("eth0", discover(t, macA)); r != nil {
+		t.Fatalf("second offer during the probe: %v", r)
+	}
+	close(release)
+	if r := <-first; r == nil || r.msg.MessageType() != dhcpv4.MessageTypeOffer {
+		t.Fatalf("first offer: %v", r)
+	}
+}
+
 // Pruef-DISCOVER einer anderen Node: Antwort ja, aber kein Angebot und kein Ereignis.
 func TestProbeDiscover(t *testing.T) {
 	s, _, _ := newTest(t, Config{})
