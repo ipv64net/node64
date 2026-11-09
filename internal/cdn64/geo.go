@@ -19,7 +19,8 @@ import (
 )
 
 // Laendersperre je Host und Stream: Besucher aus bestimmten Laendern sperren oder nur sie zulassen. Die Laenderlisten kommen
-// von ipv64.net (taeglich aus den Daten der Registrierungsstellen) und werden nur fuer Laender geladen, die ein
+// von ipv64.net (taeglich aus den Daten der Registrierungsstellen, dazu die Ausgangsadressen von Apple iCloud Private Relay mit
+// Apples Land, #54) und werden nur fuer Laender geladen, die ein
 // eingeschalteter Host oder Stream benutzt; Zwischenspeicher wie bei den Blocklisten. Private Netze, CGNAT und die Ausnahmen
 // der Blocklisten werden nie gesperrt. "Nur zulassen" sperrt erst, wenn mindestens eine der Listen geladen ist.
 
