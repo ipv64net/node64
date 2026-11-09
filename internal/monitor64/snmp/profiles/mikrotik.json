@@ -107,8 +107,15 @@
             "4": "überlastet",
             "5": "Kurzschluss",
             "6": "Spannung zu niedrig",
-            "7": "Strom zu hoch",
-            "8": "Spannung zu hoch"
+            "7": "Strom zu niedrig",
+            "8": "Versorgung neu gestartet",
+            "9": "Spannung zu hoch",
+            "10": "Controller-Fehler",
+            "11": "Controller-Update",
+            "12": "PoE-Eingang erkannt",
+            "13": "kein gültiges Netzteil",
+            "14": "Controller startet",
+            "15": "Eingangsspannung zu niedrig"
           },
           "fact": {
             "code": "poe_fault",
@@ -116,8 +123,10 @@
               4,
               5,
               6,
-              7,
-              8
+              9,
+              10,
+              13,
+              15
             ],
             "text": "PoE-Fehler"
           }

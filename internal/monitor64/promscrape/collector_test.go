@@ -358,12 +358,18 @@ func TestPartialCollectorFailure(t *testing.T) {
 	for round := 0; round < 2; round++ { // auch in der zweiten Runde noch Teilfehler (Schluessel bleiben gemerkt)
 		svcs, err = c.Collect(context.Background())
 		var pe *apis.PartialError
-		if !errors.As(err, &pe) || strings.Join(pe.Prefixes, ",") != "winsvc:" || !pe.Affects("winsvc:Themes") || pe.Affects("cpu") {
+		// PB1: Praefix "winsvc" haelt auch den Sammeldienst winsvc
+		if !errors.As(err, &pe) || strings.Join(pe.Prefixes, ",") != "winsvc" || !pe.Affects("winsvc:Themes") || !pe.Affects("winsvc") || pe.Affects("cpu") {
 			t.Fatalf("Runde %d: %v", round, err)
 		}
 		if len(svcs) != n-3 {
 			t.Errorf("Runde %d: %d Dienste", round, len(svcs))
 		}
+	}
+	// PB6: nach einem Neustart (neuer Sammler ohne gemerkte Dienste) gilt der Ausfall sofort als Teilfehler
+	c3, _ := New(Config{URL: srv.URL, Map: fakeMap})
+	if _, err := c3.Collect(context.Background()); !apis.IsPartial(err) || !err.(*apis.PartialError).Affects("winsvc:Themes") {
+		t.Errorf("nach Neustart: %v", err)
 	}
 	ts.set(func(s *testServer) { s.body = base })
 	if _, err := c.Collect(context.Background()); err != nil {
@@ -376,6 +382,15 @@ func TestPartialCollectorFailure(t *testing.T) {
 		if _, err := c2.Collect(context.Background()); err != nil {
 			t.Errorf("node: %v", err)
 		}
+	}
+	// PB6: faellt ein echter Sammler aus, kommen die Praefixe der stillen Sammler (mdadm ...) mit
+	node := strings.ReplaceAll(fixtureText(t, "node_exporter-1.12.1.txt"), `node_scrape_collector_success{collector="filesystem"} 1`,
+		`node_scrape_collector_success{collector="filesystem"} 0`)
+	ts.set(func(s *testServer) { s.body = node })
+	_, err = c2.Collect(context.Background())
+	var pe *apis.PartialError
+	if !errors.As(err, &pe) || len(pe.Errs) != 1 || !pe.Affects("fs:/") || !pe.Affects("raid:md0") || !pe.Affects("bond:bond0") || pe.Affects("cpu") {
+		t.Errorf("node filesystem: %v", err)
 	}
 }
 

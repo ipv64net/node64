@@ -19,42 +19,27 @@ package m64bsd
 
 import (
 	"errors"
-	"io/fs"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ipv64net/node64/internal/m64linux"
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
-// Grenzen gegen ausufernde Hosts.
+// Grenzen gegen ausufernde Hosts (Texte kuerzt m64linux.Clip mit denselben 300 Zeichen).
 const (
 	maxItems = 512 // Eintraege je Abschnitt (Dateisysteme, Schnittstellen, Platten, Sensoren ...)
-	maxText  = 300 // Laenge freier Texte (Fehler, Scrub-Zeile)
 )
 
 var errFormat = errors.New("unbekanntes Format")
 
-// clip kuerzt freie Texte vom Host, ersetzt ungueltiges UTF-8 und Steuerzeichen.
-func clip(s string) string {
-	s = strings.ToValidUTF8(s, "?")
-	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return ' '
-		}
-		return r
-	}, s)
-	s = strings.TrimSpace(s)
-	if len(s) > maxText {
-		i := maxText
-		for i > 0 && !utf8.RuneStart(s[i]) {
-			i--
-		}
-		s = strings.TrimSpace(s[:i])
-	}
-	return s
-}
+// Texte, Fehler und Zeilen wie im Linux-Sammler (gemeinsame Helfer, keine Kopien).
+func clip(s string) string                             { return m64linux.Clip(s) }
+func errText(err error) string                         { return m64linux.ErrText(err) }
+func addErr(r *m64proto.Report, sec string, err error) { m64linux.AddErr(r, sec, err) }
+func addNote(r *m64proto.Report, sec, note string)     { m64linux.AddNote(r, sec, note) }
+func lines(b []byte) []string                          { return m64linux.Lines(b) }
 
 // clipN kuerzt zusaetzlich auf n Bytes (Namen, Versionen).
 func clipN(s string, n int) string {
@@ -67,41 +52,6 @@ func clipN(s string, n int) string {
 		s = strings.TrimSpace(s[:i])
 	}
 	return s
-}
-
-// errText macht aus einem Fehler einen kurzen Text fuer SectionErr.
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	var pe *fs.PathError
-	if errors.As(err, &pe) {
-		return clip(pe.Op + " " + filepath.ToSlash(pe.Path) + ": " + pe.Err.Error())
-	}
-	return clip(err.Error())
-}
-
-// addErr haengt einen Abschnittsfehler an.
-func addErr(r *m64proto.Report, sec string, err error) {
-	if err == nil {
-		return
-	}
-	r.Errors = append(r.Errors, m64proto.SectionErr{Section: sec, Error: errText(err)})
-}
-
-// addNote haengt einen Hinweis an.
-func addNote(r *m64proto.Report, sec, note string) {
-	r.Notes = append(r.Notes, m64proto.SectionNote{Section: sec, Note: clip(note)})
-}
-
-// lines teilt Text in Zeilen (ohne \r).
-func lines(b []byte) []string {
-	s := strings.ReplaceAll(string(b), "\r", "")
-	s = strings.TrimRight(s, "\n")
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, "\n")
 }
 
 func u64(s string) uint64 {

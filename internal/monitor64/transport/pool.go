@@ -28,11 +28,24 @@ type Pool struct {
 }
 
 type poolEntry struct {
-	sig   string
-	agent *AgentClient
-	ssh   *SSHClient
-	conn  *conn
-	used  time.Time // zuletzt aus dem Pool geholt
+	sig     string
+	agent   *AgentClient
+	ssh     *SSHClient
+	conn    *conn
+	used    time.Time   // zuletzt aus dem Pool geholt
+	release *time.Timer // Release: Entfernen nach der Karenz, wenn ihn niemand wieder holt
+}
+
+// push: Client im Push-Betrieb (seine Anmeldung beim Lauscher haelt die Verbindungen des Agents).
+func (e *poolEntry) push() bool { return e.agent != nil && e.agent.cfg.Push != nil }
+
+// keep: der Eintrag wird wieder benutzt (eine laufende Karenz endet).
+func (e *poolEntry) keep() {
+	e.used = time.Now()
+	if e.release != nil {
+		e.release.Stop()
+		e.release = nil
+	}
 }
 
 // NewPool legt einen Pool an; forget 0 = DefaultForget.
@@ -55,7 +68,7 @@ func (p *Pool) Agent(key string, cfg AgentConfig) (*AgentClient, error) {
 		return nil, ErrClosed
 	}
 	if e := p.entries[key]; e != nil && e.agent != nil && e.sig == sig && sameHostKey(e.conn, cfg.HostKey) {
-		e.used = time.Now()
+		e.keep()
 		p.mu.Unlock()
 		return e.agent, nil
 	}
@@ -85,7 +98,7 @@ func (p *Pool) SSH(key string, cfg SSHConfig) (*SSHClient, error) {
 		return nil, ErrClosed
 	}
 	if e := p.entries[key]; e != nil && e.ssh != nil && e.sig == sig && sameHostKey(e.conn, cfg.HostKey) {
-		e.used = time.Now()
+		e.keep()
 		p.mu.Unlock()
 		return e.ssh, nil
 	}
@@ -105,10 +118,52 @@ func (p *Pool) Remove(key string) {
 	p.mu.Lock()
 	e := p.entries[key]
 	delete(p.entries, key)
+	if e != nil {
+		e.keep()
+	}
 	p.mu.Unlock()
 	if e != nil {
 		closeConn(e.conn)
 	}
+}
+
+// Release gibt den Client fuer key frei und entfernt ihn erst nach grace, wenn ihn bis dahin niemand mit gleicher
+// Konfiguration wieder holt (Push: ReloadHost baut den Sammler neu, die offene Verbindung des Agents und die
+// Anmeldung seines Tokens beim Lauscher bleiben dann bestehen). Eine geaenderte Konfiguration ersetzt ihn wie sonst.
+func (p *Pool) Release(key string, grace time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e := p.entries[key]
+	if e == nil || p.closed {
+		return
+	}
+	if e.release != nil {
+		e.release.Stop()
+	}
+	var t *time.Timer
+	t = time.AfterFunc(grace, func() {
+		p.mu.Lock()
+		gone := p.entries[key] == e && e.release == t
+		if gone {
+			delete(p.entries, key)
+			e.release = nil
+		}
+		p.mu.Unlock()
+		if gone {
+			closeConn(e.conn)
+		}
+	})
+	e.release = t
+}
+
+// Existing liefert den vorhandenen Agent-Client fuer key (nil ohne; legt keinen an und zaehlt nicht als Nutzung).
+func (p *Pool) Existing(key string) *AgentClient {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if e := p.entries[key]; e != nil {
+		return e.agent
+	}
+	return nil
 }
 
 // Len liefert die Zahl der Clients.
@@ -128,6 +183,7 @@ func (p *Pool) Close() {
 	p.closed = true
 	var old []*conn
 	for k, e := range p.entries {
+		e.keep()
 		old = append(old, e.conn)
 		delete(p.entries, k)
 	}
@@ -144,6 +200,7 @@ func (p *Pool) Close() {
 func (p *Pool) put(key string, e *poolEntry) *conn {
 	var old *conn
 	if o := p.entries[key]; o != nil {
+		o.keep() // Karenz des alten endet: er wird ohnehin geschlossen
 		old = o.conn
 	}
 	e.used = time.Now()
@@ -169,11 +226,16 @@ func (p *Pool) janitor(stop chan struct{}) {
 }
 
 // sweep wirft Clients weg, die laenger als forget weder geholt noch benutzt wurden (laufende Anfragen zaehlen
-// als Nutzung).
+// als Nutzung). Push-Clients bleiben (pausierter Host, im Cluster nicht zustaendig): mit dem Client ginge die
+// Anmeldung des Tokens, und der Agent wuerde abgewiesen und sperrte sich in seine Wartezeit; sie gehen mit Remove
+// bzw. Release, wenn der Zugang wegfaellt.
 func (p *Pool) sweep(now time.Time) {
 	p.mu.Lock()
 	var old []*conn
 	for k, e := range p.entries {
+		if e.push() {
+			continue
+		}
 		active, last := e.conn.usage()
 		if active > 0 || now.Sub(e.used) <= p.forget || now.Sub(last) <= p.forget {
 			continue

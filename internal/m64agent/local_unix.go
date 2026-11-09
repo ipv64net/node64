@@ -311,3 +311,6 @@ func localEnv() []string {
 		"HOME=" + localHome,
 	}
 }
+
+// runCmd fuehrt den mit prepareCmd vorbereiteten Aufruf aus (Prozessgruppe, Zeitlimit ueber cmd.Cancel).
+func runCmd(cmd *exec.Cmd) error { return cmd.Run() }

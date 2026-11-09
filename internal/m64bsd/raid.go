@@ -48,7 +48,6 @@ func ParseGeomStatus(class string, b []byte) []m64proto.RAID {
 		st = strings.TrimSuffix(strings.TrimPrefix(st, "("), ")")
 		up := strings.ToUpper(st)
 		r.Members = append(r.Members, clipN(name, 64))
-		r.Devices++
 		ok := strings.Contains(up, "ACTIVE")
 		for _, w := range geomBadWords {
 			if strings.Contains(up, w) {
@@ -56,6 +55,7 @@ func ParseGeomStatus(class string, b []byte) []m64proto.RAID {
 				break
 			}
 		}
+		// Reserve-Platten zaehlen nicht zum Soll (sonst hiesse ein gesundes Array mit Hot-Spare "weniger aktiv als Soll")
 		switch {
 		case ok:
 			r.Active++
@@ -63,6 +63,9 @@ func ParseGeomStatus(class string, b []byte) []m64proto.RAID {
 			r.Failed++
 		case strings.Contains(up, "SPARE"):
 			r.Spare++
+		}
+		if ok || !strings.Contains(up, "SPARE") {
+			r.Devices++
 		}
 		if m := geomPctRE.FindStringSubmatch(st); m != nil && r.SyncPercent == nil {
 			if v, err := strconv.ParseFloat(m[1], 64); err == nil && v >= 0 && v <= 100 {

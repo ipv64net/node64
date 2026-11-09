@@ -335,26 +335,35 @@ func (s *Store) Services(ctx context.Context, hostUID string) ([]*ServiceRow, er
 
 // UpsertDiscovered traegt erkannte Dienste ein: neue als Hinweis (adopted 0) bzw. sofort uebernommen
 // (adopt = true, beim Anlegen im Assistenten bestaetigt); vorhandene behalten ihren Zustand, "verschwunden" endet.
-// Nie automatisch uebernehmen (Plan "Dienste erkennen").
+// Nicht vorgeschlagene Dienste (Default false, z. B. einzelne Windows-Dienste, gestoppte Gaeste) kommen als
+// "ignoriert" (adopted -1, Akteur System) dazu: so lassen sie sich spaeter uebernehmen, ohne die Liste der neuen Dienste
+// zu fuellen; werden sie spaeter vorgeschlagen (z. B. Port mit Link), rutschen sie zu den neuen. Vom Benutzer
+// ignorierte bleiben ignoriert. Nie automatisch uebernehmen (Plan "Dienste erkennen").
 func (s *Store) UpsertDiscovered(ctx context.Context, hostUID string, found []Service, adopt map[string]bool, by Actor) (added int, err error) {
 	tx, err := s.st.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	known := map[string]bool{} // key -> geloescht
-	rows, err := tx.QueryContext(ctx, `SELECT key, deleted FROM m64_services WHERE host_uid = ?`, hostUID)
+	type cur struct {
+		deleted  bool
+		adopted  int
+		systemBy bool // zuletzt vom System gesetzt (nicht vorgeschlagen), nicht vom Benutzer ignoriert
+	}
+	sys := SystemActor.json()
+	known := map[string]cur{}
+	rows, err := tx.QueryContext(ctx, `SELECT key, deleted, adopted, updated_by FROM m64_services WHERE host_uid = ?`, hostUID)
 	if err != nil {
 		return 0, err
 	}
 	for rows.Next() {
-		var k string
-		var del int
-		if err := rows.Scan(&k, &del); err != nil {
+		var k, upBy string
+		var del, ad int
+		if err := rows.Scan(&k, &del, &ad, &upBy); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		known[k] = del == 1
+		known[k] = cur{deleted: del == 1, adopted: ad, systemBy: upBy == sys}
 	}
 	rows.Close()
 	now := tsNow()
@@ -363,15 +372,22 @@ func (s *Store) UpsertDiscovered(ctx context.Context, hostUID string, found []Se
 		if adopt[f.Key] {
 			state = 1
 		}
-		deleted, ok := known[f.Key]
+		offered := f.Default || state == 1
+		c, ok := known[f.Key]
 		switch {
+		case !ok && !offered: // nicht vorgeschlagen: uebernehmbar, aber nicht als neu gezaehlt
+			if _, err := tx.ExecContext(ctx, `INSERT INTO m64_services (uid, host_uid, key, name, kind, adopted, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, -1, ?, ?)`,
+				newUID(), hostUID, f.Key, f.Name, f.Kind, now, sys); err != nil {
+				return 0, err
+			}
 		case !ok:
 			if _, err := tx.ExecContext(ctx, `INSERT INTO m64_services (uid, host_uid, key, name, kind, adopted, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 				newUID(), hostUID, f.Key, f.Name, f.Kind, state, now, by.json()); err != nil {
 				return 0, err
 			}
 			added++
-		case deleted: // frueher entfernt: wieder als neu anbieten
+		case c.deleted && !offered: // vom Benutzer entfernt und nicht vorgeschlagen: bleibt weg
+		case c.deleted: // frueher entfernt: wieder als neu anbieten
 			if _, err := tx.ExecContext(ctx, `UPDATE m64_services SET deleted = 0, adopted = ?, vanished_at = '', updated_at = ?, updated_by = ? WHERE host_uid = ? AND key = ?`,
 				state, now, by.json(), hostUID, f.Key); err != nil {
 				return 0, err
@@ -382,11 +398,18 @@ func (s *Store) UpsertDiscovered(ctx context.Context, hostUID string, found []Se
 				now, hostUID, f.Key); err != nil {
 				return 0, err
 			}
-			if state == 1 {
-				if _, err := tx.ExecContext(ctx, `UPDATE m64_services SET adopted = 1, updated_at = ?, updated_by = ? WHERE host_uid = ? AND key = ? AND adopted = 0`,
-					now, by.json(), hostUID, f.Key); err != nil {
+			switch {
+			case state == 1:
+				if _, err := tx.ExecContext(ctx, `UPDATE m64_services SET adopted = 1, updated_at = ?, updated_by = ? WHERE host_uid = ? AND key = ? AND (adopted = 0 OR adopted = -1 AND updated_by = ?)`,
+					now, by.json(), hostUID, f.Key, sys); err != nil {
 					return 0, err
 				}
+			case f.Default && c.adopted == -1 && c.systemBy: // bisher nicht vorgeschlagen, jetzt schon: zu den neuen
+				if _, err := tx.ExecContext(ctx, `UPDATE m64_services SET adopted = 0, updated_at = ?, updated_by = ? WHERE host_uid = ? AND key = ? AND adopted = -1 AND updated_by = ?`,
+					now, sys, hostUID, f.Key, sys); err != nil {
+					return 0, err
+				}
+				added++
 			}
 		}
 	}

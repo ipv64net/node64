@@ -85,3 +85,28 @@ func TestMapWindowsReport(t *testing.T) {
 		t.Fatalf("busy = %v", v)
 	}
 }
+
+// KE2: windows_exporter liefert Vorlagen und Instanzen der Benutzerdienste sowie Trigger-Dienste ungefiltert – sie
+// zaehlen nicht als gestoppt.
+func TestMapWinSvcExporterNoise(t *testing.T) {
+	list := []m64proto.WinService{
+		{Name: "Dhcp", State: "running", StartType: "auto"},
+		{Name: "CDPUserSvc", State: "stopped", StartType: "auto"},                     // Vorlage
+		{Name: "CDPUserSvc_4f2a1", State: "running", StartType: "auto"},               // Instanz
+		{Name: "OneSyncSvc_4F2A1", State: "stopped", StartType: "auto"},               // Instanz ohne Vorlage in der Liste
+		{Name: "FooUserSvc", State: "stopped", StartType: "auto"},                     // unbekannte Vorlage mit Instanz
+		{Name: "FooUserSvc_abcd12", State: "stopped", StartType: "auto"},              // ... und ihre Instanz
+		{Name: "WpnUserService", State: "stopped", StartType: "auto"},                 // Vorlage ohne Instanz (niemand angemeldet)
+		{Name: "DoSvc", State: "stopped", StartType: "auto"},                          // Trigger-Start
+		{Name: "SgrmBroker", State: "stopped", StartType: "auto"},                     // Trigger-Start
+		{Name: "Backup_cafe", Display: "Backup", State: "stopped", StartType: "auto"}, // kein Benutzerdienst
+	}
+	out := mapWinSvc(list)
+	sum := svcBy(out, "winsvc")
+	if v, _ := metric(sum, "stopped"); v != 1 || !strings.Contains(sum.Text, "Backup") {
+		t.Fatalf("Zusammenfassung = %+v", sum)
+	}
+	if d := svcBy(out, "winsvc:FooUserSvc_abcd12"); d == nil || !hasFact(d, "winsvc_stopped") {
+		t.Fatalf("einzeln uebernommen weiter ueberwacht: %+v", d)
+	}
+}

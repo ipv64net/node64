@@ -13,6 +13,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/ipv64net/node64/internal/m64proto"
 )
 
 func TestCheckSDWindows(t *testing.T) {
@@ -173,4 +175,155 @@ func childOf(pid uint32) uint32 {
 		}
 	}
 	return 0
+}
+
+// WI2: der Ordner des aufgeloesten Skripts zaehlt wie local.d - in C:\ProgramData duerfen Benutzer Dateien anlegen
+// (als Vorfahr erlaubt, als Ordner eines Skripts nicht: DLL bzw. Befehl daneben liefe als SYSTEM).
+func TestOpenScriptParentDirWindows(t *testing.T) {
+	pd := os.Getenv("ProgramData")
+	if pd == "" {
+		t.Skip("ProgramData fehlt")
+	}
+	if err := checkAncestors(filepath.Join(pd, "x")); err != nil {
+		t.Skipf("ProgramData als Vorfahr: %v", err)
+	}
+	_, err := openScript(filepath.Join(pd, "m64-gibt-es-nicht.exe"))
+	if err == nil || !strings.Contains(err.Error(), "writable by") {
+		t.Fatalf("Skript direkt in ProgramData: %v", err)
+	}
+	// Systemordner bleiben erlaubt
+	if f, err := openScript(filepath.Join(systemDir(), `System32\whoami.exe`)); err != nil {
+		t.Fatalf("whoami.exe: %v", err)
+	} else {
+		_ = f.Close()
+	}
+}
+
+// WI3: Ausgabe in der OEM-Codepage (cmd.exe schreibt so in die Pipe) wird zu UTF-8; gueltiges UTF-8 bleibt.
+func TestDecodeOutputWindows(t *testing.T) {
+	if cp := oemCP(); cp != 437 && cp != 850 && cp != 858 {
+		t.Skipf("OEM-Codepage %d (Test erwartet 437/850/858)", cp)
+	}
+	oem := []byte("0 m64oem - Gr\x94\xe1e ok\n") // "Groesse" in 437/850
+	if got := string(decodeOutput(oem, false)); got != "0 m64oem - Größe ok\n" {
+		t.Fatalf("OEM: %q", got)
+	}
+	utf := []byte("0 m64 - Größe ok\n")
+	if got := decodeOutput(utf, false); string(got) != string(utf) {
+		t.Fatalf("UTF-8 veraendert: %q", got)
+	}
+	// abgeschnitten mitten im UTF-8-Zeichen: bleibt UTF-8
+	cut := append([]byte("0 a - ok\n0 b - Gr"), "ö"[0])
+	if got := decodeOutput(cut, true); string(got) != string(cut) {
+		t.Fatalf("abgeschnitten: %q", got)
+	}
+
+	// echter Lauf: .bat mit OEM-Text
+	dir := t.TempDir()
+	p := filepath.Join(dir, "oem.bat")
+	if err := os.WriteFile(p, append([]byte("@echo off\r\necho "), append(oem[:len(oem)-1], '\r', '\n')...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := scriptCmd(ctx, nil, p)
+	cmd.Env = localEnv()
+	out := &limitBuf{max: m64proto.LocalMaxBytes}
+	cmd.Stdout = out
+	prepareCmd(cmd)
+	if err := runCmd(cmd); err != nil {
+		t.Fatal(err)
+	}
+	checks, bad := ParseLocal(out.buf.Bytes(), "oem.bat")
+	if bad != 0 || len(checks) != 1 || !strings.Contains(checks[0].Text, "Größe") {
+		t.Fatalf("%q -> %+v", out.buf.Bytes(), checks)
+	}
+}
+
+// WI4: beim Zeitlimit endet auch ein Enkel, dessen Elternprozess schon beendet ist (killTree findet ihn nicht).
+func TestRunCmdJobWindows(t *testing.T) {
+	dir := t.TempDir()
+	waitfor := filepath.Join(systemDir(), `System32\waitfor.exe`)
+	if _, err := os.Stat(waitfor); err != nil {
+		t.Skip("waitfor.exe fehlt")
+	}
+	b := filepath.Join(dir, "b.bat")
+	a := filepath.Join(dir, "a.bat")
+	if err := os.WriteFile(b, []byte("@echo off\r\nstart \"\" /b \""+waitfor+"\" /t 60 m64jobtest\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(a, []byte("@echo off\r\ncmd /d /c \""+b+"\"\r\necho 0 a - ok\r\nping -n 30 127.0.0.1 >nul\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := pidsOf("waitfor.exe")
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	cmd := scriptCmd(ctx, nil, a)
+	cmd.Env = localEnv()
+	out := &limitBuf{max: m64proto.LocalMaxBytes}
+	cmd.Stdout = out
+	prepareCmd(cmd)
+	cmd.WaitDelay = 2 * time.Second
+	found := make(chan []uint32, 1)
+	go func() {
+		var pids []uint32
+		for i := 0; i < 150 && len(pids) == 0; i++ {
+			time.Sleep(20 * time.Millisecond)
+			for p := range pidsOf("waitfor.exe") {
+				if !before[p] {
+					pids = append(pids, p)
+				}
+			}
+		}
+		found <- pids
+	}()
+	start := time.Now()
+	_ = runCmd(cmd)
+	pids := <-found
+	t.Cleanup(func() {
+		for _, p := range pids {
+			if h, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, p); err == nil {
+				_ = windows.TerminateProcess(h, 1)
+				windows.CloseHandle(h)
+			}
+		}
+	})
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("Lauf dauerte %s", d)
+	}
+	if !strings.Contains(out.buf.String(), "0 a - ok") {
+		t.Errorf("Ausgabe %q", out.buf.String())
+	}
+	if len(pids) == 0 {
+		t.Skip("Enkel nicht gefunden")
+	}
+	for _, p := range pids {
+		h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, p)
+		if err != nil {
+			continue // schon weg
+		}
+		ev, _ := windows.WaitForSingleObject(h, 2000)
+		windows.CloseHandle(h)
+		if ev != windows.WAIT_OBJECT_0 {
+			t.Fatalf("Enkel %d laeuft noch", p)
+		}
+	}
+}
+
+// pidsOf liefert die Prozessnummern zu einem Programmnamen.
+func pidsOf(exe string) map[uint32]bool {
+	out := map[uint32]bool{}
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return out
+	}
+	defer windows.CloseHandle(snap)
+	var pe windows.ProcessEntry32
+	pe.Size = uint32(unsafe.Sizeof(pe))
+	for err = windows.Process32First(snap, &pe); err == nil; err = windows.Process32Next(snap, &pe) {
+		if strings.EqualFold(windows.UTF16ToString(pe.ExeFile[:]), exe) {
+			out[pe.ProcessID] = true
+		}
+	}
+	return out
 }

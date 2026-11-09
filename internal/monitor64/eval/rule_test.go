@@ -213,7 +213,7 @@ func TestDefaultsTable(t *testing.T) {
 		{KindIfErrRate, 0.01, 0.1, Up, 5 * time.Minute},
 		{KindFSTrendDays, 7, 2, Down, 0},
 		{KindPrinterSupply, 15, 5, Down, 0},
-		{KindUPSRuntime, 1200, 600, Down, 0},
+		{KindUPSRuntime, -1, 600, Down, 0}, // Warnung = auf Batterie (eigene Zustandsregel)
 		{KindPoEUsed, 85, 95, Up, 5 * time.Minute},
 		{KindTempSystem, 70, 80, Up, 5 * time.Minute},
 	}
@@ -300,7 +300,7 @@ func TestEffectiveJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"warn":1200`) || !strings.Contains(string(b), `"crit":600`) {
+	if !strings.Contains(string(b), `"warn":"off"`) || !strings.Contains(string(b), `"crit":600`) {
 		t.Fatalf("%s", b)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 )
 
 // Probleme im Cluster (Bereich status, Eintraege "problem:<uid>"): das Problem mit seinem Ablauf (Ereignisse je mit
@@ -57,7 +58,7 @@ func (m *Module) problemGet(ctx context.Context, uid string) (json.RawMessage, b
 		return nil, false, err
 	}
 	p.Notified = m.channelListToCluster(ctx, p.Notified)
-	p.Events = m.eventsWhere(ctx, `problem_uid = ? ORDER BY ts, id LIMIT `+itoa(problemEventsMax), uid)
+	p.Events = m.eventsWhere(ctx, `problem_uid = ? ORDER BY ts, id LIMIT `+strconv.Itoa(problemEventsMax), uid)
 	b, err := json.Marshal(p)
 	return b, err == nil, err
 }

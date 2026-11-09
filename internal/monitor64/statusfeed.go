@@ -15,22 +15,31 @@ import (
 // module.StatusFeed Zustand, Balken, Stoerungen und Wartungen der aufgenommenen Hosts bzw. Dienste ab. Nach aussen
 // gehen nur Name und Zustand: keine Werte, Adressen, Texte oder Dienstnamen (ausser beim einzeln aufgenommenen Dienst).
 //
-// Zustand: Host pausiert -> paused; noch keine Runde -> unknown; Wartung -> maintenance; nicht erreichbar ->
-// unreachable; sonst der schlimmste Dienst ohne "nur anzeigen" (Host, wie die Probleme) bzw. der Dienst selbst.
+// Zustand: Host pausiert -> paused; Wartung -> maintenance; noch keine Runde bzw. im Cluster kein Stand der
+// zustaendigen Node (nicht erreichbar, noch nichts gemeldet) -> unknown; nicht erreichbar -> unreachable; sonst der
+// schlimmste Dienst ohne "nur anzeigen" (Host, wie die Probleme) bzw. der Dienst selbst. Im Cluster liefert jede Node
+// denselben Stand: fremd ueberwachte Hosts aus dem abgeglichenen Zustand der zustaendigen Node (idleView).
 //
 // Balken und Stoerungen aus der Problem-Historie (m64_problems, Zustandswechsel aus m64_events): kritisch und nicht
 // erreichbar = gestoert, Warnung und unbekannt = eingeschraenkt. Host-Eintrag: alle Probleme des Hosts; Dienst-Eintrag:
 // die des Dienstes und "nicht erreichbar" des Hosts. Wartungszeit zaehlt nicht (wie bei den Checks), ebenso die Zeit
-// vor dem Anlegen des Hosts.
+// vor dem Anlegen des Hosts und die Zeit, in der er pausiert war (weder gestoert noch beobachtet). Wiederkehrende
+// Fenster ohne Beginn wirken erst ab ihrer letzten Aenderung (nicht rueckwirkend auf die ganze Historie).
 
 var _ module.StatusFeed = (*Module)(nil)
+
+// Obergrenzen der Problem-Historie (Variablen fuer die Tests)
+var (
+	statusMaxProblems     = 50000 // je Anfrage (die Seite rechnet hoechstens alle 30 s)
+	statusMaxProblemsHost = 10000 // je Host (die neuesten)
+)
 
 const (
 	statusSrcHost      = "m64:host:"
 	statusSrcSvc       = "m64:svc:"
-	statusMaxProblems  = 50000 // Obergrenze je Abfrage (die Seite rechnet hoechstens alle 30 s)
-	statusMaxIncidents = 100   // Stoerungen je Quelle (neueste zuerst)
-	statusMaxDays      = 800   // Tage, die ein wiederkehrendes Wartungsfenster hoechstens durchlaeuft
+	statusMaxIncidents = 100 // Stoerungen je Quelle (neueste zuerst)
+	statusMaxDays      = 800 // Tage, die ein wiederkehrendes Wartungsfenster hoechstens durchlaeuft
+	statusMaxKey       = 200 // Laenge eines Dienst-Schluessels in der Quelle (Bytes, wie die Statusseite)
 )
 
 // StatusSourceHost ist die Quelle eines Host-Eintrags auf einer Statusseite.
@@ -46,9 +55,23 @@ func parseStatusSource(s string) (host, key string, ok bool) {
 	}
 	if rest, found := strings.CutPrefix(s, statusSrcSvc); found {
 		uid, key, cut := strings.Cut(rest, "/")
-		return uid, key, cut && validStatusUID(uid) && key != "" && len(key) <= 200
+		return uid, key, cut && validStatusUID(uid) && validStatusKey(key)
 	}
 	return "", "", false
+}
+
+// validStatusKey: Dienst-Schluessel, den die Statusseite annimmt (1-200 Bytes, keine Steuerzeichen; gleiche Pruefung
+// wie healthchecks.validM64Source).
+func validStatusKey(k string) bool {
+	if k == "" || len(k) > statusMaxKey {
+		return false
+	}
+	for i := 0; i < len(k); i++ {
+		if k[i] < 0x20 || k[i] == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func validStatusUID(s string) bool {
@@ -66,8 +89,10 @@ func validStatusUID(s string) bool {
 // statusSvcName ist der Name eines Dienstes in der Auswahl und auf der Seite.
 func statusSvcName(r *ServiceRow) string { return firstNonEmpty(r.Name, r.Key) }
 
-// statusAddable: Dienste, die man einzeln aufnehmen kann (uebernommen, keine Zugaenge).
-func statusAddable(r *ServiceRow) bool { return r.Adopted == 1 && !strings.HasPrefix(r.Key, "access:") }
+// statusAddable: Dienste, die man einzeln aufnehmen kann (uebernommen, keine Zugaenge, Schluessel passt in die Quelle).
+func statusAddable(r *ServiceRow) bool {
+	return r.Adopted == 1 && !strings.HasPrefix(r.Key, "access:") && validStatusKey(r.Key)
+}
 
 // StatusTargets liefert Hosts und ihre Dienste zur Auswahl im Editor der Statusseite.
 func (m *Module) StatusTargets(ctx context.Context) ([]module.StatusTarget, error) {
@@ -87,6 +112,9 @@ func (m *Module) StatusTargets(ctx context.Context) ([]module.StatusTarget, erro
 	}
 	out := make([]module.StatusTarget, 0, len(hosts)+len(rows))
 	for _, h := range hosts {
+		if !validStatusUID(h.UID) { // Quelle waere ungueltig (die Seite liesse sich nicht speichern)
+			continue
+		}
 		out = append(out, module.StatusTarget{Source: StatusSourceHost(h.UID), Host: h.Name, Group: h.Group, Paused: h.Paused})
 		list := byHost[h.UID]
 		sort.SliceStable(list, func(i, j int) bool {
@@ -169,8 +197,29 @@ func spanOverlap(spans []tspan, from, to time.Time) time.Duration {
 	return d
 }
 
+// statusScanSpans liefert die Zeitraeume eines wiederkehrenden Fensters innerhalb des Tages [day, next) minutengenau
+// ueber eval.Window.Active (fuer Tage mit Zeitumstellung: dort fehlen bzw. doppeln sich Uhrzeiten der Wanduhr, und
+// time.Date liefert fuer sie andere Zeitpunkte, als die Bewertung der Runden annimmt).
+func statusScanSpans(r *eval.Recurrence, day, next time.Time, loc *time.Location) []tspan {
+	probe := eval.Window{Hosts: []string{"x"}, Recurring: r}
+	ref := eval.HostRef{ID: "x"}
+	var out []tspan
+	for t := day; t.Before(next); t = t.Add(time.Minute) {
+		if !probe.Active(t, ref, loc) {
+			continue
+		}
+		e := statusEarlier(t.Add(time.Minute), next)
+		if n := len(out); n > 0 && out[n-1].to.Equal(t) {
+			out[n-1].to = e
+		} else {
+			out = append(out, tspan{t, e})
+		}
+	}
+	return out
+}
+
 // statusWindowSpans liefert die Zeitraeume eines Wartungsfensters innerhalb [from, to) (wiederkehrend nach der
-// Wanduhr in loc, wie eval.Window.Active).
+// Wanduhr in loc, wie eval.Window.Active), aufsteigend.
 func statusWindowSpans(w eval.Window, from, to time.Time, loc *time.Location) []tspan {
 	lo, hi := from, to
 	if !w.Start.IsZero() && w.Start.After(lo) {
@@ -190,11 +239,17 @@ func statusWindowSpans(w eval.Window, from, to time.Time, loc *time.Location) []
 	}
 	r := w.Recurring
 	l := lo.In(loc)
-	var out []tspan
+	var out, dst []tspan
 	for i := 0; i < statusMaxDays; i++ {
 		d := time.Date(l.Year(), l.Month(), l.Day()-1+i, 0, 0, 0, 0, loc) // ab dem Vortag (ueber Mitternacht)
 		if !d.Before(hi) {
 			break
+		}
+		next := time.Date(d.Year(), d.Month(), d.Day()+1, 0, 0, 0, 0, loc)
+		_, o0 := d.Zone()
+		_, o1 := next.Zone()
+		if o0 != o1 && next.After(lo) {
+			dst = append(dst, tspan{d, next}) // Zeitumstellung an diesem Tag
 		}
 		if len(r.Days) > 0 && !slices.Contains(r.Days, d.Weekday()) {
 			continue
@@ -214,7 +269,54 @@ func statusWindowSpans(w eval.Window, from, to time.Time, loc *time.Location) []
 			out = append(out, tspan{s, e})
 		}
 	}
-	return out
+	if len(dst) == 0 {
+		return out
+	}
+	// Tage mit Zeitumstellung minutengenau nach der Wanduhr (wie die Runden); Termine, die ueber die Tagesgrenze
+	// reichen, bleiben ein Stueck
+	out = spanSubtract(out, dst)
+	for _, day := range dst {
+		for _, s := range statusScanSpans(r, day.from, day.to, loc) {
+			s.from, s.to = statusLater(s.from, lo), statusEarlier(s.to, hi)
+			if s.to.After(s.from) {
+				out = append(out, s)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].from.Before(out[j].from) })
+	merged := out[:0]
+	for _, s := range out {
+		if n := len(merged); n > 0 && merged[n-1].to.Equal(s.from) && statusDayEdge(dst, s.from) {
+			merged[n-1].to = s.to
+			continue
+		}
+		merged = append(merged, s)
+	}
+	return merged
+}
+
+// statusDayEdge: t ist Beginn oder Ende eines der Tage.
+func statusDayEdge(days []tspan, t time.Time) bool {
+	for _, d := range days {
+		if t.Equal(d.from) || t.Equal(d.to) {
+			return true
+		}
+	}
+	return false
+}
+
+func statusLater(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return b
+	}
+	return a
+}
+
+func statusEarlier(a, b time.Time) time.Time {
+	if a.After(b) {
+		return b
+	}
+	return a
 }
 
 // statusMaintNext liefert den laufenden bzw. naechsten Termin eines Fensters, der vor until beginnt.
@@ -269,16 +371,23 @@ func statusChunks(vals []string, fn func(ph string, args []any) error) error {
 	return nil
 }
 
-// statusProblems laedt die Probleme der Hosts, die [from, now] beruehren, mit ihren Zustandswechseln.
+// statusProblems laedt die Probleme der Hosts, die [from, now] beruehren, mit ihren Zustandswechseln. Bei sehr vielen
+// Problemen bleiben die neuesten (je Host hoechstens statusMaxProblemsHost, insgesamt statusMaxProblems).
 func (m *Module) statusProblems(ctx context.Context, hosts []string, from, now time.Time) (map[string][]*statusProblem, error) {
 	out := map[string][]*statusProblem{}
 	byUID := map[string]*statusProblem{}
 	var uids []string
 	initial := map[string]string{} // Problem -> Zustand ohne Ereignisse (offen: aktuell, geschlossen: schlimmster)
 	err := statusChunks(hosts, func(ph string, args []any) error {
-		rows, err := m.st.Reader().QueryContext(ctx, `SELECT uid, host_uid, service_key, state, worst, opened_at, closed_at FROM m64_problems
-			WHERE deleted = 0 AND host_uid IN (`+ph+`) AND opened_at <= ? AND (closed_at = '' OR closed_at >= ?) ORDER BY opened_at LIMIT ?`,
-			append(args, ts(now), ts(from), statusMaxProblems)...)
+		left := statusMaxProblems - len(byUID)
+		if left <= 0 {
+			return nil
+		}
+		rows, err := m.st.Reader().QueryContext(ctx, `SELECT uid, host_uid, service_key, state, worst, opened_at, closed_at FROM (
+			SELECT uid, host_uid, service_key, state, worst, opened_at, closed_at, ROW_NUMBER() OVER (PARTITION BY host_uid ORDER BY opened_at DESC, id DESC) AS rn
+			FROM m64_problems WHERE deleted = 0 AND host_uid IN (`+ph+`) AND opened_at <= ? AND (closed_at = '' OR closed_at >= ?))
+			WHERE rn <= ? ORDER BY opened_at DESC LIMIT ?`,
+			append(args, ts(now), ts(from), statusMaxProblemsHost, left)...)
 		if err != nil {
 			return err
 		}
@@ -374,7 +483,7 @@ func statusStateOf(h *Host, v *HostView, key string, inMaint bool) string {
 		return module.StatusPaused
 	case inMaint || (v != nil && v.View == eval.ViewMaintenance):
 		return module.StatusMaintenance
-	case v == nil:
+	case statusNoState(v):
 		return module.StatusUnknown
 	case v.View == eval.ViewUnreachable:
 		return module.StatusUnreachable
@@ -396,10 +505,181 @@ func statusStateOf(h *Host, v *HostView, key string, inMaint bool) string {
 	return w.String()
 }
 
-// statusHostData ist, was alle Eintraege eines Hosts teilen (Wartungen).
+// statusNoState: kein verwertbarer Stand - noch keine Runde, im Cluster kein Stand der zustaendigen Node (nicht
+// erreichbar bzw. noch nichts gemeldet; die Ansicht enthaelt dann evtl. noch die alten Dienste) oder eine leere Ansicht.
+// Eine Ansicht "unbekannt" mit Diensten zaehlt nach ihren Diensten (ein Dienst "nur anzeigen" zaehlt beim Host nicht).
+func statusNoState(v *HostView) bool {
+	if v == nil {
+		return true
+	}
+	if c := v.Cluster; c != nil && (c.Note == noteOwnerUnreachable || c.Note == noteNoData) {
+		return true
+	}
+	return v.View == eval.ViewUnknown && len(v.Services) == 0
+}
+
+// statusHostData ist, was alle Eintraege eines Hosts teilen (Wartungen, Pausen).
 type statusHostData struct {
 	maint []tspan
+	off   []tspan // Wartung und Pause (zaehlen nicht als beobachtet)
 	list  []module.StatusMaint
+}
+
+// statusLoad laedt nur die gefragten Hosts und Dienste (jeder Abruf einer oeffentlichen Seite fragt hier an).
+func (m *Module) statusLoad(ctx context.Context, hostUIDs []string, svcWants [][2]string) (map[string]*Host, map[string]*ServiceRow, error) {
+	hosts := map[string]*Host{}
+	err := statusChunks(hostUIDs, func(ph string, args []any) error {
+		rows, err := m.st.Reader().QueryContext(ctx, `SELECT `+hostCols+` FROM m64_hosts WHERE deleted = 0 AND uid IN (`+ph+`)`, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			h, err := scanHost(rows)
+			if err != nil {
+				return err
+			}
+			hosts[h.UID] = h
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	svcs := map[string]*ServiceRow{}
+	const n = 200 // Paare je Abfrage (zwei Platzhalter je Paar)
+	for i := 0; i < len(svcWants); i += n {
+		part := svcWants[i:min(i+n, len(svcWants))]
+		conds := make([]string, len(part))
+		args := make([]any, 0, 2*len(part))
+		for j, p := range part {
+			conds[j] = "(host_uid = ? AND key = ?)"
+			args = append(args, p[0], p[1])
+		}
+		err := func() error {
+			rows, err := m.st.Reader().QueryContext(ctx, `SELECT host_uid, key, name, adopted FROM m64_services WHERE deleted = 0 AND (`+strings.Join(conds, " OR ")+`)`, args...)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				r := &ServiceRow{}
+				if err := rows.Scan(&r.HostUID, &r.Key, &r.Name, &r.Adopted); err != nil {
+					return err
+				}
+				if statusAddable(r) {
+					svcs[r.HostUID+"|"+r.Key] = r
+				}
+			}
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return hosts, svcs, nil
+}
+
+// statusPauses liefert je Host die Zeitraeume, in denen er pausiert war: aus den Host-Ereignissen "pause"/"resume"
+// und, solange er pausiert ist, bis jetzt. Fehlt das Ereignis zum Beginn bzw. Ende, gilt die letzte Aenderung des
+// Hosts (die Pause begann bzw. endete spaetestens dann).
+func (m *Module) statusPauses(ctx context.Context, hosts map[string]*Host, now time.Time) (map[string][]tspan, error) {
+	uids := make([]string, 0, len(hosts))
+	for uid := range hosts {
+		uids = append(uids, uid)
+	}
+	sort.Strings(uids)
+	type ev struct {
+		at    time.Time
+		pause bool
+	}
+	evs := map[string][]ev{}
+	err := statusChunks(uids, func(ph string, args []any) error {
+		rows, err := m.st.Reader().QueryContext(ctx, `SELECT host_uid, ts, kind FROM m64_events
+			WHERE host_uid IN (`+ph+`) AND problem_uid = '' AND kind IN ('pause', 'resume') ORDER BY ts, id`, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var uid, at, kind string
+			if err := rows.Scan(&uid, &at, &kind); err != nil {
+				return err
+			}
+			if t := parseTS(at); !t.IsZero() {
+				evs[uid] = append(evs[uid], ev{t, kind == "pause"})
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]tspan{}
+	for _, uid := range uids {
+		h := hosts[uid]
+		var spans []tspan
+		var start time.Time
+		paused := false
+		for _, e := range evs[uid] {
+			switch {
+			case e.pause && !paused:
+				start, paused = e.at, true
+			case !e.pause && paused:
+				spans, paused = append(spans, tspan{start, e.at}), false
+			}
+		}
+		switch {
+		case h.Paused && paused:
+			spans = append(spans, tspan{start, now})
+		case h.Paused && !h.UpdatedAt.IsZero():
+			spans = append(spans, tspan{h.UpdatedAt, now})
+		case paused && !h.UpdatedAt.IsZero():
+			spans = append(spans, tspan{start, h.UpdatedAt})
+		}
+		if spans = spanUnion(spans); len(spans) > 0 {
+			out[uid] = spans
+		}
+	}
+	return out, nil
+}
+
+// statusHistoryMaint liefert die Wartungsfenster fuer die Historie: wiederkehrende Fenster ohne Beginn wirken erst ab
+// ihrer letzten Aenderung (sonst gaelten sie rueckwirkend fuer die ganze Historie und verdeckten alte Stoerungen).
+func (m *Module) statusHistoryMaint(ctx context.Context, ws []eval.Window, now time.Time) ([]eval.Window, error) {
+	need := false
+	for _, w := range ws {
+		need = need || (w.Recurring != nil && w.Start.IsZero())
+	}
+	if !need {
+		return ws, nil
+	}
+	since := map[string]time.Time{}
+	rows, err := m.st.Reader().QueryContext(ctx, `SELECT uid, updated_at FROM m64_maint WHERE deleted = 0 AND recur != '' AND start_at = ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uid, at string
+		if err := rows.Scan(&uid, &at); err != nil {
+			return nil, err
+		}
+		since[uid] = parseTS(at)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := slices.Clone(ws)
+	for i := range out {
+		if out[i].Recurring != nil && out[i].Start.IsZero() {
+			out[i].Start = now // unbekannt: nicht rueckwirkend
+			if s := since[out[i].ID]; !s.IsZero() && s.Before(now) {
+				out[i].Start = s
+			}
+		}
+	}
+	return out, nil
 }
 
 // StatusSources liefert den Stand der Quellen fuer eine Statusseite (Regeln siehe oben).
@@ -410,6 +690,7 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 	seen := map[string]bool{}
 	hostSet := map[string]bool{}
 	var hostUIDs []string
+	var svcWants [][2]string
 	for _, s := range q.Sources {
 		h, k, ok := parseStatusSource(s)
 		if !ok || seen[s] {
@@ -417,6 +698,9 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 		}
 		seen[s] = true
 		wants = append(wants, want{s, h, k})
+		if k != "" {
+			svcWants = append(svcWants, [2]string{h, k})
+		}
 		if !hostSet[h] {
 			hostSet[h] = true
 			hostUIDs = append(hostUIDs, h)
@@ -429,25 +713,9 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 	if now.IsZero() {
 		now = time.Now()
 	}
-	hostList, err := m.store.Hosts(ctx)
+	hosts, svcs, err := m.statusLoad(ctx, hostUIDs, svcWants)
 	if err != nil {
 		return nil, err
-	}
-	hosts := map[string]*Host{}
-	for _, h := range hostList {
-		if hostSet[h.UID] {
-			hosts[h.UID] = h
-		}
-	}
-	rows, err := m.store.Services(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	svcs := map[string]*ServiceRow{}
-	for _, r := range rows {
-		if hostSet[r.HostUID] && statusAddable(r) {
-			svcs[r.HostUID+"|"+r.Key] = r
-		}
 	}
 	// Zeitraum der Historie: ab dem ersten Balken bzw. dem Beginn der Stoerungsliste
 	var from time.Time
@@ -457,14 +725,22 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 	if !q.History.IsZero() && (from.IsZero() || q.History.Before(from)) {
 		from = q.History
 	}
+	cfg := m.config()
+	loc := m.location()
 	probs := map[string][]*statusProblem{}
+	pauses := map[string][]tspan{}
+	histMaint := cfg.maint
 	if !from.IsZero() && from.Before(now) {
 		if probs, err = m.statusProblems(ctx, hostUIDs, from, now); err != nil {
 			return nil, err
 		}
+		if pauses, err = m.statusPauses(ctx, hosts, now); err != nil {
+			return nil, err
+		}
+		if histMaint, err = m.statusHistoryMaint(ctx, cfg.maint, now); err != nil {
+			return nil, err
+		}
 	}
-	cfg := m.config()
-	loc := m.location()
 	hd := map[string]*statusHostData{}
 	hostData := func(h *Host) *statusHostData {
 		if d := hd[h.UID]; d != nil {
@@ -473,18 +749,23 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 		d := &statusHostData{}
 		ref := hostRef(h)
 		var spans []tspan
-		for _, w := range cfg.maint {
+		if !from.IsZero() {
+			for _, w := range histMaint {
+				if w.Applies(ref) {
+					spans = append(spans, statusWindowSpans(w, from, now, loc)...)
+				}
+			}
+		}
+		for _, w := range cfg.maint { // laufende und kommende Termine wie die Runden (ohne Begrenzung der Historie)
 			if !w.Applies(ref) {
 				continue
-			}
-			if !from.IsZero() {
-				spans = append(spans, statusWindowSpans(w, from, now, loc)...)
 			}
 			if sm, ok := statusMaintNext(w, now, now.Add(q.Ahead), loc); ok {
 				d.list = append(d.list, sm)
 			}
 		}
 		d.maint = spanUnion(spans)
+		d.off = spanUnion(append(slices.Clone(d.maint), pauses[h.UID]...))
 		hd[h.UID] = d
 		return d
 	}
@@ -503,7 +784,8 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 			src.Name = h.Name + " – " + statusSvcName(row)
 		}
 		inMaint, _ := eval.InMaintenance(cfg.maint, now, hostRef(h), loc)
-		src.State = statusStateOf(h, m.statusHostView(h.UID), w.key, inMaint)
+		v := m.statusHostView(h.UID)
+		src.State = statusStateOf(h, v, w.key, inMaint)
 		d := hostData(h)
 		src.Maintenance = append(src.Maintenance, d.list...)
 
@@ -536,11 +818,15 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 		switch src.State {
 		case module.StatusOK:
 			src.Since = lastClosed
-		case module.StatusWarn, module.StatusCrit, module.StatusUnreachable, module.StatusUnknown:
+		case module.StatusWarn, module.StatusCrit, module.StatusUnreachable:
 			src.Since = openSince
+		case module.StatusUnknown:
+			if !statusNoState(v) { // ohne Stand (Cluster) ist nicht bekannt, seit wann
+				src.Since = openSince
+			}
 		}
 		created := h.CreatedAt
-		skip := spanUnion(append([]tspan{{time.Time{}, created}}, d.maint...)) // Wartung und vor dem Anlegen zaehlen nicht
+		skip := spanUnion(append([]tspan{{time.Time{}, created}}, d.off...)) // Wartung, Pause und vor dem Anlegen zaehlen nicht
 		downAll := spanSubtract(spanUnion(downs), skip)
 		warnAll := spanSubtract(spanSubtract(spanUnion(warns), downAll), skip)
 		unreach = spanUnion(unreach)
@@ -557,14 +843,14 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 			var bar module.StatusBar
 			if b.After(a) {
 				bar.Maint = spanOverlap(d.maint, a, b)
-				bar.Observed = b.Sub(a) - bar.Maint
+				bar.Observed = b.Sub(a) - spanOverlap(d.off, a, b)
 				bar.Down = spanOverlap(downAll, a, b)
 				bar.Warn = spanOverlap(warnAll, a, b)
 			}
 			src.Bars = append(src.Bars, bar)
 		}
 
-		// Stoerungen (gestoerte Zeitraeume ohne Wartung), neueste zuerst
+		// Stoerungen (gestoerte Zeitraeume ohne Wartung und Pause), neueste zuerst
 		if !q.History.IsZero() {
 			for i := len(downAll) - 1; i >= 0 && len(src.Incidents) < statusMaxIncidents; i-- {
 				s := downAll[i]

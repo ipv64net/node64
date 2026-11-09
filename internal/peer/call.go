@@ -76,7 +76,9 @@ func (m *Manager) Call(ctx context.Context, nodeID, module, name string, in, out
 	}
 	var raw json.RawMessage
 	if err := m.call(ctx, *x, http.MethodPost, "/peer/v2/call/"+module+"/"+name, in, &raw); err != nil {
-		if err.Error() == "HTTP 404 "+ErrCallUnavailable.Error() || err.Error() == "HTTP 404 " {
+		// 404 mit diesem Text (Modul bzw. Bereich dort aus) oder ohne (aeltere Version ohne den Endpunkt)
+		var se *statusError
+		if errors.As(err, &se) && se.Status == http.StatusNotFound && (se.Msg == ErrCallUnavailable.Error() || se.Msg == "") {
 			return ErrCallUnavailable
 		}
 		return err

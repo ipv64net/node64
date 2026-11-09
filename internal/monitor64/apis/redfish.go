@@ -55,13 +55,14 @@ type Redfish struct {
 	wc  *webClient
 	now func() time.Time
 
-	mu      sync.Mutex
-	storAt  time.Time
-	stor    []model.Service
-	loginMu sync.Mutex // eine Anmeldung zur Zeit (sonst mehrere Sitzungen auf dem BMC)
-	tokMu   sync.Mutex
-	token   string // Sitzung: X-Auth-Token
-	session string // Sitzung: Pfad zum Abmelden
+	mu       sync.Mutex
+	storAt   time.Time
+	stor     []model.Service
+	loginMu  sync.Mutex // eine Anmeldung zur Zeit (sonst mehrere Sitzungen auf dem BMC)
+	loginErr error      // letzte gescheiterte Anmeldung (unter loginMu)
+	tokMu    sync.Mutex
+	token    string // Sitzung: X-Auth-Token
+	session  string // Sitzung: Pfad zum Abmelden
 }
 
 // NewRedfish baut den Sammler (prueft Adresse, Zugangsdaten und Pin; fragt noch nichts ab).
@@ -183,26 +184,38 @@ func (r *Redfish) get(ctx context.Context, path string, out any) error {
 }
 
 // login meldet eine Sitzung an, wenn noch keine besteht bzw. die bisherige (stale) abgelaufen ist; meldet sich
-// inzwischen eine andere Anfrage neu an, gilt deren Sitzung.
+// inzwischen eine andere Anfrage neu an, gilt deren Sitzung. Das alte Token bleibt bis zur erfolgreichen Anmeldung
+// stehen: gleichzeitige Anfragen gehen nie ohne Anmeldung hinaus, sondern warten nach ihrem 401 hier. Scheitert die
+// Neuanmeldung, bekommen die wartenden Anfragen denselben Fehler, statt sich jede fuer sich erneut anzumelden.
 func (r *Redfish) login(ctx context.Context, stale string) error {
 	r.loginMu.Lock()
 	defer r.loginMu.Unlock()
-	if cur := r.tok(); cur != "" && cur != stale {
+	cur := r.tok()
+	switch {
+	case cur != "" && cur != stale:
 		return nil
+	case cur == "" && stale != "": // Neuanmeldung einer anderen Anfrage gescheitert bzw. abgemeldet
+		if r.loginErr != nil {
+			return r.loginErr
+		}
+		return &webError{Kind: errWebAuth, Detail: "Sitzung beendet", Where: "POST SessionService/Sessions"}
 	}
-	r.setTok("", "")
 	body := map[string]string{"UserName": strings.TrimSpace(r.cfg.User), "Password": r.cfg.Password}
-	h, err := r.wc.do(ctx, http.MethodPost, "/redfish/v1/SessionService/Sessions", nil, body, nil)
-	if err != nil {
-		return err
+	// ohne das abgelaufene Token (manche BMCs lehnen eine Anmeldung mit ungueltigem X-Auth-Token ab)
+	h, err := r.wc.do(ctx, http.MethodPost, "/redfish/v1/SessionService/Sessions", http.Header{"X-Auth-Token": nil}, body, nil)
+	if err == nil {
+		tok := strings.TrimSpace(h.Get("X-Auth-Token"))
+		if tok != "" && len(tok) <= 4096 && !strings.ContainsAny(tok, "\r\n") {
+			sess, _ := rfPath(h.Get("Location"))
+			r.loginErr = nil
+			r.setTok(tok, sess)
+			return nil
+		}
+		err = &webError{Kind: errWebResp, Detail: "Anmeldung ohne X-Auth-Token", Where: "POST SessionService/Sessions"}
 	}
-	tok := strings.TrimSpace(h.Get("X-Auth-Token"))
-	if tok == "" || len(tok) > 4096 || strings.ContainsAny(tok, "\r\n") {
-		return &webError{Kind: errWebResp, Detail: "Anmeldung ohne X-Auth-Token", Where: "POST SessionService/Sessions"}
-	}
-	sess, _ := rfPath(h.Get("Location"))
-	r.setTok(tok, sess)
-	return nil
+	r.loginErr = err
+	r.setTok("", "")
+	return err
 }
 
 func (r *Redfish) setTok(tok, sess string) {
@@ -369,7 +382,8 @@ func (r *Redfish) Collect(ctx context.Context) ([]model.Service, error) {
 	for _, p := range sysPaths {
 		var s rfSystem
 		if err := r.get(ctx, p, &s); err != nil {
-			add(p, err, "system")
+			// ohne das System fehlen auch seine Controller, Laufwerke und Volumes (storage liest es nicht)
+			add(p, err, "system", "ctrl:", "disk:", "raid:")
 			continue
 		}
 		systems = append(systems, s)
@@ -585,34 +599,31 @@ func (r *Redfish) chassis(ctx context.Context, path string, add func(string, err
 			psus = append(psus, r.powerSubsystem(ctx, cid, ch.PowerSub.ID, add)...)
 		}
 	}
+	// Schluessel mit Chassis, sobald der BMC mehrere Chassis nennt: das haengt nur an der Liste, nicht daran, welche
+	// Chassis in dieser Runde Werte geliefert haben (sonst wechselte der Schluessel bei einem Teilfehler)
+	multi := len(paths) > 1
 	var out []model.Service
-	out = append(out, rfKeys("temp:", temps)...)
-	out = append(out, rfKeys("fan:", fans)...)
-	out = append(out, rfKeys("psu:", psus)...)
-	if len(powers) == 1 {
-		powers[0].svc.Key = "power"
-		out = append(out, powers[0].svc)
-	} else {
-		for _, p := range powers {
-			p.svc.Key = "power:" + p.chassis
+	out = append(out, rfKeys("temp:", temps, multi)...)
+	out = append(out, rfKeys("fan:", fans, multi)...)
+	out = append(out, rfKeys("psu:", psus, multi)...)
+	for _, p := range powers {
+		p.svc.Key = "power"
+		if multi {
+			p.svc.Key += ":" + p.chassis
 			p.svc.Name += " (" + p.chassis + ")"
-			out = append(out, p.svc)
 		}
+		out = append(out, p.svc)
 	}
 	return out
 }
 
-// rfKeys vergibt die Schluessel: Name des Sensors; kommt ein Name mehrfach vor (mehrere Chassis), mit Chassis davor.
-func rfKeys(prefix string, items []rfItem) []model.Service {
-	count := map[string]int{}
-	for _, it := range items {
-		count[it.name]++
-	}
+// rfKeys vergibt die Schluessel: Name des Sensors; nennt der BMC mehrere Chassis (multi), mit Chassis davor.
+func rfKeys(prefix string, items []rfItem, multi bool) []model.Service {
 	var out []model.Service
 	seen := map[string]bool{}
 	for _, it := range items {
 		k := prefix + it.name
-		if count[it.name] > 1 {
+		if multi {
 			k = prefix + it.chassis + "/" + it.name
 			it.svc.Name += " (" + it.chassis + ")"
 		}
@@ -638,10 +649,11 @@ func rfHealthFacts(s *model.Service, what string, h string) {
 }
 
 // rfTempItem: Temperatur mit den Schwellen des Geraets. Hat das Geraet Schwellen, bewertet Monitor64 nur diese
-// (keine Standard-Regel temp.system, die z. B. fuer CPUs zu niedrig waere); sonst gilt temp.system.
+// (keine Standard-Regel temp.system, die z. B. fuer CPUs zu niedrig waere); sonst gilt temp.system. Ein Sensor ohne
+// Wert (z. B. Server ausgeschaltet) bleibt ein Dienst ohne Messgroesse, sonst hiesse er nachts "verschwunden".
 func rfTempItem(cid, name, member string, rd, warn, crit, fatal optF, st rfStatus) (rfItem, bool) {
 	name = shortText(firstNonEmpty(name, member))
-	if name == "" || st.absent() || (!rd.Set && rfSev(st.Health) == 0) {
+	if name == "" || st.absent() {
 		return rfItem{}, false
 	}
 	s := model.Service{Name: "Temperatur " + name, Kind: "temp", Default: true}
@@ -663,6 +675,9 @@ func rfTempItem(cid, name, member string, rd, warn, crit, fatal optF, st rfStatu
 		case warn.Set && warn.V > 0 && rd.V >= warn.V:
 			s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: fmt.Sprintf("%s %.0f °C (Warnung ab %.0f °C)", name, rd.V, warn.V)})
 		}
+	}
+	if len(s.Metrics) == 0 {
+		parts = append(parts, "kein Messwert")
 	}
 	var th []string
 	if warn.Set && warn.V > 0 {

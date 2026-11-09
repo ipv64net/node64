@@ -86,7 +86,10 @@ func winMem(m *Metrics) *m64proto.Mem {
 	if !ok || total <= 0 {
 		return nil
 	}
-	avail, _ := firstValue(m, "windows_memory_available_bytes", "windows_memory_physical_free_bytes", "windows_os_physical_memory_free_bytes")
+	avail, ok := firstValue(m, "windows_memory_available_bytes", "windows_memory_physical_free_bytes", "windows_os_physical_memory_free_bytes")
+	if !ok { // ohne freien Speicher kein Abschnitt (sonst 0 frei = RAM 100 %); der Teilfehler des Sammlers haelt mem
+		return nil
+	}
 	mem := &m64proto.Mem{Total: u64(total), Available: min(u64(avail), u64(total))}
 	if m.Has("windows_pagefile_limit_bytes") {
 		mem.SwapTotal = u64(sum(m, "windows_pagefile_limit_bytes"))

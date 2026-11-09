@@ -63,7 +63,7 @@ func NewAgentClient(cfg AgentConfig) (*AgentClient, error) {
 	}
 	addr := "push"
 	if cfg.Push != nil {
-		if !ValidPushToken(cfg.PushToken) {
+		if !m64proto.ValidPushToken(cfg.PushToken) {
 			return nil, errors.New("monitor64: invalid push token")
 		}
 		if cfg.Addr != "" {
@@ -91,6 +91,14 @@ func NewAgentClient(cfg AgentConfig) (*AgentClient, error) {
 		cfg.Push.register(cfg.PushToken, c.conn)
 	}
 	return c, nil
+}
+
+// PushToken liefert den Token im Push-Betrieb ("" beim Abfragen).
+func (c *AgentClient) PushToken() string {
+	if c.cfg.Push == nil {
+		return ""
+	}
+	return c.cfg.PushToken
 }
 
 // Info fragt Version, System und Faehigkeiten ab.

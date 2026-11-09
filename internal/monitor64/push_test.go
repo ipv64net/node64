@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/ipv64net/node64/internal/m64proto"
 	"github.com/ipv64net/node64/internal/monitor64/transport"
 )
 
@@ -19,10 +20,10 @@ func TestPushTokenRules(t *testing.T) {
 	if pushToken("push", "kurz", old, false) != old {
 		t.Fatal("old token not kept")
 	}
-	if tok := pushToken("push", "", "", false); !transport.ValidPushToken(tok) {
+	if tok := pushToken("push", "", "", false); !m64proto.ValidPushToken(tok) {
 		t.Fatal("no new token")
 	}
-	if tok := pushToken("push", good, old, true); tok == good || tok == old || !transport.ValidPushToken(tok) {
+	if tok := pushToken("push", good, old, true); tok == good || tok == old || !m64proto.ValidPushToken(tok) {
 		t.Fatal("renew did not create a new token")
 	}
 }

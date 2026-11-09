@@ -479,7 +479,7 @@ func (r *localRunner) runOne(ctx context.Context, sc localScript) ([]m64proto.Lo
 	cmd.Stdin = nil
 	prepareCmd(cmd)
 	cmd.WaitDelay = 2 * time.Second
-	err = cmd.Run()
+	err = runCmd(cmd) // Windows: Job-Objekt (Zeitlimit beendet den ganzen Prozessbaum)
 	var notes []string
 	if ctx.Err() == context.DeadlineExceeded {
 		notes = append(notes, fmt.Sprintf("%s: time limit of %d s exceeded - script stopped", sc.name, m64proto.LocalTimeoutMs/1000))

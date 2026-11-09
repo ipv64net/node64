@@ -3,6 +3,7 @@ package m64bsd
 import (
 	"strings"
 
+	"github.com/ipv64net/node64/internal/m64linux"
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
@@ -49,30 +50,6 @@ func SkipMount(m Mount) bool {
 	return false
 }
 
-// dedupFS behaelt je Geraet nur einen Mount (den kuerzesten Pfad).
-func dedupFS(in []m64proto.FS) []m64proto.FS {
-	idx := map[string]int{}
-	var out []m64proto.FS
-	for _, f := range in {
-		key := f.Device
-		if key == "" {
-			key = "mount:" + f.Mount
-		}
-		if i, ok := idx[key]; ok {
-			if len(f.Mount) < len(out[i].Mount) {
-				out[i] = f
-			}
-			continue
-		}
-		idx[key] = len(out)
-		out = append(out, f)
-		if len(out) >= maxItems {
-			break
-		}
-	}
-	return out
-}
-
 // FSFromStatfs baut die Dateisysteme aus der Mount-Liste und einer statfs-Funktion (nur lokale, ohne Pseudo-FS).
 func FSFromStatfs(mounts []Mount, statfs func(mount string) (StatFS, error)) ([]m64proto.FS, []error) {
 	last := map[string]int{} // letzter Eintrag je Pfad gilt (ueberdeckte Mounts sind nicht erreichbar)
@@ -103,7 +80,7 @@ func FSFromStatfs(mounts []Mount, statfs func(mount string) (StatFS, error)) ([]
 		out = append(out, m64proto.FS{Mount: clip(m.Mount), Device: clip(m.Device), Type: clip(m.Type), Total: st.Total,
 			Used: used, Avail: st.Avail, InodesTotal: st.InodesTotal, InodesFree: st.InodesFree, ReadOnly: m.ReadOnly})
 	}
-	return dedupFS(out), errs
+	return m64linux.DedupFS(out), errs
 }
 
 // statfsValues rechnet die Felder von struct statfs (FreeBSD) in Bytes um. bavail und ffree koennen negativ sein

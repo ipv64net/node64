@@ -12,16 +12,19 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/ipv64net/node64/internal/m64agent"
+	"github.com/ipv64net/node64/internal/m64proto"
 )
 
 func TestPushProtocol(t *testing.T) {
-	if PushMagic != m64agent.PushMagic || DefaultPushPort != m64agent.DefaultPushPort || pushAck != 'W' || pushStart != 'S' {
+	// beide Seiten nutzen die Werte aus m64proto
+	if m64proto.PushMagic != m64agent.PushMagic || m64proto.DefaultPushPort != m64agent.DefaultPushPort || pushAck != 'W' || pushStart != 'S' ||
+		pushHelloMax != m64proto.PushHelloMax {
 		t.Fatal("protocol constants differ between node and agent")
 	}
 	seen := map[string]bool{}
 	for range 50 {
 		tok := NewPushToken()
-		if len(tok) != 26 || !ValidPushToken(tok) || !m64agent.ValidPushToken(tok) || seen[tok] {
+		if len(tok) != 26 || !m64proto.ValidPushToken(tok) || !m64agent.ValidPushToken(tok) || seen[tok] {
 			t.Fatalf("token %q", tok)
 		}
 		seen[tok] = true
@@ -32,16 +35,16 @@ func TestPushProtocol(t *testing.T) {
 		line string
 		ok   bool
 	}{
-		{PushMagic + " " + tok + " " + fp, true},
-		{PushMagic + " " + tok + " " + fp + " ", false},
-		{PushMagic + "  " + tok + " " + fp, false},
+		{m64proto.PushMagic + " " + tok + " " + fp, true},
+		{m64proto.PushMagic + " " + tok + " " + fp + " ", false},
+		{m64proto.PushMagic + "  " + tok + " " + fp, false},
 		{"M64PUSH2 " + tok + " " + fp, false},
-		{PushMagic + " " + strings.ToUpper(tok) + " " + fp, false},
-		{PushMagic + " short " + fp, false},
-		{PushMagic + " " + tok + " " + fp[:49], false},
-		{PushMagic + " " + tok + " MD5:" + fp[4:], false},
-		{PushMagic + " " + tok + " " + fp[:49] + "=", false},
-		{PushMagic + " " + tok, false},
+		{m64proto.PushMagic + " " + strings.ToUpper(tok) + " " + fp, false},
+		{m64proto.PushMagic + " short " + fp, false},
+		{m64proto.PushMagic + " " + tok + " " + fp[:49], false},
+		{m64proto.PushMagic + " " + tok + " MD5:" + fp[4:], false},
+		{m64proto.PushMagic + " " + tok + " " + fp[:49] + "=", false},
+		{m64proto.PushMagic + " " + tok, false},
 		{"", false},
 	} {
 		gt, gf, ok := parseHello(tc.line)
@@ -106,14 +109,14 @@ func rawPush(t *testing.T, addr, hello string) (net.Conn, bool) {
 }
 
 func helloFor(token string, s ssh.Signer) string {
-	return PushMagic + " " + token + " " + Fingerprint(s.PublicKey()) + "\n"
+	return m64proto.PushMagic + " " + token + " " + Fingerprint(s.PublicKey()) + "\n"
 }
 
 // rogueAgent meldet sich mit token und dem angekuendigten Fingerabdruck claim, zeigt beim Handshake aber den
 // eigenen Schluessel hk (z. B. kopierter Fingerabdruck eines fremden Agents).
 func rogueAgent(t *testing.T, addr, token, claim string, hk ssh.Signer) {
 	t.Helper()
-	c, ok := rawPush(t, addr, PushMagic+" "+token+" "+claim+"\n")
+	c, ok := rawPush(t, addr, m64proto.PushMagic+" "+token+" "+claim+"\n")
 	if !ok {
 		t.Fatal("rogue connection not accepted")
 	}
@@ -247,11 +250,18 @@ func TestPushCopiedFingerprint(t *testing.T) {
 	rogueAgent(t, addr2, token2, legit, rogue)
 	_, err = c2.Info(ctx(t))
 	var hk *HostKeyError
-	if !errors.As(err, &hk) || hk.Got != Fingerprint(rogue.PublicKey()) {
+	if !errors.Is(err, ErrPushForeignKey) || errors.As(err, &hk) { // kein "neuen uebernehmen" fuer einen Luegner
 		t.Fatalf("err = %v", err)
 	}
 	if c2.HostKey() != legit {
 		t.Fatalf("host key changed to %q", c2.HostKey())
+	}
+	// Netz fuer den Zugang gesperrt: die naechste Verbindung von dort wird nicht angenommen, der Fehler bleibt
+	if _, ok := rawPush(t, addr2, m64proto.PushMagic+" "+token2+" "+legit+"\n"); ok {
+		t.Fatal("blocked network accepted after a foreign key")
+	}
+	if _, err := c2.Info(ctx(t)); !errors.Is(err, ErrPushForeignKey) {
+		t.Fatalf("err later = %v", err)
 	}
 }
 
@@ -282,7 +292,7 @@ func TestPushHelloRefused(t *testing.T) {
 		helloFor(NewPushToken(), s), // unbekannt
 		"GET / HTTP/1.1\r\n\r\n",
 		strings.Repeat("A", 400),
-		PushMagic + " " + token + " " + Fingerprint(s.PublicKey()) + "\r\n",
+		m64proto.PushMagic + " " + token + " " + Fingerprint(s.PublicKey()) + "\r\n",
 		"", // nichts: Zeitlimit
 	} {
 		c, ok := rawPush(t, addr, hello)
@@ -393,7 +403,10 @@ func TestPushLimits(t *testing.T) {
 	}
 	waitFor(t, "two parked", func() bool { return l.Stats().Parked == pushParkedPerNetToken })
 
-	// je Token hoechstens pushParkedPerToken (verschiedene Netze direkt ueber park)
+	// je Token hoechstens pushParkedPerToken (verschiedene, bestaetigte Netze direkt ueber park)
+	for i := range pushParkedPerToken + 2 {
+		l.handshakeOK(token, netip4(i))
+	}
 	for i := range pushParkedPerToken + 2 {
 		a, b := net.Pipe()
 		t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
@@ -414,7 +427,7 @@ func isTimeout(err error) bool {
 
 // Wartende Verbindungen: Agent weg -> verworfen; zu alt -> geschlossen; Zugang abgemeldet -> geschlossen.
 func TestPushParkedLifecycle(t *testing.T) {
-	l, addr := startPush(t, PushConfig{ParkMax: 300 * time.Millisecond}, nil)
+	l, addr := startPush(t, PushConfig{ParkMax: 300 * time.Millisecond}, func(l *PushListener) { l.boxGrace = 200 * time.Millisecond })
 	s := newSigner(t)
 	token := NewPushToken()
 	c := pushClient(t, l, token, s, "", nil)
@@ -444,6 +457,9 @@ func TestPushParkedLifecycle(t *testing.T) {
 	e, _ := rawPush(t, addr, helloFor(token, s))
 	waitFor(t, "parked", func() bool { return l.Waiting(token) })
 	_ = c.Close()
+	if st := l.Stats(); st.Tokens != 1 || st.Parked != 1 { // Karenz: Anmeldung und wartende Verbindung bleiben
+		t.Fatalf("stats right after close %+v", st)
+	}
 	_ = e.SetReadDeadline(time.Now().Add(3 * time.Second))
 	if _, err := e.Read(make([]byte, 1)); err == nil || isTimeout(err) {
 		t.Fatalf("connection of a removed access not closed: %v", err)
@@ -531,18 +547,26 @@ func TestPushPool(t *testing.T) {
 	_, old := l.boxes[t1]
 	nb := l.boxes[t2]
 	l.mu.Unlock()
-	if old || nb == nil || nb.owner != b.conn {
-		t.Fatal("registration wrong after replacement")
+	if !old || nb == nil || len(nb.owners) != 1 || !hasOwner(l, t2, b.conn) || hasOwner(l, t1, a.conn) {
+		t.Fatal("registration wrong after replacement") // alter Token: Anmeldung ohne Client in der Karenz
 	}
 	// gleicher Token, neuer Client (z. B. anderer Schluessel): Anmeldung bleibt beim neuen
 	cfg.Signer = newSigner(t)
 	c, _ := p.Agent("h1", cfg)
-	l.mu.Lock()
-	nb = l.boxes[t2]
-	l.mu.Unlock()
-	if nb == nil || nb.owner != c.conn {
+	if !hasOwner(l, t2, c.conn) || hasOwner(l, t2, b.conn) {
 		t.Fatal("old client removed the registration of the new one")
 	}
+}
+
+func hasOwner(l *PushListener, token string, c *conn) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b := l.boxes[token]
+	if b == nil {
+		return false
+	}
+	_, ok := b.owners[c]
+	return ok
 }
 
 // probeStale: antwortet die alte Verbindung nicht auf ein Keepalive, wird sie geschlossen; antwortet sie, bleibt sie.

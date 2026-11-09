@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
@@ -24,6 +25,7 @@ import (
 //
 //	STARTTLS                 wenn upsd es anbietet (TLS "" ) bzw. Pflicht (TLS "require" oder Pin gesetzt)
 //	USERNAME/PASSWORD        nur wenn eingetragen (zum Lesen braucht upsd keine Anmeldung)
+//	                         TLS auto ohne STARTTLS: ohne Anmeldung (kein Passwort im Klartext)
 //	LIST UPS                 alle USVs dieses upsd
 //	LIST VAR <ups>           Variablen je USV -> Dienst ups:<name>
 //	LOGOUT
@@ -38,6 +40,7 @@ const (
 	nutDefaultPort = "3493"
 	nutMaxLine     = 8 << 10 // laengste Zeile
 	nutMaxLines    = 50000   // Zeilen je Runde hoechstens
+	nutMaxBytes    = 4 << 20 // Bytes je Runde hoechstens (sonst bis nutMaxLines x nutMaxLine im Speicher)
 	nutMaxUPS      = 64      // USVs je upsd
 	nutMaxVars     = 2000    // Variablen je USV
 	nutDialTimeout = 5 * time.Second
@@ -47,7 +50,7 @@ const (
 
 // Modi fuer NUTConfig.TLS.
 const (
-	NUTTLSAuto    = ""        // STARTTLS, wenn upsd es anbietet (sonst unverschluesselt)
+	NUTTLSAuto    = ""        // STARTTLS, wenn upsd es anbietet (sonst unverschluesselt und ohne Anmeldung)
 	NUTTLSOff     = "off"     // nie
 	NUTTLSRequire = "require" // Pflicht (auch mit Pin)
 )
@@ -73,6 +76,9 @@ type NUT struct {
 	pin   string
 	roots *x509.CertPool // nil = System-CA (Tests)
 	mu    sync.Mutex
+	// tlsSeen: upsd hat schon einmal STARTTLS angenommen; lehnt er es danach ab (Modus auto), ist das ein Fehler
+	// statt eines stillen Wechsels auf Klartext (Downgrade durch einen Angreifer im Netz)
+	tlsSeen atomic.Bool
 }
 
 // NewNUT prueft Adresse, Namen, Pin und Zugangsdaten (fragt noch nichts ab).
@@ -157,10 +163,12 @@ func (n *NUT) Queries() []string {
 
 // nutConn ist eine Sitzung mit upsd.
 type nutConn struct {
-	c     net.Conn
-	r     *bufio.Reader
-	lines int
-	tls   bool
+	c       net.Conn
+	r       *bufio.Reader
+	lines   int
+	bytes   int
+	tls     bool
+	noLogin bool // Modus auto ohne STARTTLS: Anmeldung weggelassen
 }
 
 func (c *nutConn) send(cmd string) error {
@@ -168,7 +176,7 @@ func (c *nutConn) send(cmd string) error {
 	return err
 }
 
-// line liest eine Zeile (ohne Zeilenende); zu lange Zeilen und zu viele Zeilen sind Fehler.
+// line liest eine Zeile (ohne Zeilenende); zu lange Zeilen, zu viele Zeilen und zu viele Bytes je Runde sind Fehler.
 func (c *nutConn) line() (string, error) {
 	c.lines++
 	if c.lines > nutMaxLines {
@@ -180,6 +188,10 @@ func (c *nutConn) line() (string, error) {
 	}
 	if err != nil {
 		return "", err
+	}
+	c.bytes += len(b)
+	if c.bytes > nutMaxBytes {
+		return "", errors.New("Antwort zu groß")
 	}
 	return strings.TrimRight(string(b), "\r\n"), nil
 }
@@ -323,15 +335,20 @@ func (n *NUT) open(ctx context.Context) (*nutConn, TestResult, error) {
 				return nil, res, errors.New(r.Error)
 			}
 			c.c, c.r, c.tls = tc, bufio.NewReaderSize(tc, nutMaxLine), true
+			n.tlsSeen.Store(true)
+		case errors.As(err, &ne) && !need && n.tlsSeen.Load():
+			return fail(fmt.Errorf("STARTTLS: %w – upsd hat bisher TLS gesprochen; bietet er es nicht mehr an, im Zugang TLS auf aus stellen", err))
 		case errors.As(err, &ne) && !need:
-			// upsd ohne TLS (nicht eingerichtet bzw. nicht gebaut): unverschluesselt weiter
+			// upsd ohne TLS (nicht eingerichtet bzw. nicht gebaut): unverschluesselt weiter, aber ohne Anmeldung –
+			// das Passwort geht nur bei ausdruecklich abgeschaltetem TLS im Klartext (zum Lesen ist keine noetig)
+			c.noLogin = true
 		case errors.As(err, &ne):
 			return fail(fmt.Errorf("STARTTLS: %w", err))
 		default:
 			return fail(webClassify(err, n.addr))
 		}
 	}
-	if u := strings.TrimSpace(n.cfg.User); u != "" {
+	if u := strings.TrimSpace(n.cfg.User); u != "" && !c.noLogin {
 		if _, err := c.cmd("USERNAME " + nutQuote(u)); err != nil {
 			_ = c.c.Close()
 			return nil, res, fmt.Errorf("USERNAME: %w", err)
@@ -474,9 +491,12 @@ func (n *NUT) Test(ctx context.Context) TestResult {
 		warn = append(warn, pe.Error())
 	}
 	if !c.tls {
-		if n.cfg.Password != "" {
+		switch {
+		case c.noLogin && n.cfg.User != "":
+			warn = append(warn, "unverschlüsselt (upsd ohne STARTTLS) – Anmeldung weggelassen, damit das Passwort nicht im Klartext durchs Netz geht (zum Lesen nicht nötig)")
+		case n.cfg.Password != "":
 			warn = append(warn, "Passwort geht unverschlüsselt an upsd (kein STARTTLS) – zum Lesen braucht upsd keine Anmeldung")
-		} else {
+		default:
 			warn = append(warn, "unverschlüsselt (upsd ohne STARTTLS)")
 		}
 	}

@@ -1,7 +1,11 @@
 # Monitor64-Agent installieren (Windows 10/11, Server 2016 und neuer, amd64). Den Befehl mit dem Schluessel der Node
 # zeigt Node64 im Assistenten "Host hinzufuegen"; in einer PowerShell als Administrator:
 #
-#   & ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "ssh-ed25519 AAAA... node64@nas"
+#   [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor 3072; & ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "ssh-ed25519 AAAA... node64@nas"
+#
+# Der Teil vor dem Semikolon schaltet TLS 1.2 ein (3072 = Tls12), bevor irm dieses Skript laedt: Windows PowerShell
+# 5.1 auf Server 2016 und aelteren Windows-10-Staenden spricht sonst nur TLS 1.0/1.1, und der Abruf scheitert an
+# Servern, die nur TLS 1.2 und neuer anbieten - die Umschaltung weiter unten im Skript kaeme dafuer zu spaet.
 #
 # Optionen: -Key "<oeffentlicher Schluessel>" (Pflicht), -Port 6465, -Base <URL> (Ordner mit den Dateien, Standard
 # https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
@@ -58,7 +62,8 @@ if ($Base -like 'https://*') {
 }
 if (-not $Base.EndsWith('/')) { $Base += '/' }
 
-# Windows PowerShell 5.1 auf aelteren Systemen spricht sonst nur TLS 1.0
+# Windows PowerShell 5.1 auf aelteren Systemen spricht sonst nur TLS 1.0 (fuer die Downloads, auch wenn das Skript
+# ohne die Zeile aus dem Kopf geladen wurde)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 # Fetch laedt eine URL in eine Datei: Zeitlimits (Verbindung 10 s, Lesen 300 s), hoechstens 5 Umleitungen, bei HTTPS

@@ -53,13 +53,13 @@ type StatusSource struct {
 	State       string           // Status* (siehe oben)
 	Since       time.Time        // seit wann der Zustand gilt (leer = unbekannt)
 	Bars        []StatusBar      // je Balken der Anfrage
-	Incidents   []StatusIncident // Stoerungen (kritisch bzw. nicht erreichbar, ohne Wartung), neueste zuerst
+	Incidents   []StatusIncident // Stoerungen (kritisch bzw. nicht erreichbar, ohne Wartung und Pause), neueste zuerst
 	Maintenance []StatusMaint    // laufende und geplante Wartungen (je Fenster der naechste Termin)
 }
 
 // StatusBar sind die Zeiten eines Balkens.
 type StatusBar struct {
-	Observed time.Duration // beobachtete Zeit (nach dem Anlegen, ohne Wartung)
+	Observed time.Duration // beobachtete Zeit (nach dem Anlegen, ohne Wartung und Pause)
 	Down     time.Duration // davon gestoert (kritisch, nicht erreichbar)
 	Warn     time.Duration // davon eingeschraenkt (Warnung, unbekannt), ohne die gestoerte Zeit
 	Maint    time.Duration // Wartung im Balken

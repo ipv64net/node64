@@ -24,6 +24,11 @@
   bei Bedarf); Auswahl „Verbindung“ im Assistenten mit Installationsbefehl.
 - Cluster-Oberfläche: „überwacht von“, bevorzugte und Ersatz-Nodes je Host mit Erreichbarkeitsprüfung, Karte
   Cluster mit Schlüsselwechsel, Lücken-Hinweis in Diagrammen.
+- Nachbesserungen aus dem Code-Review Phase 2–4: Push-Betrieb robuster (Test zerstört die Anmeldung nicht mehr, keine
+  Übernahme durch Token-Inhaber, Port-Wechsel sicher), Cluster (ausgesetzte Nodes, Schlüsselwechsel ohne Aussperren,
+  eigene Kanäle bleiben, Altersgrenzen), Traps (Ratenbegrenzung je Absender, v3-Zeitfenster, Traps im Cluster),
+  Windows-Installation (vorhandener Ordner, Skript-Ordner, Job-Objekt), USV-Restlaufzeit nur auf Batterie,
+  Statusseiten (Unbekannt, Pausen, wiederkehrende Wartung), nicht vorgeschlagene Dienste übernehmbar.
 - Nachbesserungen aus dem Code-Review: gewollt fehlende Messwerte (gestoppte VM, schlafende Platte) bleiben OK,
   Erinnerungen gehen nach der Ruhezeit nicht verloren, keine doppelten Meldungen an Standardkanäle,
   ZFS-Gerätefehler an ONLINE-Pools, Proxmox-Cluster-Dienste von einer überwachten Node, hängende VMs auch bei

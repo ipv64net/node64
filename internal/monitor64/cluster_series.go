@@ -28,7 +28,15 @@ const (
 
 	seriesCallLimit = 15 * time.Second
 	maxSeriesKeys   = 16
+	reachParallel   = 8 // Zugaenge eines Hosts, die eine Node zugleich testet
 )
+
+// reachLimit: hoechstens so lange dauert "von allen Nodes testen" (eigene Pruefung und Anfragen nebeneinander, je
+// Zugang testTimeout); deutlich unter dem Schreib-Zeitlimit des Webservers (60 s).
+var reachLimit = testTimeout + 10*time.Second
+
+// reachTest testet einen Zugang (Variable fuer Tests).
+var reachTest = func(m *Module, ctx context.Context, h *Host, a Access) testResult { return m.testAccess(ctx, h, a) }
 
 type seriesReq struct {
 	Host   string   `json:"host"`
@@ -98,17 +106,21 @@ func (m *Module) HandleClusterCall(ctx context.Context, from, name string, body 
 			}
 		}
 		return map[string]bool{"ok": true}, nil
+	case callTrap: // Trap an eine nicht zustaendige Node (traps_cluster.go)
+		return m.handleTrapCall(ctx, from, body)
 	case callReach:
 		var in hostReq
 		if err := json.Unmarshal(body, &in); err != nil || !reUID.MatchString(in.Host) {
 			return nil, errBad("host")
 		}
-		return m.reachHere(ctx, in.Host)
+		cctx, cancel := context.WithTimeout(ctx, testTimeout+2*time.Second) // Antwort vor dem Zeitlimit der fragenden Node
+		defer cancel()
+		return m.reachHere(cctx, in.Host)
 	}
 	return nil, errBad("call")
 }
 
-// reachHere testet die Zugaenge eines Hosts von dieser Node aus.
+// reachHere testet die Zugaenge eines Hosts von dieser Node aus (nebeneinander, je Zugang testTimeout).
 func (m *Module) reachHere(ctx context.Context, hostUID string) ([]reachResult, error) {
 	h, err := m.store.Host(ctx, hostUID)
 	if err != nil {
@@ -119,6 +131,8 @@ func (m *Module) reachHere(ctx context.Context, hostUID string) ([]reachResult, 
 		return nil, err
 	}
 	out := []reachResult{}
+	var todo []int
+	var rows []*Access
 	for _, a := range accs {
 		if !a.Enabled {
 			continue
@@ -126,15 +140,29 @@ func (m *Module) reachHere(ctx context.Context, hostUID string) ([]reachResult, 
 		r := reachResult{Access: a.UID, Type: a.Type}
 		var cfg accessConfig
 		_ = json.Unmarshal(a.Config, &cfg)
-		if a.Type == "agent" && cfg.Mode == "push" {
-			r.Skip = true
-			out = append(out, r)
-			continue
+		r.Skip = a.Type == "agent" && cfg.Mode == "push"
+		if !r.Skip {
+			todo, rows = append(todo, len(out)), append(rows, a)
 		}
-		res := m.testAccess(ctx, h, *a)
-		r.OK, r.Error, r.Ms = res.OK, res.Error, res.Ms
 		out = append(out, r)
 	}
+	sem := make(chan struct{}, reachParallel)
+	var wg sync.WaitGroup
+	for k, i := range todo {
+		a := rows[k]
+		wg.Go(func() {
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				out[i].Error = ctx.Err().Error()
+				return
+			}
+			defer func() { <-sem }()
+			res := reachTest(m, ctx, h, *a)
+			out[i].OK, out[i].Error, out[i].Ms = res.OK, res.Error, res.Ms
+		})
+	}
+	wg.Wait()
 	return out, nil
 }
 

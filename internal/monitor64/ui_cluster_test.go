@@ -117,6 +117,45 @@ func TestClusterPagesWithoutCluster(t *testing.T) {
 	}
 }
 
+// UI3: ohne aktiven Cluster (z. B. nach dem Entfernen einer Node) bleibt der Schluessel-Teil der Karte, solange es
+// einen Cluster-Schluessel, alte Schluessel oder offene Umstellungen gibt; Mitglieder und Mehrheit entfallen.
+func TestClusterCardKeysWithoutCluster(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	if c := e.m.clusterCardOf(ctx); c != nil {
+		t.Fatalf("card without cluster and keys: %+v", c)
+	}
+	if err := e.m.RotateKey(ctx); err != nil {
+		t.Fatal(err)
+	}
+	c := e.m.clusterCardOf(ctx)
+	if c == nil || c.Active || c.Key == nil || !c.Key.Cluster {
+		t.Fatalf("card with cluster key: %+v", c)
+	}
+	body := e.do("GET", "/monitor64/settings", nil).Body.String()
+	mustContain(t, "settings", body, `id="m64-cluster"`, `id="m64-cl-inactive"`, "monitor64.cluster.inactive_keys", `id="m64-cl-key"`, `id="m64-cl-rotate"`, `id="m64-cl-pending"`,
+		`"cluster":{"active":false`, `"cluster":true`)
+	for _, bad := range []string{`id="m64-cl-majority"`, `id="m64-cl-nodes"`, "monitor64.cluster.card_hint"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("settings without cluster: unexpected %s", bad)
+		}
+	}
+	// nur offene Umstellung (eigener Schluessel): Karte bleibt
+	if err := e.m.st.SetSetting(ctx, setKeyCluster, ""); err != nil {
+		t.Fatal(err)
+	}
+	_ = e.m.st.SetSetting(ctx, setOldKeys, "[]")
+	if c := e.m.clusterCardOf(ctx); c != nil {
+		t.Fatalf("card with own key only: %+v", c.Key)
+	}
+	if _, err := e.m.st.Writer().ExecContext(ctx, `INSERT INTO m64_keypending (access_uid, host_uid, type, target_fp, created_at) VALUES ('acc1', 'h1', 'agent', 'SHA256:x', ?)`, tsNow()); err != nil {
+		t.Fatal(err)
+	}
+	if c := e.m.clusterCardOf(ctx); c == nil || len(c.Key.Pending) != 1 {
+		t.Fatalf("card with pending switch: %+v", c)
+	}
+}
+
 // API der Oberflaeche: Hinweise je Host, Zustaendigkeit eines Hosts, bevorzugte Node und Ersatz-Nodes setzen.
 func TestClusterUIAPI(t *testing.T) {
 	e, own, foreign := clusterEnv(t)

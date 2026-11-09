@@ -45,7 +45,8 @@ const (
 	profileEvery        = 60 * time.Minute // Profile neu waehlen
 	counterTTL          = 60 * time.Minute // Zaehlerstaende ohne Aktualisierung vergessen
 	maxPartErrors       = 5
-	maxCustom           = 100 // eigene OIDs je Zugang
+	maxCustom           = 100  // eigene OIDs je Zugang
+	maxSeenUp           = 8192 // gemerkte Ports, die schon verbunden waren
 )
 
 // Secret enthaelt die Geheimnisse eines SNMP-Zugangs (im Kern verschluesselt als ein Text, siehe String/ParseSecret).
@@ -138,11 +139,27 @@ func New(cfg Config) (*Collector, error) {
 	}
 	c := &Collector{cfg: cfg, now: time.Now, counters: map[string]ctr{}, seenUp: map[string]bool{}, maxSpeed: map[string]float64{},
 		absent: map[string]time.Time{}, portKeys: map[int]string{}}
-	for _, k := range cfg.SeenUp {
-		c.seenUp[k] = true
-	}
+	c.addSeenUp(cfg.SeenUp)
 	c.dial = c.dialGoSNMP
 	return c, nil
+}
+
+// AddSeenUp uebernimmt Ports, die schon einmal verbunden waren (vom Kern ueber Neustarts gemerkt, siehe SeenUp).
+func (c *Collector) AddSeenUp(keys []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.addSeenUp(keys)
+}
+
+func (c *Collector) addSeenUp(keys []string) {
+	for _, k := range keys {
+		if len(c.seenUp) >= maxSeenUp {
+			return
+		}
+		if strings.HasPrefix(k, "if:") && len(k) <= maxKeyPartLen+32 {
+			c.seenUp[k] = true
+		}
+	}
 }
 
 // normalize setzt Standardwerte und prueft die Felder.
@@ -456,10 +473,12 @@ func (c *Collector) markAbsent(group string, now time.Time, absent bool) {
 type round struct {
 	ctx  context.Context
 	c    conn
-	now  time.Time
+	now  time.Time // Beginn der Runde
+	at   time.Time // Messzeitpunkt der zuletzt gelesenen Werte (fuer Raten; Abfragen dauern unterschiedlich lange)
 	part *partial
 	sys  sysInfo
 	out  []model.Service
+	ifOK bool // Portstatus (IF-MIB) in dieser Runde gelesen
 }
 
 // Collect ist eine Abfragerunde (nicht gleichzeitig mit sich selbst aufrufen).
@@ -476,7 +495,8 @@ func (c *Collector) collect(ctx context.Context) ([]model.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &round{ctx: ctx, c: cn, now: c.now(), part: &partial{scrub: c.scrub}}
+	now := c.now()
+	r := &round{ctx: ctx, c: cn, now: now, at: now, part: &partial{scrub: c.scrub}}
 	si, err := c.querySystem(r)
 	if err != nil {
 		c.resetConn() // v3: beim naechsten Mal neu erkennen (Engine-ID/Boots)

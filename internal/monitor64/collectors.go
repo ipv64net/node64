@@ -31,6 +31,10 @@ const (
 	slowStaleAfter = 3               // SSH: langsame Werte nach so vielen verpassten Intervallen verwerfen
 )
 
+// pushReleaseGrace: so lange bleibt der Client eines Push-Zugangs nach dem Schliessen seines Sammlers im Pool
+// (ReloadHost baut den Sammler sofort neu und uebernimmt ihn samt offener Verbindung des Agents).
+var pushReleaseGrace = time.Minute
+
 // slowTimeout: Zeitlimit des langsamen SSH-Laufs (SMART, Updates), getrennt von der Abfragerunde.
 var slowTimeout = 5 * time.Minute
 
@@ -101,7 +105,7 @@ type accessConfig struct {
 	API     string `json:"api,omitempty"`     // TrueNAS: "" (automatisch), "jsonrpc", "rest"
 	Session bool   `json:"session,omitempty"` // Redfish: Sitzung statt Basic-Auth
 	Mode    string `json:"mode,omitempty"`    // Agent: "" = Node fragt ab, "push" = Agent verbindet sich (NAT/VPS)
-	Token   string `json:"token,omitempty"`   // Push: Wegweiser zum Zugang (serverseitig erzeugt, kein Geheimnis)
+	Token   string `json:"token,omitempty"`   // Push: Wegweiser zum Zugang (serverseitig erzeugt; gibt keinen Zugriff, aber wie ein Geheimnis behandeln)
 	// Prometheus: eigene Metriken (beliebige Exporter)
 	Metrics []promscrape.CustomMetric `json:"metrics,omitempty"`
 	// SNMP (Port und User = v3-Benutzer wie oben; Community bzw. v3-Passwoerter im Secret als snmp.Secret-JSON)
@@ -159,6 +163,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 				return nil, transport.ErrClosed
 			}
 			ac = transport.AgentConfig{Addr: h.Address, Signer: signer, Extra: extra, OnHostKey: onKey, Push: pl, PushToken: cfg.Token}
+			ref.push = true
 		}
 		if _, err := ref.agent(ac); err != nil {
 			return nil, err
@@ -200,10 +205,14 @@ func withReserve(ctx context.Context) (context.Context, context.CancelFunc) {
 
 // poolRef holt den Client eines Zugangs in jeder Runde aus dem Pool. Damit zaehlt jede Runde als Nutzung, ein
 // verworfener Client wird neu gebaut, und ein per TOFU gelernter Hostschluessel haelt den Client. close entfernt
-// den Eintrag, damit ReloadHost bzw. "neuen uebernehmen" wirklich einen neuen Client bauen.
+// den Eintrag, damit ReloadHost bzw. "neuen uebernehmen" wirklich einen neuen Client bauen. Ausnahme Push: der
+// Client bleibt pushReleaseGrace (Pool.Release); der neue Sammler uebernimmt ihn bei gleicher Konfiguration samt
+// offener Verbindung und Anmeldung beim Lauscher (sonst Luecke bis zum Neuverbinden des Agents), bei geaenderter
+// Konfiguration bzw. verworfenem Hostschluessel ersetzt der Pool ihn.
 type poolRef struct {
 	pool *transport.Pool
 	key  string
+	push bool
 
 	mu      sync.Mutex
 	hostKey string
@@ -241,7 +250,11 @@ func (r *poolRef) close() {
 	defer r.mu.Unlock()
 	if !r.closed {
 		r.closed = true
-		r.pool.Remove(r.key)
+		if r.push {
+			r.pool.Release(r.key, pushReleaseGrace)
+		} else {
+			r.pool.Remove(r.key)
+		}
 	}
 }
 

@@ -67,7 +67,7 @@ func nodeCPU(m *Metrics) *m64proto.CPU {
 	if len(ss) == 0 {
 		return nil
 	}
-	var user, nice, system, idle, iowait, irq, softirq, steal float64
+	var user, nice, system, idle, iowait, irq, softirq, steal float64 // FreeBSD: interrupt statt irq
 	cores := map[string]bool{}
 	for _, s := range ss {
 		if !finite(s.Value) || s.Value < 0 {
@@ -87,7 +87,7 @@ func nodeCPU(m *Metrics) *m64proto.CPU {
 			idle += s.Value
 		case "iowait":
 			iowait += s.Value
-		case "irq":
+		case "irq", "interrupt":
 			irq += s.Value
 		case "softirq":
 			softirq += s.Value
@@ -106,7 +106,10 @@ func nodeMem(m *Metrics) *m64proto.Mem {
 	}
 	avail, ok := m.Value("node_memory_MemAvailable_bytes")
 	if !ok { // alte Kernel ohne MemAvailable
-		free, _ := m.Value("node_memory_MemFree_bytes")
+		free, ok := m.Value("node_memory_MemFree_bytes")
+		if !ok { // ohne freien Speicher kein Abschnitt (sonst RAM 100 %)
+			return nil
+		}
 		buf, _ := m.Value("node_memory_Buffers_bytes")
 		cached, _ := m.Value("node_memory_Cached_bytes")
 		avail = free + buf + cached
@@ -326,6 +329,9 @@ func nodeRAID(m *Metrics) []m64proto.RAID {
 	synced := index(m, "node_md_blocks_synced", dev)
 	disks := map[string]map[string]float64{}
 	for _, s := range m.Get("node_md_disks") {
+		if !finite(s.Value) { // NaN -> int(NaN) waere beliebig (MinInt64)
+			continue
+		}
 		d := s.Label("device")
 		if disks[d] == nil {
 			disks[d] = map[string]float64{}
@@ -362,15 +368,17 @@ func nodeRAID(m *Metrics) []m64proto.RAID {
 		r.Active = int(min(max(disks[d]["active"], 0), 1024))
 		r.Failed = int(min(max(disks[d]["failed"], 0), 1024))
 		r.Spare = int(min(max(disks[d]["spare"], 0), 1024))
-		if degraded[d] > 0 && !strings.Contains(r.State, "degraded") {
-			r.State += ", degraded"
-		}
+		// Fortschritt vor dem Zusatz "degraded": waehrend des Wiederaufbaus meldet md die fehlende Platte noch als
+		// degraded; mit Fortschritt gilt das wie beim Agent als Wiederaufbau (kein raid_degraded)
 		switch r.State {
 		case "recovering", "resync", "check":
 			if b := blocks[d]; b > 0 && synced[d] >= 0 && synced[d] <= b {
 				p := math.Round(synced[d]/b*1000) / 10
 				r.SyncPercent = &p
 			}
+		}
+		if degraded[d] > 0 && !strings.Contains(r.State, "degraded") && r.SyncPercent == nil {
+			r.State += ", degraded"
 		}
 		out = append(out, r)
 		if len(out) >= maxItems {

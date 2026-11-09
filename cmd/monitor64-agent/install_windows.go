@@ -7,8 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,20 +24,13 @@ import (
 )
 
 // Ablage unter Windows: Programm in %ProgramFiles%\monitor64-agent (nur der Ordner ist fuer update schreibbar, durch
-// SYSTEM), Einstellungen in C:\ProgramData\monitor64-agent. Der Dienst laeuft als LocalSystem (Storage- und
-// Update-Abfragen brauchen das).
+// SYSTEM), Einstellungen in %ProgramData%\monitor64-agent (defaultDir, Rechte siehe paths_windows.go). Der Dienst
+// laeuft als LocalSystem (Storage- und Update-Abfragen brauchen das).
 const (
 	exeName        = "monitor64-agent.exe"
 	serviceDisplay = "Monitor64-Agent (Node64)"
 	serviceDesc    = "Answers Node64 monitoring queries over SSH (port 6465/tcp) - https://node64.de/"
 	firewallRule   = "Monitor64-Agent"
-)
-
-// Rechte (SDDL, geschuetzt = ohne Vererbung von oben): Einstellungen nur SYSTEM und Administratoren, Programmordner
-// zusaetzlich Benutzer lesen/ausfuehren.
-const (
-	sddlData    = "O:BAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
-	sddlProgram = "O:BAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)"
 )
 
 // programDir liefert %ProgramFiles%\monitor64-agent.
@@ -53,8 +44,6 @@ func programDir() string {
 	}
 	return filepath.Join(pf, "monitor64-agent")
 }
-
-func say(format string, a ...any) { fmt.Printf("monitor64-agent: "+format+"\n", a...) }
 
 func install(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
@@ -70,24 +59,6 @@ func install(args []string) int {
 		return 1
 	}
 	return 0
-}
-
-// checkInstallArgs prueft Schluessel und Port.
-func checkInstallArgs(key string, port int) (string, error) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return "", errors.New(`--key is missing (public key of the node)`)
-	}
-	if n, err := m64agent.ParseKeys([]byte(key)); err != nil || n != 1 {
-		if err == nil {
-			err = errors.New("exactly one key expected")
-		}
-		return "", fmt.Errorf("--key: %w", err)
-	}
-	if port <= 0 || port > 65535 {
-		return "", fmt.Errorf("invalid port %d", port)
-	}
-	return key, nil
 }
 
 func doInstall(key string, port int, pf pushFlags) error {
@@ -107,10 +78,14 @@ func doInstall(key string, port int, pf pushFlags) error {
 	pdir := programDir()
 	exePath := filepath.Join(pdir, exeName)
 
-	// Ordner mit festen Rechten (vor dem Schreiben von Schluesseln, die erben sie)
-	for _, d := range []struct{ path, sddl string }{{defaultDir, sddlData}, {pdir, sddlProgram}} {
-		if err := mkdirSecure(d.path, d.sddl); err != nil {
-			return fmt.Errorf("%s: %w", d.path, err)
+	// Ordner mit festen Rechten (vor dem Schreiben von Schluesseln, die erben sie); vorhandene nur, wenn sie
+	// SYSTEM/Administratoren gehoeren und keine Verweise sind (samt keys, hostkey, connect und local.d darin)
+	for _, d := range []struct {
+		path, sddl string
+		entries    []string
+	}{{defaultDir, sddlData, dataEntries}, {pdir, sddlProgram, nil}} {
+		if err := prepareDir(d.path, d.sddl, d.entries, trustedOwner); err != nil {
+			return err
 		}
 	}
 	if err := os.MkdirAll(filepath.Join(defaultDir, "local.d"), 0o700); err != nil {
@@ -152,7 +127,7 @@ func doInstall(key string, port int, pf pushFlags) error {
 	}
 	if fi1, e1 := os.Stat(self); e1 == nil {
 		if fi2, e2 := os.Stat(exePath); e2 != nil || !os.SameFile(fi1, fi2) {
-			if err := copyFile(self, exePath); err != nil {
+			if err := copyFile(self, exePath, 0o755); err != nil {
 				return fmt.Errorf("copy program: %w", err)
 			}
 		}
@@ -246,28 +221,6 @@ func binaryPath(exe string, args []string) string {
 	return s
 }
 
-// mkdirSecure legt einen Ordner an und setzt Eigentuemer und Rechte (geschuetzt, an vorhandene Eintraege vererbt).
-func mkdirSecure(path, sddl string) error {
-	if err := os.MkdirAll(path, 0o700); err != nil {
-		return err
-	}
-	sd, err := windows.SecurityDescriptorFromString(sddl)
-	if err != nil {
-		return err
-	}
-	owner, _, err := sd.Owner()
-	if err != nil {
-		return err
-	}
-	dacl, _, err := sd.DACL()
-	if err != nil {
-		return err
-	}
-	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
-		owner, nil, dacl, nil)
-}
-
 // stopService haelt den Dienst an und wartet, bis er steht.
 func stopService(s *mgr.Service) error {
 	st, err := s.Query()
@@ -342,89 +295,6 @@ func setFirewall(exe string, port int) error {
 		return fmt.Errorf("netsh: %v: %s", err, bytes.TrimSpace(out))
 	}
 	return nil
-}
-
-// writePushTargets nimmt die Ziele aus --connect in <dir>\connect auf (wie unter Linux).
-func writePushTargets(path string, add []m64agent.PushTarget) error {
-	if len(add) == 0 {
-		return nil
-	}
-	old, err := m64agent.ReadPushFile(path)
-	if err != nil {
-		say("WARNING: %v - file replaced", err)
-		old = nil
-	}
-	all, err := m64agent.AddPushTargets(old, add)
-	if err != nil {
-		return fmt.Errorf("--connect: %w", err)
-	}
-	if err := m64agent.WritePushFile(path, all); err != nil {
-		return err
-	}
-	for _, t := range add {
-		say("connects to node %s (push, %s)", t.String(), path)
-	}
-	return nil
-}
-
-// addKey haengt den Schluessel an die Liste an, falls er fehlt (wie unter Linux).
-func addKey(path, key string) (bool, error) {
-	old, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return false, err
-	}
-	newBlob := keyBlob(key)
-	for _, line := range strings.Split(strings.ReplaceAll(string(old), "\r", ""), "\n") {
-		if b := keyBlob(line); b != "" && b == newBlob {
-			return false, nil
-		}
-	}
-	data := strings.TrimRight(string(old), "\r\n")
-	if data != "" {
-		data += "\n"
-	}
-	data += key + "\n"
-	if _, err := m64agent.ParseKeys([]byte(data)); err != nil {
-		say("WARNING: %s contains invalid lines: %v", path, err)
-	}
-	return true, m64agent.WriteKeysFile(path, []byte(data))
-}
-
-// keyBlob liefert "art schluessel" einer authorized_keys-Zeile ("" wenn keiner erkannt).
-func keyBlob(line string) string {
-	f := strings.Fields(line)
-	for i := 0; i+1 < len(f); i++ {
-		if strings.HasPrefix(f[i], "ssh-") || strings.HasPrefix(f[i], "ecdsa-") || strings.HasPrefix(f[i], "sk-") {
-			return f[i] + " " + f[i+1]
-		}
-	}
-	return ""
-}
-
-// copyFile kopiert ueber eine neue Datei daneben und Umbenennen (der Dienst ist vorher angehalten).
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".monitor64-agent.new-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := io.Copy(tmp, in); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), dst)
 }
 
 func uninstall(args []string) int {

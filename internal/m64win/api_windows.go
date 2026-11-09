@@ -3,6 +3,7 @@
 package m64win
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -92,75 +93,115 @@ func uptime() time.Duration {
 	return time.Duration(r) * time.Millisecond
 }
 
-// readFS liest die festen Laufwerke (keine Netz-, Wechsel- und CD-Laufwerke).
-func readFS() ([]m64proto.FS, []error) {
+// readFS liest die festen Laufwerke (keine Netz-, Wechsel- und CD-Laufwerke), je Laufwerk mit Zeitlimit (startDrive).
+func readFS(ctx context.Context, c *Cache) ([]m64proto.FS, []error) {
 	mask, err := windows.GetLogicalDrives()
 	if err != nil {
 		return nil, []error{fmt.Errorf("GetLogicalDrives: %w", err)}
 	}
-	var out []m64proto.FS
-	var errs []error
+	type drive struct {
+		letter string
+		call   *driveCall
+	}
+	var drives []drive
 	for i := 0; i < 26; i++ {
 		if mask&(1<<i) == 0 {
 			continue
 		}
 		letter := string(rune('A'+i)) + ":"
-		root, _ := windows.UTF16PtrFromString(letter + `\`)
-		if windows.GetDriveType(root) != windows.DRIVE_FIXED {
+		drives = append(drives, drive{letter, c.startDrive("fs "+letter, func() (any, error) { return readDrive(letter) })})
+	}
+	var out []m64proto.FS
+	var errs []error
+	for _, d := range drives {
+		f, err := waitDrive[*m64proto.FS](ctx, d.call, d.letter, driveLimit)
+		if err != nil {
+			errs = append(errs, err)
 			continue
 		}
-		var avail, total, free uint64
-		if err := windows.GetDiskFreeSpaceEx(root, &avail, &total, &free); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", letter, err))
-			continue
+		if f != nil {
+			out = append(out, *f)
 		}
-		f := m64proto.FS{Mount: letter, Total: total, Used: total - min(free, total), Avail: min(avail, total)}
-		var flags uint32
-		fsName := make([]uint16, 64)
-		if windows.GetVolumeInformation(root, nil, 0, nil, nil, &flags, &fsName[0], uint32(len(fsName))) == nil {
-			f.Type = clip(windows.UTF16ToString(fsName))
-			f.ReadOnly = flags&windows.FILE_READ_ONLY_VOLUME != 0
-		}
-		out = append(out, f)
 	}
 	return out, errs
 }
 
+// readDrive liest ein Laufwerk (nil: kein festes Laufwerk).
+func readDrive(letter string) (*m64proto.FS, error) {
+	root, _ := windows.UTF16PtrFromString(letter + `\`)
+	if windows.GetDriveType(root) != windows.DRIVE_FIXED {
+		return nil, nil
+	}
+	var avail, total, free uint64
+	if err := windows.GetDiskFreeSpaceEx(root, &avail, &total, &free); err != nil {
+		return nil, fmt.Errorf("%s: %w", letter, err)
+	}
+	f := &m64proto.FS{Mount: letter, Total: total, Used: total - min(free, total), Avail: min(avail, total)}
+	var flags uint32
+	fsName := make([]uint16, 64)
+	if windows.GetVolumeInformation(root, nil, 0, nil, nil, &flags, &fsName[0], uint32(len(fsName))) == nil {
+		f.Type = clip(windows.UTF16ToString(fsName))
+		f.ReadOnly = flags&windows.FILE_READ_ONLY_VOLUME != 0
+	}
+	return f, nil
+}
+
+// diskRead ist das Ergebnis einer Platte (readDisk).
+type diskRead struct {
+	d         m64proto.DiskIO
+	idle      int64 // Leerlaufzeit (DISK_PERFORMANCE)
+	missing   bool  // Platte gibt es nicht
+	removable bool
+}
+
 // readDisks liest die I/O-Zaehler der Platten (\\.\PhysicalDriveN; Oeffnen ohne Zugriffsrechte reicht, kein
-// Admin noetig) samt Seriennummer und Modell.
-func readDisks() ([]m64proto.DiskIO, error) {
-	var out []m64proto.DiskIO
-	var firstErr error
-	for i := 0; i < maxDrives; i++ {
+// Admin noetig) samt Seriennummer und Modell, je Platte mit Zeitlimit (startDrive). hung: haengende Platten (als
+// Hinweis, auch wenn andere Platten Werte liefern).
+func readDisks(ctx context.Context, c *Cache) (out []m64proto.DiskIO, hung []error, firstErr error) {
+	calls := make([]*driveCall, maxDrives)
+	for i := range calls {
 		name := "PhysicalDrive" + strconv.Itoa(i)
-		p, _ := windows.UTF16PtrFromString(`\\.\` + name)
-		h, err := windows.CreateFile(p, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
+		calls[i] = c.startDrive("disk "+name, func() (any, error) { return readDisk(name) })
+	}
+	for i, call := range calls {
+		name := "PhysicalDrive" + strconv.Itoa(i)
+		r, err := waitDrive[diskRead](ctx, call, name, driveLimit)
 		if err != nil {
-			if !errors.Is(err, windows.ERROR_FILE_NOT_FOUND) && !errors.Is(err, windows.ERROR_PATH_NOT_FOUND) && firstErr == nil {
-				firstErr = fmt.Errorf("%s: %w", name, err)
-			}
-			continue
-		}
-		d, removable, err := diskIO(h, name)
-		windows.CloseHandle(h)
-		if removable {
-			continue // Kartenleser, USB-Sticks (USB-Festplatten melden sich als feste Platte)
-		}
-		if err != nil {
-			if firstErr == nil {
+			if errors.Is(err, errDriveTimeout) || ctx.Err() != nil { // kein Fehler der Platte selbst
+				hung = append(hung, err)
+			} else if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		out = append(out, d)
+		if r.missing || r.removable {
+			continue // Kartenleser, USB-Sticks (USB-Festplatten melden sich als feste Platte)
+		}
+		r.d.IOTimeMs = c.busy.update(name, r.idle, time.Since(monoStart))
+		out = append(out, r.d)
 	}
 	if len(out) > 0 {
 		firstErr = nil // einzelne Platte ohne Zaehler (z. B. Kartenleser ohne Medium) ist kein Abschnittsfehler
 	}
-	return out, firstErr
+	return out, hung, firstErr
 }
 
-func diskIO(h windows.Handle, name string) (m64proto.DiskIO, bool, error) {
+// readDisk oeffnet und liest eine Platte.
+func readDisk(name string) (diskRead, error) {
+	p, _ := windows.UTF16PtrFromString(`\\.\` + name)
+	h, err := windows.CreateFile(p, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
+	if err != nil {
+		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) || errors.Is(err, windows.ERROR_PATH_NOT_FOUND) {
+			return diskRead{missing: true}, nil
+		}
+		return diskRead{}, fmt.Errorf("%s: %w", name, err)
+	}
+	defer windows.CloseHandle(h)
+	d, idle, removable, err := diskIO(h, name)
+	return diskRead{d: d, idle: idle, removable: removable}, err
+}
+
+func diskIO(h windows.Handle, name string) (m64proto.DiskIO, int64, bool, error) {
 	d := m64proto.DiskIO{Name: name}
 	// STORAGE_PROPERTY_QUERY{PropertyId: StorageDeviceProperty (0), QueryType: PropertyStandardQuery (0)}
 	q := alignedBuf(12)
@@ -169,23 +210,22 @@ func diskIO(h windows.Handle, name string) (m64proto.DiskIO, bool, error) {
 	if windows.DeviceIoControl(h, ioctlStorageQueryProperty, &q[0], uint32(len(q)), &desc[0], uint32(len(desc)), &n, nil) == nil {
 		if sd, ok := parseStorageDesc(desc[:n]); ok {
 			if sd.removable {
-				return d, true, nil
+				return d, 0, true, nil
 			}
 			d.Serial, d.Model = sd.serial, sd.model()
 		}
 	}
 	perf := alignedBuf(88)
 	if err := windows.DeviceIoControl(h, ioctlDiskPerformance, nil, 0, &perf[0], uint32(len(perf)), &n, nil); err != nil {
-		return d, false, fmt.Errorf("%s: IOCTL_DISK_PERFORMANCE: %w", name, err)
+		return d, 0, false, fmt.Errorf("%s: IOCTL_DISK_PERFORMANCE: %w", name, err)
 	}
 	p, ok := parseDiskPerf(perf[:n])
 	if !ok {
-		return d, false, fmt.Errorf("%s: IOCTL_DISK_PERFORMANCE: %d Byte", name, n)
+		return d, 0, false, fmt.Errorf("%s: IOCTL_DISK_PERFORMANCE: %d Byte", name, n)
 	}
 	d.ReadBytes, d.WriteBytes = p.bytesRead, p.bytesWritten
 	d.ReadOps, d.WriteOps = uint64(p.reads), uint64(p.writes)
-	d.IOTimeMs = p.ioTimeMs()
-	return d, false, nil
+	return d, p.idle, false, nil
 }
 
 // readNet liest die Schnittstellen samt Zaehlern (GetIfTable2); Filter-Treiber, Loopback und Tunnel fehlen,

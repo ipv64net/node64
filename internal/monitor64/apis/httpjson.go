@@ -103,7 +103,7 @@ func (e *webPinMismatch) Error() string { return "Fingerabdruck " + e.got + " pa
 type webTarget struct {
 	base   string // https://host:port
 	host   string // Hostname bzw. IP (ServerName, Zertifikat)
-	hostPt string // host:port fuers Wählen
+	hostPt string // host:port fuers Waehlen
 	https  bool
 }
 
@@ -195,28 +195,48 @@ func newWebClient(t webTarget, pin string, roots *x509.CertPool) (*webClient, er
 		return nil, errors.New("Fingerabdruck nur mit https://")
 	}
 	c := &webClient{t: t, pin: p, roots: roots, reqTO: webReqTimeout}
+	c.hc = HTTPClient(pinnedTLS(t.host, p, roots), webReqTimeout, 4, false)
+	return c, nil
+}
+
+// HTTPClient baut den Client der Zugaenge, die einzelne Geraete per HTTP(S) abfragen (JSON-APIs hier, Prometheus in
+// promscrape): kein Proxy (Geraete stehen im LAN), keine Weiterleitungen (die Zugangsdaten gehoeren nur an die
+// eingerichtete Adresse), Zeitlimits fuer Verbindungsaufbau, TLS und Antwortkopf. tc ist die TLS-Einstellung (z. B.
+// mit Pin), rawBody schaltet das automatische Entpacken ab (der Aufrufer entpackt selbst mit Grenze).
+func HTTPClient(tc *tls.Config, respTimeout time.Duration, maxIdle int, rawBody bool) *http.Client {
 	d := &net.Dialer{Timeout: webDialTimeout, KeepAlive: 30 * time.Second}
 	tr := &http.Transport{
 		Proxy:                 nil, // Geraete stehen im LAN, nie ueber einen Proxy
 		DialContext:           d.DialContext,
-		TLSClientConfig:       pinnedTLS(t.host, p, roots),
+		TLSClientConfig:       tc,
 		TLSHandshakeTimeout:   webDialTimeout,
-		ResponseHeaderTimeout: webReqTimeout,
-		MaxIdleConnsPerHost:   4,
+		ResponseHeaderTimeout: respTimeout,
+		DisableCompression:    rawBody,
+		MaxIdleConnsPerHost:   maxIdle,
 		IdleConnTimeout:       90 * time.Second,
 		ForceAttemptHTTP2:     false,
 	}
-	c.hc = &http.Client{Transport: tr,
+	return &http.Client{Transport: tr,
 		// Keine Weiterleitungen folgen (Zugangsdaten gehoeren nur an die eingerichtete Adresse).
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return c, nil
+}
+
+// CertTrusted prueft ein Leaf-Zertifikat samt Zwischenzertifikaten gegen die CA (roots nil = System) und den
+// Hostnamen (fuer die Anzeige "vertrauenswuerdig" bzw. die eigene Pruefung ohne Pin).
+func CertTrusted(leaf *x509.Certificate, inter []*x509.Certificate, host string, roots *x509.CertPool) bool {
+	pool := x509.NewCertPool()
+	for _, c := range inter {
+		pool.AddCert(c)
+	}
+	_, err := leaf.Verify(x509.VerifyOptions{DNSName: host, Roots: roots, Intermediates: pool})
+	return err == nil
 }
 
 // close gibt Leerlauf-Verbindungen frei.
 func (c *webClient) close() { c.hc.CloseIdleConnections() }
 
 // do sendet eine Anfrage (body nil = ohne Inhalt, sonst JSON) und legt die JSON-Antwort in out ab (nil = Antwort
-// verwerfen). extra sind zusaetzliche Kopfzeilen dieser Anfrage. Liefert die Kopfzeilen der Antwort.
+// verwerfen). extra sind zusaetzliche Kopfzeilen dieser Anfrage (Wert nil = weglassen). Liefert die Kopfzeilen der Antwort.
 func (c *webClient) do(ctx context.Context, method, path string, extra http.Header, body any, out any) (http.Header, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.reqTO)
 	defer cancel()
@@ -242,6 +262,10 @@ func (c *webClient) do(ctx context.Context, method, path string, extra http.Head
 		c.header(req.Header)
 	}
 	for k, v := range extra {
+		if v == nil {
+			req.Header.Del(k) // nil = Kopfzeile dieser Anfrage weglassen (z. B. altes Token bei der Anmeldung)
+			continue
+		}
 		req.Header[k] = v
 	}
 	resp, err := c.hc.Do(req)
@@ -418,12 +442,7 @@ func leafOf(st tls.ConnectionState, serverName string, roots *x509.CertPool, whe
 		return nil, false, &webError{Kind: errWebTrust, Detail: "kein Zertifikat", Where: where}
 	}
 	leaf := st.PeerCertificates[0]
-	inter := x509.NewCertPool()
-	for _, c := range st.PeerCertificates[1:] {
-		inter.AddCert(c)
-	}
-	_, verr := leaf.Verify(x509.VerifyOptions{DNSName: serverName, Roots: roots, Intermediates: inter})
-	return leaf, verr == nil, nil
+	return leaf, CertTrusted(leaf, st.PeerCertificates[1:], serverName, roots), nil
 }
 
 // finite: Zahl von einem Geraet nur, wenn endlich (NaN/Inf verwerfen).

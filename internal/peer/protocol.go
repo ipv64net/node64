@@ -77,13 +77,21 @@ func (m *Manager) callAny(ctx context.Context, x Member, method, path string, in
 		case status == http.StatusServiceUnavailable && e.Error == "healthchecks not running":
 			return errPeerHCOff
 		}
-		return fmt.Errorf("HTTP %d %s", status, e.Error)
+		return &statusError{Status: status, Msg: e.Error}
 	}
 	if out != nil {
 		return json.Unmarshal(b, out)
 	}
 	return nil
 }
+
+// statusError: die andere Node hat mit einem Fehler geantwortet (Status und Text aus ihrer Antwort).
+type statusError struct {
+	Status int
+	Msg    string
+}
+
+func (e *statusError) Error() string { return fmt.Sprintf("HTTP %d %s", e.Status, e.Msg) }
 
 // verify prueft eine eingehende signierte Anfrage (bind = Exporter der eigenen TLS-Verbindung) und liefert die
 // Absenderin. Passt ihr Account nicht zum Cluster (anderer als dessen Account, 0 passt immer), wird sie ausgesetzt;

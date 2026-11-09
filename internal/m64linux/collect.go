@@ -374,7 +374,7 @@ func (c *collector) collectZFS(ctx context.Context, r *m64proto.Report) {
 		return
 	}
 	if st, err := c.run(ctx, timeoutShort, "zpool", "status"); err == nil {
-		mergeZpoolStatus(pools, ParseZpoolStatus(st.Stdout))
+		MergeZpoolStatus(pools, ParseZpoolStatus(st.Stdout))
 	} else {
 		addErr(r, m64proto.SecZFS, err)
 	}

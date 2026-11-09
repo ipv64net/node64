@@ -116,6 +116,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	n := 0
+	var hostUIDs []string // fuer die zustaendige Node im Cluster (importOwners)
 	for _, t := range exportTables {
 		for _, row := range in.Tables[t.name] {
 			uid, _ := row["uid"].(string)
@@ -130,6 +131,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			}
 			if t.name == "m64_hosts" {
 				importNodes(row, known) // Nodes ausserhalb dieses Clusters (z. B. Umzug auf neue Hardware): diese Node
+				hostUIDs = append(hostUIDs, uid)
 			}
 			if err := upsertRow(ctx, tx, t.name, t.cols, row); err != nil {
 				return n, fmt.Errorf("%s %s: %w", t.name, uid, err)
@@ -140,6 +142,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	if err := tx.Commit(); err != nil {
 		return n, err
 	}
+	m.importOwners(ctx, hostUIDs) // zustaendige Node als owner:-Eintrag melden (sonst weicht sie lokal ab)
 	if in.Std != "" {
 		_ = m.st.SetSetting(ctx, setStd, in.Std)
 	}
@@ -155,9 +158,16 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	if in.NodeKey != "" && seal != nil {
 		if pem, err := seal.Decrypt(in.NodeKey); err == nil {
-			_ = m.st.SetSetting(ctx, setNodeKey, m.box.Encrypt(pem))
+			if err := m.importKey(ctx, pem); err != nil { // wie ein Wechsel: alter Schluessel bleibt, Cluster erfaehrt es
+				m.log.Warn("monitor64: import node key", "err", err)
+			}
 		}
 	}
+	// eingespielte Zeilen tragen ihre alte Aenderungszeit: der Abgleich im Cluster sucht einmal alles ab (meldet, was
+	// vom bekannten Stand abweicht)
+	m.cl.csMu.Lock()
+	m.cl.scanFrom = ""
+	m.cl.csMu.Unlock()
 	if m.scheduler() != nil { // laeuft: neu laden
 		m.reloadConfig(ctx)
 		hosts, _ := m.store.Hosts(ctx)

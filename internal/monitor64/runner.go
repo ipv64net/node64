@@ -50,7 +50,7 @@ func accessRank(typ string) int {
 		return 0
 	case "ssh":
 		return 1
-	case "pve", "pbs", "docker":
+	case "pve", "pbs", "docker", "nut", "truenas", "unraid", "redfish":
 		return 2
 	case "snmp":
 		return 3
@@ -240,6 +240,7 @@ type hostRT struct {
 	Local    map[string]localState    `json:"local,omitempty"`    // eigene Skripte: letzter Zustand
 	Trend    map[string]trendState    `json:"trend,omitempty"`    // Fuellstand -> letzte Trendrechnung
 	Traps    *hostTraps               `json:"traps,omitempty"`    // SNMP-Traps (Kopie fuer den Neustart)
+	SeenUp   map[string][]string      `json:"seen_up,omitempty"`  // SNMP: Ports, die schon verbunden waren (je Zugang)
 	LastDisc time.Time                `json:"last_disc,omitzero"`
 	dirty    bool
 
@@ -248,6 +249,7 @@ type hostRT struct {
 	lastSave       time.Time
 	lastSavedState eval.State
 	lastSavedView  eval.HostView
+	lastMem        []byte // zuletzt gespeichertes Gedaechtnis der Meldungen (Wechsel = sofort speichern/veroeffentlichen)
 }
 
 type localState struct {
@@ -398,6 +400,12 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			err = errors.New(a.err)
 		} else {
 			svcs, err = a.col.collect(ctx)
+			if keys, ch := seenUpChanged(a.col, rt.SeenUp[a.row.UID]); ch {
+				if rt.SeenUp == nil {
+					rt.SeenUp = map[string][]string{}
+				}
+				rt.SeenUp[a.row.UID], rt.dirty = keys, true
+			}
 		}
 		if err != nil && len(svcs) == 0 {
 			rt.Failures[a.row.UID]++
@@ -431,14 +439,15 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	hres0 := eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs})
 	reachable := !hres0.Unreachable && len(found) > 0
 
-	// 2. Dienste erkennen (beim ersten Mal und stuendlich); nie automatisch uebernehmen
+	// 2. Dienste erkennen (beim ersten Mal und stuendlich); nie automatisch uebernehmen. Nicht vorgeschlagene (Default
+	// false, z. B. einzelne Windows-Dienste, gestoppte Gaeste) kommen als "ignoriert" dazu, damit sie spaeter uebernommen
+	// werden koennen, ohne die Liste der neuen Dienste zu fuellen (UpsertDiscovered).
 	if reachable && role == roleReport && (rt.LastDisc.IsZero() || now.Sub(rt.LastDisc) >= discoverEvery) {
-		var offer []model.Service
+		offer := make([]model.Service, 0, len(found))
 		for _, g := range found {
-			if g.svc.Default {
-				offer = append(offer, g.svc)
-			}
+			offer = append(offer, g.svc)
 		}
+		sort.Slice(offer, func(i, j int) bool { return offer[i].Key < offer[j].Key })
 		if _, err := m.store.UpsertDiscovered(dbctx, h.UID, offer, nil, SystemActor); err != nil {
 			m.log.Warn("monitor64: discover", "host", h.Name, "err", err)
 		}
@@ -520,6 +529,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				freeOf[r.Key] = mt.Value
 			}
 		}
+		onBattery := upsOnBattery(g.svc)
 		// Zahlenwerte
 		for _, mt := range metrics {
 			if ok && mt.Name != "trend_days" {
@@ -537,6 +547,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 					free = f // exakt (beruecksichtigt reservierte Bloecke)
 				} else if mt.Max > 0 && mt.Unit == "%" {
 					free = mt.Max * (100 - mt.Value) / 100
+				}
+				if mt.Rule == model.RuleUPSRuntime && !onBattery {
+					e = withoutLimits(e) // Restlaufzeit zaehlt nur auf Batterie; im Netzbetrieb OK beobachten (Tracker haengt nicht)
 				}
 				mv.Status = tr.Observe(e, eval.Sample{At: now, Value: mt.Value, Free: free})
 				mv.RuleKind = mt.Rule
@@ -730,35 +743,31 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		}
 		unreachDetail = strings.Join(errs, "; ")
 	}
-	if role != roleReport { // ohne Mehrheit (Ersatz-Node vorhanden): messen, nicht melden
-		sort.SliceStable(views, func(i, j int) bool { return kindOrder(views[i].Kind) < kindOrder(views[j].Kind) })
-		rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win,
-			Cluster: m.clusterSelfRef(role)})
+	var hostMem []byte
+	if role == roleReport {
+		m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
+		round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
 		m.notifyMu.Lock()
-		var mem []byte
+		if m.notifier == nil {
+			m.notifyMu.Unlock()
+			return
+		}
+		result := m.notifier.Round(round, eval.ResolveRouting(cfg.notify, cfg.notifyOverrides, ref))
+		hostMem, _ = json.Marshal(m.notifier.Hosts[h.UID])
+		m.notifyMu.Unlock()
+		for _, k := range result.Unack {
+			m.clearAck(dbctx, h.UID, k)
+		}
+		m.recordNotified(dbctx, h, result.Lines, now)
+		for _, msg := range result.Messages {
+			m.dispatch(dbctx, h, msg, unreachDetail)
+		}
+	} else { // ohne Mehrheit (Ersatz-Node vorhanden) bzw. kurz nach dem Start: messen, nicht melden
+		m.notifyMu.Lock()
 		if m.notifier != nil {
-			mem, _ = json.Marshal(m.notifier.Hosts[h.UID])
+			hostMem, _ = json.Marshal(m.notifier.Hosts[h.UID])
 		}
 		m.notifyMu.Unlock()
-		m.saveRuntime(dbctx, rt, mem)
-		return
-	}
-	m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
-	round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
-	m.notifyMu.Lock()
-	if m.notifier == nil {
-		m.notifyMu.Unlock()
-		return
-	}
-	result := m.notifier.Round(round, eval.ResolveRouting(cfg.notify, cfg.notifyOverrides, ref))
-	hostMem, _ := json.Marshal(m.notifier.Hosts[h.UID])
-	m.notifyMu.Unlock()
-	for _, k := range result.Unack {
-		m.clearAck(dbctx, h.UID, k)
-	}
-	m.recordNotified(dbctx, h, result.Lines, now)
-	for _, msg := range result.Messages {
-		m.dispatch(dbctx, h, msg, unreachDetail)
 	}
 
 	// 5. Stand fuer die Oberflaeche und speichern
@@ -766,6 +775,28 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win,
 		Cluster: m.clusterSelfRef(role)})
 	m.saveRuntime(dbctx, rt, hostMem)
+}
+
+// upsOnBattery: die USV meldet Batteriebetrieb (Messgroesse on_battery bzw. Fact ups_on_battery).
+func upsOnBattery(s model.Service) bool {
+	for _, mt := range s.Metrics {
+		if mt.Name == "on_battery" && mt.Value > 0 {
+			return true
+		}
+	}
+	for _, f := range s.Facts {
+		if f.Code == "ups_on_battery" {
+			return true
+		}
+	}
+	return false
+}
+
+// withoutLimits: dieselbe Regel ohne Schwellen (Messung wird als OK beobachtet).
+func withoutLimits(e eval.Effective) eval.Effective {
+	off := eval.Limit{Off: true}
+	e.Warn, e.Crit, e.WarnFree, e.CritFree = off, off, off, off
+	return e
 }
 
 // partialAffects: betrifft ein Teilfehler diesen Dienst? Ohne Angabe der betroffenen Dienste: ja (vorsichtig).

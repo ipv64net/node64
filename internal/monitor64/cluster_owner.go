@@ -3,7 +3,9 @@ package monitor64
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -94,6 +96,11 @@ func (m *Module) clusterRefresh(ctx context.Context) *clusterSnap {
 			s.Stable[p.ID] = true
 		}
 	}
+	for id := range m.cl.since { // nicht mehr gemeldet (z. B. entfernt): beim Wiederauftauchen erst nach clusterStable stabil
+		if _, ok := s.Peers[id]; !ok {
+			delete(m.cl.since, id)
+		}
+	}
 	m.cl.mu.Unlock()
 	s.Active = len(s.Peers) > 0 && s.Self != ""
 	s.Total, s.Connected = len(s.Peers)+1, 1
@@ -175,6 +182,18 @@ func (m *Module) roleOf(h *Host) (int, string) {
 	return roleReport, owner
 }
 
+// ClusterNodeUsed: ein Host nennt die Node als bevorzugte, zustaendige oder Ersatz-Node (m64cluster: ein Mitglied mit
+// ausgeschaltetem Monitor64 zaehlt dann als nicht erreichbar mit, statt zu fehlen).
+func (m *Module) ClusterNodeUsed(ctx context.Context, id string) bool {
+	if !reNodeID.MatchString(id) {
+		return false
+	}
+	var one int
+	err := m.st.Reader().QueryRowContext(ctx, `SELECT 1 FROM m64_hosts WHERE deleted = 0 AND (preferred_node = ? OR owner_node = ? OR instr(backup_nodes, ?) > 0) LIMIT 1`,
+		id, id, `"`+id+`"`).Scan(&one)
+	return err == nil
+}
+
 // knownNodes: diese Node und die Mitglieder des Bereichs.
 func (m *Module) knownNodes(ctx context.Context) map[string]bool {
 	known := map[string]bool{m.clusterSelf(): true}
@@ -202,6 +221,31 @@ func importNodes(row map[string]any, known map[string]bool) {
 			}
 		}
 		row["backup_nodes"] = jsonList(keep)
+	}
+}
+
+// importOwners meldet nach einem Import die zustaendige Node der importierten Hosts an den Cluster (Eintrag
+// "owner:<host>"). Sonst weicht sie hier still von den anderen Nodes ab, und womoeglich ueberwacht niemand den Host.
+// Leer wird sie ausdruecklich auf die bevorzugte gesetzt: ein spaeter ankommender Host-Eintrag mit anderer bevorzugter
+// Node haelt sonst drueben die alte fest (rowApply).
+func (m *Module) importOwners(ctx context.Context, uids []string) {
+	if m.hooks().Change == nil {
+		return
+	}
+	self := m.clusterSelf()
+	for _, uid := range uids {
+		h, err := m.store.Host(ctx, uid)
+		if err != nil {
+			continue
+		}
+		owner := ownerOf(h, self)
+		if h.OwnerNode == "" {
+			if _, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET owner_node = ? WHERE uid = ?`, owner, uid); err != nil {
+				m.log.Warn("monitor64: import owner", "host", h.Name, "err", err)
+				continue
+			}
+		}
+		m.clusterChange(ctx, ClusterItemConfig, "owner:"+uid, false)
 	}
 }
 
@@ -269,13 +313,15 @@ var ownerEvents = []any{"takeover", "handover"}
 
 const ownerEventsKeep = 20
 
+var errOwnerNoHost = errors.New("monitor64 cluster: owner entry before its host")
+
 func (m *Module) ownerGet(ctx context.Context, uid string) (json.RawMessage, bool, error) {
 	var node string
 	err := m.st.Reader().QueryRowContext(ctx, `SELECT owner_node FROM m64_hosts WHERE uid = ? AND deleted = 0`, uid).Scan(&node)
 	if err != nil || node == "" {
 		return nil, false, nil
 	}
-	e := ownerEntry{Node: node, Events: m.eventsWhere(ctx, `host_uid = ? AND problem_uid = '' AND kind IN (?, ?) ORDER BY ts DESC, id DESC LIMIT `+itoa(ownerEventsKeep),
+	e := ownerEntry{Node: node, Events: m.eventsWhere(ctx, `host_uid = ? AND problem_uid = '' AND kind IN (?, ?) ORDER BY ts DESC, id DESC LIMIT `+strconv.Itoa(ownerEventsKeep),
 		append([]any{uid}, ownerEvents...)...)}
 	b, err := json.Marshal(e)
 	return b, err == nil, err
@@ -291,8 +337,15 @@ func (m *Module) ownerApply(ctx context.Context, uid string, data json.RawMessag
 			return errClItem
 		}
 	}
-	if _, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET owner_node = ? WHERE uid = ?`, e.Node, uid); err != nil {
+	res, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET owner_node = ? WHERE uid = ?`, e.Node, uid)
+	if err != nil {
 		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		if deleted {
+			return nil
+		}
+		return errOwnerNoHost // Host noch nicht da (Eintrag kam vor dem Host): spaeter erneut, sonst ginge er verloren
 	}
 	for _, ev := range e.Events {
 		if ev.Host != uid || !slices.Contains(ownerEvents, any(ev.Kind)) {
@@ -467,9 +520,4 @@ func (m *Module) insertEvent(ctx context.Context, e eventEntry, problem string) 
 	}
 	_, _ = m.st.Writer().ExecContext(ctx, `INSERT INTO m64_events (uid, node_id, problem_uid, host_uid, service_key, ts, kind, text, actor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (uid) DO NOTHING`, e.UID, e.Node, e.Problem, e.Host, e.Key, e.TS, e.Kind, e.Text, actor)
-}
-
-func itoa(n int) string {
-	b, _ := json.Marshal(n)
-	return string(b)
 }

@@ -126,6 +126,7 @@ func (c *Collector) collectIF(r *round) {
 	if hc && len(t.col(ifHCInOct)) == 0 && len(t.col(ifOper)) > 0 {
 		c.noHC = true // keine 64-Bit-Zaehler: ab der naechsten Runde 32 Bit
 	}
+	r.at = c.now() // Messzeitpunkt der Zaehler (nicht Rundenbeginn)
 	c.buildPorts(r, t, hc)
 }
 
@@ -156,6 +157,7 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 	}
 	c.portKeys = portKeys
 	c.ifUpNow = map[string]bool{}
+	r.ifOK = true
 	for _, idx := range t.rows() {
 		if v, ok := num(t.col(ifOper)[idx]); ok && v == 1 {
 			c.ifUpNow[idx] = true
@@ -180,7 +182,7 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 		} else if v, ok := num(t.col(ifSpeed)[idx]); ok && v > 0 && v < math.MaxUint32 {
 			speed = v / 1e6
 		}
-		if up {
+		if up && (c.seenUp[key] || len(c.seenUp) < maxSeenUp) {
 			c.seenUp[key] = true
 		}
 		name := in.name
@@ -202,8 +204,8 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 			pkts = []pdu{t.col(ifInUc)[idx], t.col(ifInNUc)[idx], t.col(ifOutUc)[idx], t.col(ifOutNUc)[idx]}
 		}
 		var parts []string
-		rin, ok1 := c.rate(pre+"in", inOct, r.now)
-		rout, ok2 := c.rate(pre+"out", outOct, r.now)
+		rin, ok1 := c.rate(pre+"in", inOct, r.at)
+		rout, ok2 := c.rate(pre+"out", outOct, r.at)
 		if ok1 && ok2 {
 			inM, outM := rin*8/1e6, rout*8/1e6
 			s.Metrics = append(s.Metrics, model.Metric{Name: "in", Value: round2(inM), Unit: "Mbit/s"}, model.Metric{Name: "out", Value: round2(outM), Unit: "Mbit/s"})
@@ -218,14 +220,14 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 			if missing(p) {
 				continue // NUcast/Multicast fehlen auf manchen Geraeten
 			}
-			d, _, ok := c.delta(pre+"p"+strconv.Itoa(i), p, r.now)
+			d, _, ok := c.delta(pre+"p"+strconv.Itoa(i), p, r.at)
 			if !ok {
 				okp = false
 			}
 			pk += d
 		}
-		ie, _, ok3 := c.delta(pre+"ie", t.col(ifInErr)[idx], r.now)
-		oe, _, ok4 := c.delta(pre+"oe", t.col(ifOutErr)[idx], r.now)
+		ie, _, ok3 := c.delta(pre+"ie", t.col(ifInErr)[idx], r.at)
+		oe, _, ok4 := c.delta(pre+"oe", t.col(ifOutErr)[idx], r.at)
 		if okp && ok3 && ok4 {
 			rate := 0.0
 			if pk > 0 {
@@ -237,8 +239,8 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 				parts = append(parts, fmt.Sprintf("%.0f Fehler", ie+oe))
 			}
 		}
-		id, _, ok5 := c.delta(pre+"id", t.col(ifInDisc)[idx], r.now)
-		od, _, ok6 := c.delta(pre+"od", t.col(ifOutDisc)[idx], r.now)
+		id, _, ok5 := c.delta(pre+"id", t.col(ifInDisc)[idx], r.at)
+		od, _, ok6 := c.delta(pre+"od", t.col(ifOutDisc)[idx], r.at)
 		if ok5 && ok6 {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "drops", Value: id + od})
 		}

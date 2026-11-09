@@ -186,6 +186,7 @@ type fakeConn struct {
 	failOn  string // OID-Praefix, bei dem die Anfrage scheitert (Teilfehler)
 	fail    bool   // jede Anfrage scheitert (Zeitueberschreitung)
 	maxResp int    // hoechstens so viele Varbinds je Antwort (abgeschnittene GETBULK-Antworten)
+	onReq   func() // vor jeder Anfrage (z. B. Uhr weiterstellen)
 }
 
 func (f *fakeConn) v1() bool { return f.isV1 }
@@ -193,6 +194,9 @@ func (f *fakeConn) close()   {}
 
 func (f *fakeConn) check(oids []string) error {
 	f.reqs++
+	if f.onReq != nil {
+		f.onReq()
+	}
 	if f.fail {
 		return errors.New("request timeout (after 1 retries)")
 	}

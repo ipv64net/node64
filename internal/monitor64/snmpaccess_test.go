@@ -145,7 +145,7 @@ func TestAPISNMPSecret(t *testing.T) {
 	if rec := e.do("PUT", au, map[string]any{"config": v3, "secret": `{"auth":"auth-GEHEIM-1","priv":"priv-GEHEIM-1"}`}); rec.Code != http.StatusOK {
 		t.Fatalf("v3: %d %s", rec.Code, rec.Body)
 	}
-	if s := secretOf(); s != (snmp.Secret{Community: "pub-GEHEIM", AuthPass: "auth-GEHEIM-1", PrivPass: "priv-GEHEIM-1"}) {
+	if s := secretOf(); s != (snmp.Secret{AuthPass: "auth-GEHEIM-1", PrivPass: "priv-GEHEIM-1"}) { // v3: Community verworfen
 		t.Fatalf("merged: %+v", s)
 	}
 	// nur das Verschluesselungs-Passwort neu: Authentifizierung bleibt
@@ -160,8 +160,28 @@ func TestAPISNMPSecret(t *testing.T) {
 	if rec := e.do("PUT", au, map[string]any{"config": v3, "secret": ""}); rec.Code != http.StatusOK {
 		t.Fatalf("keep: %d %s", rec.Code, rec.Body)
 	}
-	if s := secretOf(); s.PrivPass != "priv-GEHEIM-2" || s.Community != "pub-GEHEIM" {
+	if s := secretOf(); s.PrivPass != "priv-GEHEIM-2" || s.Community != "" {
 		t.Fatalf("keep: %+v", s)
+	}
+	// v3 ohne Authentifizierung: eine noch gespeicherte Community wird verworfen
+	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "2c"}, "secret": `{"community":"pub-GEHEIM"}`}); rec.Code != http.StatusOK {
+		t.Fatalf("back to v2c: %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "3", "user": "mon", "level": "noAuthNoPriv"}, "clear_secret": false}); rec.Code != http.StatusOK {
+		t.Fatalf("v3 noAuth: %d %s", rec.Code, rec.Body)
+	}
+	if s := secretOf(); s.Community != "" || s.AuthPass != "auth-GEHEIM-1" {
+		t.Fatalf("community kept for v3 noAuth: %+v", s)
+	}
+	// nur Community gespeichert (v2c) und Wechsel auf v3 ohne Authentifizierung: Geheimnis ganz leer
+	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "2c"}, "secret": `{"community":"pub-GEHEIM"}`, "clear_secret": true}); rec.Code != http.StatusOK {
+		t.Fatalf("v2c only community: %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "3", "user": "mon", "level": "noAuthNoPriv"}}); rec.Code != http.StatusOK {
+		t.Fatalf("v3 noAuth: %d %s", rec.Code, rec.Body)
+	}
+	if enc := e.col(`SELECT secret FROM m64_access WHERE uid = ?`, acc.UID); enc != "" {
+		t.Fatal("community kept for v3 noAuth")
 	}
 	for _, path := range []string{"/api/monitor64/hosts/" + created.UID, "/monitor64/host/" + created.UID} {
 		if b := e.do("GET", path, nil).Body.String(); strings.Contains(b, "GEHEIM") {
@@ -218,4 +238,31 @@ func TestSNMPFactKinds(t *testing.T) {
 	if k, _ := hostKindOf("snmp"); k.Soon {
 		t.Error("snmp host kind still 'soon'")
 	}
+}
+
+// TestSeenUpHelpers: Ports, die schon verbunden waren, kommen aus dem Laufzeitstand in den SNMP-Sammler und
+// Aenderungen zurueck (andere Zugaenge: nichts).
+func TestSeenUpHelpers(t *testing.T) {
+	m, _, _ := newTestModule(t)
+	h := &Host{Address: "192.0.2.70"}
+	col, err := m.newAPICollector(&Access{Type: "snmp"}, h, accessConfig{SNMPVersion: "2c"}, snmp.Secret{Community: "c"}.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer col.close()
+	if l, ch := seenUpChanged(col, nil); ch || l != nil {
+		t.Fatalf("empty: %v %v", l, ch)
+	}
+	restoreSeenUp(col, []string{"if:eth1", "if:eth0"})
+	l, ch := seenUpChanged(col, nil)
+	if !ch || !slices.Equal(l, []string{"if:eth0", "if:eth1"}) {
+		t.Fatalf("restored: %v %v", l, ch)
+	}
+	if _, ch := seenUpChanged(col, l); ch {
+		t.Fatal("unchanged reported as changed")
+	}
+	if _, ch := seenUpChanged(&fakeCol{}, nil); ch {
+		t.Fatal("other collector")
+	}
+	restoreSeenUp(&fakeCol{}, []string{"if:x"}) // kein SNMP-Sammler: nichts
 }

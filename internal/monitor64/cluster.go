@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,7 +46,7 @@ const (
 )
 
 // ClusterCalls sind die Anfragen, die andere Nodes stellen duerfen (HandleClusterCall).
-var ClusterCalls = []string{callSeries, callRepoll, callReach}
+var ClusterCalls = []string{callSeries, callRepoll, callReach, callTrap}
 
 var (
 	clusterScanEvery = 2 * time.Second  // eigene Aenderungen suchen
@@ -68,8 +69,8 @@ type ClusterPeer struct {
 type ClusterHooks struct {
 	// Change meldet eine Aenderung eines Eintrags (ctx traegt bei Uebernahmen die Herkunft).
 	Change func(ctx context.Context, item, id string, deleted bool)
-	// Members: Nodes, mit denen der Bereich abgeglichen wird (hier und dort an, nicht ausgesetzt); leer = allein bzw.
-	// Bereich hier aus.
+	// Members: Mitglieder des Bereichs; ausgesetzte bzw. mit Monitor64/Bereich aus zaehlen als nicht erreichbar, wenn
+	// ein Host sie nennt; leer = allein bzw. Bereich hier aus.
 	Members func(ctx context.Context, item string) []ClusterPeer
 	// Self: Kennung dieser Node.
 	Self func() string
@@ -110,7 +111,14 @@ type clusterRT struct {
 	dirtyCfg  bool
 	dirtyHost map[string]bool
 	timer     *time.Timer
-	bg        sync.WaitGroup // Hosts neu laden nach einem Schluesselwechsel (Tests warten darauf)
+	bg        sync.WaitGroup // Hosts neu laden nach einem Schluesselwechsel, Umstellung der Agents (Tests warten darauf)
+
+	ksLock  sync.Mutex // Umstellung der Agents (switchAgents): nie zwei Laeufe zugleich
+	ksMu    sync.Mutex // Lauf im Hintergrund (startKeySwitch): laeuft, danach erneut, erneut ohne Wartezeit
+	ksRun   bool
+	ksAgain bool
+	ksNow   bool
+	kdMu    sync.Mutex // clusterweit umgestellte Zugaenge (setKeyDone)
 }
 
 func (c *clusterRT) clock() time.Time {
@@ -257,10 +265,11 @@ func (m *Module) ClusterGet(ctx context.Context, item, id string) (json.RawMessa
 		if err != nil || !found {
 			return nil, false, err
 		}
+		out := map[string]any{"value": v}
 		if uid == setNotify {
-			v = m.notifyToCluster(ctx, v)
+			out["value"], out["channels_known"] = m.notifyToCluster(ctx, v), m.knownChannels(ctx)
 		}
-		b, err := json.Marshal(map[string]string{"value": v})
+		b, err := json.Marshal(out)
 		return b, err == nil, err
 	case item == ClusterItemConfig && kind == "owner":
 		return m.ownerGet(ctx, uid)
@@ -293,7 +302,7 @@ func (m *Module) ClusterGet(ctx context.Context, item, id string) (json.RawMessa
 			}
 		case "override":
 			if fmt.Sprint(row["scope"]) == "notify" {
-				row["data"] = m.notifyOverrideToCluster(ctx, fmt.Sprint(row["data"]))
+				row["data"], row["channels_known"] = m.notifyOverrideToCluster(ctx, fmt.Sprint(row["data"])), m.knownChannels(ctx)
 			}
 		}
 		b, err := json.Marshal(row)
@@ -392,13 +401,19 @@ func clUpsert(ctx context.Context, tx *sql.Tx, table string, cols []string, row 
 // rowApply uebernimmt Host, Zugang, Dienst, Einstellung am Host, Abweichung oder Wartungsfenster.
 func (m *Module) rowApply(ctx context.Context, t *clTable, uid string, data json.RawMessage, deleted bool) error {
 	db := m.st.Writer()
+	cur, err := m.clRow(ctx, t, uid)
+	if err != nil {
+		return err
+	}
 	if deleted {
-		cur, err := m.clRow(ctx, t, uid)
-		if err != nil || cur == nil || fmt.Sprint(cur["deleted"]) == "1" {
-			return err
+		if cur == nil || fmt.Sprint(cur["deleted"]) == "1" {
+			return nil
 		}
 		upd := fmt.Sprint(cur["updated_at"])
 		if _, at, ok := clusterOriginOf(ctx); ok {
+			if m.keepLocal(ctx, t, uid, cur, at) {
+				return supersededErr{"newer local change"}
+			}
 			upd = ts(at)
 		}
 		if _, err := db.ExecContext(ctx, `UPDATE `+t.table+` SET deleted = 1, updated_at = ? WHERE uid = ?`, upd, uid); err != nil {
@@ -436,33 +451,30 @@ func (m *Module) rowApply(ctx context.Context, t *clTable, uid string, data json
 	if inc, _ := row["incomplete"].(bool); inc {
 		return nil // dort nicht lesbar: hier bleibt der Stand
 	}
-	for k, v := range row {
-		if n, ok := v.(json.Number); ok {
-			i, err := n.Int64()
-			if err != nil {
-				return fmt.Errorf("monitor64 cluster: %s: %w", k, err)
-			}
-			row[k] = i
-		}
+	var known []string
+	hasKnown := false
+	if l, ok := row["channels_known"].([]any); ok && t.kind == "override" {
+		known, hasKnown = channelList(l), true
 	}
 	row["uid"] = uid
-	for _, c := range t.cols {
-		if _, ok := row[c]; !ok {
-			return fmt.Errorf("monitor64 cluster: %s: field %s missing", t.kind, c)
-		}
+	if err := validateClRow(t, row); err != nil {
+		return err
+	}
+	if cur != nil && m.keepLocal(ctx, t, uid, cur, parseTS(row["updated_at"].(string))) {
+		return supersededErr{"newer local change"}
 	}
 	switch t.kind {
-	case "host":
-		if p := fmt.Sprint(row["preferred_node"]); p != "" && !reNodeID.MatchString(p) {
-			return errClItem
-		}
 	case "access":
-		if s := fmt.Sprint(row["secret"]); s != "" {
+		if s := row["secret"].(string); s != "" {
 			row["secret"] = m.box.Encrypt(s)
 		}
 	case "override":
-		if fmt.Sprint(row["scope"]) == "notify" {
-			row["data"] = m.notifyOverrideFromCluster(ctx, fmt.Sprint(row["data"]))
+		if row["scope"] == "notify" {
+			local := ""
+			if cur != nil && fmt.Sprint(cur["scope"]) == "notify" && fmt.Sprint(cur["deleted"]) == "0" {
+				local = fmt.Sprint(cur["data"])
+			}
+			row["data"] = m.notifyOverrideFromCluster(ctx, row["data"].(string), local, known, hasKnown)
 		}
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -471,13 +483,14 @@ func (m *Module) rowApply(ctx context.Context, t *clTable, uid string, data json
 	}
 	defer func() { _ = tx.Rollback() }()
 	var renamed string
+	renamedDel := false
 	if t.kind == "host" { // zustaendige Node folgt nicht sofort einer neuen bevorzugten Node (Eintrag "owner" folgt)
 		var owner, pref string
 		if err := tx.QueryRowContext(ctx, `SELECT owner_node, preferred_node FROM m64_hosts WHERE uid = ?`, uid).Scan(&owner, &pref); err == nil && owner == "" {
 			if pref == "" {
 				pref = m.clusterSelf()
 			}
-			if pref != fmt.Sprint(row["preferred_node"]) {
+			if pref != row["preferred_node"] {
 				if _, err := tx.ExecContext(ctx, `UPDATE m64_hosts SET owner_node = ? WHERE uid = ?`, pref, uid); err != nil {
 					return err
 				}
@@ -490,18 +503,21 @@ func (m *Module) rowApply(ctx context.Context, t *clTable, uid string, data json
 			col = "kind"
 		}
 		var other string
-		err := tx.QueryRowContext(ctx, `SELECT uid FROM `+t.table+` WHERE host_uid = ? AND `+col+` = ? AND uid != ?`, row["host_uid"], row[col], uid).Scan(&other)
+		var otherDel int
+		err := tx.QueryRowContext(ctx, `SELECT uid, deleted FROM `+t.table+` WHERE host_uid = ? AND `+col+` = ? AND uid != ?`, row["host_uid"], row[col], uid).Scan(&other, &otherDel)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 		case err != nil:
 			return err
-		case other < uid:
+		case otherDel == 0 && other < uid:
 			return nil // hier gilt die kleinere Kennung, die andere Node uebernimmt sie
-		default: // die eingehende Kennung ist kleiner: der Eintrag hier uebernimmt sie
+		default:
+			// die eingehende Kennung ist kleiner bzw. der Eintrag hier ist geloescht (sein Vermerk ist schon gemeldet):
+			// der Eintrag hier uebernimmt sie
 			if _, err := tx.ExecContext(ctx, `UPDATE `+t.table+` SET uid = ? WHERE uid = ?`, uid, other); err != nil {
 				return err
 			}
-			renamed = other
+			renamed, renamedDel = other, otherDel == 1
 		}
 	}
 	if err := clUpsert(ctx, tx, t.table, t.cols, row); err != nil {
@@ -513,11 +529,167 @@ func (m *Module) rowApply(ctx context.Context, t *clTable, uid string, data json
 	m.csyncMark(ctx, t, uid)
 	if renamed != "" {
 		_, _ = db.ExecContext(ctx, `DELETE FROM m64_csync WHERE kind = ? AND uid = ?`, t.kind, renamed)
-		m.clusterChange(context.Background(), ClusterItemConfig, t.kind+":"+renamed, true) // alte Kennung: von hier geloescht
+		if !renamedDel {
+			m.clusterChange(context.Background(), ClusterItemConfig, t.kind+":"+renamed, true) // alte Kennung: von hier geloescht
+		}
 	}
 	hostUID := fmt.Sprint(row["host_uid"])
 	m.clusterDirty(t.kind, hostUID, uid)
 	return nil
+}
+
+// keepLocal: hier gibt es eine noch nicht gemeldete Aenderung (der Abgleich sucht nur alle paar Sekunden), die juenger
+// ist als die eingehende (at) - sie bleibt und geht sofort an den Cluster (die eingehende ist damit ueberholt).
+func (m *Module) keepLocal(ctx context.Context, t *clTable, uid string, cur map[string]any, at time.Time) bool {
+	stamp := fmt.Sprint(cur["updated_at"]) + "|" + fmt.Sprint(cur["deleted"])
+	if at.IsZero() || m.csyncGet(ctx, t.kind, uid) == stamp || !parseTS(fmt.Sprint(cur["updated_at"])).After(at) {
+		return false
+	}
+	m.clusterChange(context.Background(), ClusterItemConfig, t.kind+":"+uid, fmt.Sprint(cur["deleted"]) == "1")
+	m.csyncSet(ctx, t.kind, uid, stamp)
+	return true
+}
+
+// clColSpec: erlaubte Werte einer abgeglichenen Spalte. Was eine andere Node liefert, wird vor dem Speichern streng
+// geprueft (sonst scheitert z. B. Store.Hosts an einem Text in einer Zahlen-Spalte - auf allen Nodes).
+type clColSpec struct {
+	typ    byte // i: Ganzzahl lo..hi, t: Zeit (opt: auch leer), j: JSON-Objekt bzw. -Liste (opt: auch leer), u: Kennung, s: Text
+	lo, hi int64
+	max    int // Text bzw. JSON: hoechstens so viele Byte
+	opt    bool
+}
+
+var clColSpecs = map[string]clColSpec{
+	"interval_sec":  {typ: 'i', lo: 0, hi: 86400},
+	"agent_autoupd": {typ: 'i', lo: 0, hi: 1},
+	"paused":        {typ: 'i', lo: 0, hi: 1},
+	"enabled":       {typ: 'i', lo: 0, hi: 1},
+	"deleted":       {typ: 'i', lo: 0, hi: 1},
+	"adopted":       {typ: 'i', lo: -1, hi: 1},
+	"position":      {typ: 'i', lo: 0, hi: 1 << 30},
+	"updated_at":    {typ: 't'},
+	"created_at":    {typ: 't', opt: true},
+	"vanished_at":   {typ: 't', opt: true},
+	"start_at":      {typ: 't', opt: true},
+	"end_at":        {typ: 't', opt: true},
+	"ended_at":      {typ: 't', opt: true},
+	"tags":          {typ: 'j', max: 8 << 10},
+	"backup_nodes":  {typ: 'j', max: 4 << 10},
+	"config":        {typ: 'j', max: 64 << 10},
+	"rule":          {typ: 'j', max: 64 << 10},
+	"data":          {typ: 'j', max: 64 << 10},
+	"targets":       {typ: 'j', max: 64 << 10},
+	"host_rule":     {typ: 'j', max: 64 << 10, opt: true},
+	"recur":         {typ: 'j', max: 8 << 10, opt: true},
+	"created_by":    {typ: 'j', max: 4 << 10, opt: true},
+	"updated_by":    {typ: 'j', max: 4 << 10, opt: true},
+	"host_uid":      {typ: 'u'},
+	"uid":           {typ: 'u'},
+	"secret":        {typ: 's', max: 64 << 10},
+	"notes":         {typ: 's', max: 16 << 10},
+	"hostkey":       {typ: 's', max: 4 << 10},
+	"key":           {typ: 's', max: 1024},
+}
+
+// validateClRow prueft eine eingehende Zeile (alle Spalten vorhanden, Typ, Wertebereich, Groesse) und setzt Zahlen
+// als int64. Unbekannte Felder werden nicht gespeichert (clUpsert schreibt nur die Spalten).
+func validateClRow(t *clTable, row map[string]any) error {
+	bad := func(c, why string) error { return fmt.Errorf("monitor64 cluster: %s: field %s %s", t.kind, c, why) }
+	for _, c := range t.cols {
+		v, ok := row[c]
+		if !ok {
+			return bad(c, "missing")
+		}
+		spec, ok := clColSpecs[c]
+		if !ok {
+			spec = clColSpec{typ: 's', max: 1024}
+		}
+		if spec.typ == 'i' {
+			var n int64
+			switch x := v.(type) {
+			case json.Number:
+				i, err := x.Int64()
+				if err != nil {
+					return bad(c, "not an integer")
+				}
+				n = i
+			case int64:
+				n = x
+			case bool:
+				if x {
+					n = 1
+				}
+			default:
+				return bad(c, "not an integer")
+			}
+			if n < spec.lo || n > spec.hi {
+				return bad(c, "out of range")
+			}
+			row[c] = n
+			continue
+		}
+		s, ok := v.(string)
+		if !ok {
+			return bad(c, "not a text")
+		}
+		switch spec.typ {
+		case 't':
+			if (s != "" || !spec.opt) && (len(s) != len(dbTime) || parseTS(s).IsZero()) {
+				return bad(c, "not a time")
+			}
+		case 'u':
+			if !reUID.MatchString(s) {
+				return bad(c, "not an id")
+			}
+		case 'j':
+			if s == "" && spec.opt {
+				break
+			}
+			if len(s) > spec.max || !json.Valid([]byte(s)) || s[0] != '{' && s[0] != '[' {
+				return bad(c, "not valid JSON")
+			}
+		default:
+			if len(s) > spec.max || strings.ContainsRune(s, 0) {
+				return bad(c, "too long")
+			}
+		}
+	}
+	switch t.kind {
+	case "host":
+		if p := row["preferred_node"].(string); p != "" && !reNodeID.MatchString(p) {
+			return bad("preferred_node", "not a node")
+		}
+		var tags, backups []string
+		if json.Unmarshal([]byte(row["tags"].(string)), &tags) != nil || len(tags) > 64 {
+			return bad("tags", "not a list")
+		}
+		if json.Unmarshal([]byte(row["backup_nodes"].(string)), &backups) != nil || len(backups) > 16 {
+			return bad("backup_nodes", "not a list")
+		}
+		for _, b := range backups {
+			if !reNodeID.MatchString(b) {
+				return bad("backup_nodes", "not a node")
+			}
+		}
+	case "access", "service", "hostrule", "override", "maint":
+		for _, c := range []string{"config", "rule", "data", "targets", "host_rule", "recur"} {
+			if s, ok := row[c].(string); ok && s != "" && s[0] != '{' {
+				return bad(c, "not an object")
+			}
+		}
+	}
+	return nil
+}
+
+// channelList: Kennungen der Kanaele aus einer gelieferten Liste (nur gueltige, hoechstens 10000).
+func channelList(l []any) []string {
+	out := []string{}
+	for _, v := range l {
+		if s, ok := v.(string); ok && len(s) <= 64 && s != "" && len(out) < 10000 {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // clusterDirty merkt, was nach Uebernahmen neu zu laden ist (gebuendelt, clusterFlush).
@@ -593,14 +765,22 @@ func (m *Module) settingApply(ctx context.Context, key string, data json.RawMess
 	}
 	var in struct {
 		Value string `json:"value"`
+		Known *[]any `json:"channels_known"` // Kanaele, die die liefernde Node kennt (nur Benachrichtigung)
 	}
 	if err := json.Unmarshal(data, &in); err != nil {
 		return err
 	}
 	v := in.Value
+	if len(v) > 256<<10 {
+		return errClItem
+	}
 	switch key {
 	case setNotify:
-		v = m.notifyFromCluster(ctx, v)
+		var known []string
+		if in.Known != nil {
+			known = channelList(*in.Known)
+		}
+		v = m.notifyFromCluster(ctx, v, m.st.SettingOr(ctx, setNotify, ""), known, in.Known != nil)
 	case setStd:
 		var x map[string]json.RawMessage
 		if v != "" && json.Unmarshal([]byte(v), &x) != nil {
@@ -625,7 +805,9 @@ func settingStamp(v string) string {
 }
 
 // Kanaele: lokal ueber ihre Nummer (je Node verschieden), im Cluster ueber ihre Kennung (nf_channels.uid, gleich auf
-// allen Nodes mit abgeglichenen Kanaelen). Unbekannte Kanaele entfallen beim Uebernehmen; "default" bleibt.
+// allen Nodes mit abgeglichenen Kanaelen). "default" bleibt. Beim Uebernehmen gilt fuer die Kanaele, die die liefernde
+// Node kennt (channels_known), ihr Stand; Kanaele nur dieser Node (nicht geteilt, z. B. Portal/SMS) behalten ihre
+// Zuordnung hier - die liefernde Node kann sie nicht kennen und haette sie sonst verworfen.
 
 func (m *Module) channelUIDs(ctx context.Context) (byID map[string]string, byUID map[string]string) {
 	byID, byUID = map[string]string{}, map[string]string{}
@@ -642,6 +824,17 @@ func (m *Module) channelUIDs(ctx context.Context) (byID map[string]string, byUID
 		}
 	}
 	return
+}
+
+// knownChannels: Kennungen aller Kanaele dieser Node (sortiert).
+func (m *Module) knownChannels(ctx context.Context) []string {
+	_, byUID := m.channelUIDs(ctx)
+	out := make([]string, 0, len(byUID))
+	for u := range byUID {
+		out = append(out, u)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func mapRoutes(routes []eval.ChannelRoute, m map[string]string, prefixIn, prefixOut string) []eval.ChannelRoute {
@@ -663,14 +856,47 @@ func mapRoutes(routes []eval.ChannelRoute, m map[string]string, prefixIn, prefix
 	return out
 }
 
+// mergeRoutes bildet gelieferte Kanaele ("uid:<kennung>") auf die Nummern hier ab und behaelt die lokalen Kanaele,
+// die die liefernde Node nicht kennt (known; ohne Liste - aeltere Fassung - gelten die gelieferten Kanaele als bekannt).
+func mergeRoutes(in, local []eval.ChannelRoute, byID, byUID map[string]string, known []string, hasKnown bool) []eval.ChannelRoute {
+	out := mapRoutes(in, byUID, "uid:", "")
+	knows := map[string]bool{}
+	for _, u := range known {
+		knows[u] = true
+	}
+	if !hasKnown {
+		for _, r := range in {
+			if u, ok := strings.CutPrefix(r.ID, "uid:"); ok {
+				knows[u] = true
+			}
+		}
+	}
+	for _, r := range local {
+		if r.ID == defaultChannels {
+			continue // gemeinsam: es gilt der gelieferte Stand
+		}
+		u, ok := byID[r.ID]
+		if !ok || knows[u] || slices.ContainsFunc(out, func(x eval.ChannelRoute) bool { return x.ID == r.ID }) {
+			continue // Kanal gibt es hier nicht mehr bzw. die liefernde Node kennt ihn (ihr Stand gilt)
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
 func (m *Module) notifyToCluster(ctx context.Context, raw string) string {
 	byID, _ := m.channelUIDs(ctx)
 	return remapNotify(raw, func(r []eval.ChannelRoute) []eval.ChannelRoute { return mapRoutes(r, byID, "", "uid:") })
 }
 
-func (m *Module) notifyFromCluster(ctx context.Context, raw string) string {
-	_, byUID := m.channelUIDs(ctx)
-	return remapNotify(raw, func(r []eval.ChannelRoute) []eval.ChannelRoute { return mapRoutes(r, byUID, "uid:", "") })
+// notifyFromCluster: gelieferte Benachrichtigung (raw) mit den nur hier bekannten Kanaelen der bisherigen (local).
+func (m *Module) notifyFromCluster(ctx context.Context, raw, local string, known []string, hasKnown bool) string {
+	byID, byUID := m.channelUIDs(ctx)
+	var lc eval.NotifyConfig
+	_ = json.Unmarshal([]byte(local), &lc)
+	return remapNotify(raw, func(r []eval.ChannelRoute) []eval.ChannelRoute {
+		return mergeRoutes(r, lc.Channels, byID, byUID, known, hasKnown)
+	})
 }
 
 func (m *Module) notifyOverrideToCluster(ctx context.Context, raw string) string {
@@ -678,9 +904,13 @@ func (m *Module) notifyOverrideToCluster(ctx context.Context, raw string) string
 	return remapOverride(raw, func(r []eval.ChannelRoute) []eval.ChannelRoute { return mapRoutes(r, byID, "", "uid:") })
 }
 
-func (m *Module) notifyOverrideFromCluster(ctx context.Context, raw string) string {
-	_, byUID := m.channelUIDs(ctx)
-	return remapOverride(raw, func(r []eval.ChannelRoute) []eval.ChannelRoute { return mapRoutes(r, byUID, "uid:", "") })
+func (m *Module) notifyOverrideFromCluster(ctx context.Context, raw, local string, known []string, hasKnown bool) string {
+	byID, byUID := m.channelUIDs(ctx)
+	var lo eval.NotifyOverride
+	_ = json.Unmarshal([]byte(local), &lo)
+	return remapOverride(raw, func(r []eval.ChannelRoute) []eval.ChannelRoute {
+		return mergeRoutes(r, lo.Channels, byID, byUID, known, hasKnown)
+	})
 }
 
 func remapNotify(raw string, f func([]eval.ChannelRoute) []eval.ChannelRoute) string {

@@ -1,6 +1,7 @@
 package monitor64
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -88,7 +89,7 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 	if old != nil { // Stand im Speicher weiterverwenden (aktueller als m64_runtime)
 		old.mu.Lock()
 		rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = old.Trackers, old.Kinds, old.Failures, old.Missing, old.Provider
-		rt.Rising, rt.Local, rt.Trend, rt.Traps = old.Rising, old.Local, old.Trend, old.Traps
+		rt.Rising, rt.Local, rt.Trend, rt.Traps, rt.SeenUp = old.Rising, old.Local, old.Trend, old.Traps, old.SeenUp
 		old.mu.Unlock()
 		rt.view = old.getView()
 		rt.dirty = true
@@ -122,6 +123,9 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 			continue
 		}
 		col, err := m.newCollector(ctx, h, a)
+		if err == nil {
+			restoreSeenUp(col, rt.SeenUp[a.UID]) // SNMP: "schon verbunden" ueber Neustarts
+		}
 		ar := &accRT{row: a, col: col}
 		if err != nil {
 			ar.err = err.Error()
@@ -137,10 +141,17 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 	sched.Set("host:"+h.UID, time.Duration(h.IntervalSec)*time.Second, func(ctx context.Context) { m.poll(ctx, rt) })
 }
 
-// saveRuntime speichert den Laufzeitstand eines Hosts (Tracker, Fehlerzaehler, Gedaechtnis der Meldungen).
+// saveRuntime speichert den Laufzeitstand eines Hosts (Tracker, Fehlerzaehler, Gedaechtnis der Meldungen): bei einem
+// Wechsel des Zustands oder des Gedaechtnisses (Meldung, Erinnerung) sofort, sonst hoechstens alle saveEvery. Im
+// Cluster geht der Stand dabei an die anderen Nodes (die uebernehmende macht damit weiter).
 func (m *Module) saveRuntime(ctx context.Context, rt *hostRT, mem []byte) {
+	m.saveRuntimeAs(ctx, rt, mem, false)
+}
+
+// saveRuntimeAs: final = letzter Stand beim Abgeben an eine andere Node (publishFinal).
+func (m *Module) saveRuntimeAs(ctx context.Context, rt *hostRT, mem []byte, final bool) {
 	v := rt.getView()
-	changed := v != nil && (rt.lastSavedState != v.State || rt.lastSavedView != v.View)
+	changed := v != nil && (rt.lastSavedState != v.State || rt.lastSavedView != v.View) || !bytes.Equal(mem, rt.lastMem)
 	if !rt.dirty && !changed && time.Since(rt.lastSave) < saveEvery {
 		return
 	}
@@ -150,11 +161,11 @@ func (m *Module) saveRuntime(ctx context.Context, rt *hostRT, mem []byte) {
 		m.log.Warn("monitor64: save runtime", "host", rt.host.Name, "err", err)
 		return
 	}
-	rt.dirty, rt.lastSave = false, time.Now()
+	rt.dirty, rt.lastSave, rt.lastMem = false, time.Now(), mem
 	if v != nil {
 		rt.lastSavedState, rt.lastSavedView = v.State, v.View
 	}
-	m.publishState(ctx, rt, b) // Cluster: Zustand an die anderen Nodes (cluster_state.go)
+	m.publishState(ctx, rt, b, final) // Cluster: Zustand an die anderen Nodes (cluster_state.go)
 }
 
 // Views liefert den aktuellen Stand aller Hosts (fuer die Oberflaeche).

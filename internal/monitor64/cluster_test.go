@@ -797,8 +797,15 @@ func TestClusterKeyTakeover(t *testing.T) {
 	if keyOf(string(raw)) != keyOf(lineN) {
 		t.Fatalf("agent keys after rotation: %q", raw)
 	}
-	if ki, _ := a.m.keyInfo(ctx); len(ki.Pending) != 0 {
-		t.Fatalf("A has nothing to switch (not responsible for c-host): %+v", ki.Pending)
+	// A stellt c-host nicht selbst um (nicht zustaendig), behaelt den alten Schluessel aber, bis C die Umstellung meldet
+	if ki, _ := a.m.keyInfo(ctx); len(ki.Pending) != 1 || len(ki.OldKeys) != 1 {
+		t.Fatalf("A waits for C's switch: %+v", ki)
+	}
+	b.sync()
+	a.m.switchAgents(ctx, false)
+	a.m.cl.bg.Wait()
+	if ki, _ := a.m.keyInfo(ctx); len(ki.Pending) != 0 || len(ki.OldKeys) != 0 {
+		t.Fatalf("A learns the switch from C and drops its old key: %+v", ki)
 	}
 }
 

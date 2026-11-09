@@ -33,12 +33,21 @@ func init() { platformRun = runWindows }
 // runWindows startet den Agent als Dienst (vom Dienst-Manager gestartet) bzw. im Vordergrund (Konsole).
 func runWindows(exe string, args []string) int {
 	keepRunLink(exe)
+	// Ordner der Einstellungen nie mit geerbten Rechten anlegen (Hostschluessel, Protokoll; siehe ensureDataDir)
+	dir := defaultDir
+	if f, err := parseRunFlags(args, io.Discard); err == nil {
+		dir = f.dir
+	}
+	dirErr := ensureDataDir(dir)
 	isSvc, err := svc.IsWindowsService()
 	if err != nil || !isSvc {
+		if dirErr != nil {
+			fmt.Fprintln(os.Stderr, "monitor64-agent:", dirErr)
+		}
 		return runAgent(exe, args)
 	}
 	asService.Store(true)
-	logDone = serviceLog(args)
+	logDone = serviceLog(dir, dirErr)
 	defer logDone()
 	h := &agentService{exe: exe, args: args}
 	if err := svc.Run(serviceName, h); err != nil {
@@ -97,14 +106,10 @@ func (a *agentService) Execute(_ []string, req <-chan svc.ChangeRequest, st chan
 	}
 }
 
-// serviceLog leitet stderr (slog des Agents) in eine Datei mit Groessengrenze um und meldet Abstuerze nach
-// crash.log. Liefert eine Funktion, die das Protokoll schliesst.
-func serviceLog(args []string) func() {
-	dir := defaultDir
-	if f, err := parseRunFlags(args, io.Discard); err == nil {
-		dir = f.dir
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+// serviceLog leitet stderr (slog des Agents) in eine Datei in dir mit Groessengrenze um und meldet Abstuerze nach
+// crash.log. Liefert eine Funktion, die das Protokoll schliesst. dirErr: dir liess sich nicht anlegen.
+func serviceLog(dir string, dirErr error) func() {
+	if dirErr != nil {
 		return func() {}
 	}
 	if f, err := os.OpenFile(filepath.Join(dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {

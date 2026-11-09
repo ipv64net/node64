@@ -51,6 +51,7 @@ const (
 	slowFirstWait  = 2 * time.Second  // erster Lauf: so lange auf das Ergebnis warten, dann Hinweis
 	raidEvery      = 5 * time.Minute  // Storage Spaces (nur wenn vorhanden) oefter als SMART
 	deadlineMargin = 3 * time.Second  // Collect endet so viel vor der ctx-Deadline
+	driveLimit     = 5 * time.Second  // Laufwerks- bzw. Plattenaufruf (haengende LUN), siehe startDrive
 )
 
 // NoteReading steht in Notes (SMART, Updates), solange der erste Lauf im Hintergrund noch nicht fertig ist
@@ -97,6 +98,8 @@ type Cache struct {
 	mu      sync.Mutex
 	entries map[string]*slowEntry
 	wg      sync.WaitGroup
+	drives  map[string]*driveCall // laufende Laufwerks-/Plattenaufrufe (startDrive)
+	busy    diskBusy              // beschaeftigte Zeit je Platte
 }
 
 type slowEntry struct {
@@ -198,6 +201,78 @@ func (c *Cache) slow(ctx context.Context, now func() time.Time, key, sec string,
 	return slowResult{notes: []m64proto.SectionNote{{Section: sec, Note: NoteReading}}}
 }
 
+// ---- Laufwerks- und Plattenaufrufe mit Zeitlimit ----
+
+// errDriveTimeout: ein Laufwerks- bzw. Plattenaufruf kam nicht rechtzeitig zurueck (kein Fehler des Laufwerks).
+var errDriveTimeout = errors.New("Zeitlimit")
+
+// driveCall ist ein laufender Aufruf fuer ein Laufwerk bzw. eine Platte.
+type driveCall struct {
+	done  chan struct{}
+	start time.Time
+	res   any
+	err   error
+}
+
+// startDrive startet fn fuer key im Hintergrund, falls fuer key nicht schon ein Aufruf laeuft (dann liefert es
+// diesen). GetDiskFreeSpaceEx, CreateFile auf \\.\PhysicalDriveN und DeviceIoControl lassen sich nicht abbrechen:
+// eine haengende LUN (iSCSI, getrennte SAN-Platte) wuerde collect sonst blockieren. Je Schluessel laeuft hoechstens
+// ein Aufruf; er bleibt stehen, bis er zurueckkommt (kein Goroutinen-Leck bei dauerhaft haengendem Laufwerk, wie
+// statfsTimeout in m64linux). Alle Aufrufe einer Runde zuerst starten, dann mit waitDrive einsammeln: so wartet
+// eine Runde insgesamt hoechstens etwa driveLimit.
+func (c *Cache) startDrive(key string, fn func() (any, error)) *driveCall {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.drives == nil {
+		c.drives = map[string]*driveCall{}
+	}
+	if call := c.drives[key]; call != nil {
+		return call
+	}
+	call := &driveCall{done: make(chan struct{}), start: time.Now()}
+	c.drives[key] = call
+	go func() {
+		res, err := fn()
+		c.mu.Lock()
+		call.res, call.err = res, err
+		if c.drives[key] == call {
+			delete(c.drives, key)
+		}
+		c.mu.Unlock()
+		close(call.done)
+	}()
+	return call
+}
+
+// waitDrive wartet auf einen Aufruf hoechstens bis limit nach seinem Start (bzw. bis ctx endet). Haengt er schon
+// aus einer frueheren Runde laenger, kommt der Fehler sofort.
+func waitDrive[T any](ctx context.Context, call *driveCall, key string, limit time.Duration) (T, error) {
+	var zero T
+	rest := limit - time.Since(call.start)
+	if rest <= 0 {
+		select {
+		case <-call.done:
+		default:
+			return zero, fmt.Errorf("%s: %w, haengt seit %s", key, errDriveTimeout, time.Since(call.start).Round(time.Second))
+		}
+	} else {
+		t := time.NewTimer(rest)
+		defer t.Stop()
+		select {
+		case <-call.done:
+		case <-t.C:
+			return zero, fmt.Errorf("%s: %w (%s)", key, errDriveTimeout, limit)
+		case <-ctx.Done():
+			return zero, fmt.Errorf("%s: %w", key, ctx.Err())
+		}
+	}
+	if call.err != nil {
+		return zero, call.err
+	}
+	v, _ := call.res.(T)
+	return v, nil
+}
+
 // ---- Texte und Fehler ----
 
 // clip kuerzt freie Texte vom Host, ersetzt ungueltiges UTF-8 und Steuerzeichen.
@@ -277,12 +352,13 @@ func parsePagefiles(buf []byte, pageSize uint64) (total, used uint64, ok bool) {
 // diskPerf ist der Teil von DISK_PERFORMANCE, den der Agent braucht.
 type diskPerf struct {
 	bytesRead, bytesWritten uint64
-	idle, query             int64 // 100 ns
+	idle                    int64 // Leerlaufzeit seit Start der Zaehler, 100 ns
 	reads, writes           uint32
 }
 
 // parseDiskPerf liest DISK_PERFORMANCE (IOCTL_DISK_PERFORMANCE): BytesRead 0, BytesWritten 8, ReadTime 16,
-// WriteTime 24, IdleTime 32, ReadCount 40, WriteCount 44, QueueDepth 48, SplitCount 52, QueryTime 56.
+// WriteTime 24, IdleTime 32, ReadCount 40, WriteCount 44, QueueDepth 48, SplitCount 52, QueryTime 56. QueryTime ist
+// die Systemuhrzeit der Abfrage und taugt nicht als Zeitbasis (siehe diskBusy).
 func parseDiskPerf(b []byte) (diskPerf, bool) {
 	if len(b) < 64 {
 		return diskPerf{}, false
@@ -294,17 +370,47 @@ func parseDiskPerf(b []byte) (diskPerf, bool) {
 		idle:         int64(le.Uint64(b[32:])),
 		reads:        le.Uint32(b[40:]),
 		writes:       le.Uint32(b[44:]),
-		query:        int64(le.Uint64(b[56:])),
 	}, true
 }
 
-// ioTimeMs: beschaeftigte Zeit in ms als steigender Zaehler (Abfragezeit minus Leerlauf); die Node rechnet die
-// Auslastung aus der Differenz zweier Berichte.
-func (p diskPerf) ioTimeMs() uint64 {
-	if p.query <= p.idle || p.idle < 0 {
+// diskBusy summiert die beschaeftigte Zeit je Platte im Agent auf: zwischen zwei Abfragen verstrichene Zeit (monotone
+// Uhr) minus der dabei gewachsenen Leerlaufzeit. Das ergibt einen steigenden Zaehler in ms (wie io_ticks unter
+// Linux), aus dessen Differenz die Node die Auslastung rechnet. QueryTime - IdleTime waere die Zeit seit 1601 minus
+// Leerlauf: ein Sprung der Systemuhr (Zeitabgleich, Stellen von Hand) zaehlte dann als Last (busy 100 %).
+type diskBusy struct {
+	mu    sync.Mutex
+	disks map[string]*busyState
+}
+
+type busyState struct {
+	idle int64         // IdleTime der letzten Abfrage (100 ns)
+	at   time.Duration // Zeitpunkt der letzten Abfrage (monoton)
+	busy uint64        // aufsummiert (100 ns)
+}
+
+// monoStart ist der Bezugspunkt der monotonen Uhr (time.Since nutzt die monotone Zeit).
+var monoStart = time.Now()
+
+// update nimmt die Leerlaufzeit einer Platte zum Zeitpunkt now (monoton) auf und liefert die beschaeftigte Zeit in
+// ms. Die erste Abfrage einer Platte legt nur die Basis (0). Waechst die Leerlaufzeit schneller als die Uhr (z. B.
+// ueber einen Ruhezustand) oder springt sie zurueck (Zaehler neu), zaehlt das Intervall nicht.
+func (b *diskBusy) update(name string, idle int64, now time.Duration) uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.disks == nil {
+		b.disks = map[string]*busyState{}
+	}
+	st := b.disks[name]
+	if st == nil { // Namen aus fester Liste (PhysicalDrive0..63): die Liste waechst nicht
+		b.disks[name] = &busyState{idle: idle, at: now}
 		return 0
 	}
-	return uint64(p.query-p.idle) / 10000
+	elapsed := int64(now-st.at) / 100
+	if d := idle - st.idle; elapsed > 0 && d >= 0 && d < elapsed {
+		st.busy += uint64(elapsed - d)
+	}
+	st.idle, st.at = idle, now
+	return st.busy / 10000
 }
 
 // storageDesc ist der Teil von STORAGE_DEVICE_DESCRIPTOR (IOCTL_STORAGE_QUERY_PROPERTY), den der Agent braucht.

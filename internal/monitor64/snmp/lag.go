@@ -24,6 +24,9 @@ func (c *Collector) collectLAG(r *round) {
 	if c.isAbsent("lag", r.now) || c.ifStatic == nil {
 		return
 	}
+	if !r.ifOK { // Portstatus dieser Runde fehlt (IF-MIB-Teilfehler meldet "bond:"): nicht mit altem Stand rechnen
+		return
+	}
 	t, err := walkColumns(r.ctx, r.c, []string{lagAggMAC, lagPortSelected, lagPortAttached, lagPortPartnerID, lagPortPartnerK}, c.cfg.MaxRep)
 	if err != nil {
 		r.part.add("LAG-MIB", err, "bond:")

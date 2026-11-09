@@ -78,6 +78,7 @@ func (c *Collector) collectHost(r *round) {
 		} else {
 			c.markAbsent("ucd", r.now, len(res) == 0)
 			ucd = res
+			r.at = c.now() // Messzeitpunkt der CPU-Zaehler
 		}
 	}
 	var hr table
@@ -248,7 +249,7 @@ func (c *Collector) ucdCPU(r *round, ucd map[string]pdu) (model.Service, bool) {
 			continue
 		}
 		have = true
-		v, _, okd := c.delta("cpu|"+o, p, r.now)
+		v, _, okd := c.delta("cpu|"+o, p, r.at)
 		if !okd {
 			ok = false
 		}

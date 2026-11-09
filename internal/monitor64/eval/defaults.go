@@ -120,7 +120,7 @@ func Defaults() Table {
 		KindIfUtil:        num(L(80), L(90), Up, 5*m, DefaultHyst),
 		KindIfErrRate:     num(L(0.01), L(0.1), Up, 5*m, 0.005),
 		KindPrinterSupply: num(L(15), L(5), Down, 0, DefaultHyst),
-		KindUPSRuntime:    num(L(1200), L(600), Down, 0, 60),
+		KindUPSRuntime:    num(LOff(), L(600), Down, 0, 60), // Warnung ist "auf Batterie" (ups.on_battery); bewertet nur auf Batterie (runner)
 		KindPoEUsed:       num(L(85), L(95), Up, 5*m, DefaultHyst),
 		KindTempSystem:    num(L(70), L(80), Up, 5*m, DefaultHyst),
 

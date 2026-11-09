@@ -165,5 +165,48 @@ func (m *Module) snmpSecretIn(a *Access, in *accessIn, isNew bool) error {
 	}
 	var cfg accessConfig
 	_ = json.Unmarshal(a.Config, &cfg)
+	if cfg.SNMPVersion == "3" { // v3: keine Community behalten (der Trap-Empfaenger naehme sonst weiter v1/v2c an)
+		if s := snmp.ParseSecret(final); s.Community != "" {
+			s.Community = ""
+			if s.AuthPass == "" && s.PrivPass == "" {
+				final, in.Secret, in.ClearSecret = "", "", true
+			} else {
+				final = s.String()
+				in.Secret = final
+			}
+		}
+	}
 	return checkSNMPSecret(cfg, final)
+}
+
+// snmpOf liefert den SNMP-Sammler hinter einem Zugang (nil bei anderen Zugaengen).
+func snmpOf(col collector) *snmp.Collector {
+	if a, ok := col.(*apiAdapter); ok {
+		if c, ok := a.src.(*snmp.Collector); ok {
+			return c
+		}
+	}
+	return nil
+}
+
+// restoreSeenUp gibt dem SNMP-Sammler die Ports, die schon einmal verbunden waren (aus dem Laufzeitstand des Hosts,
+// ueber Neustarts gemerkt): sie bleiben Vorschlag, auch wenn sie gerade keinen Link haben.
+func restoreSeenUp(col collector, keys []string) {
+	if c := snmpOf(col); c != nil && len(keys) > 0 {
+		c.AddSeenUp(keys)
+	}
+}
+
+// seenUpChanged liefert die Ports des SNMP-Sammlers, die schon einmal verbunden waren, wenn sie sich gegenueber dem
+// gemerkten Stand geaendert haben (dann im Laufzeitstand merken).
+func seenUpChanged(col collector, old []string) ([]string, bool) {
+	c := snmpOf(col)
+	if c == nil {
+		return nil, false
+	}
+	cur := c.SeenUp()
+	if slices.Equal(cur, old) {
+		return nil, false
+	}
+	return cur, true
 }

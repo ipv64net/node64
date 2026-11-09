@@ -138,10 +138,10 @@ func zfsCount(s string) (uint64, bool) {
 	return uint64(v * mult), true
 }
 
-// mergeZpoolStatus traegt Fehlertext und Scrub in die Pools ein. Errors bleibt "No known data errors", solange
+// MergeZpoolStatus traegt Fehlertext und Scrub in die Pools ein. Errors bleibt "No known data errors", solange
 // weder Datenfehler noch Geraetefehler (READ/WRITE/CKSUM > 0) vorliegen; sonst steht dort ein Kurztext - auch bei
 // ONLINE (ZFS korrigiert Pruefsummenfehler und bleibt ONLINE).
-func mergeZpoolStatus(pools []m64proto.ZPool, st map[string]ZpoolStatus) {
+func MergeZpoolStatus(pools []m64proto.ZPool, st map[string]ZpoolStatus) {
 	for i := range pools {
 		s, ok := st[pools[i].Name]
 		if !ok {

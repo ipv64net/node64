@@ -96,7 +96,9 @@ func TestNodeReportE2E(t *testing.T) {
 	if x := raid["md11"]; x.Failed != 1 || x.Spare != 2 {
 		t.Errorf("md11 %+v", x)
 	}
-	if x := raid["md6"]; !strings.Contains(x.State, "degraded") {
+	// Wiederaufbau auf die Reserve nach einem Ausfall: Zustand recovering mit Fortschritt (wie beim Agent); die
+	// defekte Platte (Failed) meldet der Mapper weiter als raid_degraded
+	if x := raid["md6"]; x.State != "recovering" || x.SyncPercent == nil || x.Failed != 1 {
 		t.Errorf("md6 %+v", x)
 	}
 	var syncing int
@@ -281,5 +283,62 @@ func TestTicksU64(t *testing.T) {
 	}
 	if u64(-1) != 0 || u64(2.6) != 3 || u64(1e30) == 0 {
 		t.Error("u64")
+	}
+}
+
+// PB3/PB4: mdraid mit NaN-Zaehlern bzw. im Wiederaufbau (md meldet dabei noch degraded).
+func TestNodeRAIDEdge(t *testing.T) {
+	m, err := Parse([]byte(`node_md_state{device="md0",state="active"} 0
+node_md_state{device="md0",state="recovering"} 1
+node_md_disks_required{device="md0"} 2
+node_md_disks{device="md0",state="active"} 1
+node_md_disks{device="md0",state="failed"} 0
+node_md_disks{device="md0",state="spare"} 1
+node_md_degraded{device="md0"} 1
+node_md_blocks{device="md0"} 1000
+node_md_blocks_synced{device="md0"} 250
+node_md_state{device="md1",state="active"} 1
+node_md_disks_required{device="md1"} 2
+node_md_disks{device="md1",state="active"} 2
+node_md_disks{device="md1",state="failed"} NaN
+node_md_disks{device="md1",state="spare"} NaN
+node_md_state{device="md2",state="active"} 1
+node_md_disks_required{device="md2"} 2
+node_md_disks{device="md2",state="active"} 1
+node_md_degraded{device="md2"} 1
+`), Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := nodeReport(m, testNow)
+	if len(r.RAID) != 3 {
+		t.Fatalf("RAID %+v", r.RAID)
+	}
+	if md0 := r.RAID[0]; md0.State != "recovering" || md0.SyncPercent == nil || *md0.SyncPercent != 25 {
+		t.Errorf("md0 (Wiederaufbau) %+v", md0)
+	}
+	if md1 := r.RAID[1]; md1.Failed != 0 || md1.Spare != 0 || md1.State != "active" {
+		t.Errorf("md1 (NaN) %+v", md1)
+	}
+	if md2 := r.RAID[2]; md2.State != "active, degraded" || md2.SyncPercent != nil {
+		t.Errorf("md2 (degraded) %+v", md2)
+	}
+}
+
+// PB5: FreeBSD-node_exporter nennt die Interrupt-Zeit "interrupt"; PB2: ohne freien Speicher kein Abschnitt.
+func TestNodeFreeBSDCPUAndMem(t *testing.T) {
+	m, _ := Parse([]byte(`node_cpu_seconds_total{cpu="0",mode="user"} 10
+node_cpu_seconds_total{cpu="0",mode="nice"} 0
+node_cpu_seconds_total{cpu="0",mode="system"} 5
+node_cpu_seconds_total{cpu="0",mode="interrupt"} 3
+node_cpu_seconds_total{cpu="0",mode="idle"} 100
+node_memory_MemTotal_bytes 1000
+`), Limits{})
+	r := nodeReport(m, testNow)
+	if r.CPU == nil || r.CPU.IRQ != 300 || r.CPU.User != 1000 || r.CPU.Idle != 10000 {
+		t.Errorf("CPU %+v", r.CPU)
+	}
+	if r.Mem != nil {
+		t.Errorf("Mem ohne freien Speicher: %+v", r.Mem)
 	}
 }

@@ -24,6 +24,11 @@
   "Connection" choice in the wizard with install command.
 - Cluster UI: "monitored by", preferred and backup nodes per host with reachability check, cluster card with key
   rotation, gap note in charts.
+- Code review fixes phase 2–4: more robust push mode (test no longer breaks the registration, no takeover by token
+  holders, safe port change), cluster (suspended nodes, key rotation without lockout, local channels kept, age limits),
+  traps (rate limit per sender, v3 time window, traps in the cluster), Windows install (existing folder, script folder,
+  job object), UPS runtime only on battery, status pages (unknown, pauses, recurring maintenance), non-suggested services
+  can be adopted.
 - Code review fixes: intentionally missing values (stopped VM, sleeping disk) stay OK, reminders are not lost after
   quiet hours, no duplicate messages to default channels, ZFS device errors on ONLINE pools, Proxmox cluster services
   evaluated by a monitored node, hung VMs even when allowed to be off, thousands separator and hysteresis in the shown unit.

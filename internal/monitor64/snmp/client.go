@@ -15,8 +15,7 @@ import (
 
 // Grenzen gegen feindliche bzw. kaputte Agenten (endlose Tabellen, nicht steigende OIDs).
 const (
-	maxTableRows   = 5000 // Zeilen je Spalte
-	maxWalkReqs    = 1000 // Anfragen je Tabellen-Abfrage
+	maxTableRows   = 5000 // Zeilen je Spalte (gezaehlt auch Zeilen ohne Wert)
 	maxGetOIDs     = 20   // OIDs je GET
 	varbindBudget  = 60   // Varbinds je GETBULK-Antwort (Zeilen = Budget / Spalten)
 	maxTextLen     = 256  // Texte vom Geraet (Namen, Beschreibungen)
@@ -445,6 +444,9 @@ func sortIdx(l []string) {
 	}
 }
 
+// walkReqLimit: hoechstens so viele Anfragen je Tabellen-Abfrage mit n Spalten.
+func walkReqLimit(n int) int { return n*(maxTableRows+1) + 64 }
+
 // walkColumns fragt mehrere Spalten gleichzeitig ab (GETBULK mit mehreren OIDs, v1 GETNEXT). Jede Spalte endet,
 // sobald eine Antwort ausserhalb ihres Praefixes liegt, nicht steigt oder endOfMibView meldet.
 func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table, error) {
@@ -470,7 +472,11 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 		maxRep = 20
 	}
 	total := 0
-	for req := 0; req < maxWalkReqs; req++ {
+	// Jede verwertbare Antwort beendet eine Spalte oder bringt sie mindestens eine Zeile weiter, und keine Spalte geht
+	// ueber maxTableRows: so viele Anfragen reichen fuer jede Tabelle (auch grosse IF-Tabellen mit vielen Spalten und
+	// wenigen Zeilen je GETBULK). Zeitlich begrenzt die Runde.
+	maxReqs := walkReqLimit(len(cols))
+	for req := 0; req < maxReqs; req++ {
 		var active []*colState
 		for _, st := range states {
 			if !st.done {
@@ -534,10 +540,10 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 				st.done = true
 				continue
 			}
+			st.rows++
 			if missing(p) {
 				continue
 			}
-			st.rows++
 			cp, size := clip(p)
 			if total += size; total > maxWalkBytes {
 				return out, errors.New("Antwort zu gross")

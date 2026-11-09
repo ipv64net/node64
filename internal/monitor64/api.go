@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/promscrape"
 	"github.com/ipv64net/node64/internal/monitor64/snmp"
+	"github.com/ipv64net/node64/internal/monitor64/transport"
 	"github.com/ipv64net/node64/internal/monitor64/tsdb"
 )
 
@@ -193,7 +195,12 @@ type accessIn struct {
 }
 
 var (
+	// reUser: Konto fuer SSH ohne Agent (Linux-Name; steht im angezeigten Befehl fuer authorized_keys und sudoers,
+	// dort waeren "\" und "@" Sonderzeichen). reLogin: Konten von Geraeten und APIs (Redfish, TrueNAS, NUT,
+	// Prometheus, SNMPv3), auch Verzeichnis-Konten wie user@domain und DOMAIN\user; ":" (Basic-Auth), Leer- und
+	// Steuerzeichen bleiben verboten.
 	reUser  = regexp.MustCompile(`^[A-Za-z0-9._-]{0,32}$`)
+	reLogin = regexp.MustCompile(`^[A-Za-z0-9._@\\-]{0,128}$`)
 	reToken = regexp.MustCompile(`^[A-Za-z0-9@!._:-]{0,128}$`)
 	reNode  = regexp.MustCompile(`^[A-Za-z0-9._-]{0,64}$`)
 	rePin   = regexp.MustCompile(`^([A-Fa-f0-9:]{0,128}|SHA256:[A-Za-z0-9+/]{43}=?)$`) // Zertifikat (hex) bzw. SSH-Host-Key (Docker ssh://)
@@ -221,7 +228,7 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	switch {
 	case c.Port < 0 || c.Port > 65535:
 		return nil, errBad("port")
-	case !reUser.MatchString(c.User):
+	case !validUser(typ, c.User):
 		return nil, errBad("user")
 	case !reToken.MatchString(c.TokenID):
 		return nil, errBad("token_id")
@@ -242,7 +249,7 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 			}
 		}
 	} else if len(c.Metrics) > 0 {
-		return nil, errBad("metrics")
+		return nil, errBad("metrics", "error", "nur fuer Prometheus")
 	}
 	c.UPS, c.TLS, c.API = strings.TrimSpace(c.UPS), strings.TrimSpace(c.TLS), strings.TrimSpace(c.API)
 	switch {
@@ -284,6 +291,17 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	}
 	b, _ := json.Marshal(c)
 	return b, nil
+}
+
+// validUser prueft den Benutzernamen je Zugangsart (SNMPv3: hoechstens 32 Byte, RFC 3414).
+func validUser(typ, u string) bool {
+	switch typ {
+	case "ssh", "agent":
+		return reUser.MatchString(u)
+	case "snmp":
+		return len(u) <= 32 && reLogin.MatchString(u)
+	}
+	return reLogin.MatchString(u)
 }
 
 // accessOut ist ein Zugang in API-Antworten: nie das Geheimnis, nur ob eines gesetzt ist.
@@ -468,6 +486,7 @@ func (m *Module) apiHostUpdate(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
+	wasPaused := h.Paused
 	if err := in.apply(h, h.IntervalSec); err != nil {
 		m.fail(w, r, err)
 		return
@@ -475,6 +494,13 @@ func (m *Module) apiHostUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := m.store.SaveHost(ctx, h, m.actor(r)); err != nil {
 		m.fail(w, r, err)
 		return
+	}
+	if h.Paused != wasPaused { // Pause im Verlauf (Statusseiten zaehlen pausierte Zeit nicht)
+		kind := "resume"
+		if h.Paused {
+			kind = "pause"
+		}
+		m.event(ctx, "", h.UID, "", kind, "", m.actor(r), time.Now())
 	}
 	m.audit(r, "host.update", h.Name, "uid="+h.UID)
 	m.ReloadHost(ctx, h.UID)
@@ -669,6 +695,18 @@ func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 		res.Error = i18nText("monitor64.err.not_running")
 		return res
 	}
+	if a.Type == "agent" {
+		var cfg accessConfig
+		_ = json.Unmarshal(a.Config, &cfg)
+		if cfg.Mode == "push" {
+			ctx, cancel := context.WithTimeout(ctx, testTimeout)
+			defer cancel()
+			start := time.Now()
+			m.testPush(ctx, a, cfg, &res)
+			res.Ms = time.Since(start).Milliseconds()
+			return res
+		}
+	}
 	a.UID = "test:" + newUID()
 	defer m.pool.Remove(a.UID)
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
@@ -697,6 +735,39 @@ func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 	}
 	slices.SortStableFunc(res.Services, func(x, y serviceIn) int { return kindOrder(x.Kind) - kindOrder(y.Kind) })
 	return res
+}
+
+// testPush testet einen Push-Zugang ueber den laufenden Client des gespeicherten Zugangs (kein eigener Test-Client:
+// der Agent hat seine Verbindungen beim Token, ein zweiter Client konkurrierte mit dem echten um sie). Ungespeichert
+// bzw. mit geaendertem Token: erst speichern; Zugang aus oder noch nicht eingeplant: kein Test.
+func (m *Module) testPush(ctx context.Context, a Access, cfg accessConfig, res *testResult) {
+	if a.UID == "" {
+		res.Error = i18nText("monitor64.err.push_test_saved")
+		return
+	}
+	c := m.pool.Existing(a.UID)
+	switch {
+	case c == nil:
+		res.Error = i18nText("monitor64.err.push_inactive")
+		return
+	case c.PushToken() != cfg.Token:
+		res.Error = i18nText("monitor64.err.push_test_saved")
+		return
+	}
+	rep, err := c.Collect(ctx)
+	res.Fingerprint = c.HostKey()
+	if err != nil {
+		res.Error = transport.CleanError(err).Error()
+		return
+	}
+	res.OK = true
+	for _, s := range MapReport(nil, rep) {
+		res.Services = append(res.Services, serviceIn{Key: s.Key, Name: s.Name, Kind: s.Kind, Default: s.Default})
+	}
+	if perr := sectionErrors(rep); perr != nil {
+		res.Error = perr.Error()
+	}
+	slices.SortStableFunc(res.Services, func(x, y serviceIn) int { return kindOrder(x.Kind) - kindOrder(y.Kind) })
 }
 
 // testAPIAccess testet einen API-Zugang (apis.*.Test: Fingerabdruck, Bestaetigung, Cluster-Nodes). Nur wenn die
@@ -744,6 +815,9 @@ func (m *Module) testAPIAccess(ctx context.Context, h *Host, a Access, res *test
 type testIn struct {
 	Address string   `json:"address"`
 	Access  accessIn `json:"access"`
+	// AccessUID: Formular eines gespeicherten Zugangs (Geheimnis mit dem gespeicherten zusammenfuehren, Push ueber
+	// den laufenden Client)
+	AccessUID string `json:"access_uid"`
 }
 
 // apiTest: POST Verbindung testen, bevor etwas gespeichert ist (Assistent).
@@ -758,6 +832,31 @@ func (m *Module) apiTest(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, errBad("address"))
 		return
 	}
+	if in.AccessUID != "" { // gespeicherter Zugang: muss zum Host mit dieser Adresse gehoeren und die Art passen
+		ctx := r.Context()
+		a, err := m.accessByUID(ctx, in.AccessUID)
+		if err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		h, err := m.store.Host(ctx, a.HostUID)
+		if err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		if !strings.EqualFold(strings.Trim(strings.TrimSpace(h.Address), "[]"), addr) {
+			m.fail(w, r, errBad("address"))
+			return
+		}
+		res, err := m.testStored(ctx, h, a, in.Access)
+		if err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		m.audit(r, "access.test", h.Name, fmt.Sprintf("type=%s uid=%s ok=%t", a.Type, a.UID, res.OK))
+		writeJSON(w, http.StatusOK, res)
+		return
+	}
 	var a Access
 	if _, err := m.buildAccess(&a, in.Access, true); err != nil {
 		m.fail(w, r, err)
@@ -768,7 +867,11 @@ func (m *Module) apiTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// apiAccessTest: POST gespeicherten Zugang testen (mit gespeichertem Geheimnis und Hostschluessel).
+// apiAccessTest: POST gespeicherten Zugang testen (mit gespeichertem Geheimnis und Hostschluessel). Optional mit den
+// Aenderungen aus dem Formular (accessIn wie bei PUT, ohne Typwechsel; nichts wird gespeichert): ein leeres bzw.
+// teilweise neues Geheimnis wird wie beim Speichern mit dem gespeicherten zusammengefuehrt (z. B. SNMP v3 nur das
+// Auth-Passwort neu). Das gespeicherte Geheimnis geht dabei nur an das gespeicherte Ziel: bei geaenderter URL bzw.
+// geaendertem Pin erst speichern oder das Geheimnis neu eingeben.
 func (m *Module) apiAccessTest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	a, err := m.accessByUID(ctx, r.PathValue("uid"))
@@ -781,8 +884,67 @@ func (m *Module) apiAccessTest(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	res := m.testAccess(ctx, h, *a)
+	var in accessIn
+	has, err := decodeOptional(r, &in)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if !has {
+		writeJSON(w, http.StatusOK, m.testAccess(ctx, h, *a))
+		return
+	}
+	res, err := m.testStored(ctx, h, a, in)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// testStored testet einen gespeicherten Zugang mit den Aenderungen aus dem Formular (nichts wird gespeichert):
+// Geheimnis wie beim Speichern zusammengefuehrt; das gespeicherte geht nur an das gespeicherte Ziel.
+func (m *Module) testStored(ctx context.Context, h *Host, a *Access, in accessIn) (testResult, error) {
+	if in.Type != "" && in.Type != a.Type {
+		return testResult{}, errBad("access_type")
+	}
+	in.Type, in.Enabled, in.NewToken = "", nil, false
+	t := *a
+	keep, err := m.buildAccess(&t, in, false)
+	if err != nil {
+		return testResult{}, err
+	}
+	stored := a.Secret != "" && !in.ClearSecret && (keep || a.Type == "snmp") // SNMP: Teil-Geheimnis gemischt
+	if stored && t.Secret != "" && targetChanged(a.Config, t.Config) {
+		return testResult{Services: []serviceIn{}, Error: i18nText("monitor64.err.test_save_first")}, nil
+	}
+	return m.testAccess(ctx, h, t), nil
+}
+
+// targetChanged: Ziel eines Zugangs (URL, Pin) geaendert - dorthin geht das gespeicherte Geheimnis nicht. Adresse
+// und Port des Hosts aendert der Zugang nicht (bei SSH und SNMP bleibt es derselbe Host).
+func targetChanged(old, cur json.RawMessage) bool {
+	var o, c accessConfig
+	_ = json.Unmarshal(old, &o)
+	_ = json.Unmarshal(cur, &c)
+	return o.URL != c.URL || o.Pin != c.Pin
+}
+
+// decodeOptional liest einen JSON-Koerper wie decode; ein leerer Koerper ist erlaubt (has = false).
+func decodeOptional(r *http.Request, v any) (has bool, err error) {
+	b, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxBody))
+	if err != nil {
+		return false, errBad("json", "error", err.Error())
+	}
+	if len(bytes.TrimSpace(b)) == 0 {
+		return false, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return false, errBad("json", "error", err.Error())
+	}
+	return true, nil
 }
 
 // apiNodeAddr: GET Adresse dieser Node in Richtung eines Hosts (fuer from="..." in authorized_keys). Es wird kein

@@ -36,7 +36,7 @@ func FuzzWalk(f *testing.F) {
 	f.Fuzz(func(t *testing.T, o1 string, t1 byte, o2 string, t2 byte) {
 		hc := &hostileConn{resp: []pdu{{Name: o1, Type: gosnmp.Asn1BER(t1), Value: []byte("x")}, {Name: o2, Type: gosnmp.Asn1BER(t2), Value: 7}}}
 		_, _ = walkColumns(context.Background(), hc, []string{ifDescr, ifType}, 20)
-		if hc.reqs > maxWalkReqs {
+		if hc.reqs > walkReqLimit(2) {
 			t.Fatalf("zu viele Anfragen: %d", hc.reqs)
 		}
 		_, _ = getScalars(context.Background(), hc, []string{oidSysDescr, oidSysUpTime})

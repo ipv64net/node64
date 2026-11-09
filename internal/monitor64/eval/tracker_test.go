@@ -67,7 +67,7 @@ func TestTrackerDirectionDown(t *testing.T) {
 	})
 	// USV: Restlaufzeit in Sekunden (20/10 min), Hysterese 60 s
 	tr = Tracker{}
-	runSteps(t, eff(KindUPSRuntime, nil), &tr, []step{
+	runSteps(t, eff(KindUPSRuntime, &Rule{Warn: L(1200)}), &tr, []step{ // Warnung am Dienst gesetzt (Standard: nur Kritisch)
 		{0, 3600, OK, "volle Batterie", false},
 		{1, 599, Crit, "unter 10 min", false},
 		{2, 640, Crit, "Hysterese", false},

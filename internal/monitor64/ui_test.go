@@ -166,7 +166,7 @@ func TestPagesRender(t *testing.T) {
 		{"/monitor64/host/" + h.UID, "host", []string{`data-m64-page="host"`, `data-host="` + h.UID + `"`, `nas&lt;01&gt;`, `id="m64-svcs"`, `id="m64-charts"`, `data-range="1y"`, `id="m64-detail"`, `data-act="discover"`, `data-act="delete"`, `"secret_set":true`}},
 		{"/monitor64/problems", "problems", []string{`data-m64-page="problems"`, `data-tab="closed"`, `id="m64-who"`, `id="m64-csv"`, `id="m64-pb"`}},
 		{"/monitor64/maintenance", "maintenance", []string{`data-m64-page="maint"`, `id="m64-maint-new"`, `id="m64-maint-list"`}},
-		{"/monitor64/rules", "rules", []string{`data-m64-page="rules"`, `data-kind="fs.used"`, `name="warn" value="80"`, `name="crit" value="90"`, `data-kind="ups.runtime" data-factor="60"`, `name="warn" value="20"`,
+		{"/monitor64/rules", "rules", []string{`data-m64-page="rules"`, `data-kind="fs.used"`, `name="warn" value="80"`, `name="crit" value="90"`, `data-kind="ups.runtime" data-factor="60"`, `name="crit" value="10"`,
 			`data-kind="smart.failed"`, `value="crit" selected`, `id="m64-ovr"`, "monitor64.rgroup.storage", `value="900" selected`}},
 		{"/monitor64/notify", "notify", []string{`data-m64-page="notify"`, `id="m64-nf-channels"`, `id="m64-remind-crit"`, `id="m64-crit-quiet"`, `data-pv="f"`, `id="m64-nf-test"`}},
 		{"/monitor64/settings", "settings", []string{`data-m64-page="settings"`, `id="m64-settings-form"`, `id="m64-status"`, `value="60" selected`, `id="m64-pubkey"`, "ssh-ed25519 ", `id="m64-fp"`, "SHA256:"}},

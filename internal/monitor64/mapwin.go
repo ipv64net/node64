@@ -8,15 +8,41 @@ import (
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
-// Zuordnung der Windows-Abschnitte des Agent-Berichts (m64win). Noch nicht in MapReport verdrahtet: dort ersetzt
-// mapWinSvc die Schleife ueber cur.WinSvc (siehe Bericht des Windows-Agents).
+// Zuordnung der Windows-Abschnitte des Agent-Berichts (m64win bzw. windows_exporter ueber promscrape); MapReport ruft
+// mapWinSvc fuer cur.WinSvc auf.
 
 // winSvcIgnore: Dienste mit Starttyp Automatisch, die sich nach getaner Arbeit selbst beenden (Updater von Browsern,
-// Lizenzdienst ...). Sie zaehlen in der Zusammenfassung nicht als gestoppt; einzeln uebernommen werden sie trotzdem
-// ueberwacht.
+// Lizenzdienst, Dienste mit Trigger-Start wie die Uebermittlungsoptimierung ...) und Dienste je Benutzer (Vorlage
+// ohne bzw. Instanz mit "_<hex>" dahinter). Der Monitor64-Agent laesst Trigger- und Benutzerdienste schon beim Lesen
+// weg, windows_exporter liefert sie ungefiltert. Sie zaehlen in der Zusammenfassung nicht als gestoppt; einzeln
+// uebernommen werden sie trotzdem ueberwacht.
 var winSvcIgnore = regexp.MustCompile(`(?i)^(gupdate|gupdatem|GoogleUpdater(Internal)?Service.*|edgeupdate|edgeupdatem|` +
 	`MicrosoftEdgeElevationService|BraveUpdate.*|brave|bravem|MozillaMaintenance|sppsvc|RemoteRegistry|MapsBroker|` +
-	`clr_optimization_v.*|SysmonLog|TrustedInstaller|wuauserv|UsoSvc|WaaSMedicSvc|ShellHWDetection|tiledatamodelsvc)$`)
+	`clr_optimization_v.*|SysmonLog|TrustedInstaller|wuauserv|UsoSvc|WaaSMedicSvc|ShellHWDetection|tiledatamodelsvc|` +
+	`DoSvc|SgrmBroker|uhssvc|` +
+	`(OneSyncSvc|WpnUserService|CDPUserSvc|PimIndexMaintenanceSvc|UnistoreSvc|UserDataSvc|MessagingService|cbdhsvc|` +
+	`BcastDVRUserService|DevicesFlowUserSvc|DevicePickerUserSvc|DeviceAssociationBrokerSvc|PrintWorkflowUserSvc|` +
+	`BluetoothUserService|CaptureService|ConsentUxUserSvc|CredentialEnrollmentManagerUserSvc|UdkUserSvc|` +
+	`webthreatdefusersvc|NPSMSvc|P9RdrService|PenService|AarSvc|CloudBackupRestoreSvc)(_[0-9a-f]{4,8})?)$`)
+
+// winSvcInstance: Name einer Instanz eines Benutzerdienstes (Vorlage + "_" + LUID in Hex).
+var winSvcInstance = regexp.MustCompile(`^(.+)_[0-9a-fA-F]{4,8}$`)
+
+// winSvcPerUser erkennt Benutzerdienste auch ohne Eintrag in winSvcIgnore: Vorlage und Instanz stehen beide in der
+// Liste (die Instanz heisst wie die Vorlage mit "_<hex>" dahinter).
+func winSvcPerUser(list []m64proto.WinService) map[string]bool {
+	names := make(map[string]bool, len(list))
+	for _, w := range list {
+		names[strings.ToLower(w.Name)] = true
+	}
+	out := map[string]bool{}
+	for _, w := range list {
+		if m := winSvcInstance.FindStringSubmatch(w.Name); m != nil && names[strings.ToLower(m[1])] {
+			out[strings.ToLower(w.Name)], out[strings.ToLower(m[1])] = true, true
+		}
+	}
+	return out
+}
 
 // winSvcStopped: Zustand, der als "laeuft nicht" zaehlt (Uebergaenge wie start_pending nicht, sonst flackert es).
 func winSvcStopped(state string) bool {
@@ -36,6 +62,7 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 		return nil
 	}
 	sum := Service{Key: "winsvc", Name: "Windows-Dienste", Kind: "winsvc", Default: true}
+	perUser := winSvcPerUser(list)
 	var stopped []string
 	auto := 0
 	out := make([]Service, 0, len(list)+1)
@@ -55,7 +82,7 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 			s.Facts = append(s.Facts, Fact{Code: "winsvc_stopped", Text: fmt.Sprintf("%s (%s): %s", name, w.Name, w.State)})
 		}
 		out = append(out, s)
-		if w.StartType != "auto" {
+		if w.StartType != "auto" || perUser[strings.ToLower(w.Name)] {
 			continue
 		}
 		auto++

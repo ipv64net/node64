@@ -76,7 +76,7 @@ function devText(k) {
 // p = "w": Assistent, nur die Felder der Art t (Werte aus dem Zustand c, data-w).
 function devFields(c, p, t) {
 	c = c || {};
-	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics', 'mode', 'pushNode'];
+	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics'];
 	var owner = { ups: 'nut', tls: 'nut', api: 'truenas', session: 'redfish', metrics: 'prom' };
 	var val = function (id) { return id === 'metrics' && p === 'af' ? (c.metrics ? JSON.stringify(c.metrics, null, 1) : '') : c[id] || ''; };
 	var attr = function (id) { return ' id="m64-' + p + '-' + id + '"' + (p === 'w' ? ' data-w="' + id + '"' : ''); };
@@ -118,7 +118,7 @@ var SNMP_PASS = ['community', 'authpass', 'privpass'];
 function snmpVal(c, x) {
 	c = c || {};
 	var v = { version: c.snmp_version || '2c', port: c.port || '', user: c.user || '', level: c.level || 'authPriv', auth: c.auth_proto || 'SHA256', priv: c.priv_proto || 'AES',
-		context: c.context || '', traps: !!c.traps, engine: c.trap_engine_id || '', custom: c.custom ? JSON.stringify(c.custom, null, 1) : '' }[x];
+		context: c.context || '', traps: !!c.traps, engine: c.trap_engine_id || '', custom: c.custom ? JSON.stringify(c.custom, null, 1) : '', profiles: c.profiles || '' }[x];
 	return v === undefined ? '' : v;
 }
 function snmpLevelText(v) { return { authPriv: L('acc.snmp_level_priv'), authNoPriv: L('acc.snmp_level_auth'), noAuthNoPriv: L('acc.snmp_level_none') }[v]; }
@@ -179,6 +179,8 @@ function snmpRead(get) {
 		try { cfg.custom = JSON.parse(cu); } catch (e) { return null; }
 		if (!Array.isArray(cfg.custom)) { return null; }
 	}
+	var pr = get('profiles'); // feste Profile (nur in der gespeicherten Konfiguration, kein Formularfeld): beim Aendern behalten
+	if (Array.isArray(pr) && pr.length) { cfg.profiles = pr.slice(); }
 	return { config: cfg, secret: Object.keys(sec).length ? JSON.stringify(sec) : '' };
 }
 // snmpTestHTML: Ergebnis "Verbindung testen" bei SNMP (Geraeteart, Profile mit Hinweis "nicht geprueft", Abfragen).
@@ -1266,7 +1268,8 @@ function pageHost() {
 		$('#m64-af-shint', body).textContent = DEVAPI.indexOf(t) >= 0 ? devSecretHint(t) : L('acc.secret_hint');
 		snmpShow(body, 'af');
 	}
-	function accessFromForm(body) {
+	// accessFromForm liest den Zugang aus dem Formular (a = gespeicherter Zugang beim Aendern, sonst null).
+	function accessFromForm(body, a) {
 		var t = $('#m64-af-type', body).value, cfg = {};
 		var port = parseInt($('#m64-af-port', body).value, 10);
 		if ((t === 'agent' || t === 'ssh') && port) { cfg.port = port; }
@@ -1284,7 +1287,11 @@ function pageHost() {
 		}
 		var secret = t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value;
 		if (t === 'snmp') {
-			var sr = snmpRead(function (id) { var x = $('#m64-af-s' + id, body); return x ? (x.type === 'checkbox' ? x.checked : SNMP_PASS.indexOf(id) >= 0 ? x.value : x.value.trim()) : ''; });
+			var sr = snmpRead(function (id) {
+				if (id === 'profiles') { return a && a.type === 'snmp' ? snmpVal(a.config, id) : ''; }
+				var x = $('#m64-af-s' + id, body);
+				return x ? (x.type === 'checkbox' ? x.checked : SNMP_PASS.indexOf(id) >= 0 ? x.value : x.value.trim()) : '';
+			});
 			if (sr === null) { throw new Error(L('acc.snmp_custom_bad')); }
 			cfg = sr.config;
 			secret = sr.secret;
@@ -1300,16 +1307,18 @@ function pageHost() {
 	function accessDialog(a) {
 		var au = a ? '/api/monitor64/access/' + encodeURIComponent(a.uid) : '';
 		var body = modal(a ? L('acc.edit') + ' · ' + accLabel(a.type) : L('host.access_add'), accessForm(a), [{ label: L('cancel') }, { label: L('acc.test'), click: function () {
-			var acc = accessFromForm(body), res = $('#m64-af-res', body), stored = a && !acc.secret && !acc.clear_secret;
-			if (stored && JSON.stringify(acc.config) !== JSON.stringify(cleanCfg(a.config, a.type))) { // gespeichertes Geheimnis gibt es nur zur gespeicherten Konfiguration
+			var res = $('#m64-af-res', body), acc;
+			try { acc = accessFromForm(body, a); } catch (e) { res.innerHTML = '<span class="text-danger">' + esc(e.message) + '</span>'; return null; }
+			var tq = accessTestReq(a, acc);
+			if (!tq) { // gespeichertes Geheimnis gibt es nur zur gespeicherten Konfiguration
 				res.innerHTML = '<span class="text-warning-emphasis">' + esc(L('acc.save_first')) + '</span>';
 				return null;
 			}
 			res.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + esc(L('new.testing'));
-			var p = stored ? api('POST', au + '/test') : api('POST', '/api/monitor64/test', { address: H.host.address, access: acc });
+			var p = tq.stored ? api('POST', au + '/test') : api('POST', '/api/monitor64/test', tq.body);
 			return p.then(function (r) { res.innerHTML = testHTML(r); }).catch(function (e) { res.innerHTML = '<span class="text-danger">' + esc(tx(e.message)) + '</span>'; });
 		} }, { label: L('save'), cls: 'btn-primary', click: function (close) {
-			var acc = accessFromForm(body);
+			var acc = accessFromForm(body, a);
 			if (a) { delete acc.type; }
 			return api(a ? 'PUT' : 'POST', a ? au : '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/access', acc).then(function () { close(); toast(L('acc.saved_toast')); return reload(); });
 		} }], true);
@@ -1323,6 +1332,19 @@ function pageHost() {
 			$('#m64-af-res', body).innerHTML = '<span class="small text-body-secondary">' + esc(L('acc.pin_set')) + '</span>';
 		});
 		accessShow(body);
+	}
+	// accessTestReq: wie "Verbindung testen" beim Zugang a (null = neu) mit den Formularwerten acc prueft.
+	// {stored: true}: gespeicherten Zugang testen (Geheimnis, Hostschluessel; Push: Stand der laufenden Verbindung);
+	// {body}: Test mit den Formularwerten; null: Konfiguration geaendert, Geheimnis nur gespeichert -> erst speichern.
+	// access_uid: der Server ergaenzt ein Teil-Geheimnis (SNMP v3 nur ein Passwort neu) aus dem gespeicherten bzw.
+	// meldet bei Push den Stand der Verbindung dieses Zugangs.
+	function accessTestReq(a, acc) {
+		var keep = a && !acc.secret && !acc.clear_secret, same = a && JSON.stringify(acc.config) === JSON.stringify(cleanCfg(a.config, a.type));
+		if (keep && same) { return { stored: true }; }
+		if (keep && a.secret_set) { return null; }
+		var b = { address: H.host.address, access: acc };
+		if (a && !acc.clear_secret && ((a.type === 'snmp' && a.secret_set && acc.secret) || (acc.type === 'agent' && acc.config.mode === 'push'))) { b.access_uid = a.uid; }
+		return { body: b };
 	}
 	// cleanCfg: gespeicherte Konfiguration in der Form des Formulars (Vergleich "geaendert?").
 	function cleanCfg(c, t) {
@@ -1467,7 +1489,7 @@ function pageHost() {
 var TLI = { warn: ['bi-exclamation-triangle-fill', 'text-warning'], crit: ['bi-x-octagon-fill', 'text-danger'], unknown: ['bi-question-circle-fill', 'text-body-secondary'], unreachable: ['bi-plug-fill', 'text-danger'],
 	ok: ['bi-check-circle-fill', 'text-success'], bell: ['bi-bell', 'text-body-secondary'], held: ['bi-moon-stars', 'text-body-secondary'], ack: ['bi-check2-square', 'text-primary'], unack: ['bi-arrow-counterclockwise', 'text-body-secondary'],
 	comment: ['bi-chat-left-text', 'text-primary'], resolved: ['bi-person-check', 'text-primary'], maint: ['bi-cone-striped', 'text-body-secondary'], takeover: ['bi-diagram-3', 'text-body-secondary'],
-	handover: ['bi-arrow-left-right', 'text-body-secondary'] };
+	handover: ['bi-arrow-left-right', 'text-body-secondary'], pause: ['bi-pause-circle', 'text-body-secondary'], resume: ['bi-play-circle', 'text-body-secondary'] };
 function evText(e, chans) {
 	var t = tx(e.text || ''), w = whoTxt(e.actor);
 	switch (e.kind) {
@@ -1487,6 +1509,8 @@ function evText(e, chans) {
 	case 'maint_end': return L('ev.maint_end') + (t ? ': ' + t : '');
 	case 'takeover': return t || L('ev.takeover'); // Cluster: Text nennt die Nodes ("von node01 an node02")
 	case 'handover': return t || L('ev.handover');
+	case 'pause': return L('ev.pause', { w: w });
+	case 'resume': return L('ev.resume', { w: w });
 	}
 	return e.kind + (t ? ': ' + t : '');
 }
@@ -2043,7 +2067,17 @@ function clusterKeys(k) {
 function clusterKeyActions() {
 	var card = $('#m64-cluster');
 	if (!card) { return; }
-	function keyCall(path, body, msg) { return api('POST', '/api/monitor64/cluster/keys/' + path, body).then(function (k) { clusterKeys(k); toast(msg); }); }
+	// Umstellung laeuft im Hintergrund (running): Stand alle 3 s neu holen, bis sie fertig ist
+	var poll = null;
+	function follow(k) {
+		clusterKeys(k);
+		if (k && k.running && !poll) {
+			poll = setInterval(function () {
+				api('GET', '/api/monitor64/cluster/keys').then(function (n) { clusterKeys(n); if (!n.running) { clearInterval(poll); poll = null; } }).catch(function () { clearInterval(poll); poll = null; });
+			}, 3000);
+		}
+	}
+	function keyCall(path, body, msg) { return api('POST', '/api/monitor64/cluster/keys/' + path, body).then(function (k) { follow(k); toast(msg); }); }
 	card.addEventListener('click', function (ev) {
 		var b = ev.target.closest('[data-cl-confirm]');
 		if (b) { lock(b, function () { return keyCall('confirm', { access_uid: b.dataset.clConfirm }, L('cluster.confirmed_toast')); }).catch(fail); return; }
@@ -2055,6 +2089,13 @@ function clusterKeyActions() {
 	});
 }
 
+// pushTarget: Ziel des Push-Agents token@node:port; IPv6 in Klammern, nur Zeichen von Namen und Adressen (der Befehl
+// wird in eine Shell kopiert).
+function pushTarget(tok, node, port) {
+	var h = String(node || '').trim().replace(/[^0-9A-Za-z.:%_\-\[\]]/g, '');
+	if (h.indexOf(':') >= 0 && h.charAt(0) !== '[') { h = '[' + h.replace(/[\[\]]/g, '') + ']'; }
+	return tok + '@' + h + ':' + port;
+}
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
 	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
@@ -2113,7 +2154,8 @@ function pageNew() {
 		return out;
 	}
 	function collect() {
-		$$('#m64-wizard [data-w]').forEach(function (el) { WZ[el.dataset.w] = el.type === 'checkbox' ? el.checked : el.value.trim(); });
+		// Passwortfelder unveraendert (Leerzeichen am Rand koennen zum Passwort gehoeren)
+		$$('#m64-wizard [data-w]').forEach(function (el) { WZ[el.dataset.w] = el.type === 'checkbox' ? el.checked : el.type === 'password' ? el.value : el.value.trim(); });
 	}
 	// weitere Nodes eines Proxmox-Clusters (Vorschlag "als eigene Hosts anlegen")
 	function otherNodes() {
@@ -2132,10 +2174,12 @@ function pageNew() {
 		} else if (WZ.step === 2) {
 			html = '<div class="row g-3"><div class="col-md-6">' + field('name', L('f.name'), WZ.name, ' data-w="name" maxlength="100" placeholder="nas02"') + '</div><div class="col-md-6">' + field('addr', L('f.address'), WZ.address, ' data-w="address" maxlength="253" placeholder="10.0.0.21"') + '</div>';
 			if (k.access === 'agent') {
-				var push = WZ.mode === 'push', tgt = WZ.token + '@' + (WZ.pushNode || location.hostname) + ':' + (WZ.pushPort || 6466);
-				var cmd = WZ.kind === 'windows' ? '& ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "' + key + '"' + (push ? ' -Connect "' + tgt + '" -NoListen' : '') :
+				var push = WZ.mode === 'push', tgt = pushTarget(WZ.token, WZ.pushNode || location.hostname, WZ.pushPort || 6466);
+				// Windows: TLS 1.2 einschalten, bevor irm laedt (Server 2016 bietet sonst nur TLS 1.0/1.1 an)
+				var cmd = WZ.kind === 'windows' ? '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; ' +
+					'& ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "' + key + '"' + (push ? ' -Connect "' + tgt + '" -NoListen' : '') :
 					WZ.kind === 'freebsd' ? L('new.bsd_cmd', { k: key }) + (push ? '\n' + L('push.bsd_cmd', { t: tgt }) : '') :
-					'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"' + (push ? ' \\\n  --connect ' + tgt + ' --no-listen' : '');
+					'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"' + (push ? ' \\\n  --connect \'' + tgt + '\' --no-listen' : '');
 				html += '<div class="col-md-6"><label class="form-label" for="m64-w-mode">' + esc(L('push.mode_label')) + '</label><select class="form-select" id="m64-w-mode" data-w="mode"><option value=""' + (push ? '' : ' selected') + '>' + esc(L('push.mode_pull')) + '</option><option value="push"' + (push ? ' selected' : '') + '>' + esc(L('push.mode_push')) + '</option></select></div>' +
 					(push ? '<div class="col-md-6">' + field('pnode', L('push.node_addr'), WZ.pushNode, ' data-w="pushNode" maxlength="253"') + '</div>' : '') +
 					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(push && !WZ.token ? '…' : cmd) + '</div>' +
@@ -2265,9 +2309,10 @@ function pageNew() {
 	function testConn() {
 		collect();
 		if (!WZ.address) { toast(L('new.need_address'), true); return null; }
-		var res = $('#m64-w-res');
+		var res = $('#m64-w-res'), acc;
+		try { acc = access(); } catch (e) { res.innerHTML = '<span class="text-danger">' + esc(e.message) + '</span>'; return null; } // z. B. eigene Metriken kein JSON
 		res.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + esc(L('new.testing'));
-		return api('POST', '/api/monitor64/test', { address: WZ.address, access: access() }).then(function (r) {
+		return api('POST', '/api/monitor64/test', { address: WZ.address, access: acc }).then(function (r) {
 			WZ.test = r;
 			WZ.adopt = {};
 			WZ.nodes = {};
@@ -2316,7 +2361,8 @@ function pageNew() {
 			if (!WZ.name || !WZ.address) { toast(L('new.need_name'), true); return; }
 		}
 		if (WZ.step < 4) { WZ.step++; render(); if (WZ.step === 2 && kind() && kind().access === 'ssh') { nodeAddr(); } return; }
-		var acc = access(), nodes = selectedNodes();
+		var acc, nodes = selectedNodes();
+		try { acc = access(); } catch (e) { toast(e.message, true); return; }
 		if (WZ.test && WZ.test.fingerprint && (acc.type === 'agent' || acc.type === 'ssh')) { acc.hostkey = WZ.test.fingerprint; }
 		if (acc.type === 'pve' && nodes.length && !acc.config.node && WZ.test.node) { acc.config.node = WZ.test.node; } // weitere Nodes bekommen eigene Hosts
 		var tags = WZ.tags.split(/[,\s]+/).filter(Boolean), iv = parseInt(WZ.interval, 10) || 0;
@@ -2341,8 +2387,10 @@ function pageNew() {
 					});
 				});
 				return chain.then(function () {
-					if (failed.length) { toast(L('new.nodes_failed', { n: failed.join(', ') }), true); }
-					else if (clFailed) { toast(L('cluster.wiz_failed'), true); }
+					var msg = [];
+					if (failed.length) { msg.push(L('new.nodes_failed', { n: failed.join(', ') })); }
+					if (clFailed) { msg.push(L('cluster.wiz_failed')); }
+					if (msg.length) { toast(msg.join(' '), true); }
 					setTimeout(function () { location.href = '/monitor64/host/' + encodeURIComponent(r.uid); }, failed.length || clFailed ? 2500 : 0);
 				});
 			});

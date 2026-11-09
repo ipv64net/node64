@@ -35,15 +35,8 @@ func Register(pm *peer.Manager, m *monitor64.Module, nodeID func() string) {
 		Change: func(ctx context.Context, item, id string, deleted bool) {
 			pm.ClusterChange(ctx, monitor64.ClusterModuleID, item, id, deleted)
 		},
-		Members: func(ctx context.Context, item string) []monitor64.ClusterPeer {
-			list := pm.AreaMembers(ctx, monitor64.ClusterModuleID, item)
-			out := make([]monitor64.ClusterPeer, 0, len(list))
-			for _, x := range list {
-				out = append(out, monitor64.ClusterPeer{ID: x.NodeID, Name: x.Name, Online: x.Online()})
-			}
-			return out
-		},
-		Self: nodeID,
+		Members: members(pm, m), // ausgesetzte bzw. mit Monitor64/Bereich aus zaehlen als nicht erreichbar
+		Self:    nodeID,
 		Call: func(ctx context.Context, node, name string, in, out any) error {
 			return pm.Call(ctx, node, monitor64.ClusterModuleID, name, in, out)
 		},

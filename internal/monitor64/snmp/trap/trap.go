@@ -39,7 +39,17 @@ const (
 	DefaultMaxVarbinds = 32        // Varbinds im Event
 	DefaultMaxValueLen = 256       // Zeichen je Wert im Event
 	queueSize          = 256       // Events bis zum Rueckruf
+
+	timeWindow    = 150       // Sekunden: Zeitfenster fuer v3 (RFC 3414 3.2.7)
+	maxEngineBoot = 1<<31 - 1 // snmpEngineBoots am Ende: keine Nachricht mehr gueltig
+	maxTimeStates = 4096      // so viele Engine-ID/Benutzer merkt sich die Zeitpruefung
+	localBoots    = 1         // eigene snmpEngineBoots (die eigene Zeit laeuft ab engineEpoch, ueber Neustarts weiter)
 )
+
+// engineEpoch: Beginn der eigenen snmpEngineTime (Sekunden seit diesem Zeitpunkt). Die Zeit laeuft so ueber Neustarts
+// der Node weiter; Absender von v3-Informs behalten ihren Stand, wiederholte (mitgeschnittene) Informs fallen aus
+// dem Zeitfenster.
+var engineEpoch = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // User ist ein v3-Benutzer eines Hosts (Geheimnisse aus dem verschluesselten Secret des Zugangs).
 type User struct {
@@ -85,7 +95,7 @@ type Event struct {
 	From      netip.Addr `json:"from"`
 	HostID    string     `json:"host_id,omitempty"` // "" = unbekannter Absender
 	Known     bool       `json:"known"`
-	Rejected  string     `json:"rejected,omitempty"` // bekannter Absender, aber "community", "user" bzw. "engine" passt nicht
+	Rejected  string     `json:"rejected,omitempty"` // bekannter Absender, aber "community", "user", "engine" bzw. "time" passt nicht
 	Version   string     `json:"version"`            // 1, 2c, 3
 	Inform    bool       `json:"inform,omitempty"`
 	User      string     `json:"user,omitempty"` // v3-Benutzer
@@ -136,6 +146,9 @@ type Receiver struct {
 	lim   *limiter
 	plain *gosnmp.GoSNMP // v1/v2c (und Kopf von v3)
 
+	tmu   sync.Mutex
+	times map[string]*engineTime // Engine-ID + Benutzer -> zuletzt angenommener Stand (v3 mit Authentifizierung)
+
 	received, accepted, tooBig, rateLimited, badPacket, rejected, unknown, queueFull atomic.Uint64
 	unknownEngineIDs                                                                 atomic.Uint32
 	now                                                                              func() time.Time
@@ -178,7 +191,7 @@ func New(cfg Config, cb func(Event)) (*Receiver, error) {
 	if err != nil || len(raw) < 5 || len(raw) > 32 {
 		return nil, errors.New("ungueltige Engine-ID (5 bis 32 Bytes hex)")
 	}
-	r := &Receiver{cfg: cfg, cb: cb, engineID: string(raw), now: time.Now,
+	r := &Receiver{cfg: cfg, cb: cb, engineID: string(raw), now: time.Now, times: map[string]*engineTime{},
 		lim:   newLimiter(cfg.Rate, cfg.Burst, cfg.GlobalRate, cfg.MaxSenders),
 		plain: &gosnmp.GoSNMP{Version: gosnmp.Version2c, Logger: gosnmp.NewLogger(nil)}}
 	empty := map[netip.Addr]*hostEntry{}
@@ -343,7 +356,8 @@ func (r *Receiver) process(b []byte, from netip.Addr) (reply []byte, ev *Event) 
 		return nil, nil
 	}
 	now := r.now()
-	if !r.lim.allow(from, now) {
+	he := (*r.byAddr.Load())[from]
+	if !r.lim.allow(from, he != nil, now) {
 		r.rateLimited.Add(1)
 		return nil, nil
 	}
@@ -357,7 +371,6 @@ func (r *Receiver) process(b []byte, from netip.Addr) (reply []byte, ev *Event) 
 		}
 	}()
 	pkt := append([]byte(nil), b...) // gosnmp veraendert den Puffer (MAC ausblenden)
-	he := (*r.byAddr.Load())[from]
 	version, ok := peekVersion(pkt)
 	if !ok {
 		r.badPacket.Add(1)
@@ -396,8 +409,12 @@ func (r *Receiver) process(b []byte, from netip.Addr) (reply []byte, ev *Event) 
 			r.badPacket.Add(1)
 			return nil, nil
 		}
-		if probe { // Engine-Erkennung fuer v3-Informs: lokale Engine-ID melden (ohne Event)
-			return r.report(pkt), nil
+		if probe { // Engine-Erkennung fuer v3-Informs: lokale Engine-ID melden (ohne Event), nur bekannten Absendern
+			if he == nil { // gefaelschte Absender bekaemen sonst eine groessere Antwort (Verstaerkung)
+				r.unknown.Add(1)
+				return nil, nil
+			}
+			return r.report(pkt, now), nil
 		}
 		ev.User = user
 		if he == nil {
@@ -424,12 +441,18 @@ func (r *Receiver) process(b []byte, from netip.Addr) (reply []byte, ev *Event) 
 			r.badPacket.Add(1)
 			return nil, nil
 		}
+		if p.PDUType == gosnmp.InformRequest && engine != r.engineID { // Inform muss die Engine-ID des Empfaengers tragen (RFC 3414 3.2.3)
+			return r.report(pkt, now), nil
+		}
+		if usm, ok := p.SecurityParameters.(*gosnmp.UsmSecurityParameters); ok && p.MsgFlags&gosnmp.AuthNoPriv != 0 &&
+			!r.inTime(engine, user, usm.AuthoritativeEngineBoots, usm.AuthoritativeEngineTime, now) {
+			r.rejected.Add(1) // ausserhalb des Zeitfensters: wiederholte (mitgeschnittene) Nachricht
+			ev.Rejected = "time"
+			return nil, ev
+		}
 		r.fill(ev, p)
 		r.accepted.Add(1)
 		if p.PDUType == gosnmp.InformRequest {
-			if engine != r.engineID { // Inform muss die Engine-ID des Empfaengers tragen (RFC 3414 3.2.3)
-				return r.report(pkt), nil
-			}
 			reply = r.ack(p)
 		}
 		return reply, ev
@@ -460,13 +483,15 @@ func (r *Receiver) ack(p *gosnmp.SnmpPacket) []byte {
 	return b
 }
 
-// report meldet die lokale Engine-ID (usmStatsUnknownEngineIDs, RFC 3414 3.2.3b).
-func (r *Receiver) report(pkt []byte) []byte {
+// report meldet die lokale Engine-ID mit Boots/Time (usmStatsUnknownEngineIDs, RFC 3414 3.2.3b).
+func (r *Receiver) report(pkt []byte, now time.Time) []byte {
 	hdr, _ := decodeV3Header(pkt) // nur Kopf noetig; der Inhalt kann verschluesselt sein
 	if hdr == nil || hdr.MsgID == 0 {
 		return nil
 	}
-	sp := &gosnmp.UsmSecurityParameters{AuthoritativeEngineID: r.engineID, Logger: gosnmp.NewLogger(nil)}
+	boots, etime := localEngineTime(now)
+	sp := &gosnmp.UsmSecurityParameters{AuthoritativeEngineID: r.engineID, AuthoritativeEngineBoots: boots, AuthoritativeEngineTime: etime,
+		Logger: gosnmp.NewLogger(nil)}
 	if in, ok := hdr.SecurityParameters.(*gosnmp.UsmSecurityParameters); ok && in != nil && in.UserName != headerUser {
 		sp.UserName = in.UserName
 	}
@@ -479,6 +504,58 @@ func (r *Receiver) report(pkt []byte) []byte {
 		return nil
 	}
 	return b
+}
+
+// engineTime ist der zuletzt angenommene Stand einer fremden Engine (latestReceivedEngineTime) und die lokale Zeit dazu.
+type engineTime struct {
+	boots, time uint32
+	at          time.Time
+}
+
+// localEngineTime: eigene snmpEngineBoots/snmpEngineTime (Empfaenger autoritativ, v3-Informs).
+func localEngineTime(now time.Time) (uint32, uint32) {
+	s := int64(now.Sub(engineEpoch) / time.Second)
+	return localBoots, uint32(min(max(s, 0), maxEngineBoot))
+}
+
+// inTime prueft das Zeitfenster einer authentifizierten v3-Nachricht (RFC 3414 3.2.7). Informs tragen die eigene
+// Engine-ID (Empfaenger autoritativ): Boots gleich, Time hoechstens 150 s daneben. Traps tragen die Engine-ID des
+// Absenders: je Engine-ID und Benutzer zaehlt der zuletzt angenommene Stand – kleinere Boots oder eine Time mehr als
+// 150 s hinter dem fortgeschriebenen Stand sind eine Wiederholung.
+func (r *Receiver) inTime(engine, user string, boots, etime uint32, now time.Time) bool {
+	if boots >= maxEngineBoot {
+		return false
+	}
+	if engine == r.engineID {
+		lb, lt := localEngineTime(now)
+		d := int64(etime) - int64(lt)
+		return boots == lb && d >= -timeWindow && d <= timeWindow
+	}
+	r.tmu.Lock()
+	defer r.tmu.Unlock()
+	key := engine + "\x00" + user
+	st := r.times[key]
+	switch {
+	case st == nil:
+		if len(r.times) >= maxTimeStates { // voll: den am laengsten stillen vergessen
+			var oldest string
+			for k, v := range r.times {
+				if oldest == "" || v.at.Before(r.times[oldest].at) {
+					oldest = k
+				}
+			}
+			delete(r.times, oldest)
+		}
+		r.times[key] = &engineTime{boots: boots, time: etime, at: now}
+		return true
+	case boots > st.boots || (boots == st.boots && etime > st.time): // neuer Stand
+		st.boots, st.time, st.at = boots, etime, now
+		return true
+	case boots < st.boots:
+		return false
+	}
+	est := float64(st.time) + max(0, now.Sub(st.at).Seconds()) // fortgeschriebene fremde snmpEngineTime
+	return float64(etime) >= est-timeWindow
 }
 
 // headerUser: Platzhalter, damit gosnmp den Kopf ohne Benutzer liest (wird vom Paket ueberschrieben).
@@ -743,20 +820,23 @@ type bucket struct {
 	last   time.Time
 }
 
-// limiter: Token-Bucket je Absender plus gesamt; begrenzte Zahl gemerkter Absender.
+// limiter: Token-Bucket je Absender plus gesamt, getrennt fuer bekannte und unbekannte Absender; begrenzte Zahl
+// gemerkter Absender. Zuerst zaehlt der Bucket des Absenders: wer flutet, verbraucht nur seine eigenen Token, und
+// Unbekannte (auch gefaelschte Adressen) leeren bekannten Absendern den gemeinsamen Bucket nicht.
 type limiter struct {
-	mu     sync.Mutex
-	rate   float64
-	burst  float64
-	max    int
-	m      map[netip.Addr]*bucket
-	global bucket
-	grate  float64
+	mu      sync.Mutex
+	rate    float64
+	burst   float64
+	max     int
+	m       map[netip.Addr]*bucket
+	known   bucket // gesamt fuer bekannte Absender
+	unknown bucket // gesamt fuer unbekannte Absender
+	grate   float64
 }
 
 func newLimiter(rate float64, burst int, global float64, max int) *limiter {
 	return &limiter{rate: rate, burst: float64(burst), max: max, m: map[netip.Addr]*bucket{}, grate: global,
-		global: bucket{tokens: global}}
+		known: bucket{tokens: global}, unknown: bucket{tokens: global}}
 }
 
 func (l *limiter) take(b *bucket, rate, burst float64, now time.Time) bool {
@@ -773,12 +853,9 @@ func (l *limiter) take(b *bucket, rate, burst float64, now time.Time) bool {
 	return true
 }
 
-func (l *limiter) allow(a netip.Addr, now time.Time) bool {
+func (l *limiter) allow(a netip.Addr, known bool, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if !l.take(&l.global, l.grate, l.grate, now) {
-		return false
-	}
 	b, ok := l.m[a]
 	if !ok {
 		if len(l.m) >= l.max {
@@ -795,5 +872,12 @@ func (l *limiter) allow(a netip.Addr, now time.Time) bool {
 		b = &bucket{tokens: l.burst}
 		l.m[a] = b
 	}
-	return l.take(b, l.rate, l.burst, now)
+	if !l.take(b, l.rate, l.burst, now) {
+		return false
+	}
+	g := &l.unknown
+	if known {
+		g = &l.known
+	}
+	return l.take(g, l.grate, l.grate, now)
 }

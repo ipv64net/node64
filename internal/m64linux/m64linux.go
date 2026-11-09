@@ -262,6 +262,23 @@ func u64(s string) uint64 {
 	return v
 }
 
+// Gemeinsame Helfer fuer die anderen Unix-Sammler (m64bsd): gleiche Grenzen und Texte wie hier.
+
+// Clip kuerzt freie Texte vom Host (siehe clip).
+func Clip(s string) string { return clip(s) }
+
+// ErrText macht aus einem Fehler einen kurzen Text fuer SectionErr (siehe errText).
+func ErrText(err error) string { return errText(err) }
+
+// AddErr haengt einen Abschnittsfehler an.
+func AddErr(r *m64proto.Report, sec string, err error) { addErr(r, sec, err) }
+
+// AddNote haengt einen Hinweis an.
+func AddNote(r *m64proto.Report, sec, note string) { addNote(r, sec, note) }
+
+// Lines teilt Text in Zeilen (ohne \r).
+func Lines(b []byte) []string { return lines(b) }
+
 func ptrU64(v uint64) *uint64   { return &v }
 func ptrF64(v float64) *float64 { return &v }
 func ptrBool(v bool) *bool      { return &v }

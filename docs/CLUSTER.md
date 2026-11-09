@@ -276,8 +276,13 @@ Node wartet 10 min, sie soll den des Clusters übernehmen). Übernimmt eine Node
 „Schlüssel wechseln“), behält sie bis zu 3 alte und bietet sie Agents und SSH-Hosts nach dem neuen an, bis ihre Agents
 per Anfrage `keys` umgestellt sind (Hosts, für die sie zuständig oder bevorzugt ist; nicht erreichbare alle 5 min erneut,
 Liste „Schlüssel veraltet“). SSH-Hosts ohne Agent bekommen die neue Zeile für `authorized_keys` und werden von Hand
-bestätigt. Danach sind die alten Schlüssel weg. Achtung: `keys` setzt die ganze Liste des Agents (Schlüssel anderer
-Nodes außerhalb des Clusters fallen weg). Ein Löschvermerk des Schlüssels wird nie übernommen.
+bestätigt. Die alten Schlüssel fallen erst weg, wenn (1) der aktuelle Schlüssel noch derselbe ist wie zu Beginn der
+Umstellung und (2) **clusterweit** jeder Zugang, der den Node-Schlüssel braucht (Agent, SSH ohne Passwort – auch
+deaktivierte Zugänge, Hosts anderer Nodes und Hosts, für die die Node nur Ersatz ist), als umgestellt oder bestätigt
+gilt. Umstellungen und Bestätigungen gehen als Liste `done` mit dem Eintrag `key:cluster`; „Bestätigen“ (SSH) gilt damit
+für alle Nodes. Die Umstellung läuft im Hintergrund (Oberfläche zeigt „läuft“). Eine beitretende Node verwirft ihren
+eigenen Eintrag `key:cluster` und übernimmt den des Clusters. Achtung: `keys` setzt die ganze Liste des Agents
+(Schlüssel anderer Nodes außerhalb des Clusters fallen weg). Ein Löschvermerk des Schlüssels wird nie übernommen.
 
 **Split-Brain:** wie oben; nach der Wiederverbindung gilt je Eintrag die jüngere Änderung – der `owner:`-Eintrag der
 Mehrheit (die abgehängte Node schreibt keinen), danach die Rückgabe-Regel. Problem-Ereignisse beider Seiten bleiben.

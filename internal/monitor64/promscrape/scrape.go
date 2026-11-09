@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
@@ -26,9 +27,8 @@ import (
 // Bestaetigung). Keine Weiterleitungen, kein Proxy, gzip mit Grenze nach dem Entpacken.
 
 const (
-	dialTimeout = 5 * time.Second
-	userAgent   = "node64-monitor64"
-	acceptHdr   = "text/plain;version=0.0.4;q=1,application/openmetrics-text;version=1.0.0;q=0.5,*/*;q=0.1"
+	userAgent = "node64-monitor64"
+	acceptHdr = "text/plain;version=0.0.4;q=1,application/openmetrics-text;version=1.0.0;q=0.5,*/*;q=0.1"
 )
 
 // Fehler der Abfrage.
@@ -120,14 +120,13 @@ func newFetcher(rawURL, user, secret, pin string, timeout time.Duration, maxBody
 			ci := certInfo{fp: fp}
 			if leaf, err := x509.ParseCertificate(raw[0]); err == nil {
 				ci.subject = clip(leaf.Subject.String(), 200)
-				inter := x509.NewCertPool()
+				var inter []*x509.Certificate
 				for _, r := range raw[1:] {
 					if c, err := x509.ParseCertificate(r); err == nil {
-						inter.AddCert(c)
+						inter = append(inter, c)
 					}
 				}
-				_, verr := leaf.Verify(x509.VerifyOptions{DNSName: host, Roots: roots, Intermediates: inter})
-				ci.trusted = verr == nil
+				ci.trusted = apis.CertTrusted(leaf, inter, host, roots)
 			}
 			f.mu.Lock()
 			f.cert = ci
@@ -140,22 +139,8 @@ func newFetcher(rawURL, user, secret, pin string, timeout time.Duration, maxBody
 			}
 			return nil
 		}}
-	d := &net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}
-	tr := &http.Transport{
-		Proxy:                 nil, // Exporter stehen im LAN, nie ueber einen Proxy
-		DialContext:           d.DialContext,
-		TLSClientConfig:       tc,
-		TLSHandshakeTimeout:   dialTimeout,
-		ResponseHeaderTimeout: timeout,
-		DisableCompression:    true, // gzip selbst entpacken (mit Grenze)
-		MaxIdleConnsPerHost:   1,
-		IdleConnTimeout:       90 * time.Second,
-	}
-	f.hc = &http.Client{
-		Transport: tr,
-		// keine Weiterleitungen (die Zugangsdaten gehoeren nur an die eingerichtete Adresse)
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	// gemeinsamer Client der Zugaenge (kein Proxy, keine Weiterleitungen); gzip selbst entpacken (mit Grenze)
+	f.hc = apis.HTTPClient(tc, timeout, 1, true)
 	return f, nil
 }
 

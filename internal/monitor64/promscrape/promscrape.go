@@ -153,40 +153,56 @@ func (c *Collector) Collect(ctx context.Context) ([]model.Service, error) {
 	return out, perr
 }
 
-// partial: ausgefallene Sammler des Exporters als Teilfehler. Nur Praefixe, unter denen es vorher Dienste gab (fehlende
-// Daten fuer bond, mdadm, zfs ... melden die Exporter ebenfalls als Fehler); die Schluessel bleiben dann gemerkt, bis
-// der Sammler wieder liefert.
+// partial: ausgefallene Sammler des Exporters als Teilfehler. Die Praefixe eines ausgefallenen Sammlers gehoeren immer
+// dazu (auch direkt nach einem Neustart, wenn der Sammler noch keine Dienste kennt; sonst hiessen dessen Dienste
+// "verschwunden"). Ausnahme sind die Sammler, die ohne die Funktion immer als fehlgeschlagen gelten (bond, mdadm,
+// zfs ..., noDataCollector): sie zaehlen als Teilfehler nur, wenn es vorher Dienste unter ihren Praefixen gab (die
+// Schluessel bleiben dann gemerkt, bis der Sammler wieder liefert); liegt ohnehin ein Teilfehler vor, werden ihre
+// Praefixe mit gemeldet.
 func (c *Collector) partial(m *Metrics, kind string, out []model.Service) error {
 	failed := failedCollectors(m, kind)
 	next := map[string]bool{}
 	for _, s := range out {
 		next[s.Key] = true
 	}
-	pe := &apis.PartialError{}
-	seen := map[string]bool{}
+	var errs []string
+	var quiet []string // Praefixe der noDataCollector ohne gemerkte Dienste
+	prefixes := map[string]bool{}
 	for _, fc := range failed {
-		hit := false
-		for _, p := range collectorPrefixes(kind)[fc] {
-			phit := false
+		pres, known := collectorPrefixes(kind)[fc]
+		if !known {
+			continue
+		}
+		hit := !noDataCollector(fc)
+		for _, p := range pres {
 			for k := range c.known {
 				if strings.HasPrefix(k, p) && !next[k] {
 					next[k] = true // gemerkt lassen
-					phit = true
+					hit = true
 				}
 			}
-			hit = hit || phit
-			if phit && !seen[p] {
-				seen[p] = true
-				pe.Prefixes = append(pe.Prefixes, p)
-			}
 		}
-		if hit && len(pe.Errs) < 5 {
-			pe.Errs = append(pe.Errs, clip(fc, 40)+": Sammler des Exporters fehlgeschlagen")
+		if !hit {
+			quiet = append(quiet, pres...)
+			continue
+		}
+		for _, p := range pres {
+			prefixes[p] = true
+		}
+		if len(errs) < 5 {
+			errs = append(errs, clip(fc, 40)+": Sammler des Exporters fehlgeschlagen")
 		}
 	}
 	c.known = next
-	if len(pe.Errs) == 0 {
+	if len(errs) == 0 {
 		return nil
+	}
+	for _, p := range quiet {
+		prefixes[p] = true
+	}
+	pe := &apis.PartialError{Errs: errs}
+	for p := range prefixes {
+		pe.Prefixes = append(pe.Prefixes, p)
 	}
 	sort.Strings(pe.Prefixes)
 	return pe
@@ -227,7 +243,7 @@ func collectorPrefixes(kind string) map[string][]string {
 	if kind == ExporterWindows {
 		return map[string][]string{"cpu": {"cpu"}, "cs": {"cpu", "mem", "swap"}, "memory": {"mem", "swap"},
 			"os": {"mem", "swap"}, "pagefile": {"swap"}, "logical_disk": {"fs:"}, "physical_disk": {"disk:"},
-			"net": {"if:"}, "service": {"winsvc:"}}
+			"net": {"if:"}, "service": {"winsvc"}}
 	}
 	return map[string][]string{"cpu": {"cpu"}, "meminfo": {"mem", "swap"}, "loadavg": {"load"}, "filesystem": {"fs:"},
 		"diskstats": {"disk:"}, "netdev": {"if:"}, "bonding": {"bond:"}, "mdadm": {"raid:"}, "zfs": {"zfs:"},

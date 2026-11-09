@@ -92,8 +92,8 @@ func SkipMount(m Mount) bool {
 	return false
 }
 
-// dedupFS behaelt je Geraet nur einen Mount (Bind-Mounts, btrfs-Subvolumes): den kuerzesten Pfad.
-func dedupFS(in []m64proto.FS) []m64proto.FS {
+// DedupFS behaelt je Geraet nur einen Mount (Bind-Mounts, btrfs-Subvolumes): den kuerzesten Pfad.
+func DedupFS(in []m64proto.FS) []m64proto.FS {
 	idx := map[string]int{}
 	var out []m64proto.FS
 	for _, f := range in {
@@ -226,7 +226,7 @@ func FSFromDF(rows []DFRow, mounts []Mount, inodes map[string][2]uint64) []m64pr
 		}
 		out = append(out, f)
 	}
-	return dedupFS(out)
+	return DedupFS(out)
 }
 
 // StatFS sind die Groessen eines Dateisystems (Agent: statfs).
@@ -263,7 +263,7 @@ func FSFromStatfs(mounts []Mount, statfs func(mount string) (StatFS, error)) ([]
 		out = append(out, m64proto.FS{Mount: m.Mount, Device: m.Device, Type: m.Type, Total: st.Total, Used: used,
 			Avail: st.Avail, InodesTotal: st.InodesTotal, InodesFree: st.InodesFree, ReadOnly: m.ReadOnly})
 	}
-	return dedupFS(out), errs
+	return DedupFS(out), errs
 }
 
 // statfsError ist ein Fehler von statfs samt Pfad.

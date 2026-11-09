@@ -95,41 +95,41 @@ func checkRedfish(t *testing.T, svcs []model.Service) {
 	if b := svcByKey(t, svcs, "temp:Blade2/CPU1 Temp"); mustMetric(t, b, "temp").Value != 55.5 {
 		t.Errorf("Blade2 CPU1 = %+v", b)
 	}
-	if c2 := svcByKey(t, svcs, "temp:CPU2 Temp"); !hasFact(c2, "device_crit") || len(c2.Facts) != 1 {
+	if c2 := svcByKey(t, svcs, "temp:1U/CPU2 Temp"); !hasFact(c2, "device_crit") || len(c2.Facts) != 1 {
 		t.Errorf("CPU2 = %+v", c2)
 	}
-	if in := svcByKey(t, svcs, "temp:Chassis Intake Temp"); !hasFact(in, "device_warn") || hasFact(in, "device_crit") {
+	if in := svcByKey(t, svcs, "temp:1U/Chassis Intake Temp"); !hasFact(in, "device_warn") || hasFact(in, "device_crit") {
 		t.Errorf("Intake = %+v", in)
 	}
-	if bt := svcByKey(t, svcs, "temp:Board Temp"); mustMetric(t, bt, "temp").Rule != model.RuleTemp {
+	if bt := svcByKey(t, svcs, "temp:1U/Board Temp"); mustMetric(t, bt, "temp").Rule != model.RuleTemp {
 		t.Errorf("Board (ohne Schwellen) = %+v", bt)
 	}
-	if hasSvc(svcs, "temp:CPU3 Temp") || hasSvc(svcs, "fan:Fan 3") || hasSvc(svcs, "psu:Power Supply Bay 3") || hasSvc(svcs, "temp:PS1 Voltage") {
+	if hasSvc(svcs, "temp:1U/CPU3 Temp") || hasSvc(svcs, "fan:1U/Fan 3") || hasSvc(svcs, "psu:1U/Power Supply Bay 3") || hasSvc(svcs, "temp:Blade2/PS1 Voltage") {
 		t.Error("fehlende Bauteile bzw. Spannung als Dienst")
 	}
-	if mustMetric(t, svcByKey(t, svcs, "temp:Inlet Temp"), "temp").Rule != model.RuleTemp {
+	if mustMetric(t, svcByKey(t, svcs, "temp:Blade2/Inlet Temp"), "temp").Rule != model.RuleTemp {
 		t.Error("Inlet (Sensors, absolute URL) fehlt Regel")
 	}
-	if f := svcByKey(t, svcs, "fan:BaseBoard System Fan"); mustMetric(t, f, "rpm").Value != 2100 || len(f.Facts) != 0 {
+	if f := svcByKey(t, svcs, "fan:1U/BaseBoard System Fan"); mustMetric(t, f, "rpm").Value != 2100 || len(f.Facts) != 0 {
 		t.Errorf("Fan = %+v", f)
 	}
-	if f := svcByKey(t, svcs, "fan:BaseBoard System Fan Backup"); !hasFact(f, "device_crit") || !strings.Contains(f.Facts[0].Text, "kritisch unter 1000") {
+	if f := svcByKey(t, svcs, "fan:1U/BaseBoard System Fan Backup"); !hasFact(f, "device_crit") || !strings.Contains(f.Facts[0].Text, "kritisch unter 1000") {
 		t.Errorf("Fan Backup = %+v", f)
 	}
-	if f := svcByKey(t, svcs, "fan:Fan 1"); mustMetric(t, f, "rpm").Value != 7200 {
+	if f := svcByKey(t, svcs, "fan:Blade2/Fan 1"); mustMetric(t, f, "rpm").Value != 7200 {
 		t.Errorf("Fan 1 (Sensors) = %+v", f)
 	}
-	p1 := svcByKey(t, svcs, "psu:Power Supply Bay 1")
+	p1 := svcByKey(t, svcs, "psu:1U/Power Supply Bay 1")
 	if mustMetric(t, p1, "watts").Value != 210 || mustMetric(t, p1, "input_voltage").Value != 238 || len(p1.Facts) != 0 {
 		t.Errorf("PSU 1 = %+v", p1)
 	}
-	if p2 := svcByKey(t, svcs, "psu:Power Supply Bay 2"); !hasFact(p2, "device_crit") || !strings.Contains(p2.Text, "UnavailableOffline") {
+	if p2 := svcByKey(t, svcs, "psu:1U/Power Supply Bay 2"); !hasFact(p2, "device_crit") || !strings.Contains(p2.Text, "UnavailableOffline") {
 		t.Errorf("PSU 2 = %+v", p2)
 	}
-	if !hasSvc(svcs, "psu:Blade PSU") {
+	if !hasSvc(svcs, "psu:Blade2/Blade PSU") {
 		t.Error("PowerSubsystem-Netzteil fehlt")
 	}
-	pw := svcByKey(t, svcs, "power")
+	pw := svcByKey(t, svcs, "power:1U")
 	if mustMetric(t, pw, "watts").Value != 344 || !hasFact(pw, "device_warn") || !strings.Contains(pw.Facts[0].Text, "Redundancy Group 1 verloren") {
 		t.Errorf("power = %+v", pw)
 	}
@@ -255,7 +255,7 @@ func TestRedfishConfirmAndPartial(t *testing.T) {
 	if !hasPrefix(pe, "psu:") || !hasPrefix(pe, "power") || !hasPrefix(pe, "raid:1/") || !strings.Contains(pe.Error(), "internal error") {
 		t.Errorf("Teilfehler = %+v", pe)
 	}
-	if !hasSvc(svcs, "raid:1/1") || hasSvc(svcs, "raid:1/2") || hasSvc(svcs, "power") || !hasSvc(svcs, "temp:CPU2 Temp") {
+	if !hasSvc(svcs, "raid:1/1") || hasSvc(svcs, "raid:1/2") || hasSvc(svcs, "power:1U") || !hasSvc(svcs, "temp:1U/CPU2 Temp") {
 		t.Errorf("Dienste bei Teilfehler falsch")
 	}
 	if !r.storAt.IsZero() {
@@ -305,9 +305,17 @@ func TestRedfishTempThresholds(t *testing.T) {
 	if !ok || !hasFact(it.svc, "device_warn") || len(it.svc.Metrics) != 0 {
 		t.Errorf("ohne Wert = %+v", it.svc)
 	}
-	// ohne Wert und ohne Zustand: kein Dienst
-	if _, ok := rfTempItem("1", "Y", "", optF{}, optF{}, optF{}, optF{}, rfStatus{}); ok {
-		t.Error("leerer Sensor als Dienst")
+	// ohne Wert bei Zustand OK (Server aus): Dienst ohne Messgroesse statt "verschwunden"
+	it, ok = rfTempItem("1", "Y", "", optF{}, set(75), optF{}, optF{}, rfStatus{State: "Enabled", Health: "OK"})
+	if !ok || len(it.svc.Metrics) != 0 || len(it.svc.Facts) != 0 || !strings.HasPrefix(it.svc.Text, "kein Messwert") {
+		t.Errorf("ohne Wert, Zustand OK = %+v %v", it.svc, ok)
+	}
+	if _, ok := rfTempItem("1", "Y", "", optF{}, optF{}, optF{}, optF{}, rfStatus{}); !ok {
+		t.Error("Sensor ohne Wert und Zustand verworfen")
+	}
+	// nicht bestueckt: kein Dienst
+	if _, ok := rfTempItem("1", "Y", "", optF{}, optF{}, optF{}, optF{}, rfStatus{State: "Absent"}); ok {
+		t.Error("fehlender Sensor als Dienst")
 	}
 	// unsinniger Wert
 	it, _ = rfTempItem("1", "Z", "", set(9999), optF{}, optF{}, optF{}, rfStatus{Health: "OK"})
@@ -347,5 +355,140 @@ func TestRedfishSimpleStorage(t *testing.T) {
 	}
 	if hasSvc(svcs, "disk:1/SATA Bay 3") {
 		t.Error("leerer Platz als Laufwerk")
+	}
+}
+
+// AP1: Server ausgeschaltet – Temperaturen ohne Wert bleiben als Dienste erhalten.
+func TestRedfishTempWithoutReading(t *testing.T) {
+	f, _, cfg := rfFake(t)
+	f.set("GET /redfish/v1/Chassis/1U/Thermal", 200, `{"Temperatures":[{"Name":"CPU1 Temp","ReadingCelsius":null,
+"UpperThresholdNonCritical":75,"Status":{"State":"Enabled","Health":"OK"}},{"Name":"Board Temp","Status":{"State":"Enabled"}}]}`)
+	r, _ := NewRedfish(cfg)
+	svcs, err := r.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	for _, k := range []string{"temp:1U/CPU1 Temp", "temp:1U/Board Temp"} {
+		if s := svcByKey(t, svcs, k); len(s.Metrics) != 0 || len(s.Facts) != 0 {
+			t.Errorf("%s = %+v", k, s)
+		}
+	}
+}
+
+// AP2: scheitert Systems/{id}, fehlen auch Controller, Laufwerke und Volumes – sie gehoeren in die Praefixe.
+func TestRedfishSystemFailPrefixes(t *testing.T) {
+	f, _, cfg := rfFake(t)
+	f.set("GET /redfish/v1/Systems/437XR1138R2", 500, `{"error":{"message":"busy"}}`)
+	r, _ := NewRedfish(cfg)
+	svcs, err := r.Collect(context.Background())
+	pe := partialOf(t, err)
+	for _, pre := range []string{"system", "ctrl:", "disk:", "raid:"} {
+		if !hasPrefix(pe, pre) {
+			t.Errorf("Praefix %q fehlt: %+v", pre, pe.Prefixes)
+		}
+	}
+	if hasSvc(svcs, "ctrl:1") || !r.storAt.IsZero() {
+		t.Error("Storage ohne System gelesen bzw. gemerkt")
+	}
+}
+
+// AP6: die Schluessel haengen an der Zahl der Chassis, nicht daran, welche Chassis in der Runde Werte liefern.
+func TestRedfishStableKeys(t *testing.T) {
+	f, _, cfg := rfFake(t)
+	r, _ := NewRedfish(cfg)
+	svcs, err := r.Collect(context.Background())
+	if err != nil || !hasSvc(svcs, "temp:Blade2/CPU1 Temp") || !hasSvc(svcs, "temp:Blade2/Inlet Temp") {
+		t.Fatalf("erste Runde: %v", err)
+	}
+	f.set("GET /redfish/v1/Chassis/1U/Thermal", 500, `{}`)
+	svcs, err = r.Collect(context.Background())
+	if pe := partialOf(t, err); !hasPrefix(pe, "temp:") {
+		t.Errorf("Praefixe = %v", pe.Prefixes)
+	}
+	if !hasSvc(svcs, "temp:Blade2/CPU1 Temp") || !hasSvc(svcs, "temp:Blade2/Inlet Temp") || hasSvc(svcs, "temp:CPU1 Temp") {
+		t.Error("Schluessel gewechselt, als ein Chassis fehlte")
+	}
+	// ein Chassis: ohne Praefix (auch power)
+	items := []rfItem{{chassis: "1", name: "CPU", svc: model.Service{Name: "Temperatur CPU"}}}
+	if l := rfKeys("temp:", items, false); len(l) != 1 || l[0].Key != "temp:CPU" || l[0].Name != "Temperatur CPU" {
+		t.Errorf("ein Chassis = %+v", l)
+	}
+	if l := rfKeys("temp:", items, true); len(l) != 1 || l[0].Key != "temp:1/CPU" || l[0].Name != "Temperatur CPU (1)" {
+		t.Errorf("mehrere Chassis = %+v", l)
+	}
+}
+
+// AP4: bei abgelaufener Sitzung bleibt das alte Token bis zur neuen Anmeldung stehen – gleichzeitige Anfragen gehen
+// nie ohne Anmeldung hinaus, warten auf die Anmeldung und laufen danach; die Anmeldung selbst ohne altes Token.
+func TestRedfishReloginRace(t *testing.T) {
+	f, a, cfg := rfFake(t)
+	cfg.Session = true
+	r, _ := NewRedfish(cfg)
+	if _, err := r.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.valid = map[string]bool{}
+	a.mu.Unlock()
+	posted, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	var postHdr http.Header
+	f.mu.Lock()
+	f.before = func(w http.ResponseWriter, req *http.Request) bool {
+		if req.Method == http.MethodPost {
+			once.Do(func() { postHdr = req.Header.Clone(); close(posted) })
+			<-release
+		}
+		return a.before(w, req)
+	}
+	f.mu.Unlock()
+	ctx := context.Background()
+	errs := make(chan error, 2)
+	go func() {
+		var x rfCollection
+		errs <- r.get(ctx, "/redfish/v1/Systems", &x)
+	}()
+	<-posted // Anmeldung laeuft
+	go func() {
+		var x rfCollection
+		errs <- r.get(ctx, "/redfish/v1/Chassis", &x)
+	}()
+	for i := 0; f.count("GET /redfish/v1/Chassis") < 2 && i < 200; i++ {
+		time.Sleep(5 * time.Millisecond) // die zweite Anfrage ist beim BMC angekommen
+	}
+	close(release)
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("Anfrage waehrend der Anmeldung: %v", err)
+		}
+	}
+	if a.noAuth != 0 || a.sessions != 2 {
+		t.Errorf("ohne Anmeldung %d, Sitzungen %d", a.noAuth, a.sessions)
+	}
+	if postHdr.Get("X-Auth-Token") != "" {
+		t.Error("Anmeldung mit altem Token gesendet")
+	}
+	// scheitert die Neuanmeldung, melden sich wartende Anfragen nicht jede fuer sich erneut an
+	f.mu.Lock()
+	f.before = a.before
+	f.mu.Unlock()
+	a.mu.Lock()
+	a.valid, a.pass = map[string]bool{}, "anders"
+	a.mu.Unlock()
+	posts := f.count("POST /redfish/v1/SessionService/Sessions")
+	var wg sync.WaitGroup
+	for _, p := range []string{"/redfish/v1/Systems", "/redfish/v1/Chassis", "/redfish/v1/Chassis/1U"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var x rfCollection
+			if err := r.get(ctx, p, &x); err == nil {
+				t.Errorf("%s ohne Sitzung gelungen", p)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := f.count("POST /redfish/v1/SessionService/Sessions") - posts; n != 1 {
+		t.Errorf("%d Anmeldungen nach gescheiterter Neuanmeldung", n)
 	}
 }

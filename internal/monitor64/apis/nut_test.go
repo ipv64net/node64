@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -215,7 +217,7 @@ func TestNUTFilterAndAuth(t *testing.T) {
 		t.Errorf("Test = %+v", r)
 	}
 	// falsches Passwort: Fehler ohne Geheimnis
-	n2, _ := NewNUT(NUTConfig{Address: f.addr(), User: "monuser", Password: "falsch-" + testSecret})
+	n2, _ := NewNUT(NUTConfig{Address: f.addr(), User: "monuser", Password: "falsch-" + testSecret, TLS: NUTTLSOff})
 	_, err = n2.Collect(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "INVALID-PASSWORD") || strings.Contains(err.Error(), testSecret) {
 		t.Errorf("falsches Passwort: %v", err)
@@ -360,5 +362,69 @@ func TestNUTServiceStates(t *testing.T) {
 	}
 	if m := mustMetric(t, s, "power"); m.Unit != "VA" {
 		t.Errorf("power VA = %+v", m)
+	}
+}
+
+// AP5: Modus auto, upsd lehnt STARTTLS ab – lesen ohne Anmeldung (kein Passwort im Klartext); hat upsd schon einmal
+// TLS gesprochen, ist die Ablehnung ein Fehler statt eines stillen Wechsels auf Klartext.
+func TestNUTNoDowngrade(t *testing.T) {
+	f := nutFake(t)
+	f.pass = testSecret
+	n, _ := NewNUT(NUTConfig{Address: f.addr(), User: "monuser", Password: testSecret})
+	svcs, err := n.Collect(context.Background())
+	if !IsPartial(err) || len(svcs) != 2 {
+		t.Fatalf("auto ohne TLS = %d, %v", len(svcs), err)
+	}
+	for _, c := range f.commands() {
+		if strings.Contains(c, testSecret) || strings.HasPrefix(c, "USERNAME") {
+			t.Fatalf("Anmeldung ohne TLS gesendet: %v", f.commands())
+		}
+	}
+	if r := n.Test(context.Background()); !r.OK || !strings.Contains(r.Warning, "Anmeldung weggelassen") {
+		t.Errorf("Test auto ohne TLS = %+v", r)
+	}
+	// erst TLS, dann abgelehnt
+	cert, pin := testCert(t)
+	f.mu.Lock()
+	f.cert = &cert
+	f.mu.Unlock()
+	n, _ = NewNUT(NUTConfig{Address: f.addr(), User: "monuser", Password: testSecret, Pin: pin})
+	n.cfg.Pin, n.pin = "", "" // Modus auto ohne Pflicht, Zertifikat vertraut
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.roots = x509.NewCertPool()
+	n.roots.AddCert(leaf)
+	if _, err := n.Collect(context.Background()); !IsPartial(err) {
+		t.Fatalf("mit TLS: %v", err)
+	}
+	f.mu.Lock()
+	f.cert = nil
+	f.cmds = nil
+	f.mu.Unlock()
+	_, err = n.Collect(context.Background())
+	if err == nil || IsPartial(err) || !strings.Contains(err.Error(), "bisher TLS") {
+		t.Errorf("Ablehnung nach TLS: %v", err)
+	}
+	for _, c := range f.commands() {
+		if strings.HasPrefix(c, "LIST") || strings.Contains(c, testSecret) {
+			t.Errorf("nach abgelehntem STARTTLS weiter gesendet: %v", f.commands())
+		}
+	}
+}
+
+// AP8: die Antworten einer Runde sind in der Summe begrenzt (nicht nur je Zeile und Zeilenzahl).
+func TestNUTMaxBytes(t *testing.T) {
+	f := newFakeUPSD(t)
+	var b strings.Builder
+	for i := 0; i < 1500; i++ { // 1500 x ~4 KB = ~6 MB
+		fmt.Fprintf(&b, "VAR big v%d \"%s\"\n", i, strings.Repeat("x", 4000))
+	}
+	f.ups["big"] = b.String()
+	f.upsList = []string{"big"}
+	n, _ := NewNUT(NUTConfig{Address: f.addr(), TLS: NUTTLSOff, Timeout: 10 * time.Second})
+	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "zu groß") {
+		t.Errorf("6 MB angenommen: %v", err)
 	}
 }

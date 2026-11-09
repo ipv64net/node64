@@ -211,14 +211,12 @@ func (s *Store) MoveOverride(ctx context.Context, scope, uid string, dir int, by
 	defer func() { _ = tx.Rollback() }()
 	now := tsNow()
 	for k, o := range list {
-		upd := ``
-		args := []any{k + 1}
-		if o.UID == uid {
-			upd = `, updated_at = ?, updated_by = ?`
-			args = append(args, now, by.json())
+		if o.Position == k+1 && o.UID != uid {
+			continue
 		}
-		args = append(args, o.UID)
-		if _, err := tx.ExecContext(ctx, `UPDATE m64_overrides SET position = ?`+upd+` WHERE uid = ?`, args...); err != nil {
+		// jede Zeile mit neuer Position bekommt eine neue Aenderungszeit (der Abgleich im Cluster findet Aenderungen
+		// nur darueber)
+		if _, err := tx.ExecContext(ctx, `UPDATE m64_overrides SET position = ?, updated_at = ?, updated_by = ? WHERE uid = ?`, k+1, now, by.json(), o.UID); err != nil {
 			return err
 		}
 	}

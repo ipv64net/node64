@@ -429,6 +429,11 @@ func TestParseGeomStatus(t *testing.T) {
 	if r2 := rs[2]; r2.State != "failed" || r2.Failed != 1 || r2.Active != 0 {
 		t.Fatalf("r2: %+v", r2)
 	}
+	// PB7: Reserve-Platte zaehlt nicht zum Soll (gesundes Array mit Hot-Spare)
+	rs = ParseGeomStatus(geomRAID, []byte("raid/r0  OPTIMAL  ada0 (ACTIVE (ACTIVE))\n                 ada1 (ACTIVE (ACTIVE))\n                 ada2 (SPARE)\n"))
+	if len(rs) != 1 || rs[0].Devices != 2 || rs[0].Active != 2 || rs[0].Spare != 1 || rs[0].State != "active" || len(rs[0].Members) != 3 {
+		t.Fatalf("Hot-Spare: %+v", rs)
+	}
 	if rs := ParseGeomStatus(geomMirror, nil); len(rs) != 0 {
 		t.Fatalf("leer: %+v", rs)
 	}
@@ -584,7 +589,7 @@ func TestDetectPlatform(t *testing.T) {
 
 func TestZpoolFreeBSD(t *testing.T) {
 	pools := m64linux.ParseZpoolList([]byte("zroot\t483183820800\t21474836480\t461708984320\t3\tONLINE\ntank\t3985729650688\t1992864825344\t1992864825344\t12\tDEGRADED\n"))
-	mergeZpoolStatus(pools, m64linux.ParseZpoolStatus(readTestdata(t, "zpool_status_freebsd14_nachgebaut.txt")))
+	m64linux.MergeZpoolStatus(pools, m64linux.ParseZpoolStatus(readTestdata(t, "zpool_status_freebsd14_nachgebaut.txt")))
 	if len(pools) != 2 || pools[0].Errors != "No known data errors" || !strings.Contains(pools[0].ScanText, "scrub repaired") {
 		t.Fatalf("zroot: %+v", pools)
 	}

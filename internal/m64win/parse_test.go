@@ -73,14 +73,92 @@ func TestParseDiskPerf(t *testing.T) {
 	le.PutUint32(b[44:], 9)          // writes
 	le.PutUint64(b[56:], 25_000_000) // query 2,5 s
 	p, ok := parseDiskPerf(b)
-	if !ok || p.bytesRead != 1000 || p.bytesWritten != 2000 || p.reads != 7 || p.writes != 9 || p.ioTimeMs() != 2000 {
-		t.Fatalf("perf = %+v %v (io %d)", p, ok, p.ioTimeMs())
+	if !ok || p.bytesRead != 1000 || p.bytesWritten != 2000 || p.reads != 7 || p.writes != 9 || p.idle != 5_000_000 {
+		t.Fatalf("perf = %+v %v", p, ok)
 	}
 	if _, ok := parseDiskPerf(b[:40]); ok {
 		t.Fatal("zu kurz angenommen")
 	}
-	if (diskPerf{idle: 10, query: 5}).ioTimeMs() != 0 || (diskPerf{idle: -1, query: 5}).ioTimeMs() != 0 {
-		t.Fatal("Unsinn nicht verworfen")
+}
+
+// WI6: beschaeftigte Zeit aus monotoner Uhr und Leerlauf - QueryTime (Systemuhr) spielt keine Rolle mehr, ein
+// Uhrsprung zaehlt nicht als Last.
+func TestDiskBusy(t *testing.T) {
+	var b diskBusy
+	sec := func(s float64) int64 { return int64(s * 1e7) } // 100 ns
+	steps := []struct {
+		idle int64
+		now  time.Duration
+		want uint64 // ms
+	}{
+		{sec(100), 10 * time.Second, 0},      // Basis
+		{sec(110), 20 * time.Second, 0},      // 10 s Leerlauf in 10 s
+		{sec(114), 30 * time.Second, 6000},   // 4 s Leerlauf in 10 s: 6 s beschaeftigt
+		{sec(130), 40 * time.Second, 6000},   // mehr Leerlauf als Zeit (Ruhezustand): zaehlt nicht
+		{sec(5), 50 * time.Second, 6000},     // Zaehler neu: nur neue Basis
+		{sec(5), 60 * time.Second, 16000},    // kein Leerlauf: 10 s beschaeftigt
+		{sec(15), 60 * time.Second, 16000},   // keine Zeit vergangen
+		{sec(15), 60*time.Second - 1, 16000}, // Uhr rueckwaerts (kann monoton nicht vorkommen)
+		{sec(15.5), 61 * time.Second, 16500}, // 0,5 s Leerlauf in 1 s
+	}
+	for i, st := range steps {
+		if got := b.update("PhysicalDrive0", st.idle, st.now); got != st.want {
+			t.Fatalf("Schritt %d: %d ms, erwartet %d", i, got, st.want)
+		}
+	}
+	if got := b.update("PhysicalDrive1", sec(1), time.Hour); got != 0 {
+		t.Fatalf("zweite Platte: %d", got)
+	}
+}
+
+// WI7: haengende Laufwerksaufrufe blockieren collect nicht; je Schluessel laeuft hoechstens ein Aufruf, und ein
+// schon haengender wird ohne neues Warten gemeldet.
+func TestDriveCalls(t *testing.T) {
+	c := NewCache()
+	release := make(chan struct{})
+	var started atomic.Int32
+	hang := func() (any, error) {
+		started.Add(1)
+		<-release
+		return 7, nil
+	}
+	ctx := context.Background()
+	t0 := time.Now()
+	_, err := waitDrive[int](ctx, c.startDrive("fs X:", hang), "X:", 50*time.Millisecond)
+	if !errors.Is(err, errDriveTimeout) || time.Since(t0) > time.Second {
+		t.Fatalf("Zeitlimit: %v nach %s", err, time.Since(t0))
+	}
+	t1 := time.Now()
+	_, err = waitDrive[int](ctx, c.startDrive("fs X:", hang), "X:", 50*time.Millisecond)
+	if !errors.Is(err, errDriveTimeout) || !strings.Contains(err.Error(), "haengt seit") || time.Since(t1) > 20*time.Millisecond {
+		t.Fatalf("haengt: %v nach %s", err, time.Since(t1))
+	}
+	// andere Laufwerke laufen weiter
+	ok := c.startDrive("fs C:", func() (any, error) { return 3, nil })
+	if v, err := waitDrive[int](ctx, ok, "C:", time.Second); err != nil || v != 3 {
+		t.Fatalf("C: %v %v", v, err)
+	}
+	if n := started.Load(); n != 1 {
+		t.Fatalf("%d Aufrufe fuer X:", n)
+	}
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		c.mu.Lock()
+		_, busy := c.drives["fs X:"]
+		c.mu.Unlock()
+		if !busy || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if v, err := waitDrive[int](ctx, c.startDrive("fs X:", func() (any, error) { return 8, nil }), "X:", time.Second); err != nil || v != 8 {
+		t.Fatalf("nach dem Haengen: %v %v", v, err)
+	}
+	// Fehler des Laufwerks selbst sind kein Zeitlimit
+	_, err = waitDrive[int](ctx, c.startDrive("fs D:", func() (any, error) { return nil, errors.New("D: kaputt") }), "D:", time.Second)
+	if err == nil || errors.Is(err, errDriveTimeout) {
+		t.Fatalf("D: %v", err)
 	}
 }
 

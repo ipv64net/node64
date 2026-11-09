@@ -398,13 +398,20 @@ func (c *conn) dialPush(ctx context.Context) (*ssh.Client, string, error) {
 		stopLife()
 		cancel()
 		if err == nil {
+			c.cfg.push.handshakeOK(c.cfg.pushToken, pc.net)
 			return cl, learned, nil
 		}
 		if errors.Is(err, ErrClosed) || ctx.Err() != nil {
 			return nil, "", err
 		}
-		c.cfg.push.rejected(pc, err)
+		// Gemerkten Schluessel angekuendigt, im Handshake einen anderen gezeigt: so meldet sich der echte Agent nie
+		// (er kuendigt immer seinen eigenen an). Kein "Schluessel geaendert" anbieten, sondern ErrPushForeignKey.
 		var hk *HostKeyError
+		liar := errors.As(err, &hk) && pc.claimed == hk.Want
+		if liar {
+			err = ErrPushForeignKey
+		}
+		c.cfg.push.handshakeFailed(c.cfg.pushToken, pc, err, liar)
 		if errors.As(err, &hk) {
 			hkErr = err
 		} else {
@@ -486,11 +493,13 @@ func (c *conn) handshake(ctx, dctx context.Context, nc net.Conn, deadline time.T
 
 // probeStale prueft die offene Verbindung mit einem Keepalive und schliesst sie, wenn die Antwort innerhalb von
 // wait ausbleibt (Push: eine neue Verbindung des Agents ist angekommen, die alte ist dann oft tot). Laeuft im
-// Hintergrund, hoechstens einmal gleichzeitig.
+// Hintergrund, hoechstens einmal gleichzeitig. Laeuft gerade eine Anfrage, wird nicht geprueft: eine ausgelastete
+// Verbindung antwortet unter Umstaenden langsam, und eine tote beendet die laufende Anfrage ohnehin (Zeitlimit
+// schliesst die Verbindung).
 func (c *conn) probeStale(wait time.Duration) {
 	c.mu.Lock()
 	cl := c.client
-	if cl == nil || c.probing || c.closed {
+	if cl == nil || c.probing || c.closed || c.active > 0 {
 		c.mu.Unlock()
 		return
 	}

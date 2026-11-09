@@ -214,10 +214,15 @@ type clusterCardRow struct {
 	Measure int // davon nur messen (diese Node ohne Mehrheit)
 }
 
-// clusterCardOf baut die Karte (nil ohne Cluster).
+// clusterCardOf baut die Karte (nil ohne Cluster). Ohne aktiven Cluster bleibt der Schluessel-Teil sichtbar, solange
+// es einen Cluster-Schluessel, alte Schluessel oder offene Umstellungen gibt (z. B. Schluesselwechsel nach dem
+// Entfernen einer Node, Rest-Umstellungen nach dem Verlassen des Clusters).
 func (m *Module) clusterCardOf(ctx context.Context) *clusterCard {
 	ci, err := m.clusterInfo(ctx)
-	if err != nil || !ci.Active {
+	if err != nil {
+		return nil
+	}
+	if !ci.Active && (ci.Key == nil || !ci.Key.Cluster && len(ci.Key.OldKeys) == 0 && len(ci.Key.Pending) == 0) {
 		return nil
 	}
 	c := &clusterCard{clusterOut: ci}

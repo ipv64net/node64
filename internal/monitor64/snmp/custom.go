@@ -18,6 +18,7 @@ func (c *Collector) collectCustom(r *round) {
 		r.part.add("eigene OIDs", err, "oid:")
 		return
 	}
+	r.at = c.now() // Messzeitpunkt der Zaehler
 	for _, co := range c.cfg.Custom {
 		s := model.Service{Key: "oid:" + co.OID, Name: co.Name, Kind: "oid", Default: true}
 		p, ok := res[co.OID]
@@ -32,7 +33,7 @@ func (c *Collector) collectCustom(r *round) {
 		}
 		switch {
 		case co.Counter:
-			if rt, ok := c.rate("oid|"+co.OID, p, r.now); ok && finite(rt*factor) {
+			if rt, ok := c.rate("oid|"+co.OID, p, r.at); ok && finite(rt*factor) {
 				v := round4(rt * factor)
 				s.Metrics = []model.Metric{{Name: "value", Value: v, Unit: co.Unit, Rule: co.Rule}}
 				s.Text = valueText(v, co.Unit)

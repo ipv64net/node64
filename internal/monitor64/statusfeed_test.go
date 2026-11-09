@@ -300,3 +300,260 @@ func TestStatusFeed(t *testing.T) {
 		t.Fatalf("empty: %v %v", err, res)
 	}
 }
+
+// Tage mit Zeitumstellung: die Zeitraeume muessen genau dann gelten, wenn eval.Window.Active gilt (Wanduhr der Runden)
+func TestStatusWindowSpansDST(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip("no tzdata")
+	}
+	rec := func(from, to eval.Clock, days ...time.Weekday) eval.Window {
+		return eval.Window{Hosts: []string{"h"}, Recurring: &eval.Recurrence{Days: days, From: from, To: to}}
+	}
+	windows := []eval.Window{
+		rec(eval.At(1, 0), eval.At(2, 30)),               // endet in der fehlenden Stunde (Maerz)
+		rec(eval.At(2, 0), eval.At(3, 0)),                // die fehlende bzw. doppelte Stunde
+		rec(eval.At(2, 30), eval.At(2, 45)),              // ganz in der Luecke
+		rec(eval.At(22, 0), eval.At(2, 30)),              // ueber Mitternacht in die Umstellung
+		rec(eval.At(0, 0), eval.At(0, 0), time.Sunday),   // ganzer Sonntag (23 bzw. 25 Stunden)
+		rec(eval.At(1, 30), eval.At(1, 15), time.Sunday), // fast 24 Stunden ab Sonntag
+	}
+	for _, r := range [][2]time.Time{
+		{time.Date(2026, 3, 27, 0, 0, 0, 0, loc), time.Date(2026, 4, 1, 0, 0, 0, 0, loc)},
+		{time.Date(2026, 10, 23, 0, 0, 0, 0, loc), time.Date(2026, 10, 28, 0, 0, 0, 0, loc)},
+	} {
+		for wi, w := range windows {
+			spans := statusWindowSpans(w, r[0], r[1], loc)
+			for i := 1; i < len(spans); i++ {
+				if spans[i].from.Before(spans[i-1].to) {
+					t.Fatalf("window %d: overlapping/unsorted %+v", wi, spans)
+				}
+			}
+			for at := r[0]; at.Before(r[1]); at = at.Add(time.Minute) {
+				in := spanOverlap(spans, at, at.Add(time.Second)) > 0
+				if in != w.Active(at, eval.HostRef{ID: "h"}, loc) {
+					t.Fatalf("window %d: mismatch with Active at %v (in=%v)", wi, at, in)
+				}
+			}
+		}
+	}
+	// Termin ueber die Tagesgrenze bleibt ein Stueck (naechster Termin in der Liste)
+	w := windows[3]
+	now := time.Date(2026, 3, 28, 12, 0, 0, 0, loc)
+	sm, ok := statusMaintNext(w, now, now.Add(48*time.Hour), loc)
+	if !ok || !sm.Start.Equal(time.Date(2026, 3, 28, 22, 0, 0, 0, loc)) || !sm.End.Equal(time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC)) {
+		t.Fatalf("next over DST: %+v %v", sm, ok)
+	}
+}
+
+// Zustand im Cluster: ohne Stand der zustaendigen Node ist der Eintrag unbekannt, auch wenn die Ansicht noch alte
+// Dienste enthaelt; eine eigene Ansicht "unbekannt" zaehlt nach den Diensten ohne "nur anzeigen".
+func TestStatusStateCluster(t *testing.T) {
+	h := &Host{UID: "h1"}
+	svcs := []SvcView{{Key: "fs:/", State: eval.OK}, {Key: "disk:sda", State: eval.OK}}
+	for _, c := range []struct {
+		name string
+		v    *HostView
+		key  string
+		want string
+	}{
+		{"owner unreachable", &HostView{View: eval.ViewUnknown, State: eval.Unknown, Services: svcs, Cluster: &ClusterRef{Node: "n2", Note: noteOwnerUnreachable}}, "", module.StatusUnknown},
+		{"owner unreachable svc", &HostView{View: eval.ViewUnknown, State: eval.Unknown, Services: svcs, Cluster: &ClusterRef{Node: "n2", Note: noteOwnerUnreachable}}, "fs:/", module.StatusUnknown},
+		{"no data", &HostView{View: eval.ViewUnknown, State: eval.Unknown, Services: []SvcView{}, Cluster: &ClusterRef{Node: "n2", Note: noteNoData}}, "", module.StatusUnknown},
+		{"empty unknown", &HostView{View: eval.ViewUnknown, State: eval.Unknown}, "", module.StatusUnknown},
+		{"remote ok", &HostView{View: eval.ViewOK, State: eval.OK, Services: svcs, Cluster: &ClusterRef{Node: "n2", Reachable: true, Reporting: true}}, "", module.StatusOK},
+		{"measure only", &HostView{View: eval.ViewWarn, State: eval.Warn, Services: []SvcView{{Key: "fs:/", State: eval.Warn}}, Cluster: &ClusterRef{Node: "n1", Here: true, Note: noteMeasureOnly}}, "", module.StatusWarn},
+		{"show-only unknown", &HostView{View: eval.ViewUnknown, State: eval.Unknown, Services: append([]SvcView{{Key: "x", State: eval.Unknown, ShowOnly: true}}, svcs...)}, "", module.StatusOK},
+	} {
+		if got := statusStateOf(h, c.v, c.key, false); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+	}
+
+	// ueber StatusSources: fremd ueberwachter Host, zustaendige Node nicht erreichbar (idleView)
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	x := statusTestHost(t, m, "fremd", "", false, now.Add(-48*time.Hour))
+	if _, err := m.store.UpsertDiscovered(ctx, x.UID, []Service{{Key: "fs:/", Name: "/", Kind: "fs"}}, map[string]bool{"fs:/": true}, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	statusTestProblem(t, m, x.UID, "fs:/", time.Time{}, false, statusTestEv{now.Add(-3 * time.Hour), "warn"})
+	rt := &hostRT{host: x}
+	rt.setView(&HostView{Host: x, View: eval.ViewUnknown, State: eval.Unknown, Services: []SvcView{{Key: "fs:/", State: eval.OK}},
+		Cluster: &ClusterRef{Node: "n2", Note: noteOwnerUnreachable}})
+	m.rtMu.Lock()
+	m.rts = map[string]*hostRT{x.UID: rt}
+	m.rtMu.Unlock()
+	res, err := m.StatusSources(ctx, module.StatusQuery{Sources: []string{StatusSourceHost(x.UID), StatusSourceService(x.UID, "fs:/")},
+		Bounds: []time.Time{now.Add(-24 * time.Hour), now}, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for src, s := range res {
+		if s.State != module.StatusUnknown || !s.Since.IsZero() {
+			t.Errorf("%s: %s since %v", src, s.State, s.Since)
+		}
+	}
+	if len(res) != 2 {
+		t.Fatalf("sources: %v", res)
+	}
+}
+
+// Pausierte Zeit zaehlt weder als Stoerung noch als beobachtet (aktuelle Pause seit der letzten Aenderung bzw. dem
+// Ereignis, fruehere aus den Ereignissen "pause"/"resume").
+func TestStatusFeedPause(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	hr := func(n int) time.Time { return now.Add(time.Duration(n) * time.Hour) }
+	p := statusTestHost(t, m, "pausiert", "", true, hr(-60))
+	if _, err := m.st.Writer().Exec(`UPDATE m64_hosts SET updated_at = ? WHERE uid = ?`, ts(hr(-10)), p.UID); err != nil {
+		t.Fatal(err)
+	}
+	statusTestProblem(t, m, p.UID, "", time.Time{}, false, statusTestEv{hr(-20), "crit"}) // offen, laeuft in die Pause
+	e := statusTestHost(t, m, "frueher", "", false, hr(-60))
+	statusTestProblem(t, m, e.UID, "", hr(-27), false, statusTestEv{hr(-31), "crit"})
+	m.event(ctx, "", e.UID, "", "pause", "", SystemActor, hr(-30))
+	m.event(ctx, "", e.UID, "", "resume", "", SystemActor, hr(-28))
+	// aktuelle Pause mit Ereignis: gilt ab dem Ereignis (nicht ab der spaeteren Aenderung)
+	ev := statusTestHost(t, m, "ereignis", "", true, hr(-60))
+	if _, err := m.st.Writer().Exec(`UPDATE m64_hosts SET updated_at = ? WHERE uid = ?`, ts(hr(-2)), ev.UID); err != nil {
+		t.Fatal(err)
+	}
+	statusTestProblem(t, m, ev.UID, "", time.Time{}, false, statusTestEv{hr(-8), "crit"})
+	m.event(ctx, "", ev.UID, "", "pause", "", SystemActor, hr(-6))
+
+	hp, he, hev := StatusSourceHost(p.UID), StatusSourceHost(e.UID), StatusSourceHost(ev.UID)
+	res, err := m.StatusSources(ctx, module.StatusQuery{Sources: []string{hp, he, hev}, Bounds: []time.Time{hr(-48), hr(-24), now}, History: hr(-48), Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := time.Hour
+	type exp struct{ obs, down time.Duration }
+	for src, want := range map[string][]exp{
+		hp:  {{24 * h, 0}, {14 * h, 10 * h}},
+		he:  {{22 * h, 2 * h}, {24 * h, 0}},
+		hev: {{24 * h, 0}, {18 * h, 2 * h}},
+	} {
+		for i, w := range want {
+			if b := res[src].Bars[i]; b.Observed != w.obs || b.Down != w.down || b.Maint != 0 {
+				t.Errorf("%s bar %d: %+v, want %+v", src, i, b, w)
+			}
+		}
+	}
+	if inc := res[hp].Incidents; len(inc) != 1 || inc[0].End.IsZero() || !inc[0].End.Equal(hr(-10)) || res[hp].State != module.StatusPaused {
+		t.Fatalf("paused incidents: %s %+v", res[hp].State, inc)
+	}
+	if inc := res[he].Incidents; len(inc) != 2 || !inc[0].Start.Equal(hr(-28)) || !inc[1].End.Equal(hr(-30)) {
+		t.Fatalf("earlier pause incidents: %+v", inc)
+	}
+}
+
+// Wiederkehrende Wartung ohne Beginn wirkt erst ab ihrer letzten Aenderung (nicht rueckwirkend).
+func TestStatusFeedRecurringMaint(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	hr := func(n int) time.Time { return now.Add(time.Duration(n) * time.Hour) }
+	x := statusTestHost(t, m, "nas", "", false, hr(-100))
+	statusTestProblem(t, m, x.UID, "", hr(-49), false, statusTestEv{hr(-50), "crit"})
+	rc, _ := json.Marshal(eval.Recurrence{From: eval.At(0, 0), To: eval.At(0, 0)}) // jeden Tag ganztags
+	if _, err := m.st.Writer().Exec(`INSERT INTO m64_maint (uid, title, targets, start_at, end_at, recur, ended_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
+		"rw1", "Taeglich", `{"hosts":["`+x.UID+`"]}`, "", "", string(rc), "", ts(hr(-30))); err != nil {
+		t.Fatal(err)
+	}
+	m.reloadConfig(ctx)
+	src := StatusSourceHost(x.UID)
+	res, err := m.StatusSources(ctx, module.StatusQuery{Sources: []string{src}, Bounds: []time.Time{hr(-72), hr(-48), hr(-24), now}, History: hr(-72), Ahead: time.Hour, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := res[src]
+	if b := s.Bars[0]; b.Down != time.Hour || b.Maint != 0 || b.Observed != 24*time.Hour {
+		t.Fatalf("old outage hidden by recurring window: %+v", b)
+	}
+	if b := s.Bars[1]; b.Maint != 6*time.Hour || b.Observed != 18*time.Hour {
+		t.Fatalf("bar 1: %+v", b)
+	}
+	if b := s.Bars[2]; b.Maint != 24*time.Hour || b.Observed != 0 {
+		t.Fatalf("bar 2: %+v", b)
+	}
+	if len(s.Incidents) != 1 || s.State != module.StatusMaintenance || len(s.Maintenance) != 1 || !s.Maintenance[0].Active {
+		t.Fatalf("incidents/maintenance: %s %+v %+v", s.State, s.Incidents, s.Maintenance)
+	}
+}
+
+// Viele Probleme: die neuesten bleiben, die Grenze gilt je Host.
+func TestStatusFeedProblemLimit(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	oldTotal, oldHost := statusMaxProblems, statusMaxProblemsHost
+	statusMaxProblems, statusMaxProblemsHost = 4, 2
+	t.Cleanup(func() { statusMaxProblems, statusMaxProblemsHost = oldTotal, oldHost })
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	hr := func(n int) time.Time { return now.Add(time.Duration(n) * time.Hour) }
+	a := statusTestHost(t, m, "a", "", false, hr(-100))
+	b := statusTestHost(t, m, "b", "", false, hr(-100))
+	for _, n := range []int{-40, -30, -20, -10} {
+		statusTestProblem(t, m, a.UID, "", hr(n+1), false, statusTestEv{hr(n), "crit"})
+	}
+	for _, n := range []int{-45, -35} {
+		statusTestProblem(t, m, b.UID, "", hr(n+1), false, statusTestEv{hr(n), "crit"})
+	}
+	sa, sb := StatusSourceHost(a.UID), StatusSourceHost(b.UID)
+	res, err := m.StatusSources(ctx, module.StatusQuery{Sources: []string{sa, sb}, History: hr(-48), Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inc := res[sa].Incidents; len(inc) != 2 || !inc[0].Start.Equal(hr(-10)) || !inc[1].Start.Equal(hr(-20)) {
+		t.Fatalf("a: newest problems missing: %+v", inc)
+	}
+	if inc := res[sb].Incidents; len(inc) != 2 {
+		t.Fatalf("b: limit not per host: %+v", inc)
+	}
+}
+
+// Nur die gefragten Hosts und Dienste werden geladen; Dienste, deren Schluessel die Statusseite nicht annimmt, werden
+// nicht angeboten.
+func TestStatusFeedLoadAndKeys(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	x := statusTestHost(t, m, "x", "", false, now.Add(-time.Hour))
+	y := statusTestHost(t, m, "y", "", false, now.Add(-time.Hour))
+	long := "fs:/" + strings.Repeat("ä", 99) // 202 Bytes, aber nur 103 Zeichen
+	ctl := "fs:/a\x01b"
+	keys := map[string]bool{"fs:/": true, "disk:sda": true, long: true, ctl: true}
+	var list []Service
+	for k := range keys {
+		list = append(list, Service{Key: k, Name: k, Kind: "fs"})
+	}
+	for _, h := range []*Host{x, y} {
+		if _, err := m.store.UpsertDiscovered(ctx, h.UID, list, keys, SystemActor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	targets, err := m.StatusTargets(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tg := range targets {
+		if _, _, ok := parseStatusSource(tg.Source); !ok || strings.Contains(tg.Source, "\x01") || strings.Contains(tg.Source, "ä") {
+			t.Errorf("invalid target offered: %q", tg.Source)
+		}
+	}
+	if len(targets) != 6 {
+		t.Fatalf("targets: %d", len(targets))
+	}
+	if _, _, ok := parseStatusSource(StatusSourceService(x.UID, long)); ok {
+		t.Fatal("long key accepted")
+	}
+	hosts, svcs, err := m.statusLoad(ctx, []string{x.UID, "NOPE"}, [][2]string{{x.UID, "fs:/"}, {x.UID, "none"}, {y.UID, "disk:sda"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 1 || hosts[x.UID] == nil || hosts[x.UID].Name != "x" || len(svcs) != 2 || svcs[x.UID+"|fs:/"] == nil || svcs[y.UID+"|disk:sda"] == nil {
+		t.Fatalf("load: %v %v", hosts, svcs)
+	}
+}

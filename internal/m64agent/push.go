@@ -38,17 +38,19 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/ipv64net/node64/internal/m64proto"
 )
 
-// Push-Protokoll und Standardwerte.
+// Push-Protokoll (gemeinsam mit der Node in m64proto) und Standardwerte.
 const (
-	DefaultPushPort = 6466       // Standard-Port des Lauschers der Node (TCP)
-	PushMagic       = "M64PUSH1" // Kennung, Version 1
-	PushFile        = "connect"  // Ziele in <dir>/connect, eine Zeile je Node: token@host[:port]
+	DefaultPushPort = m64proto.DefaultPushPort // Standard-Port des Lauschers der Node (TCP)
+	PushMagic       = m64proto.PushMagic       // Kennung, Version 1
+	PushFile        = "connect"                // Ziele in <dir>/connect, eine Zeile je Node: token@host[:port]
 
 	maxPushTargets      = 8
 	maxPushFileBytes    = 4 << 10
-	maxPushHello        = 160
+	maxPushHello        = m64proto.PushHelloMax
 	pushDialTimeout     = 10 * time.Second
 	pushAckTimeout      = 10 * time.Second
 	pushParkMax         = 15 * time.Minute // auf "S" warten (die Node raeumt wartende Verbindungen nach 10 min)
@@ -57,8 +59,8 @@ const (
 	defaultPushRetryMin = 5 * time.Second
 	defaultPushRetryMax = 5 * time.Minute
 
-	pushAck   = 'W'
-	pushStart = 'S'
+	pushAck   = m64proto.PushAck
+	pushStart = m64proto.PushStart
 )
 
 // PushTarget ist eine Node, zu der der Agent die Verbindung aufbaut.
@@ -70,18 +72,8 @@ type PushTarget struct {
 // String liefert die Adresse ohne Token (fuer das Log).
 func (t PushTarget) String() string { return t.Addr }
 
-// ValidPushToken prueft einen Token: 16 bis 64 Zeichen aus a-z und 0-9.
-func ValidPushToken(s string) bool {
-	if len(s) < 16 || len(s) > 64 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; (c < 'a' || c > 'z') && (c < '0' || c > '9') {
-			return false
-		}
-	}
-	return true
-}
+// ValidPushToken prueft einen Token: 16 bis 64 Zeichen aus a-z und 0-9 (m64proto.ValidPushToken, wie die Node).
+func ValidPushToken(s string) bool { return m64proto.ValidPushToken(s) }
 
 // ParsePushTarget liest "token@host[:port]" (IPv6 in Klammern; ohne Port DefaultPushPort).
 func ParsePushTarget(s string) (PushTarget, error) {

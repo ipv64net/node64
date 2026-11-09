@@ -278,7 +278,7 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 	if zl, ok := cmd["zpool_list"]; ok {
 		pools := ParseZpoolList(zl)
 		if len(pools) > 0 {
-			mergeZpoolStatus(pools, ParseZpoolStatus(cmd["zpool_status"]))
+			MergeZpoolStatus(pools, ParseZpoolStatus(cmd["zpool_status"]))
 			r.ZFS = pools
 		} else if rc := strings.TrimSpace(string(cmd["zpool_list_rc"])); rc != "" && rc != "0" && len(lines(zl)) > 0 {
 			addErr(r, m64proto.SecZFS, errors.New("zpool list: Exit-Code "+rc))

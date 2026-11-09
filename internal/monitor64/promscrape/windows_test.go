@@ -107,3 +107,11 @@ func TestDetect(t *testing.T) {
 		}
 	}
 }
+
+// PB2: liefert der Exporter keinen freien Speicher (Sammler os/memory ausgefallen), fehlt der Abschnitt statt 0 frei.
+func TestWindowsMemWithoutAvailable(t *testing.T) {
+	m, _ := Parse([]byte("windows_cs_physical_memory_bytes 4294967296\nwindows_os_paging_limit_bytes 1000\n"), Limits{})
+	if r := windowsReport(m, testNow, winIO{}); r.Mem != nil {
+		t.Errorf("Mem %+v", r.Mem)
+	}
+}

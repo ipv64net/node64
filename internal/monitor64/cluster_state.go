@@ -58,7 +58,8 @@ func (m *Module) clusterSelfRef(role int) *ClusterRef {
 }
 
 // publishState schickt den Zustand eines Hosts an den Cluster (aus saveRuntime; blob = gespeicherter Laufzeitstand).
-func (m *Module) publishState(ctx context.Context, rt *hostRT, blob []byte) {
+// final: letzter Stand beim Abgeben (Rolle schon "andere Node zustaendig"), gilt als gemeldet.
+func (m *Module) publishState(ctx context.Context, rt *hostRT, blob []byte, final bool) {
 	s := m.clusterSnapshot()
 	if !s.Active || m.hooks().Change == nil {
 		return
@@ -66,6 +67,9 @@ func (m *Module) publishState(ctx context.Context, rt *hostRT, blob []byte) {
 	m.cl.mu.Lock()
 	role, ok := m.cl.roles[rt.host.UID]
 	m.cl.mu.Unlock()
+	if final {
+		role, ok = roleReport, true
+	}
 	if !ok || role == roleIdle {
 		return
 	}
@@ -74,7 +78,7 @@ func (m *Module) publishState(ctx context.Context, rt *hostRT, blob []byte) {
 		Mem json.RawMessage `json:"mem"`
 	}
 	_ = json.Unmarshal(blob, &saved)
-	e := stateEntry{Node: s.Self, At: time.Now().UTC().Truncate(time.Millisecond), Reporting: role == roleReport, RT: saved.RT, Mem: saved.Mem}
+	e := stateEntry{Node: s.Self, At: time.Now().UTC().Truncate(time.Millisecond), Reporting: role == roleReport, RT: saved.RT, Mem: m.memToCluster(ctx, saved.Mem)}
 	if v := rt.getView(); v != nil {
 		cp := *v
 		cp.Host, cp.Cluster = nil, nil
@@ -208,12 +212,20 @@ func (m *Module) setRole(uid string, role int) (int, bool) {
 	return prev, ok
 }
 
-// idleView setzt die Ansicht eines Hosts, den eine andere Node ueberwacht (aus deren abgeglichenem Zustand).
+// stateMaxAge: so alt darf der Zustand einer anderen Node hoechstens sein, um ihn anzuzeigen bzw. damit weiterzumachen.
+// Die meldende Node schickt ihn bei jeder Aenderung, sonst hoechstens alle saveEvery bzw. je Runde (langes Intervall).
+// Aelter (Bereich status aus, Node weg, Abgleich haengt): nicht mehr verwenden.
+func stateMaxAge(h *Host) time.Duration {
+	return 3 * max(saveEvery, time.Duration(h.IntervalSec)*time.Second)
+}
+
+// idleView setzt die Ansicht eines Hosts, den eine andere Node ueberwacht (aus deren abgeglichenem Zustand; zu alt =
+// noch kein Zustand, Unbekannt).
 func (m *Module) idleView(rt *hostRT, owner string) {
 	s := m.clusterSnapshot()
 	ref := &ClusterRef{Node: owner, Name: s.name(owner), Reachable: s.online(owner)}
 	v := &HostView{Host: rt.host, View: eval.ViewUnknown, State: eval.Unknown, Accesses: []AccessView{}, Services: []SvcView{}}
-	if e := m.remoteState(rt.host.UID, owner); e != nil && e.View != nil {
+	if e := m.remoteState(rt.host.UID, owner); e != nil && e.View != nil && time.Since(e.At) <= stateMaxAge(rt.host) {
 		cp := *e.View
 		v = &cp
 		v.Host = rt.host
@@ -256,7 +268,8 @@ func (m *Module) clusterRefreshIdle() {
 
 // adoptState: diese Node meldet den Host jetzt (wieder). Hat eine andere Node juenger gemeldet, macht diese Node mit
 // deren Gedaechtnis der Meldungen weiter (nichts doppelt melden) und, wenn deren Stand juenger ist als der eigene, mit
-// deren Laufzeitstand (Tracker: Dauer und Zustand laufen weiter). rt.mu gehalten.
+// deren Laufzeitstand (Tracker: Dauer und Zustand laufen weiter). Ein zu alter Stand (stateMaxAge) gilt nicht mehr:
+// sonst meldete diese Node laengst Erledigtes erneut bzw. entwarnte dafuer. rt.mu gehalten.
 func (m *Module) adoptState(ctx context.Context, rt *hostRT) {
 	self := m.clusterSelf()
 	var own *stateEntry
@@ -284,9 +297,14 @@ func (m *Module) adoptState(ctx context.Context, rt *hostRT) {
 	if best == nil || own != nil && own.Reporting && !own.At.Before(best.At) {
 		return
 	}
+	if age := time.Since(best.At); age > stateMaxAge(rt.host) {
+		m.log.Info("monitor64: state of another node too old, starting fresh", "host", rt.host.Name, "node", best.Node, "age", age.Round(time.Second))
+		return
+	}
 	if len(best.Mem) > 0 && string(best.Mem) != "null" {
 		var mem eval.HostMemory
 		if json.Unmarshal(best.Mem, &mem) == nil {
+			m.memFromCluster(ctx, &mem)
 			m.notifyMu.Lock()
 			if m.notifier != nil {
 				m.notifier.Hosts[rt.host.UID] = &mem
@@ -306,15 +324,99 @@ func (m *Module) adoptState(ctx context.Context, rt *hostRT) {
 	m.log.Info("monitor64: continuing with the state of another node", "host", rt.host.Name, "node", best.Node)
 }
 
-// clusterRole bestimmt die Rolle einer Runde und erledigt den Wechsel (rt.mu gehalten).
+// clusterRole bestimmt die Rolle einer Runde und erledigt den Wechsel (rt.mu gehalten). Kurz nach dem Start
+// (clusterStartWait) misst die Node im Cluster nur: erst den Stand der anderen abholen, sonst meldet sie nach einem
+// Neustart doppelt, was die andere Node schon gemeldet hat.
 func (m *Module) clusterRole(ctx context.Context, rt *hostRT) (int, string) {
 	role, owner := m.roleOf(rt.host)
+	active := m.clusterSnapshot().Active
+	if role == roleReport && active && m.clusterStarting() {
+		role = roleMeasure
+	}
 	prev, had := m.setRole(rt.host.UID, role)
 	if !had || prev != role {
 		rt.dirty = true // Rolle neu: Zustand gleich speichern und an den Cluster melden
 	}
-	if role == roleReport && (!had || prev != roleReport) && m.clusterSnapshot().Active {
+	if role == roleIdle && had && prev == roleReport {
+		m.publishFinal(ctx, rt) // abgeben: letzten Stand (Gedaechtnis der Meldungen) der neuen Node mitgeben
+	}
+	if role == roleReport && (!had || prev != roleReport) && active {
 		m.adoptState(ctx, rt)
 	}
 	return role, owner
+}
+
+// clusterStarting: seit dem Start des Moduls ist clusterStartWait noch nicht vergangen.
+func (m *Module) clusterStarting() bool {
+	m.cl.mu.Lock()
+	started := m.cl.started
+	m.cl.mu.Unlock()
+	return !started.IsZero() && m.cl.clock().Sub(started) < clusterStartWait
+}
+
+// publishFinal speichert und veroeffentlicht den letzten eigenen Stand beim Abgeben (rt.mu gehalten).
+func (m *Module) publishFinal(ctx context.Context, rt *hostRT) {
+	m.notifyMu.Lock()
+	var mem []byte
+	if m.notifier != nil {
+		mem, _ = json.Marshal(m.notifier.Hosts[rt.host.UID])
+	}
+	m.notifyMu.Unlock()
+	rt.dirty = true
+	m.saveRuntimeAs(ctx, rt, mem, true)
+}
+
+// Kanaele im Gedaechtnis der Meldungen: lokal ihre Nummer (je Node verschieden), im Cluster ihre Kennung wie bei
+// "gemeldet an" ("uid:<kennung>", "default" bleibt). Unbekannte Kanaele entfallen.
+
+func (m *Module) memToCluster(ctx context.Context, raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || string(raw) == "null" {
+		return raw
+	}
+	var mem eval.HostMemory
+	if json.Unmarshal(raw, &mem) != nil {
+		return nil
+	}
+	byID, _ := m.channelUIDs(ctx)
+	mapMemChans(&mem, func(id string) (string, bool) {
+		u, ok := byID[id]
+		return "uid:" + u, ok
+	})
+	b, err := json.Marshal(mem)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+func (m *Module) memFromCluster(ctx context.Context, mem *eval.HostMemory) {
+	_, byUID := m.channelUIDs(ctx)
+	mapMemChans(mem, func(id string) (string, bool) {
+		u, ok := strings.CutPrefix(id, "uid:")
+		if !ok {
+			return "", false
+		}
+		n, ok := byUID[u]
+		return n, ok
+	})
+}
+
+func mapMemChans(mem *eval.HostMemory, f func(string) (string, bool)) {
+	conv := func(in []string) []string {
+		var out []string
+		for _, id := range in {
+			if id == defaultChannels {
+				out = append(out, id)
+			} else if to, ok := f(id); ok {
+				out = append(out, to)
+			}
+		}
+		return out
+	}
+	mem.HostChans = conv(mem.HostChans)
+	for _, s := range mem.Svcs {
+		if s != nil {
+			s.Chans = conv(s.Chans)
+		}
+	}
 }

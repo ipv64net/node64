@@ -6,10 +6,13 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 )
@@ -400,5 +403,46 @@ func TestUIMetaPhase(t *testing.T) {
 		if _, ok := tx[k]; !ok {
 			t.Errorf("core text %s not passed to the script", k)
 		}
+	}
+}
+
+// UI8: jeder Fehlercode der API (errBad/apiError im Paket) hat einen Text in beiden Sprachen; sonst zeigt die
+// Oberflaeche nur den Schluessel und das Detail ({error}) geht verloren.
+func TestErrTextsComplete(t *testing.T) {
+	b, err := i18n.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`(?:errBad\(|code:\s*)"([a-z0-9_]+)"`)
+	ents, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes := map[string]string{}
+	for _, en := range ents {
+		if en.IsDir() || !strings.HasSuffix(en.Name(), ".go") || strings.HasSuffix(en.Name(), "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(en.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, mm := range re.FindAllSubmatch(raw, -1) {
+			codes[string(mm[1])] = en.Name()
+		}
+	}
+	if len(codes) < 40 {
+		t.Fatalf("only %d error codes found", len(codes))
+	}
+	for _, lang := range []string{"de", "en"} {
+		for c, file := range codes {
+			if k := "monitor64.err." + c; b.T(lang, k) == k {
+				t.Errorf("%s: missing %s (%s)", lang, k, file)
+			}
+		}
+	}
+	// Detail der eigenen Metriken (Prometheus) erscheint in der Meldung
+	if got := b.T("de", "monitor64.err.metrics", "error", "zeile 3"); !strings.Contains(got, "zeile 3") {
+		t.Errorf("metrics without detail: %q", got)
 	}
 }

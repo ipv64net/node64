@@ -780,7 +780,8 @@ func (m *Module) buildMaint(ctx context.Context, in maintIn, mr *maintRow, now t
 				rc.Days = append(rc.Days, d)
 			}
 		}
-		mr.Recur, mr.Start, mr.End = &rc, time.Time{}, time.Time{}
+		// Beginn = Anlegen bzw. letzte Aenderung: der Plan wirkt nicht rueckwirkend (Statusseiten, Verfuegbarkeit)
+		mr.Recur, mr.Start, mr.End = &rc, time.Now().UTC().Truncate(time.Second), time.Time{}
 	default:
 		return errBad("maint_mode")
 	}
@@ -962,6 +963,12 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, errBad("trap_port"))
 		return
 	}
+	if in.PushPort != nil && *in.PushPort != m.pushPort(ctx) { // belegt ein anderer Teil den Port: nichts speichern
+		if err := m.checkPushPort(ctx, m.st.SettingOr(ctx, setPushBind, ""), *in.PushPort); err != nil {
+			m.fail(w, r, pushPortErr(*in.PushPort, err))
+			return
+		}
+	}
 	err := errors.Join(m.st.SetSetting(ctx, setInterval, strconv.Itoa(in.Interval)), m.st.SetSetting(ctx, setWorkers, strconv.Itoa(in.Workers)))
 	trapPort := m.trapPort(ctx)
 	if err == nil && in.TrapPort != nil && *in.TrapPort != trapPort {
@@ -970,8 +977,7 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 		m.kickTraps() // Empfaenger auf dem neuen Port
 	}
 	if err == nil && in.PushPort != nil && *in.PushPort != m.pushPort(ctx) {
-		err = m.st.SetSetting(ctx, setPushPort, strconv.Itoa(*in.PushPort))
-		m.syncPush(context.WithoutCancel(ctx)) // Lauscher auf dem neuen Port
+		err = m.setPushPort(ctx, *in.PushPort)
 	}
 	if err != nil {
 		m.fail(w, r, err)
@@ -979,4 +985,22 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "settings", "", fmt.Sprintf("interval=%d workers=%d trap_port=%d", in.Interval, in.Workers, trapPort))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// setPushPort speichert den Push-Port und stellt den Lauscher um: der neue Port wird erst geoeffnet, dann der alte
+// geschlossen. Scheitert das Oeffnen, bleibt der alte Port offen, die Einstellung wird zurueckgesetzt und der Fehler
+// geht an die API.
+func (m *Module) setPushPort(ctx context.Context, port int) error {
+	old := m.st.SettingOr(ctx, setPushPort, "")
+	if err := m.st.SetSetting(ctx, setPushPort, strconv.Itoa(port)); err != nil {
+		return err
+	}
+	err := m.syncPush(context.WithoutCancel(ctx))
+	if err == nil {
+		return nil
+	}
+	if rerr := m.st.SetSetting(ctx, setPushPort, old); rerr != nil {
+		m.log.Warn("monitor64: push port not restored", "err", rerr)
+	}
+	return pushPortErr(port, err)
 }

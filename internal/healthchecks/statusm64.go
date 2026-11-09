@@ -15,8 +15,10 @@ import (
 // Ein Eintrag hat statt des Check-Tokens eine Quelle "m64:host:<uid>" bzw. "m64:svc:<uid>/<key>"; Zustand, Balken,
 // Stoerungen und Wartungen liefert Monitor64 ueber module.StatusFeed (cmd/node64/main.go: SetMonitor64Status). Ist
 // Monitor64 aus oder nicht registriert, fallen die Eintraege beim Anzeigen weg (wie geloeschte Checks), die Seite
-// laeuft weiter und der Editor zeigt einen Hinweis. Im Cluster gehen die Eintraege mit der Seite mit (wie Tokens),
-// angezeigt werden sie vorerst nur auf der Node, deren Monitor64 den Host kennt.
+// laeuft weiter und der Editor zeigt einen Hinweis. Im Cluster gehen die Eintraege mit der Seite mit (wie Tokens);
+// Monitor64 gleicht seine Hosts im Cluster selbst ab, jede Node zeigt sie also mit demselben Stand (fremd ueberwachte
+// aus dem Zustand der zustaendigen Node, "unbekannt", solange diese nicht erreichbar ist). Kennt Monitor64 einer Node
+// den Host nicht (kein Bereich Monitor64 im Cluster), faellt der Eintrag dort weg.
 //
 // Zustand: ok -> up (in Betrieb), warn -> degraded (eingeschraenkt), crit und unreachable -> down (gestoert),
 // unknown -> unknown, maintenance -> maintenance, paused -> paused. Tagesbalken wie bei den Checks (statusBucket), die
@@ -27,7 +29,11 @@ const statusM64Group = "Monitor64"
 
 const statusM64Prefix = "m64:"
 
-var statusM64Re = regexp.MustCompile(`^m64:(?:host:[A-Za-z0-9_-]{1,64}|svc:[A-Za-z0-9_-]{1,64}/[^\x00-\x1f\x7f]{1,200})$`)
+// statusM64Re: Form der Quelle; der Dienst-Schluessel (Gruppe 1) wird in Bytes geprueft (validM64Key, wie Monitor64).
+var statusM64Re = regexp.MustCompile(`^m64:(?:host:[A-Za-z0-9_-]{1,64}|svc:[A-Za-z0-9_-]{1,64}/(.+))$`)
+
+// statusM64MaxKey: Laenge eines Dienst-Schluessels in Bytes (Monitor64: statusMaxKey).
+const statusM64MaxKey = 200
 
 // statusM64Feeds ordnet jedem Modul die Verbindung zu Monitor64 zu (ohne Feld im Modul, wie statusStates).
 var statusM64Feeds sync.Map // *Module -> func() module.StatusFeed
@@ -49,7 +55,26 @@ func (m *Module) m64Status() module.StatusFeed {
 func isM64Source(tok string) bool { return strings.HasPrefix(tok, statusM64Prefix) }
 
 // validM64Source prueft die Form einer Monitor64-Quelle.
-func validM64Source(tok string) bool { return statusM64Re.MatchString(tok) }
+func validM64Source(tok string) bool {
+	m := statusM64Re.FindStringSubmatch(tok)
+	if m == nil {
+		return false
+	}
+	return !strings.HasPrefix(tok, statusM64Prefix+"svc:") || validM64Key(m[1])
+}
+
+// validM64Key: Dienst-Schluessel mit 1-200 Bytes ohne Steuerzeichen (gleiche Pruefung wie monitor64.validStatusKey).
+func validM64Key(k string) bool {
+	if k == "" || len(k) > statusM64MaxKey {
+		return false
+	}
+	for i := 0; i < len(k); i++ {
+		if k[i] < 0x20 || k[i] == 0x7f {
+			return false
+		}
+	}
+	return true
+}
 
 // statusM64HostUID liefert den Host einer Quelle (fuer den Link im Editor).
 func statusM64HostUID(tok string) string {

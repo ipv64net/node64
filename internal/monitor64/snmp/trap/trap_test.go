@@ -238,7 +238,7 @@ func TestLimits(t *testing.T) {
 	// Absender-Tabelle laeuft nicht ueber
 	l := newLimiter(10, 5, 1e9, 100)
 	for i := 0; i < 1000; i++ {
-		l.allow(netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}), now)
+		l.allow(netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}), false, now)
 	}
 	if len(l.m) > 100 {
 		t.Fatalf("Limiter: %d", len(l.m))
@@ -255,7 +255,13 @@ func TestEngineDiscoveryReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reply, ev := r.process(b, otherIP)
+	// unbekannter (womoeglich gefaelschter) Absender: keine Antwort (keine Verstaerkung)
+	if reply, ev := r.process(b, otherIP); reply != nil || ev != nil {
+		t.Fatalf("Report an unbekannten Absender: %v %+v", reply, ev)
+	}
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	r.now = func() time.Time { return now }
+	reply, ev := r.process(b, hostIP)
 	if ev != nil || reply == nil {
 		t.Fatalf("Report erwartet: %v %+v", reply, ev)
 	}
@@ -263,6 +269,9 @@ func TestEngineDiscoveryReport(t *testing.T) {
 	sp, _ := p.SecurityParameters.(*gosnmp.UsmSecurityParameters)
 	if p.PDUType != gosnmp.Report || p.MsgID != 4711 || sp == nil || hex.EncodeToString([]byte(sp.AuthoritativeEngineID)) != r.EngineID() {
 		t.Fatalf("Report: %+v", p)
+	}
+	if wb, wt := localEngineTime(now); sp.AuthoritativeEngineBoots != wb || sp.AuthoritativeEngineTime != wt || wt == 0 {
+		t.Fatalf("Report ohne eigene Boots/Time: %d/%d", sp.AuthoritativeEngineBoots, sp.AuthoritativeEngineTime)
 	}
 	if r.EngineID() != "80000000050102030405060708" {
 		t.Fatalf("EngineID: %s", r.EngineID())
@@ -272,6 +281,86 @@ func TestEngineDiscoveryReport(t *testing.T) {
 	}
 	if id := GenerateEngineID(); len(id) != 26 || !strings.HasPrefix(id, "8000000005") {
 		t.Fatalf("GenerateEngineID: %s", id)
+	}
+}
+
+// TestRateKnownSenders: ein flutender bekannter Absender und viele (gefaelschte) Unbekannte nehmen einem anderen
+// bekannten Absender nicht den gemeinsamen Bucket weg (Bucket je Absender zuerst, gesamt getrennt nach bekannt).
+func TestRateKnownSenders(t *testing.T) {
+	r, _ := newRecv(t, Config{Rate: 10, Burst: 50, GlobalRate: 100})
+	h2 := netip.MustParseAddr("192.0.2.11")
+	if err := r.SetHosts([]Host{{ID: "h1", Addrs: []netip.Addr{hostIP}, Communities: []string{"trapcomm"}},
+		{ID: "h2", Addrs: []netip.Addr{h2}, Communities: []string{"trapcomm"}}}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1000, 0)
+	r.now = func() time.Time { return now }
+	pkt := capture(t, v2c("trapcomm"), linkDown(1, "a"))
+	for i := 0; i < 500; i++ {
+		r.process(pkt, hostIP)
+	}
+	for i := 0; i < 2000; i++ { // gefaelschte Absender, je ein Paket
+		r.process(pkt, netip.AddrFrom4([4]byte{198, 51, byte(i >> 8), byte(i)}))
+	}
+	if _, ev := r.process(pkt, h2); ev == nil || ev.HostID != "h2" || ev.Rejected != "" {
+		t.Fatalf("zweiter bekannter Absender blockiert: %+v stats %+v", ev, r.Stats())
+	}
+}
+
+// TestV3TimeWindow: v3-Traps je Engine-ID und Benutzer nur im Zeitfenster (RFC 3414 3.2.7) – Wiederholungen
+// mitgeschnittener Traps werden abgewiesen; v3-Informs muessen die eigene Boots/Time tragen.
+func TestV3TimeWindow(t *testing.T) {
+	r, _ := newRecv(t, Config{})
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	r.now = func() time.Time { return now }
+	tr := linkDown(2, "eth2")
+	client := func(boots, etime uint32, engine string) *gosnmp.GoSNMP {
+		g := v3Client(v3User, engine)
+		sp := g.SecurityParameters.(*gosnmp.UsmSecurityParameters)
+		sp.AuthoritativeEngineBoots, sp.AuthoritativeEngineTime = boots, etime
+		return g
+	}
+	old := capture(t, client(5, 1000, senderEID), tr)
+	if _, ev := r.process(old, hostIP); ev == nil || ev.Rejected != "" {
+		t.Fatalf("erster Trap: %+v", ev)
+	}
+	// Wiederholung 200 s spaeter (der Absender ist inzwischen weiter): ausserhalb des Fensters
+	now = now.Add(200 * time.Second)
+	if _, ev := r.process(old, hostIP); ev == nil || ev.Rejected != "time" || ev.TrapOID != "" {
+		t.Fatalf("Wiederholung angenommen: %+v", ev)
+	}
+	// echter neuer Trap des Absenders
+	if _, ev := r.process(capture(t, client(5, 1200, senderEID), tr), hostIP); ev == nil || ev.Rejected != "" {
+		t.Fatalf("neuer Trap: %+v", ev)
+	}
+	// leicht verspaeteter Trap (innerhalb 150 s) bleibt gueltig
+	if _, ev := r.process(capture(t, client(5, 1100, senderEID), tr), hostIP); ev == nil || ev.Rejected != "" {
+		t.Fatalf("Trap im Fenster: %+v", ev)
+	}
+	// kleinere Boots: abgewiesen; groessere (Neustart des Absenders): angenommen
+	if _, ev := r.process(capture(t, client(4, 99999, senderEID), tr), hostIP); ev == nil || ev.Rejected != "time" {
+		t.Fatalf("alte Boots: %+v", ev)
+	}
+	if _, ev := r.process(capture(t, client(6, 3, senderEID), tr), hostIP); ev == nil || ev.Rejected != "" {
+		t.Fatalf("Neustart des Absenders: %+v", ev)
+	}
+	if _, ev := r.process(capture(t, client(maxEngineBoot, 3, "8000000001020399"), tr), hostIP); ev == nil || ev.Rejected != "time" {
+		t.Fatalf("Boots am Ende: %+v", ev)
+	}
+	// Informs: eigene Engine-ID, eigene Boots/Time
+	inf := linkDown(3, "eth3")
+	inf.IsInform = true
+	lb, lt := localEngineTime(now)
+	reply, ev := r.process(capture(t, client(lb, lt+10, r.EngineID()), inf), hostIP)
+	if ev == nil || ev.Rejected != "" || reply == nil {
+		t.Fatalf("Inform im Fenster: %v %+v", reply, ev)
+	}
+	reply, ev = r.process(capture(t, client(lb, lt-1000, r.EngineID()), inf), hostIP)
+	if reply != nil || ev == nil || ev.Rejected != "time" {
+		t.Fatalf("alter Inform angenommen: %v %+v", reply, ev)
+	}
+	if r.Stats().Rejected != 4 {
+		t.Fatalf("Stats: %+v", r.Stats())
 	}
 }
 
@@ -398,6 +487,9 @@ func FuzzProcess(f *testing.F) {
 			}
 			if reply != nil && len(reply) > DefaultMaxSize {
 				t.Fatal("Antwort zu gross")
+			}
+			if reply != nil && from == otherIP {
+				t.Fatal("Antwort an unbekannten Absender")
 			}
 			if caught != nil { // abgefangen (der Empfang laeuft weiter), aber sichtbar machen
 				t.Fatalf("Panic im Dekodierer: %v", caught)

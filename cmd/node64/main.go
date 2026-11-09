@@ -300,12 +300,14 @@ func run() error {
 		portReg.Provide(sonar64.Name, s64Module.Claims)
 		modules.Register(s64Module)
 	}
-	var m64Module *monitor64.Module // Cluster: Anmeldung unten beim peer-Manager
+	var m64Module *monitor64.Module // Cluster: Anmeldung unten beim peer-Manager (vor dem Start der Module)
 	if monitor64.Enabled() {        // Monitor64 bis zur Freigabe nur mit NODE64_MONITOR64=1 (Plan: Veroeffentlichung)
 		m64Module = monitor64.New(st, logger.Slog(), box, cfg.DataDir, Version)
 		m64Module.SetNotifier(dispatcher.Dispatch)
 		m64Module.SetQuiet(dispatcher.InQuietHours)
 		modules.Register(m64Module)
+		m64Module.SetPorts(portReg)                            // Push-Port vor dem Oeffnen pruefen
+		portReg.Provide(monitor64.Name, m64Module.PushClaims)  // Push-Port in der Port-Uebersicht
 		hcModule.SetMonitor64Status(func() module.StatusFeed { // Statusseiten: Monitor64-Eintraege, nur solange Monitor64 laeuft
 			if !modules.IsRunning(monitor64.Name) {
 				return nil
@@ -313,9 +315,6 @@ func run() error {
 			return m64Module
 		})
 	}
-	modules.StartEnabled(ctx)
-	defer modules.StopAll()
-
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
 	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version), Modules: modules,
 		UnlinkAPI: func(ctx context.Context, nodeID string, keep bool) error { // hubs nicht erreichbar: ueber die API v2 trennen
@@ -374,6 +373,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if m64Module != nil { // vor dem Start: sonst laeuft Monitor64 die ersten Runden "ohne Cluster" und meldet doppelt
+		m64cluster.Register(peerMgr, m64Module, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Monitor64 ueber den Cluster
+	}
+	modules.StartEnabled(ctx)
+	defer modules.StopAll()
 	hcModule.Store().OnAnyChange = peerMgr.LogChange
 	hcModule.SetGroupRole(peerMgr.NotifyRole)
 	hcModule.SetGroupDecides(peerMgr.GroupDecides)
@@ -395,9 +399,6 @@ func run() error {
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
 	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
 	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster
-	if m64Module != nil {
-		m64cluster.Register(peerMgr, m64Module, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Monitor64 ueber den Cluster
-	}
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

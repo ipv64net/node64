@@ -272,7 +272,7 @@ func TestParseZpool(t *testing.T) {
 		t.Fatalf("%+v", pools)
 	}
 	st := ParseZpoolStatus(section(t, "script_proxmox8.txt", "zpool_status"))
-	mergeZpoolStatus(pools, st)
+	MergeZpoolStatus(pools, st)
 	if pools[0].Errors != "No known data errors" || !strings.HasPrefix(pools[0].ScanText, "scrub repaired 0B") {
 		t.Fatalf("%+v", pools[0])
 	}
@@ -534,7 +534,7 @@ config:
 errors: No known data errors
 `)
 	pools := []m64proto.ZPool{{Name: "tank", Health: "ONLINE"}, {Name: "data", Health: "ONLINE"}, {Name: "ok", Health: "ONLINE"}}
-	mergeZpoolStatus(pools, ParseZpoolStatus(st))
+	MergeZpoolStatus(pools, ParseZpoolStatus(st))
 	if pools[0].Errors != "No known data errors; Geraetefehler READ 0 WRITE 0 CKSUM 12" {
 		t.Fatalf("tank %q", pools[0].Errors)
 	}

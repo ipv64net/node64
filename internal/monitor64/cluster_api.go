@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 // JSON-API fuer den Cluster unter /api/monitor64/cluster/... (Oberflaeche in monitor64.js).
@@ -234,7 +233,9 @@ type reachNodeOut struct {
 	Accesses []reachResult `json:"accesses"`
 }
 
-// apiClusterReach: POST Zugaenge des Hosts von allen erreichbaren Nodes aus testen (Vorschlag der Ersatz-Nodes).
+// apiClusterReach: POST Zugaenge des Hosts von allen erreichbaren Nodes aus testen (Vorschlag der Ersatz-Nodes). Die
+// eigene Pruefung laeuft neben den Anfragen an die anderen Nodes, die Zugaenge je Node nebeneinander: zusammen
+// hoechstens reachLimit (unter dem Schreib-Zeitlimit des Webservers).
 func (m *Module) apiClusterReach(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	h, err := m.store.Host(ctx, r.PathValue("uid"))
@@ -254,40 +255,47 @@ func (m *Module) apiClusterReach(w http.ResponseWriter, r *http.Request) {
 		}
 		return ok && any
 	}
-	out := []reachNodeOut{}
-	own, err := m.reachHere(ctx, h.UID)
-	self := reachNodeOut{Node: s.Self, Name: m.st.SettingOr(ctx, "node.name", "Node64"), Self: true, Accesses: own, OK: err == nil && sum(own)}
-	if err != nil {
-		self.Error = err.Error()
-	}
-	out = append(out, self)
+	ctx, cancel := context.WithTimeout(ctx, reachLimit)
+	defer cancel()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	self := reachNodeOut{Node: s.Self, Name: m.st.SettingOr(ctx, "node.name", "Node64"), Self: true, Accesses: []reachResult{}}
+	wg.Go(func() {
+		own, err := m.reachHere(ctx, h.UID)
+		mu.Lock()
+		defer mu.Unlock()
+		if own != nil {
+			self.Accesses = own
+		}
+		self.OK = err == nil && sum(own)
+		if err != nil {
+			self.Error = err.Error()
+		}
+	})
+	var peers []reachNodeOut
 	for id, p := range s.Peers {
 		if !p.Online || m.hooks().Call == nil {
 			mu.Lock()
-			out = append(out, reachNodeOut{Node: id, Name: p.Name, Error: "offline", Accesses: []reachResult{}})
+			peers = append(peers, reachNodeOut{Node: id, Name: p.Name, Error: "offline", Accesses: []reachResult{}})
 			mu.Unlock()
 			continue
 		}
 		wg.Go(func() {
-			cctx, cancel := context.WithTimeout(ctx, testTimeout+10*time.Second)
-			defer cancel()
 			var res []reachResult
 			o := reachNodeOut{Node: id, Name: p.Name, Accesses: []reachResult{}}
-			if err := m.hooks().Call(cctx, id, callReach, hostReq{Host: h.UID}, &res); err != nil {
+			if err := m.hooks().Call(ctx, id, callReach, hostReq{Host: h.UID}, &res); err != nil {
 				o.Error = err.Error()
 			} else {
 				o.Accesses, o.OK = res, sum(res)
 			}
 			mu.Lock()
-			out = append(out, o)
+			peers = append(peers, o)
 			mu.Unlock()
 		})
 	}
 	wg.Wait()
-	sort.SliceStable(out[1:], func(i, j int) bool { return strings.ToLower(out[i+1].Name) < strings.ToLower(out[j+1].Name) })
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": out})
+	sort.SliceStable(peers, func(i, j int) bool { return strings.ToLower(peers[i].Name) < strings.ToLower(peers[j].Name) })
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": append([]reachNodeOut{self}, peers...)})
 }
 
 // apiClusterKeys: GET Schluessel der Node (Fingerabdruck, Zeile fuer authorized_keys, alte Schluessel, offene Umstellungen).
@@ -312,7 +320,7 @@ func (m *Module) apiClusterKeyRotate(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	go m.switchAgents(context.WithoutCancel(ctx), true)
+	m.startKeySwitch(context.WithoutCancel(ctx), true)
 	k, err := m.keyInfo(ctx)
 	if err != nil {
 		m.fail(w, r, err)
@@ -322,14 +330,15 @@ func (m *Module) apiClusterKeyRotate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, k)
 }
 
-// apiClusterKeyRetry: POST nicht umgestellte Agents jetzt erneut versuchen.
+// apiClusterKeyRetry: POST nicht umgestellte Agents jetzt erneut versuchen (im Hintergrund, je Agent bis 30 s; die
+// Oberflaeche fragt den Stand per GET ab, solange "running").
 func (m *Module) apiClusterKeyRetry(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if m.scheduler() == nil {
 		m.fail(w, r, errNotRunning)
 		return
 	}
-	m.switchAgents(ctx, true)
+	m.startKeySwitch(context.WithoutCancel(ctx), true)
 	k, err := m.keyInfo(ctx)
 	if err != nil {
 		m.fail(w, r, err)
@@ -339,6 +348,7 @@ func (m *Module) apiClusterKeyRetry(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiClusterKeyConfirm: POST {"access_uid"} - SSH-Host von Hand umgestellt (Zeile eingetragen) bzw. Eintrag verwerfen.
+// Gilt clusterweit (die anderen Nodes erfahren es ueber den Eintrag "key:cluster").
 func (m *Module) apiClusterKeyConfirm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var in struct {
@@ -348,13 +358,19 @@ func (m *Module) apiClusterKeyConfirm(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
+	var fp string
+	if err := m.st.Reader().QueryRowContext(ctx, `SELECT target_fp FROM m64_keypending WHERE access_uid = ?`, in.AccessUID).Scan(&fp); err != nil {
+		m.fail(w, r, ErrNotFound)
+		return
+	}
 	res, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_keypending WHERE access_uid = ?`, in.AccessUID)
 	if err := affected(res, err); err != nil {
 		m.fail(w, r, err)
 		return
 	}
+	m.markKeyDone(ctx, fp, in.AccessUID)
 	m.audit(r, "key.confirm", in.AccessUID, "")
-	m.switchAgents(ctx, false) // ggf. alte Schluessel abraeumen
+	m.startKeySwitch(context.WithoutCancel(ctx), false) // im Hintergrund: ggf. alte Schluessel abraeumen
 	k, err := m.keyInfo(ctx)
 	if err != nil {
 		m.fail(w, r, err)

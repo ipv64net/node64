@@ -251,6 +251,12 @@ func (m *Module) Stop(ctx context.Context) error {
 		m.saveRuntime(sctx, rt, mem)
 		cancel()
 		rt.removed = true
+		for _, a := range rt.accs { // Sammler schliessen (z. B. Redfish-Sitzung abmelden, Verbindungen)
+			if a.col != nil {
+				a.col.close()
+			}
+		}
+		rt.accs = nil
 		rt.mu.Unlock()
 	}
 	if m.pool != nil {

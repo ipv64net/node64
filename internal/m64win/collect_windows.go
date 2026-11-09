@@ -55,7 +55,7 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 		addErr(r, m64proto.SecMem, err)
 	}
 	if want(m64proto.SecFS) {
-		fs, errs := readFS()
+		fs, errs := readFS(ctx, c.cache)
 		r.FS = fs
 		for i, e := range errs {
 			if i >= 5 {
@@ -67,10 +67,17 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 	var disks []m64proto.DiskIO
 	if want(m64proto.SecDisk) || want(m64proto.SecSmart) {
 		var err error
-		disks, err = readDisks()
+		var hung []error
+		disks, hung, err = readDisks(ctx, c.cache)
 		if want(m64proto.SecDisk) {
 			r.Disks = disks
 			addErr(r, m64proto.SecDisk, err)
+			for i, h := range hung {
+				if i >= 5 {
+					break
+				}
+				addNote(r, m64proto.SecDisk, h.Error())
+			}
 		}
 	}
 	if want(m64proto.SecNet) {

@@ -83,6 +83,7 @@ func snmpHostWithFake(t *testing.T, m *Module, fake *fakeCol) *hostRT {
 		t.Fatal(err)
 	}
 	m.ReloadHost(ctx, h.UID)
+	m.syncTraps(ctx) // Host gilt erst nach dem Abgleich als bekannt
 	m.rtMu.Lock()
 	rt := m.rts[h.UID]
 	m.rtMu.Unlock()
@@ -400,15 +401,16 @@ func TestTrapHostsV3(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg, _ := json.Marshal(accessConfig{SNMPVersion: "3", User: "mon", Level: "authPriv", AuthProto: "SHA256", PrivProto: "AES", Traps: true, TrapEngine: "80001f8880aabbccdd"})
-	sec := snmp.Secret{AuthPass: "auth-pass-1", PrivPass: "priv-pass-1"}.String()
+	// alte Community aus v2c-Zeiten im Geheimnis: bei v3 nicht als Community annehmen
+	sec := snmp.Secret{Community: "alt-v2c", AuthPass: "auth-pass-1", PrivPass: "priv-pass-1"}.String()
 	if err := m.store.SaveAccess(ctx, &Access{HostUID: h.UID, Type: "snmp", Config: cfg, Secret: m.box.Encrypt(sec), Enabled: true}, false, SystemActor); err != nil {
 		t.Fatal(err)
 	}
-	hosts, err := m.trapHosts(ctx)
-	if err != nil || len(hosts) != 1 {
-		t.Fatalf("hosts: %v %d", err, len(hosts))
+	set, err := m.trapHosts(ctx)
+	if err != nil || len(set.hosts) != 1 {
+		t.Fatalf("hosts: %v %d", err, len(set.hosts))
 	}
-	th := hosts[0]
+	th := set.hosts[0]
 	if th.ID != h.UID || len(th.Addrs) != 1 || th.Addrs[0] != netip.MustParseAddr("192.0.2.50") || len(th.Users) != 1 || th.Users[0].EngineID != "80001f8880aabbccdd" || len(th.Communities) != 0 {
 		t.Fatalf("trap host: %+v", th)
 	}
@@ -417,5 +419,184 @@ func TestTrapHostsV3(t *testing.T) {
 	}
 	if got := resolveAddrs(ctx, "fe80::1%eth0"); len(got) != 1 || got[0].Zone() != "" {
 		t.Fatalf("resolve zone: %v", got)
+	}
+}
+
+// TestTrapDNSFailureKeepsHost: scheitert die Aufloesung des Host-Namens, bleibt der Host bekannt – mit seinem
+// Trap-Stand und der zuletzt bekannten Adresse (frueher: Stand geloescht, Traps als "unbekannt"); der Abgleich wird
+// wiederholt.
+func TestTrapDNSFailureKeepsHost(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	m := e.m
+	port := freeUDPPort(t)
+	if err := m.st.SetSetting(ctx, setTrapPort, strconv.Itoa(port)); err != nil {
+		t.Fatal(err)
+	}
+	h := &Host{Name: "nas", Address: "m64-trap-test.invalid", IntervalSec: 60, Paused: true}
+	if err := m.store.SaveHost(ctx, h, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := json.Marshal(accessConfig{SNMPVersion: "2c", Traps: true})
+	if err := m.store.SaveAccess(ctx, &Access{HostUID: h.UID, Type: "snmp", Config: cfg, Secret: m.box.Encrypt(snmp.Secret{Community: "dns-c"}.String()), Enabled: true}, false, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	m.traps.mu.Lock()
+	m.traps.addrs[h.UID] = trapAddrs{address: h.Address, list: []netip.Addr{netip.MustParseAddr("127.0.0.1")}} // frueher aufgeloest
+	m.traps.mu.Unlock()
+	m.traps.restore(h.UID, &hostTraps{Pending: 1, Total: 1, List: []trapEntry{{Time: time.Now(), Version: "2c", TrapOID: ".1.3.6.1.4.1.9999.0.1"}}})
+	m.syncTraps(ctx)
+	if st := m.trapStatus(ctx); st.Active != 1 || !st.Running {
+		t.Fatalf("host with DNS failure dropped: %+v", st)
+	}
+	if s := m.traps.snapshot(h.UID, false); s == nil || s.Pending != 1 {
+		t.Fatalf("trap state lost on DNS failure: %+v", s)
+	}
+	if !m.traps.syncDue() {
+		t.Fatal("no retry after DNS failure")
+	}
+	g := &gosnmp.GoSNMP{Target: "127.0.0.1", Port: uint16(port), Community: "dns-c", Version: gosnmp.Version2c, Timeout: time.Second}
+	if err := g.Connect(); err != nil {
+		t.Fatal(err)
+	}
+	defer g.Conn.Close()
+	if _, err := g.SendTrap(gosnmp.SnmpTrap{Variables: []gosnmp.SnmpPDU{{Name: ".1.3.6.1.6.3.1.1.4.1.0", Type: gosnmp.ObjectIdentifier, Value: ".1.3.6.1.4.1.9999.0.2"}}}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if s := m.traps.snapshot(h.UID, false); s != nil && s.Pending == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("trap from last known address not accepted: %+v", m.trapStatus(ctx))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestTrapPortRetry: ist der Port belegt, oeffnet der Empfaenger ihn, sobald er frei wird (frueher erst beim naechsten
+// Anstoss durch eine Aenderung).
+func TestTrapPortRetry(t *testing.T) {
+	old := trapRetryEvery
+	trapRetryEvery = 20 * time.Millisecond
+	t.Cleanup(func() { trapRetryEvery = old })
+	ctx := context.Background()
+	busy, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := busy.LocalAddr().(*net.UDPAddr).Port
+	e := newEnv(t)
+	m := e.m
+	if err := m.st.SetSetting(ctx, setTrapPort, strconv.Itoa(port)); err != nil {
+		t.Fatal(err)
+	}
+	h := &Host{Name: "lo", Address: "127.0.0.1", IntervalSec: 60, Paused: true}
+	if err := m.store.SaveHost(ctx, h, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := json.Marshal(accessConfig{SNMPVersion: "2c", Traps: true})
+	if err := m.store.SaveAccess(ctx, &Access{HostUID: h.UID, Type: "snmp", Config: cfg, Secret: m.box.Encrypt(snmp.Secret{Community: "c"}.String()), Enabled: true}, false, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	m.syncTraps(ctx)
+	if st := m.trapStatus(ctx); st.Running || st.Error == "" {
+		_ = busy.Close()
+		t.Fatalf("busy port: %+v", st)
+	}
+	_ = busy.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for !m.trapStatus(ctx).Running {
+		if time.Now().After(deadline) {
+			t.Fatalf("receiver not reopened after the port became free: %+v", m.trapStatus(ctx))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if m.traps.syncDue() {
+		t.Fatal("retry still pending after success")
+	}
+}
+
+// TestTrapsForgottenWhenDisabled: Traps aus vergisst auch den gemerkten Stand im Laufzeitstand; beim Wiedereinschalten
+// ist nichts Altes offen.
+func TestTrapsForgottenWhenDisabled(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	m := e.m
+	if err := m.st.SetSetting(ctx, setTrapPort, strconv.Itoa(freeUDPPort(t))); err != nil {
+		t.Fatal(err)
+	}
+	rec := e.do("POST", "/api/monitor64/hosts", map[string]any{"name": "lo", "address": "127.0.0.1", "kind": "snmp", "paused": true,
+		"accesses": []map[string]any{{"type": "snmp", "config": map[string]any{"snmp_version": "2c", "traps": true}, "secret": `{"community":"c"}`}}})
+	if rec.Code != 201 {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	var created struct{ UID string }
+	decodeBody(t, rec.Body.Bytes(), &created)
+	uid := created.UID
+	m.syncTraps(ctx)
+	rtOf := func() *hostRT {
+		m.rtMu.Lock()
+		defer m.rtMu.Unlock()
+		return m.rts[uid]
+	}
+	m.traps.onEvent(trap.Event{From: netip.MustParseAddr("127.0.0.1"), HostID: uid, Known: true, Version: "2c", TrapOID: ".1.3.6.1.4.1.9999.0.1"})
+	rt := rtOf()
+	rt.mu.Lock()
+	rt.Traps = m.traps.snapshot(uid, false) // wie nach einer Runde
+	rt.mu.Unlock()
+	if rt.Traps == nil || rt.Traps.Pending != 1 {
+		t.Fatalf("setup: %+v", rt.Traps)
+	}
+	accs, _ := m.store.Accesses(ctx, uid)
+	au := "/api/monitor64/access/" + accs[0].UID
+	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "2c"}}); rec.Code != 200 {
+		t.Fatalf("traps off: %d %s", rec.Code, rec.Body)
+	}
+	m.syncTraps(ctx)
+	rt = rtOf()
+	rt.mu.Lock()
+	kept := rt.Traps
+	rt.mu.Unlock()
+	if kept != nil {
+		t.Fatalf("runtime copy kept after traps off: %+v", kept)
+	}
+	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "2c", "traps": true}}); rec.Code != 200 {
+		t.Fatalf("traps on: %d %s", rec.Code, rec.Body)
+	}
+	m.syncTraps(ctx)
+	if s := m.traps.snapshot(uid, false); s != nil && s.Pending != 0 {
+		t.Fatalf("old traps open again: %+v", s)
+	}
+}
+
+// TestTrapLateEvents: Events aus der Warteschlange nach dem Stopp bzw. von Hosts, die keine Traps (mehr) nutzen,
+// legen keinen Stand an.
+func TestTrapLateEvents(t *testing.T) {
+	m, _, _ := newTestModule(t)
+	r := fakeTraps(m)
+	const known, gone = "host00000001", "host00000002"
+	m.traps.mu.Lock()
+	m.traps.known = map[string]bool{known: true}
+	m.traps.mu.Unlock()
+	from := netip.MustParseAddr("192.0.2.40")
+	m.traps.onEvent(trap.Event{From: from, HostID: known, Known: true, Version: "2c", TrapOID: ".1.3.6.1.4.1.9999.0.1"})
+	m.traps.onEvent(trap.Event{From: from, HostID: gone, Known: true, Version: "2c", TrapOID: ".1.3.6.1.4.1.9999.0.1"})
+	m.traps.onEvent(trap.Event{From: from, HostID: gone, Known: true, Version: "2c", Rejected: "community"})
+	if s := m.traps.snapshot(gone, false); s != nil || r.count(gone) != 0 {
+		t.Fatalf("state for host without traps: %+v", s)
+	}
+	if s := m.traps.snapshot(known, false); s == nil || s.Pending != 1 {
+		t.Fatalf("known host: %+v", s)
+	}
+	m.traps.stop()
+	m.traps.onEvent(trap.Event{From: from, HostID: known, Known: true, Version: "2c", TrapOID: ".1.3.6.1.4.1.9999.0.1"})
+	m.traps.onEvent(trap.Event{From: netip.MustParseAddr("198.51.100.1"), Version: "2c"})
+	if s := m.traps.snapshot(known, false); s.Total != 1 || len(m.traps.unknown) != 0 {
+		t.Fatalf("event after stop counted: %+v unknown %d", s, len(m.traps.unknown))
+	}
+	if m.traps.addEntry(known, trapEntry{Version: "2c"}) {
+		t.Fatal("entry accepted after stop")
 	}
 }

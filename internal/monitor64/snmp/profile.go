@@ -451,8 +451,18 @@ func (c *Collector) selectProfiles(r *round) {
 			}
 			r.part.add("Profil-Erkennung", err, pre...)
 			if c.profiles != nil {
-				return // bisherige Auswahl behalten
+				return // bisherige Auswahl behalten (Zeitpunkt bleibt: naechste Runde neu versuchen)
 			}
+			// erste Wahl ohne Probe: vorlaeufig die Profile ohne Probe, aber nicht festschreiben – die naechste Runde
+			// fragt die Probe neu (sonst fehlten die Profil-Dienste bis zur naechsten Wahl in 60 min)
+			c.profiles = []*Profile{}
+			for _, p := range cand {
+				if p.Match.Probe == "" {
+					c.profiles = append(c.profiles, p)
+				}
+			}
+			c.profileOf = "" // naechste Runde waehlt neu
+			return
 		}
 	}
 	sel := []*Profile{}
@@ -520,6 +530,7 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 			r.part.add("Profil "+p.Name, err, p.keyPrefixes()...)
 			return
 		}
+		r.at = c.now() // Messzeitpunkt der Zaehler
 		for _, s := range p.Scalars {
 			pv, ok := res[s.OID]
 			if !ok {
@@ -559,6 +570,7 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 			r.part.add(fmt.Sprintf("Profil %s Tabelle %d", p.Name, ti+1), err, keyPrefix(t.Key))
 			continue
 		}
+		r.at = c.now()
 		colOID := func(n int) string { return t.OID + "." + strconv.Itoa(n) }
 		for _, idx := range tab.rows() {
 			if t.Filter != nil {
@@ -634,7 +646,7 @@ func (c *Collector) applyValue(r *round, a *acc, v Value, p pdu, look func(strin
 				}
 			}
 		case v.Counter:
-			if rt, ok := c.rate(ctrKey, p, r.now); ok {
+			if rt, ok := c.rate(ctrKey, p, r.at); ok {
 				val := rt*factor + v.Offset
 				if finite(val) {
 					a.s.Metrics = append(a.s.Metrics, model.Metric{Name: v.Metric, Value: round4(val), Unit: v.Unit, Rule: v.Rule})

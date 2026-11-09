@@ -116,6 +116,12 @@ func TestStatusM64Source(t *testing.T) {
 		"m64:foo:x":                           false,
 		"m64:svc:Ab09/a\nb":                   false,
 		"m64:host:" + strings.Repeat("a", 65): false,
+		// Laenge des Schluessels in Bytes (wie Monitor64), nicht in Zeichen
+		"m64:svc:Ab09/" + strings.Repeat("k", 200): true,
+		"m64:svc:Ab09/" + strings.Repeat("k", 201): false,
+		"m64:svc:Ab09/" + strings.Repeat("ä", 100): true,
+		"m64:svc:Ab09/" + strings.Repeat("ä", 101): false,
+		"m64:svc:Ab09/a\x7fb":                      false,
 	} {
 		if validM64Source(tok) != ok {
 			t.Errorf("%q: want %v", tok, ok)
@@ -477,7 +483,9 @@ func TestStatusM64Cluster(t *testing.T) {
 	b.SetCluster(ClusterHooks{Change: lb.hook})
 	f := m64Fake(time.Now())
 	a.SetMonitor64Status(func() module.StatusFeed { return f })
-	b.SetMonitor64Status(func() module.StatusFeed { return &fakeM64{} }) // Monitor64 laeuft, kennt den Host aber nicht
+	var fbMu sync.Mutex
+	var fb module.StatusFeed = &fakeM64{} // Monitor64 laeuft, kennt den Host aber nicht (kein Bereich Monitor64)
+	b.SetMonitor64Status(func() module.StatusFeed { fbMu.Lock(); defer fbMu.Unlock(); return fb })
 
 	p := &StatusPage{Slug: "c1", Title: "Cluster", Enabled: true, Groups: []StatusGroup{{Items: []StatusItem{{Token: "m64:host:HOSTUID1", Label: "NAS"}}}}}
 	if err := a.st.SaveStatusPage(ctx, p, ""); err != nil {
@@ -493,6 +501,16 @@ func TestStatusM64Cluster(t *testing.T) {
 	}
 	if v, err := a.buildStatusView(ctx, p, "de"); err != nil || len(v.Groups) != 1 || v.Groups[0].Items[0].Label != "NAS" {
 		t.Fatalf("view on A: %v %+v", err, v)
+	}
+	// Phase 4: Monitor64 gleicht die Hosts ab, B kennt den Host auch. Ueberwacht ihn A und ist A fuer B nicht
+	// erreichbar, liefert Monitor64 auf B "unbekannt" (nicht den letzten Stand) - die Seite zeigt den Eintrag so an.
+	fbMu.Lock()
+	fb = &fakeM64{srcs: map[string]fakeM64Src{"m64:host:HOSTUID1": {StatusSource: module.StatusSource{Name: "nas01", State: module.StatusUnknown,
+		Incidents: []module.StatusIncident{}, Maintenance: []module.StatusMaint{}}}}}
+	fbMu.Unlock()
+	if v, err := b.buildStatusView(ctx, pb, "de"); err != nil || len(v.Groups) != 1 || len(v.Groups[0].Items) != 1 || v.Groups[0].Items[0].Label != "NAS" ||
+		v.Groups[0].Items[0].State != "unknown" || v.Overall != "unknown" {
+		t.Fatalf("view on B (cluster, owner unreachable): %v %+v", err, v)
 	}
 	// Aenderung auf B kommt mit dem Eintrag zurueck
 	pb.Title = "Neu"
