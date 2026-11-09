@@ -152,7 +152,8 @@ func (m *Module) probe(ctx context.Context, h *Host) Reach {
 		req.Host = h.Names[0]
 		req.Header.Set("User-Agent", "Node64-CDN64-Check")
 		req.Header.Set(loopHeader, "check")
-		cl := &http.Client{Transport: m.transport(h.VerifyTarget), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		// mit dem Protokoll des Hosts (ein reines h2c-Ziel wie gRPC antwortet auf HTTP/1.1 nicht)
+		cl := &http.Client{Transport: m.targetTransport(0, h.VerifyTarget, h.Advanced.TargetHTTP, 0), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		resp, err := cl.Do(req)
 		if err != nil {
 			return Reach{State: ReachDown, Error: shortErr(err), Checked: time.Now()}

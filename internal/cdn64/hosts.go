@@ -176,6 +176,7 @@ func (h *Host) normalize() error {
 	if h.Kind != KindProxy {
 		h.Locations = []Location{}
 		h.Advanced.TargetPath, h.Advanced.OnlyLocations = "", false // Pfad beim Ziel und "nur Locations" nur bei Proxy-Hosts
+		h.Advanced.TargetHTTP = ""                                  // ebenso das Protokoll zum Ziel
 	}
 	if err := normalizeLocations(h.Locations); err != nil {
 		return err

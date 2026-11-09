@@ -47,9 +47,22 @@ func (m *Module) statsOf(id int64) *hostStats {
 	return st
 }
 
-// transport: geteilte Verbindungen zu den Zielen (mit bzw. ohne Pruefung des Ziel-Zertifikats).
-func newTransport(verify bool) *http.Transport {
+// newTransport: Verbindungen zu den Zielen (mit bzw. ohne Pruefung des Ziel-Zertifikats) mit dem Protokoll
+// zum Ziel (#53): automatisch = HTTP/1.1 und HTTP/2 (https: per ALPN; http bleibt HTTP/1.1), h1 = nur HTTP/1.1,
+// h2c = nur HTTP/2 (http: mit Vorwissen ohne TLS). Eigener Dialer, aber kein eigener TLS-Dialer: ALPN macht Go selbst.
+func newTransport(verify bool, mode string) *http.Transport {
 	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	p := new(http.Protocols)
+	switch mode {
+	case TargetHTTP1:
+		p.SetHTTP1(true)
+	case TargetH2C:
+		p.SetHTTP2(true)
+		p.SetUnencryptedHTTP2(true)
+	default:
+		p.SetHTTP1(true)
+		p.SetHTTP2(true)
+	}
 	return &http.Transport{
 		Proxy:                 nil,
 		DialContext:           d.DialContext,
@@ -59,14 +72,80 @@ func newTransport(verify bool) *http.Transport {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: time.Second,
+		Protocols:             p,
+		// HTTP/2: tote Verbindungen (NAT, Neustart des Ziels) erkennen, auch unter langen gRPC-Streams
+		HTTP2: &http.HTTP2Config{SendPingTimeout: 30 * time.Second, PingTimeout: 15 * time.Second},
 	}
 }
 
-func (m *Module) transport(verify bool) http.RoundTripper {
-	if verify {
-		return m.trVerify
+// transport: geteilter Transport je Pruefung des Zertifikats und Protokoll (automatisch: trVerify bzw. trInsecure).
+func (m *Module) transport(verify bool, mode string) *http.Transport {
+	if mode == TargetHTTPAuto {
+		if verify {
+			return m.trVerify
+		}
+		return m.trInsecure
 	}
-	return m.trInsecure
+	key := mode + "|" + strconv.FormatBool(verify)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.trProto == nil {
+		m.trProto = map[string]*http.Transport{}
+	}
+	tr := m.trProto[key]
+	if tr == nil {
+		tr = newTransport(verify, mode)
+		m.trProto[key] = tr
+	}
+	return tr
+}
+
+// idleCloser: Transport, dessen ruhende Verbindungen sich schliessen lassen (hostTr).
+type idleCloser interface {
+	http.RoundTripper
+	CloseIdleConnections()
+}
+
+// upgradeSplit: h2c bzw. nur HTTP/2 - WebSocket und andere Upgrades gibt es nur mit HTTP/1.1, sie gehen ueber h1.
+type upgradeSplit struct{ h2, h1 *http.Transport }
+
+func (s upgradeSplit) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Header.Get("Upgrade") != "" {
+		return s.h1.RoundTrip(r)
+	}
+	return s.h2.RoundTrip(r)
+}
+
+func (s upgradeSplit) CloseIdleConnections() {
+	s.h2.CloseIdleConnections()
+	s.h1.CloseIdleConnections()
+}
+
+// targetTransport: Transport zu einem Ziel - geteilt ohne Timeout, sonst ein eigener unter key in hostTr (die
+// Verbindungen des vorigen Transports unter key werden geschlossen: Aenderungen wirken nach dem Speichern).
+func (m *Module) targetTransport(key int64, verify bool, mode string, timeout int) http.RoundTripper {
+	if timeout <= 0 {
+		if mode != TargetH2C {
+			return m.transport(verify, mode)
+		}
+		return upgradeSplit{h2: m.transport(verify, mode), h1: m.transport(verify, TargetHTTP1)}
+	}
+	mk := func(mode string) *http.Transport {
+		tr := newTransport(verify, mode)
+		tr.ResponseHeaderTimeout = time.Duration(timeout) * time.Second
+		return tr
+	}
+	var tr idleCloser = mk(mode)
+	if mode == TargetH2C {
+		tr = upgradeSplit{h2: tr.(*http.Transport), h1: mk(TargetHTTP1)}
+	}
+	m.mu.Lock()
+	if old := m.hostTr[key]; old != nil {
+		old.CloseIdleConnections()
+	}
+	m.hostTr[key] = tr
+	m.mu.Unlock()
+	return tr
 }
 
 // inner: was ein Host tut (Proxy, Weiterleitung, 404, Statusseite).
@@ -104,36 +183,24 @@ func redirectHandler(h *Host) http.Handler {
 
 // transportFor: geteilte Verbindungen, mit eigenem Timeout nur fuer Hosts, die einen eingestellt haben.
 func (m *Module) transportFor(h *Host) http.RoundTripper {
-	base := m.transport(h.VerifyTarget)
-	if h.Advanced.TimeoutSeconds <= 0 {
-		return base
-	}
-	tr := base.(*http.Transport).Clone()
-	tr.ResponseHeaderTimeout = time.Duration(h.Advanced.TimeoutSeconds) * time.Second
-	m.mu.Lock()
-	if old := m.hostTr[h.ID]; old != nil {
-		old.CloseIdleConnections()
-	}
-	m.hostTr[h.ID] = tr
-	m.mu.Unlock()
-	return tr
+	return m.targetTransport(h.ID, h.VerifyTarget, h.Advanced.TargetHTTP, h.Advanced.TimeoutSeconds)
 }
 
-// locTransport: eigener Timeout einer Location (Schluessel neben den Hosts negativ, je Location eine Verbindung).
+// locTransport: eigener Timeout bzw. eigenes Protokoll einer Location (Schluessel neben den Hosts negativ, je Location
+// eine Verbindung); sonst die des Hosts (base).
 func (m *Module) locTransport(h *Host, i int, l *Location, base http.RoundTripper) http.RoundTripper {
-	if l.Advanced == nil || l.Advanced.TimeoutSeconds <= 0 {
+	mode := l.Advanced.targetHTTP(h.Advanced.TargetHTTP)
+	timeout := 0
+	if l.Advanced != nil {
+		timeout = l.Advanced.TimeoutSeconds
+	}
+	if timeout <= 0 && mode == h.Advanced.TargetHTTP {
 		return base
 	}
-	tr := m.transport(h.VerifyTarget).(*http.Transport).Clone()
-	tr.ResponseHeaderTimeout = time.Duration(l.Advanced.TimeoutSeconds) * time.Second
-	key := -(h.ID*100 + int64(i) + 1)
-	m.mu.Lock()
-	if old := m.hostTr[key]; old != nil {
-		old.CloseIdleConnections()
+	if timeout <= 0 { // nur das Protokoll ist eigen: Timeout wie der Host
+		timeout = h.Advanced.TimeoutSeconds
 	}
-	m.hostTr[key] = tr
-	m.mu.Unlock()
-	return tr
+	return m.targetTransport(-(h.ID*100 + int64(i) + 1), h.VerifyTarget, mode, timeout)
 }
 
 // target ist ein Ziel des Proxys (der Host selbst oder eine Location).
@@ -333,7 +400,9 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 		if host && t.forward != "" {
 			unpath(resp, t)
 		}
-		overrideErr(adv, resp) // eigene Fehlerseite statt 5xx des Ziels (vor dem Cache: wird nie gespeichert)
+		if !grpcReq(resp.Request) {
+			overrideErr(adv, resp) // eigene Fehlerseite statt 5xx des Ziels (vor dem Cache: wird nie gespeichert)
+		}
 		if host {
 			m.aiRobots(adv, resp) // robots.txt mit KI-Sperre, wenn das Ziel keine hat
 		}
@@ -350,6 +419,24 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 		rp.FlushInterval = -1
 	}
 	return rp
+}
+
+// grpcReq: gRPC bzw. gRPC-Web (Content-Type application/grpc...): Rahmen mit Trailern (grpc-status), lange Streams
+// in beide Richtungen - weder komprimieren noch durch die eigene Fehlerseite ersetzen.
+func grpcReq(r *http.Request) bool {
+	return r != nil && strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/grpc")
+}
+
+// compress: Komprimierung der Antworten (Erweitert), ausser bei gRPC (Clients erwarten die Rahmen unveraendert).
+func compress(next http.Handler, opt httpcompress.Options) http.Handler {
+	c := httpcompress.Handler(next, opt)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if grpcReq(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		c.ServeHTTP(w, r)
+	})
 }
 
 // route ist ein Pfad eines Hosts mit eigenem Proxy und eigener Zugriffsliste.
@@ -374,7 +461,7 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		})
 	}
 	if h.Advanced.Gzip { // vor dem Cache: der legt die fertig komprimierte Fassung ab (was er ablegt, staerker)
-		next = httpcompress.Handler(next, httpcompress.Options{Static: func(r *http.Request, hd http.Header) bool {
+		next = compress(next, httpcompress.Options{Static: func(r *http.Request, hd http.Header) bool {
 			return h.CacheAssets && r.Method == http.MethodGet && cacheable(r) && httpcompress.StaticExt(r.URL.Path) && storable(hd)
 		}})
 	}
@@ -391,7 +478,7 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 			la := l.effective(&h.Advanced)
 			ln = m.reverseProxy(target{url: mk(l.Scheme, l.TargetHost, l.TargetPort), prefix: prefix, forward: l.ForwardPath}, st, m.locTransport(h, i, &l, tr), &la)
 			if h.Advanced.Gzip {
-				ln = httpcompress.Handler(ln, httpcompress.Options{})
+				ln = compress(ln, httpcompress.Options{})
 			}
 		}
 		acl := l.AccessListID
@@ -820,7 +907,9 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		if hsts != "" && r.TLS != nil {
 			sw.Header().Set("Strict-Transport-Security", hsts)
 		}
-		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) { // WebSockets laufen lange und zaehlen nicht (nur, wo erlaubt); Wartung braucht kein Ziel
+		// WebSockets (nur, wo erlaubt) und gRPC-Streams (NetBird: je Peer zwei dauerhaft) laufen lange und zaehlen nicht;
+		// Wartung braucht kein Ziel
+		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) && !grpcReq(r) {
 			if !sl.acquire(r.Context(), limQueueWait) {
 				if r.Context().Err() == nil {
 					*reject = rejTarget

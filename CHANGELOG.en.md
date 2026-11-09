@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: HTTP/2 to the target – automatic for https targets, h2c for gRPC (e.g. NetBird), HTTP/1.1 only as a way out (#53). **Note:** https targets that offer HTTP/2 now get HTTP/2; if NTLM/Exchange has problems, set the host to "HTTP/1.1 only" under Advanced.
 - PROXY64: redirects with a path at the target and the return address of the access list sign-in no longer lead to foreign sites (found by CodeQL/gosec, #27).
 
 ## 1.4.0 – 2026-11-08

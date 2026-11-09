@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -101,6 +102,9 @@ func (e *Edge) serveTerminated(w http.ResponseWriter, r *http.Request) {
 		misdirected(w)
 		return
 	}
+	if fullDuplex(r) { // der CDN64-Server spricht HTTP/1.1: Body weiter lesen, waehrend die Antwort laeuft (gRPC)
+		_ = http.NewResponseController(w).EnableFullDuplex()
+	}
 	r = r.WithContext(context.WithValue(r.Context(), terminatedKey{}, true))
 	r.TLS = &tls.ConnectionState{Version: tls.VersionTLS13, HandshakeComplete: true, ServerName: hostOf(r.Host)}
 	if _, routes := e.table.Load().lookup(hostOf(r.Host)); pick(routes, r.URL.Path, true) == nil {
@@ -111,6 +115,13 @@ func (e *Edge) serveTerminated(w http.ResponseWriter, r *http.Request) {
 }
 
 type terminatedKey struct{}
+
+// fullDuplex: Anfrage, deren Body neben der Antwort weiterlaufen kann - gRPC (auch gRPC-Web) und Bodies ohne Laenge
+// (chunked, Streaming). Ohne das schliesst der HTTP/1.1-Server den Body, sobald die Antwort beginnt; Bodies mit
+// fester Laenge (Formulare, Uploads) bleiben beim ueblichen Verhalten.
+func fullDuplex(r *http.Request) bool {
+	return r.ContentLength < 0 || strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/grpc")
+}
 
 type routedKey struct{}
 

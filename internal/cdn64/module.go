@@ -50,7 +50,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.53.1"
+	Version = "1.54.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -76,6 +76,7 @@ type Module struct {
 	loopToken  string
 	trVerify   *http.Transport
 	trInsecure *http.Transport
+	trProto    map[string]*http.Transport // geteilt je Protokoll zum Ziel ausser automatisch (transport)
 	cache      *assetCache
 	reach      *reacher
 	ports      *ports.Registry         // Pruefung der Stream-Ports (nil = keine)
@@ -85,7 +86,7 @@ type Module struct {
 	authFail   *failLimiter
 	loginKey   atomic.Pointer[[]byte] // Schluessel der Sitzungs-Cookies der Login-Seite (access_login.go)
 	loginKeyMu sync.Mutex
-	hostTr     map[int64]*http.Transport
+	hostTr     map[int64]idleCloser
 	checks     CheckCreator    // Healthcheck anlegen (nil = nicht verfuegbar)
 	findChecks CheckFinder     // Healthchecks lesen ("ueberwacht" in der Liste; nil = nicht verfuegbar)
 	bl         *blocklists     // ipv64-Blocklisten
@@ -112,9 +113,9 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
 	m := &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
-		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
+		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true, TargetHTTPAuto), trInsecure: newTransport(false, TargetHTTPAuto),
 		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
-		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists(), lim: newLimiter(),
+		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]idleCloser{}, bl: newBlocklists(), lim: newLimiter(),
 		dyn: newDynAddrs()}
 	m.online.kick = make(chan struct{}, 1)
 	m.dk.kick = make(chan struct{}, 1)
@@ -258,6 +259,11 @@ func (m *Module) Stop(ctx context.Context) error {
 	}
 	m.trVerify.CloseIdleConnections()
 	m.trInsecure.CloseIdleConnections()
+	m.mu.Lock()
+	for _, tr := range m.trProto {
+		tr.CloseIdleConnections()
+	}
+	m.mu.Unlock()
 	m.log.Info("cdn64 stopped")
 	return nil
 }

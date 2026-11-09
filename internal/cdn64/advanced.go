@@ -58,6 +58,32 @@ type Advanced struct {
 	// "" = unveraendert. OnlyLocations: nur die Locations beantworten, alle anderen Pfade 404 (#11)
 	TargetPath    string `json:"target_path,omitempty"`
 	OnlyLocations bool   `json:"only_locations,omitempty"`
+
+	// Protokoll zum Ziel (#53, nur Proxy-Hosts): "" = automatisch, h1 = nur HTTP/1.1, h2c = HTTP/2 ohne Aushandeln
+	TargetHTTP string `json:"target_http,omitempty"`
+}
+
+// Protokoll zum Ziel (Advanced.TargetHTTP, LocationAdvanced.TargetHTTP).
+const (
+	TargetHTTPAuto = ""     // https-Ziel: HTTP/2 per ALPN, wenn das Ziel es anbietet, sonst HTTP/1.1; http-Ziel: HTTP/1.1
+	TargetHTTP1    = "h1"   // nur HTTP/1.1 (NTLM/Kerberos bei Exchange/IIS, Sonderfaelle)
+	TargetH2C      = "h2c"  // http-Ziel: HTTP/2 mit Vorwissen (gRPC ohne TLS), https-Ziel: nur HTTP/2
+	targetHTTPLoc  = "auto" // nur bei Locations: ausdruecklich automatisch ("" = wie der Host)
+)
+
+// cleanTargetHTTP: Protokoll zum Ziel in Grundform; false = unbekannt. loc: Location ("auto" bleibt, "" = wie Host).
+func cleanTargetHTTP(s string, loc bool) (string, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case TargetHTTPAuto, TargetHTTP1, TargetH2C:
+		return s, true
+	case targetHTTPLoc:
+		if loc {
+			return s, true
+		}
+		return TargetHTTPAuto, true
+	}
+	return s, false
 }
 
 // Location ist ein Pfad mit eigenem Ziel (Custom Location), gesperrt oder mit fester Antwort.
@@ -100,12 +126,24 @@ type LocationAdvanced struct {
 	RequestRemove   []string `json:"request_remove,omitempty"`
 	ResponseHeaders []Header `json:"response_headers,omitempty"`
 	ResponseRemove  []string `json:"response_remove,omitempty"`
+	TargetHTTP      string   `json:"target_http,omitempty"` // "" = wie der Host, auto, h1 oder h2c (Advanced.TargetHTTP)
 }
 
 // empty: nichts Eigenes gesetzt.
 func (a *LocationAdvanced) empty() bool {
 	return a == nil || a.TimeoutSeconds == 0 && a.MaxBodyMB == 0 && a.Buffering == "" && len(a.RequestHeaders) == 0 && len(a.RequestRemove) == 0 &&
-		len(a.ResponseHeaders) == 0 && len(a.ResponseRemove) == 0
+		len(a.ResponseHeaders) == 0 && len(a.ResponseRemove) == 0 && a.TargetHTTP == ""
+}
+
+// targetHTTP: Protokoll zum Ziel dieser Location (host = das des Hosts).
+func (a *LocationAdvanced) targetHTTP(host string) string {
+	switch {
+	case a == nil || a.TargetHTTP == "":
+		return host
+	case a.TargetHTTP == targetHTTPLoc:
+		return TargetHTTPAuto
+	}
+	return a.TargetHTTP
 }
 
 // normalize prueft die Werte einer Location (Kopfzeilen wie beim Host).
@@ -114,6 +152,11 @@ func (a *LocationAdvanced) normalize(path string) error {
 		a.Buffering != "" && a.Buffering != "on" && a.Buffering != "off" {
 		return &FieldError{Field: "locations", Key: "cdn64.err.location_limits", Name: path}
 	}
+	th, ok := cleanTargetHTTP(a.TargetHTTP, true)
+	if !ok {
+		return &FieldError{Field: "locations", Key: "cdn64.err.target_http", Name: path + ": " + a.TargetHTTP}
+	}
+	a.TargetHTTP = th
 	tmp := Advanced{RequestHeaders: a.RequestHeaders, RequestRemove: a.RequestRemove, ResponseHeaders: a.ResponseHeaders, ResponseRemove: a.ResponseRemove}
 	if err := tmp.normalize(); err != nil {
 		var fe *FieldError
@@ -142,6 +185,7 @@ func (l *Location) effective(host *Advanced) Advanced {
 	case la.MaxBodyMB > 0:
 		a.MaxBodyMB = la.MaxBodyMB
 	}
+	a.TargetHTTP = la.targetHTTP(host.TargetHTTP)
 	switch la.Buffering {
 	case "on":
 		a.NoBuffering = false
@@ -285,6 +329,11 @@ func (a *Advanced) normalize() error {
 		return &FieldError{Field: "target_path", Key: "cdn64.err.location_path", Name: a.TargetPath}
 	}
 	a.TargetPath = tp
+	th, ok := cleanTargetHTTP(a.TargetHTTP, false)
+	if !ok {
+		return &FieldError{Field: "advanced", Key: "cdn64.err.target_http", Name: a.TargetHTTP}
+	}
+	a.TargetHTTP = th
 	return nil
 }
 

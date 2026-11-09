@@ -1,6 +1,10 @@
 # Changes – PROXY64
 
-## 1.53.1 – 2026-11-08
+## 1.54.0 – 2026-11-09
+
+### New
+- HTTP/2 to the target (#53): for https targets PROXY64 now speaks HTTP/2 when the target offers it – if NTLM/Exchange has problems, set the host to "HTTP/1.1 only". New choice "Protocol to the target" under Advanced (and per location): Automatic (default), HTTP/1.1 only, h2c / cleartext HTTP/2 for gRPC services without TLS such as NetBird Management/Signal (for https targets: HTTP/2 only). API: `advanced.target_http`.
+- gRPC through PROXY64: trailers (`grpc-status`) reach the client, streams run in both directions – locally and via CDN64 mode 2; gRPC responses are never compressed and do not count against the limit of concurrent requests per target. WebSockets keep using HTTP/1.1.
 
 ### Fixed
 - Path at the target: writing back redirects can no longer produce an address on a foreign site (e.g. `/rezepte//evil.com` → `//evil.com`); encoded characters such as `%2F` are kept.

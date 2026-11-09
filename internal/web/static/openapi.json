@@ -2577,6 +2577,16 @@
                 ],
                 "description": "\"\" = wie der Host, off = sofort weiterreichen (Streaming, ActiveSync)"
               },
+              "target_http": {
+                "type": "string",
+                "enum": [
+                  "",
+                  "auto",
+                  "h1",
+                  "h2c"
+                ],
+                "description": "Protokoll zum Ziel dieser Location: \"\" = wie der Host, auto = automatisch, h1 = nur HTTP/1.1, h2c = HTTP/2 im Klartext (gRPC)"
+              },
               "request_headers": {
                   "type": "array",
                   "items": {
@@ -2656,6 +2666,16 @@
           "only_locations": {
             "type": "boolean",
             "description": "nur Proxy-Hosts: nur die Locations beantworten, alle anderen Pfade 404 (braucht mindestens eine Location)"
+          },
+          "target_http": {
+            "type": "string",
+            "enum": [
+              "",
+              "auto",
+              "h1",
+              "h2c"
+            ],
+            "description": "nur Proxy-Hosts: Protokoll zum Ziel (#53). \"\" bzw. auto = automatisch (https-Ziel: HTTP/2 per ALPN, wenn das Ziel es anbietet, sonst HTTP/1.1; http-Ziel: HTTP/1.1), h1 = nur HTTP/1.1 (NTLM/Kerberos, Exchange/IIS), h2c = http-Ziel: HTTP/2 mit Vorwissen ohne TLS (gRPC, z. B. NetBird), https-Ziel: nur HTTP/2. WebSocket-Upgrades gehen immer über HTTP/1.1; unbekannte Werte werden abgewiesen (400)"
           },
           "request_headers": {
             "type": "array",

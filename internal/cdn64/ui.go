@@ -410,7 +410,8 @@ func (l Location) LocAdv() map[string]string {
 		a = &LocationAdvanced{}
 	}
 	out := map[string]string{"req_set": headersText(a.RequestHeaders), "req_del": strings.Join(a.RequestRemove, "\n"),
-		"resp_set": headersText(a.ResponseHeaders), "resp_del": strings.Join(a.ResponseRemove, "\n"), "buffering": a.Buffering}
+		"resp_set": headersText(a.ResponseHeaders), "resp_del": strings.Join(a.ResponseRemove, "\n"), "buffering": a.Buffering,
+		"target_http": a.TargetHTTP}
 	if a.TimeoutSeconds > 0 {
 		out["timeout"] = strconv.Itoa(a.TimeoutSeconds)
 	}
@@ -557,7 +558,7 @@ func hostFromForm(r *http.Request, h *Host) {
 				ContentType: strings.TrimSpace(r.PostFormValue(k + "ctype"))}
 			la := &LocationAdvanced{RequestHeaders: parseHeaders(r.PostFormValue(k + "req_set")), RequestRemove: lines(r.PostFormValue(k + "req_del")),
 				ResponseHeaders: parseHeaders(r.PostFormValue(k + "resp_set")), ResponseRemove: lines(r.PostFormValue(k + "resp_del")),
-				Buffering: r.PostFormValue(k + "buffering")}
+				Buffering: r.PostFormValue(k + "buffering"), TargetHTTP: r.PostFormValue(k + "target_http")}
 			la.TimeoutSeconds, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "timeout")))
 			la.MaxBodyMB, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "max_body")))
 			if !la.empty() {
@@ -592,6 +593,9 @@ func hostFromForm(r *http.Request, h *Host) {
 		a.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_up")))
 		a.NoBuffering, a.Gzip, a.AccessLog, a.NoLimits = on("adv_no_buffering"), on("adv_gzip"), on("adv_access_log"), on("adv_no_limits")
 		a.TrustedProxies = lines(r.PostFormValue("adv_trusted"))
+		if r.PostForm.Has("adv_target_http") { // nur bei Proxy-Hosts im Formular
+			a.TargetHTTP = r.PostFormValue("adv_target_http")
+		}
 	}
 	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular
 		h.Advanced.GeoMode, h.Advanced.GeoCountries = r.PostFormValue("geo_mode"), lines(r.PostFormValue("geo_countries"))
