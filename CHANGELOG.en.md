@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- DNS64: Apple device profiles (`.mobileconfig`) install on macOS and iOS (#60).
 - Certificates: for ipv64 domains (and other providers) the node checks the TXT record at the right nameservers again, even if the container has a search domain with a wildcard CNAME (e.g. your own domain at Cloudflare) – so far issuing failed with “not visible on … ns.cloudflare.com”. Same fix for DynDNS and the DNS healthcheck.
 - PROXY64: security headers from “Advanced” and HSTS apply to every response of the host, including block, error and sign-in pages; headers middlewares from Traefik labels are taken over.
 - DNS64: DHCP server as its own menu item (opt-in, off by default, no port until turned on) – networks per interface/VLAN, fixed addresses, dry run, detection of other DHCP servers, ARP check, PXE/netboot; host network or macvlan only (#59).

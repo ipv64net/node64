@@ -5,6 +5,9 @@
 ### New
 - DHCP in Prometheus (`/api/metrics`, only when DHCP is not off): server running, dry run, per network assignable, leased and fixed addresses, errors and standby, requests per type, results (offered, leased, declined …) and other DHCP servers (#59).
 
+### Fixed
+- Apple device profiles (`.mobileconfig`, DoH/DoT under “For devices”) install on macOS and iOS – so far installation failed with “The VPN Service payload could not be installed” because the system-wide scope was missing (#60).
+
 ## 1.37.1 – 2026-11-09
 
 ### Fixed (review of the DHCP server)

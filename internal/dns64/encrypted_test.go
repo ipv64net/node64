@@ -197,7 +197,9 @@ func TestMobileconfig(t *testing.T) {
 				t.Fatalf("%s: %v", proto, err)
 			}
 		}
-		if !strings.Contains(out, "com.apple.dnsSettings.managed") || !strings.Contains(out, "com.apple.security.root") {
+		// PayloadScope System: dnsSettings.managed gilt nur systemweit, sonst "VPN-Dienst wurde nicht erstellt" (#60)
+		if !strings.Contains(out, "com.apple.dnsSettings.managed") || !strings.Contains(out, "com.apple.security.root") ||
+			!strings.Contains(out, "<key>PayloadScope</key><string>System</string>") {
 			t.Fatalf("%s: payloads missing", proto)
 		}
 	}

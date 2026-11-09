@@ -233,6 +233,7 @@ func mobileconfig(proto, host, dohURL string, caDER []byte) string {
 	<key>PayloadDisplayName</key><string>Node64 DNS64 (%s)</string>
 	<key>PayloadIdentifier</key><string>net.ipv64.node64.dns64.%s</string>
 	<key>PayloadRemovalDisallowed</key><false/>
+	<key>PayloadScope</key><string>System</string>
 	<key>PayloadType</key><string>Configuration</string>
 	<key>PayloadUUID</key><string>%s</string>
 	<key>PayloadVersion</key><integer>1</integer>
