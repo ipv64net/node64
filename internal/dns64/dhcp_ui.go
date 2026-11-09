@@ -2,8 +2,10 @@ package dns64
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -72,28 +74,29 @@ type dhcpResView struct {
 
 // dhcpReserveView: Rolle dieser Node im Cluster (D6).
 type dhcpReserveView struct {
-	Cluster bool       // es gibt andere Nodes im Cluster (bzw. Rolle Reserve gesetzt)
-	Role    string     // primary | reserve
-	Peers   []DHCPPeer // Nodes mit dem Bereich "Vergaben"
-	Names   string     // ihre Namen fuer den Text
-	Standby bool       // Reserve bleibt gerade still
+	Cluster    bool   // es gibt andere Nodes im Cluster (bzw. Rolle Reserve gesetzt)
+	Role       string // primary | reserve
+	HasPrimary bool   // Reserve: fuer mindestens ein eigenes Netz gibt es eine Haupt-Node
+	Names      string // Reserve: Namen der Haupt-Nodes fuer die eigenen Netze
+	Standby    bool   // Reserve bleibt gerade still (eine Haupt-Node lebt)
 }
 
 type dhcpPage struct {
-	Mode     string
-	Bridge   bool
-	Running  bool // Server laeuft (Schalter an/Probelauf und mindestens ein Netz)
-	Scopes   []dhcpScopeView
-	Res      []dhcpResView
-	ResScope map[int64]string // Kennung -> Name des Netzes
-	Groups   []groups.Group   // Auswahl "in Geraetegruppe aufnehmen"
-	Reserve  dhcpReserveView
-	Leases   []dhcpLeaseView
-	Events   []dhcp.Event
-	Foreign  []dhcp.Foreign
-	Ifaces   []dhcpIface
-	Suggest  DHCPScope
-	Self     string // Adresse dieser Node (Hinweis DNS-Server)
+	Mode      string
+	Bridge    bool
+	Running   bool // Server laeuft (Schalter an/Probelauf und mindestens ein Netz)
+	Scopes    []dhcpScopeView
+	Res       []dhcpResView
+	ResScope  map[int64]string // Kennung -> Name des Netzes
+	Groups    []groups.Group   // Auswahl "in Geraetegruppe aufnehmen"
+	Reserve   dhcpReserveView
+	Leases    []dhcpLeaseView
+	Events    []dhcp.Event
+	Foreign   []dhcp.Foreign
+	Ifaces    []dhcpIface
+	Suggest   DHCPScope
+	Self      string              // Adresse dieser Node (Hinweis DNS-Server)
+	Conflicts map[string][]string // Netz -> andere Haupt-Nodes, die dort auch vergeben
 }
 
 func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
@@ -115,17 +118,24 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 	}
 	v.Reserve.Role = m.dhcpRole(ctx)
 	v.Reserve.Cluster = len(m.dhcpPeers(ctx, "")) > 0 || v.Reserve.Role == dhcpReserve // Rolle nur mit anderen Nodes
-	if v.Reserve.Cluster {
-		v.Reserve.Peers = m.dhcpPeers(ctx, ItemDHCPLeases)
+	if v.Reserve.Role == dhcpReserve {                                                 // je eigenem Netz: lebt eine Haupt-Node?
 		var names []string
-		for _, p := range v.Reserve.Peers {
-			names = append(names, p.Name)
+		for _, s := range scopes {
+			if !s.Enabled {
+				continue
+			}
+			alive, prim := m.dhcpPrimaryAlive(ctx, s.Subnet)
+			v.Reserve.Standby = v.Reserve.Standby || (alive && len(prim) > 0)
+			v.Reserve.HasPrimary = v.Reserve.HasPrimary || len(prim) > 0
+			for _, n := range prim {
+				if !slices.Contains(names, n) {
+					names = append(names, n)
+				}
+			}
 		}
 		v.Reserve.Names = strings.Join(names, ", ")
 	}
-	if v.Reserve.Role == dhcpReserve {
-		v.Reserve.Standby = m.dhcpPrimaryAlive(ctx)
-	}
+	v.Conflicts = m.dhcpConflicts(ctx)
 	var snap dhcp.View
 	if s := m.dhcpSrv.Load(); s != nil {
 		v.Running, snap = true, s.Snapshot()
@@ -152,28 +162,22 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 		}
 	}
 	v.Events = snap.Events
-	for _, f := range snap.Foreign { // Nodes des Clusters (Haupt-/Reserve-Node) sind keine fremden Server
-		if !m.dhcpIsPeer(f.Server) {
+	for _, f := range snap.Foreign { // die Haupt-Node einer Reserve ist kein fremder Server
+		if !m.dhcpExpected(f.Server) {
 			v.Foreign = append(v.Foreign, f)
 		}
 	}
-	if len(v.Ifaces) > 0 {
-		v.Suggest = v.Ifaces[0].Suggest
-		for _, i := range v.Ifaces { // erste Schnittstelle mit privater Adresse
-			if len(i.Addrs) > 0 && i.Addrs[0].Addr().IsPrivate() {
-				v.Suggest = i.Suggest
-				break
-			}
+	var pick *dhcpIface // Vorschlag: erste echte Schnittstelle mit privater Adresse (nicht docker0, virbr0 ...)
+	for i := range v.Ifaces {
+		if virtualIface(v.Ifaces[i].Name) {
+			continue
 		}
-		if p, err := netip.ParsePrefix(v.Suggest.Subnet); err == nil {
-			for _, i := range v.Ifaces {
-				for _, a := range i.Addrs {
-					if p.Contains(a.Addr()) {
-						v.Self = a.Addr().String()
-					}
-				}
-			}
+		if pick == nil || (!pick.Addrs[0].Addr().IsPrivate() && v.Ifaces[i].Addrs[0].Addr().IsPrivate()) {
+			pick = &v.Ifaces[i]
 		}
+	}
+	if pick != nil {
+		v.Suggest, v.Self = pick.Suggest, pick.Addrs[0].Addr().String()
 	}
 	d.DHCP = v
 	return nil
@@ -290,10 +294,21 @@ func (m *Module) pageDHCPReserve(w http.ResponseWriter, r *http.Request) {
 	m.dhcpBack(w, r, err, "dns64.dhcp.res_added")
 }
 
+// dhcpMAC normalisiert eine MAC (aa:bb:cc:dd:ee:ff) wie beim Anlegen fester Adressen.
+func dhcpMAC(v string) (string, error) {
+	hw, err := net.ParseMAC(strings.TrimSpace(v))
+	if err != nil || len(hw) != 6 {
+		return "", errCfg("err_dhcp_mac")
+	}
+	return hw.String(), nil
+}
+
 func (m *Module) pageDHCPRelease(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.ParseInt(r.PostFormValue("scope"), 10, 64)
-	mac := strings.ToLower(r.PostFormValue("mac"))
-	err := m.ReleaseDHCPLease(r.Context(), sid, mac)
+	mac, err := dhcpMAC(r.PostFormValue("mac"))
+	if err == nil {
+		err = m.ReleaseDHCPLease(r.Context(), sid, mac)
+	}
 	if err == nil {
 		m.audit(r, "dns64.dhcp.release", mac, "")
 	}
@@ -303,18 +318,28 @@ func (m *Module) pageDHCPRelease(w http.ResponseWriter, r *http.Request) {
 // ---- API ----
 
 func (m *Module) apiDHCP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	out := struct {
-		Mode    string    `json:"mode"`
-		Role    string    `json:"role"`
-		Standby bool      `json:"standby"` // Reserve-Node bleibt gerade still (Haupt-Node erreichbar)
-		Running bool      `json:"running"`
-		Bridge  bool      `json:"docker_bridge"`
-		View    dhcp.View `json:"state"`
-	}{Mode: m.dhcpMode(r.Context()), Role: m.dhcpRole(r.Context()), Bridge: dhcpBridge(), View: dhcp.View{Scopes: []dhcp.ScopeView{}, Events: []dhcp.Event{}, Foreign: []dhcp.Foreign{}}}
+		Mode      string              `json:"mode"`
+		Role      string              `json:"role"`
+		Standby   []string            `json:"standby"`   // Reserve: Netze, in denen sie still bleibt (Haupt-Node lebt)
+		Conflicts map[string][]string `json:"conflicts"` // Netz -> andere Haupt-Nodes, die dort auch vergeben
+		Running   bool                `json:"running"`
+		Bridge    bool                `json:"docker_bridge"`
+		View      dhcp.View           `json:"state"`
+	}{Mode: m.dhcpMode(ctx), Role: m.dhcpRole(ctx), Standby: []string{}, Conflicts: m.dhcpConflicts(ctx), Bridge: dhcpBridge(),
+		View: dhcp.View{Scopes: []dhcp.ScopeView{}, Events: []dhcp.Event{}, Foreign: []dhcp.Foreign{}}}
 	if s := m.dhcpSrv.Load(); s != nil {
 		out.Running, out.View = true, s.Snapshot()
 	}
-	out.Standby = out.Role == dhcpReserve && m.dhcpPrimaryAlive(r.Context())
+	if out.Role == dhcpReserve {
+		scopes, _ := m.DHCPScopes(ctx)
+		for _, s := range scopes {
+			if alive, prim := m.dhcpPrimaryAlive(ctx, s.Subnet); s.Enabled && (alive || len(prim) == 0) {
+				out.Standby = append(out.Standby, s.Subnet)
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -425,8 +450,10 @@ func (m *Module) apiDHCPResDelete(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) apiDHCPRelease(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.ParseInt(r.PathValue("scope"), 10, 64)
-	mac := strings.ToLower(r.PathValue("mac"))
-	err := m.ReleaseDHCPLease(r.Context(), sid, mac)
+	mac, err := dhcpMAC(r.PathValue("mac"))
+	if err == nil {
+		err = m.ReleaseDHCPLease(r.Context(), sid, mac)
+	}
 	if err == nil {
 		m.audit(r, "dns64.dhcp.release", mac, "")
 	}

@@ -124,6 +124,7 @@ func (m *Module) loadForwards(ctx context.Context) error {
 		}
 	}
 	m.rw.Store(rt)
+	m.dhcpNamesSoon() // DHCP-Namen weichen Umschreibungen
 	m.clChanged(ctx, ItemForwards)
 	if old := m.fwd.Swap(t); old != nil { // laufende Anfragen duerfen die alten Verbindungen noch zu Ende nutzen
 		time.AfterFunc(30*time.Second, func() {

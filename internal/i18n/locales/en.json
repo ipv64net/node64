@@ -3207,6 +3207,9 @@
       "dyndns_addr_failed": "Public {family} address not determined {count} times in a row.",
       "dyndns_limit_reached": "ipv64: daily update limit reached.",
       "cluster_suspended": "Suspended: {reason}",
+      "dns64_dhcp_foreign": "Another DHCP server found on the network: {server}. Turn it off, otherwise devices get conflicting addresses.",
+      "dns64_dhcp_pool": "The address range is {pct} % used.",
+      "dns64_dhcp_primary": "{node} also hands out addresses in this network as primary node – two DHCP servers. Set one of the nodes to “Standby node”.",
       "update_ok": "Node64 runs stably with version {version} (before {from}).",
       "update_failed": "The new version {version} did not run stably. Node64 runs {back} again, the database from before the update was restored."
     },
@@ -3746,7 +3749,7 @@
       "role_primary": "Primary node",
       "role_reserve": "Standby node",
       "role_hint": "The standby node only hands out addresses when the primary node is really gone. Turn on the areas “DHCP networks” and “DHCP leases” in the cluster on both nodes.",
-      "reserve_alone": "Standby node without partner: it stays silent until the area “DHCP leases” is on in the cluster on both nodes.",
+      "reserve_alone": "Standby node without a primary node for its networks: it stays silent until a primary node with this network is known (turn on the area “DHCP leases” in the cluster on both nodes).",
       "reserve_standby": "Standby node: {nodes} is reachable – this node does not answer.",
       "reserve_active": "Standby node: {nodes} is not reachable – this node is handing out the addresses now.",
       "relay": "Network behind a DHCP relay",
@@ -3756,7 +3759,8 @@
       "group_none": "none",
       "group_hint": "Adds the MAC to the group – its rules then apply even if the IP changes.",
       "no_iface": "Taken over from the cluster: choose the interface and enable the network.",
-      "result_standby": "standby, primary active"
+      "result_standby": "standby, primary active",
+      "two_primary": "Two DHCP servers: in network {net}, {nodes} also hands out addresses as primary node. Set one of the nodes to “Standby node”."
     },
     "pub": {
       "refused": "{n} queries from networks not allowed were rejected (last {ip}, {time}). If the network is yours, add it under “Additional allowed client networks”.",
@@ -4304,7 +4308,8 @@
       "dhcp_iface": "Invalid interface (e.g. eth0 or eth0.20).",
       "dhcp_iface_dup": "There already is a network for this interface.",
       "dhcp_role": "Unknown role (primary or standby node).",
-      "dhcp_subnet_dup": "This network already exists.",
+      "dhcp_subnet_dup": "The network overlaps the existing network {net}.",
+      "dhcp_subnet_fixed": "The network of an existing network cannot be changed (it identifies fixed addresses, leases and the cluster sync). Add a new network.",
       "dhcp_subnet": "Invalid network: IPv4 with prefix, e.g. 192.168.1.0/24 (/8 to /30).",
       "dhcp_range": "Invalid address range: both addresses must be in the network (from ≤ to, without network and broadcast address).",
       "dhcp_router": "The router must be an IPv4 address in the network.",
@@ -4315,7 +4320,7 @@
       "dhcp_boot": "PXE values without spaces; boot server at most 63, files at most 127 characters.",
       "dhcp_mac": "Invalid MAC address (e.g. aa:bb:cc:dd:ee:ff).",
       "dhcp_scope": "Unknown network.",
-      "dhcp_res_ip": "The fixed address must be in the network (not the network or broadcast address).",
+      "dhcp_res_ip": "The fixed address must be in the network and must not be the network, broadcast, router or node address.",
       "dhcp_res_dup": "MAC or IP already has a fixed address in this network.",
       "docker_ip": "Addresses for Docker records: IPv4 or IPv6 addresses, separated by commas.",
       "zone_soa": "TTL and SOA values are out of the allowed range.",

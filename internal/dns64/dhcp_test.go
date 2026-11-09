@@ -3,6 +3,7 @@ package dns64
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"io"
 	"net/http"
@@ -147,7 +148,7 @@ func (tview) Time(t time.Time) string       { return t.Format(time.RFC3339) }
 func (tview) Doc(string) template.HTML      { return "" }
 
 func TestDHCPPageRenders(t *testing.T) {
-	tpl, err := template.ParseFS(templateFS, "templates/pages/dhcp.html")
+	tpl, err := template.New("dhcp").Funcs(template.FuncMap{"join": strings.Join}).ParseFS(templateFS, "templates/pages/dhcp.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,14 +158,15 @@ func TestDHCPPageRenders(t *testing.T) {
 	lease := dhcp.Lease{Scope: 1, MAC: "02:00:00:00:00:0a", IP: netip.MustParseAddr("192.168.1.100"), Hostname: "laptop", Expires: now.Add(time.Hour), State: dhcp.StateBound}
 	for _, mode := range []string{dhcpOff, dhcpObserve, dhcpOn} {
 		v := tview{CSRF: "c", Data: pageData{DHCP: dhcpPage{Mode: mode, Running: mode != dhcpOff, ResScope: map[int64]string{1: "LAN (eth0)"},
-			Scopes:  []dhcpScopeView{{DHCPScope: sc, State: dhcp.ScopeView{ID: 1, Self: netip.MustParseAddr("192.168.1.2"), Size: 100, Used: 1, Leases: []dhcp.Lease{lease}}, Pct: 1}},
-			Res:     []dhcpResView{{DHCPReservation{ID: 1, ScopeID: 1, MAC: "02:00:00:00:00:0b", IP: "192.168.1.20", Name: "nas"}, "nas.home.lan"}},
-			Groups:  []groups.Group{{ID: 3, Name: "Kinder"}},
-			Reserve: dhcpReserveView{Cluster: true, Role: dhcpReserve, Peers: []DHCPPeer{{Name: "node-a", Online: true}}, Names: "node-a", Standby: mode == dhcpOn},
-			Leases:  []dhcpLeaseView{{Lease: lease, ScopeName: "LAN (eth0)", Active: true}},
-			Events:  []dhcp.Event{{Time: now, Scope: 1, Type: "discover", MAC: lease.MAC, IP: lease.IP, Result: "offer"}},
-			Foreign: []dhcp.Foreign{{Scope: 1, Server: netip.MustParseAddr("192.168.1.1"), LastSeen: now}},
-			Ifaces:  []dhcpIface{{Name: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")}, Suggest: sc}}, Suggest: sc}}}
+			Scopes:    []dhcpScopeView{{DHCPScope: sc, State: dhcp.ScopeView{ID: 1, Self: netip.MustParseAddr("192.168.1.2"), Size: 100, Used: 1, Leases: []dhcp.Lease{lease}}, Pct: 1}},
+			Res:       []dhcpResView{{DHCPReservation{ID: 1, ScopeID: 1, MAC: "02:00:00:00:00:0b", IP: "192.168.1.20", Name: "nas"}, "nas.home.lan"}},
+			Groups:    []groups.Group{{ID: 3, Name: "Kinder"}},
+			Reserve:   dhcpReserveView{Cluster: true, Role: dhcpReserve, HasPrimary: mode != dhcpOff, Names: "node-a", Standby: mode == dhcpOn},
+			Conflicts: map[string][]string{"192.168.1.0/24": {"node-b"}},
+			Leases:    []dhcpLeaseView{{Lease: lease, ScopeName: "LAN (eth0)", Active: true}},
+			Events:    []dhcp.Event{{Time: now, Scope: 1, Type: "discover", MAC: lease.MAC, IP: lease.IP, Result: "offer"}},
+			Foreign:   []dhcp.Foreign{{Scope: 1, Server: netip.MustParseAddr("192.168.1.1"), LastSeen: now}},
+			Ifaces:    []dhcpIface{{Name: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")}, Suggest: sc}}, Suggest: sc}}}
 		if err := tpl.ExecuteTemplate(io.Discard, "content", v); err != nil {
 			t.Fatalf("%s: %v", mode, err)
 		}
@@ -299,32 +301,175 @@ func TestDHCPCluster(t *testing.T) {
 	}
 }
 
-// D6: Reserve bleibt still ohne Partner und solange einer erreichbar ist; DNS-Server im Netz aus dem Cluster.
+// D6: Reserve je Netz nach dem Zustand der anderen Nodes: ohne Haupt-Node still, mit erreichbarer Haupt-Node still,
+// sonst antwortet sie; eine Node ohne DHCP (nur DNS) zaehlt nicht. Zwei Haupt-Nodes im selben Netz sind ein Konflikt.
 func TestDHCPReserve(t *testing.T) {
 	m, _ := testModule(t)
 	ctx := context.Background()
-	if !m.dhcpPrimaryAlive(ctx) {
-		t.Fatal("reserve without peers must stay silent")
+	const net = "192.168.50.0/24"
+	if alive, prim := m.dhcpPrimaryAlive(ctx, net); !alive || len(prim) != 0 {
+		t.Fatal("reserve without primary must stay silent")
 	}
-	peers := []DHCPPeer{{Name: "a", Addr: netip.MustParseAddr("192.168.50.2"), Online: true}, {Name: "far", Addr: netip.MustParseAddr("10.0.0.2")}}
+	peers := []DHCPPeer{{NodeID: "a", Name: "Node A", Online: true}, {NodeID: "c", Name: "Nur DNS", Online: true}}
 	m.SetDHCPPeers(func(context.Context, string) []DHCPPeer { return peers })
-	if !m.dhcpPrimaryAlive(ctx) {
-		t.Fatal("primary online")
+	apply := func(id string, n clDHCPNode) {
+		if err := m.ClusterApply(ctx, ItemDHCPLeases, "n:"+id, json.RawMessage(jsonString(n)), false); err != nil {
+			t.Fatal(err)
+		}
 	}
-	peers[0].Online = false
-	if m.dhcpPrimaryAlive(ctx) {
-		t.Fatal("primary gone, reserve must answer")
+	apply("a", clDHCPNode{Role: dhcpPrimary, Mode: dhcpOn, Nets: []clDHCPNodeNet{{net, "192.168.50.2"}}, DNS: []string{"192.168.50.2"}})
+	apply("c", clDHCPNode{Role: dhcpPrimary, Mode: dhcpOff, DNS: []string{"192.168.50.3", "10.9.9.9"}})
+	if alive, prim := m.dhcpPrimaryAlive(ctx, net); !alive || len(prim) != 1 || prim[0] != "Node A" {
+		t.Fatalf("primary online: %v %v", alive, prim)
 	}
-	if dns := m.dhcpPeerDNS(ctx, netip.MustParsePrefix("192.168.50.0/24")); len(dns) != 1 || dns[0] != peers[0].Addr {
-		t.Fatalf("peer dns %v", dns)
+	peers[0].Online = false // A weg, C (ohne DHCP) noch da
+	if alive, _ := m.dhcpPrimaryAlive(ctx, net); alive {
+		t.Fatal("primary gone, reserve must answer although a DNS-only node is online")
 	}
-	if !m.dhcpIsPeer(netip.MustParseAddr("10.0.0.2")) || m.dhcpIsPeer(netip.MustParseAddr("10.0.0.3")) {
-		t.Fatal("peer detection")
+	if alive, prim := m.dhcpPrimaryAlive(ctx, "10.0.0.0/24"); !alive || len(prim) != 0 {
+		t.Fatal("network without primary: reserve stays silent")
+	}
+	// DNS-Server: nur erreichbare Nodes mit DNS64 auf Port 53 in diesem Netz
+	if d := m.dhcpPeerDNS(ctx, netip.MustParsePrefix(net)); len(d) != 1 || d[0] != netip.MustParseAddr("192.168.50.3") {
+		t.Fatalf("peer dns %v", d)
+	}
+	// Haupt-Node ist fuer die Reserve kein fremder Server, fuer eine Haupt-Node schon
+	if m.dhcpExpected(netip.MustParseAddr("192.168.50.2")) {
+		t.Fatal("expected server while primary")
 	}
 	if err := m.SetDHCPRole(ctx, "boss"); err == nil {
 		t.Fatal("bad role accepted")
 	}
 	if err := m.SetDHCPRole(ctx, dhcpReserve); err != nil || m.dhcpRole(ctx) != dhcpReserve {
 		t.Fatalf("role: %v", err)
+	}
+	if !m.dhcpExpected(netip.MustParseAddr("192.168.50.2")) || m.dhcpExpected(netip.MustParseAddr("192.168.50.9")) {
+		t.Fatal("expected server while reserve")
+	}
+	// zwei Haupt-Nodes: diese Node wieder Haupt-Node mit eingeschaltetem Netz auf einer Schnittstelle mit Adresse im Netz
+	_ = m.SetDHCPRole(ctx, dhcpPrimary)
+	_ = m.core.SetSetting(ctx, setDHCP, dhcpOn)
+	ifs := dhcpInterfaces()
+	if len(ifs) == 0 {
+		t.Skip("keine Schnittstelle mit IPv4")
+	}
+	p := ifs[0].Addrs[0].Masked()
+	if _, err := m.AddDHCPScope(ctx, DHCPScope{Iface: ifs[0].Name, Subnet: p.String(), Start: p.Addr().Next().String(), End: p.Addr().Next().Next().String()}); err != nil {
+		t.Skipf("scope on %s: %v", ifs[0].Name, err)
+	}
+	apply("b", clDHCPNode{Role: dhcpPrimary, Mode: dhcpOn, Nets: []clDHCPNodeNet{{p.String(), "1.2.3.4"}}})
+	if c := m.dhcpConflicts(ctx); len(c[p.String()]) != 1 || c[p.String()][0] != "b" {
+		t.Fatalf("conflicts %v", c)
+	}
+}
+
+// Netz eines vorhandenen Netzes ist fest (Kennung), Ueberschneidungen sind verboten, feste Adressen nicht auf dem Router.
+func TestDHCPScopeRules(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	s, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: "192.168.50.0/24", Start: "192.168.50.100", End: "192.168.50.150", Router: "192.168.50.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Subnet, s.Start, s.End, s.Router = "192.168.0.0/23", "192.168.0.100", "192.168.0.150", "192.168.0.1"
+	if _, err := m.UpdateDHCPScope(ctx, s.ID, s); err == nil || !strings.Contains(err.Error(), "err_dhcp_subnet_fixed") {
+		t.Fatalf("subnet change: %v", err)
+	}
+	if _, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth8", Subnet: "192.168.50.128/25", Start: "192.168.50.200", End: "192.168.50.210", Relay: true}); err == nil {
+		t.Fatal("overlapping network accepted")
+	}
+	if _, err := m.AddDHCPReservation(ctx, DHCPReservation{ScopeID: s.ID, MAC: "02:00:00:00:00:01", IP: "192.168.50.1"}); err == nil {
+		t.Fatal("reservation on the router accepted")
+	}
+	if _, err := m.AddDHCPReservation(ctx, DHCPReservation{ScopeID: s.ID, MAC: "02:00:00:00:00:02", IP: "192.168.50.20", GroupID: 999}); err == nil {
+		t.Fatal("reservation with unknown group accepted")
+	}
+	if res, _ := m.DHCPReservations(ctx); len(res) != 0 {
+		t.Fatalf("reservation stored although the group is missing: %+v", res)
+	}
+	if _, err := normalizeDNS(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func normalizeDNS() (DHCPScope, error) {
+	s := DHCPScope{Iface: "eth0", Subnet: "192.168.1.0/24", Start: "192.168.1.100", End: "192.168.1.199", DNS: []string{"0.0.0.0"}}
+	if normalizeDHCPScope(&s) == nil {
+		return s, errors.New("0.0.0.0 accepted as DNS server")
+	}
+	return s, nil
+}
+
+// Namen: wer einen Namen hat, behaelt ihn (auch gegen ein Geraet mit kleinerer MAC); wpad nie; Umschreibungen gehen vor.
+func TestDHCPNameRules(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	s, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: "192.168.50.0/24", Start: "192.168.50.100", End: "192.168.50.150", Domain: "home.lan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, exp := dhcpStore{m}, time.Now().Add(time.Hour)
+	save := func(mac, ip, host string) {
+		if err := st.SaveLease(dhcp.Lease{Scope: s.ID, MAC: mac, IP: netip.MustParseAddr(ip), Hostname: host, Expires: exp, State: dhcp.StateBound}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := func(name string) string {
+		if rrs, ok := m.Lookup(name, dns.TypeA); ok && len(rrs) == 1 {
+			return rrs[0].(*dns.A).A.String()
+		}
+		return ""
+	}
+	save("02:00:00:00:00:ff", "192.168.50.100", "printer")
+	_ = m.dhcpNamesBuild(ctx)
+	save("02:00:00:00:00:01", "192.168.50.101", "printer") // kleinere MAC, spaeter
+	save("02:00:00:00:00:02", "192.168.50.102", "wpad")
+	save("02:00:00:00:00:03", "192.168.50.103", "nextcloud")
+	if _, err := m.AddRewrite(ctx, Rewrite{Name: "nextcloud.home.lan", Target: "proxy.home.lan"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = m.dhcpNamesBuild(ctx)
+	if a("printer.home.lan") != "192.168.50.100" || a("wpad.home.lan") != "" || a("nextcloud.home.lan") != "" {
+		t.Fatalf("printer=%q wpad=%q nextcloud=%q", a("printer.home.lan"), a("wpad.home.lan"), a("nextcloud.home.lan"))
+	}
+	if rrs, ok := m.Lookup("103.50.168.192.in-addr.arpa", dns.TypePTR); ok && len(rrs) > 0 {
+		t.Fatalf("PTR for a name owned by a rewrite: %v", rrs)
+	}
+}
+
+// Schalter aus bzw. kein Netz: kein laufender Server mehr; abgebrochener Kontext laesst DHCP nicht aus.
+func TestDHCPApplyState(t *testing.T) {
+	m, _ := testModule(t)
+	old := dhcpBridge
+	dhcpBridge = func() bool { return false }
+	t.Cleanup(func() { dhcpBridge = old })
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: "192.168.50.0/24", Start: "192.168.50.100", End: "192.168.50.150"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetDHCPMode(ctx, dhcpObserve); err != nil || m.dhcpSrv.Load() == nil {
+		t.Fatalf("observe: %v %v", err, m.dhcpSrv.Load())
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	m.dhcpApply(cancelled)
+	if m.dhcpSrv.Load() == nil {
+		t.Fatal("cancelled context stopped DHCP")
+	}
+	if err := m.SetDHCPMode(ctx, dhcpOff); err != nil || m.dhcpSrv.Load() != nil {
+		t.Fatalf("off: %v %v", err, m.dhcpSrv.Load())
+	}
+	if err := m.SetDHCPMode(ctx, dhcpOn); err != nil {
+		t.Fatal(err)
+	}
+	scopes, _ := m.DHCPScopes(ctx)
+	if err := m.SetDHCPScopeEnabled(ctx, scopes[0].ID, false); err != nil || m.dhcpSrv.Load() != nil {
+		t.Fatalf("last network off: %v %v", err, m.dhcpSrv.Load())
+	}
+	if err := m.Stop(ctx); err != nil {
+		t.Fatal(err)
 	}
 }

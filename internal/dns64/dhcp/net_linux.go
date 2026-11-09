@@ -14,16 +14,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// listen oeffnet einen UDP-Socket auf port, gebunden an die Schnittstelle (SO_BINDTODEVICE, braucht cap_net_raw),
-// mit Broadcast. SO_REUSEADDR: mehrere Schnittstellen teilen sich Port 67.
+// listen oeffnet einen UDP-Socket auf port, gebunden an die Schnittstelle (SO_BINDTODEVICE vor dem bind, braucht
+// cap_net_raw), mit Broadcast. Mehrere Schnittstellen teilen sich Port 67 schon durch die Bindung ans Geraet; ohne
+// SO_REUSEADDR scheitert das Binden, wenn auf dem Host schon ein anderer DHCP-Server lauscht (Fehler "Port belegt").
 func listen(ctx context.Context, iface string, port int) (*net.UDPConn, error) {
 	lc := net.ListenConfig{Control: func(_, _ string, rc syscall.RawConn) error {
 		var serr error
 		if err := rc.Control(func(fd uintptr) {
-			for _, o := range []int{unix.SO_REUSEADDR, unix.SO_BROADCAST} {
-				if serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, o, 1); serr != nil {
-					return
-				}
+			if serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_BROADCAST, 1); serr != nil {
+				return
 			}
 			serr = unix.BindToDevice(int(fd), iface)
 		}); err != nil {

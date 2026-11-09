@@ -1,6 +1,6 @@
 # Plan: DHCP-Server in DNS64
 
-Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
+Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0, Review-Fixes 1.37.1.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
 (Pi-hole und AdGuard Home haben ihn). Ziel: ein leichter DHCP-Server für Homelab und kleine bis mittlere Firmen, der
 Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md),
 [PLAN-NODE64-DNS64-GRUPPEN.md](PLAN-NODE64-DNS64-GRUPPEN.md), [CLUSTER.md](CLUSTER.md).
@@ -150,8 +150,13 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
 - D5: Bereiche `dhcp_scopes` (s:<Netz>), `dhcp_reservations` (r:<Netz>|<MAC>), `dhcp_leases` (l:<Netz>|<MAC>) in
   `dhcp_cluster.go`; neue Netze aus dem Cluster kommen aus und mit erratener Schnittstelle an. Netz je Node nur einmal.
   DNS leer: nach dieser Node die anderen Nodes mit dem Bereich „DHCP-Netze“ in diesem Netz (Adresse aus der URL).
-- D6: Rolle `dns64.dhcp_role` (primary/reserve) je Node; `Server.Standby` (10 s zwischengespeichert), Suche nach
-  fremden Servern jede Minute, Vergaben aus dem Cluster per `Server.Import`.
+- D6: Rolle `dns64.dhcp_role` (primary/reserve) je Node. Jede Node meldet ihren DHCP-Zustand als `n:<Node-ID>` im
+  Bereich „DHCP-Vergaben“ (Rolle, Schalter, Server-ID je eingeschaltetem Netz, IPv4-Adressen mit DNS64 auf Port 53;
+  Tabelle `dns64_dhcp_nodes`, Migration 0018). `Server.Standby(Netz)`: still, solange eine Haupt-Node für genau
+  dieses Netz lebt (im Cluster erreichbar oder ihre Server-ID antwortete in den letzten 3 Minuten); ohne Haupt-Node
+  für das Netz ebenfalls still; 10 s zwischengespeichert. Zwei Haupt-Nodes im selben Netz: Hinweis und
+  Benachrichtigung. Vergaben aus dem Cluster mit Altersvergleich (`clApplyLease`), Löschungen per `Server.Forget`.
+  Prüf-DISCOVER tragen Option 60 `node64-probe`: andere Nodes antworten, merken sich aber nichts.
 
 ## Bewusst nicht dabei (vorerst)
 

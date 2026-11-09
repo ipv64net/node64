@@ -921,6 +921,9 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 	if IsDNS64(a.Kind) {
 		m.URL = d.baseURL(uid, "/dns64")
 	}
+	if a.Kind == KindDNS64DHCP {
+		m.URL = d.baseURL(uid, "/dns64/dhcp")
+	}
 	if IsCert(a.Kind) {
 		m.URL = d.baseURL(uid, "/certificates")
 	}

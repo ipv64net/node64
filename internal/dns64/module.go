@@ -52,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.37.0"
+	version   = "1.37.1"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -119,8 +119,9 @@ type Module struct {
 	dh        dhcpState                     // DHCP-Server (dhcp.go), opt-in
 	dhcpSrv   atomic.Pointer[dhcp.Server]   // laufender DHCP-Server, nil = aus
 	dhcpNames atomic.Pointer[dhcpNameTable] // Namen aus Vergaben und festen Adressen (dhcp_names.go)
-	// dhcpPeersFn: andere Nodes, mit denen ein DHCP-Bereich abgeglichen wird (dns64cluster), nil = kein Cluster
-	dhcpPeersFn func(ctx context.Context, item string) []DHCPPeer
+	// dhcpPeersFn: andere Nodes, mit denen ein DHCP-Bereich abgeglichen wird (dns64cluster), nil = kein Cluster;
+	// atomar: dns64cluster setzt sie erst nach dem Start des Moduls
+	dhcpPeersFn atomic.Pointer[func(ctx context.Context, item string) []DHCPPeer]
 }
 
 const retryEvery = time.Minute
@@ -221,7 +222,7 @@ func (m *Module) Start(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
 	err := m.startLocked()
-	m.dhcpApply(ctx) // DHCP nur, wenn eingeschaltet (dns64.dhcp)
+	m.dhcpApplyLocked(ctx) // DHCP nur, wenn eingeschaltet (dns64.dhcp)
 	return err
 }
 
@@ -378,6 +379,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
 	m.dhcpHalt()
+	defer m.dhcpLeasesSoon() // eigener DHCP-Zustand (DNS aus) fuer den Cluster
 	return m.stopLocked(ctx)
 }
 

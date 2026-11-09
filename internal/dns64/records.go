@@ -176,6 +176,7 @@ func (m *Module) buildRecords(ctx context.Context) error {
 		}
 	}
 	m.recs.Store(t)
+	m.dhcpNamesSoon() // DHCP-Namen weichen eigenen Eintraegen
 	return nil
 }
 

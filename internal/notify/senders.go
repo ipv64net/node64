@@ -124,7 +124,7 @@ func IsDynDNS(k Kind) bool {
 
 // IsDNS64: Meldung des DNS64-Moduls.
 func IsDNS64(k Kind) bool {
-	return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists || k == KindDNS64Cert
+	return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists || k == KindDNS64Cert || k == KindDNS64DHCP
 }
 
 // IsCert: Meldung der Zertifikatsverwaltung.

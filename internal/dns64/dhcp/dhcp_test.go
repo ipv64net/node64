@@ -62,7 +62,7 @@ func newTest(t *testing.T, cfg Config) (*Server, *memStore, *time.Time) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	s.Now = func() time.Time { return now }
 	s.Addrs = func(string) []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")} }
-	s.bind()
+	s.bind(false)
 	return s, st, &now
 }
 
@@ -271,7 +271,7 @@ func TestSnapshotCounts(t *testing.T) {
 	s, _, _ := newTest(t, Config{Reservations: []Reservation{{Scope: 1, MAC: macB.String(), IP: netip.MustParseAddr("192.168.1.5")}}})
 	offerAndAck(t, s, macA)
 	v := s.Snapshot().Scopes[0]
-	if v.Size != 5 || v.Used != 1 || v.Reserved != 1 || len(v.Leases) != 1 {
+	if v.Size != 3 || v.Used != 1 || v.Reserved != 1 || len(v.Leases) != 1 {
 		t.Fatalf("view %+v", v)
 	}
 }
@@ -286,7 +286,7 @@ func TestBroadcast(t *testing.T) {
 func TestStandby(t *testing.T) {
 	s, st, _ := newTest(t, Config{})
 	alive := true
-	s.Standby = func() bool { return alive }
+	s.Standby = func(p netip.Prefix) bool { return alive && p == testScope().Subnet }
 	if r := s.Handle("eth0", discover(t, macA)); r != nil {
 		t.Fatal("standby answered")
 	}
@@ -309,9 +309,104 @@ func TestImport(t *testing.T) {
 	if got := ip4(s.Handle("eth0", discover(t, macB)).msg.YourIPAddr); got == netip.MustParseAddr("192.168.1.5") {
 		t.Fatal("imported address offered to other client")
 	}
-	s.Import(Lease{Scope: 1, MAC: macA.String()}) // geloescht
-	if len(s.Snapshot().Scopes[0].Leases) != 2 {  // macA hat noch sein Angebot, macB seins
-		t.Fatalf("leases %+v", s.Snapshot().Scopes[0].Leases)
+	s.Forget(1, macA.String()) // im Cluster geloescht: aus dem Speicher, die Adresse ist wieder frei
+	for _, l := range s.Snapshot().Scopes[0].Leases {
+		if l.MAC == macA.String() {
+			t.Fatalf("forgotten lease still there: %+v", l)
+		}
+	}
+	if got := ip4(s.Handle("eth0", discover(t, net.HardwareAddr{0x02, 0, 0, 0, 0, 0x0c}, dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("192.168.1.5"))))).msg.YourIPAddr); got != netip.MustParseAddr("192.168.1.5") {
+		t.Fatalf("address not free after forget: %v", got)
+	}
+}
+
+// Bereich verkleinert bzw. Router auf eine vergebene Adresse gelegt: Verlaengerung bekommt NAK, der Client holt eine
+// neue Adresse; feste Adressen auf Router oder Node werden nie angeboten.
+func TestRenewOutsidePool(t *testing.T) {
+	s, _, now := newTest(t, Config{Reservations: []Reservation{{Scope: 1, MAC: macB.String(), IP: netip.MustParseAddr("192.168.1.1")}}})
+	s.Import(Lease{Scope: 1, MAC: macA.String(), IP: netip.MustParseAddr("192.168.1.9"), Expires: now.Add(time.Hour), State: StateBound}) // ausserhalb .1-.5
+	renew, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest), dhcpv4.WithClientIP(net.ParseIP("192.168.1.9")))
+	if r := s.Handle("eth0", renew); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak {
+		t.Fatalf("renew outside pool: %v", r)
+	}
+	if got := ip4(s.Handle("eth0", discover(t, macB)).msg.YourIPAddr); got == netip.MustParseAddr("192.168.1.1") {
+		t.Fatal("reservation on the router address offered")
+	}
+}
+
+// Relay-Client verlaengert per Unicast (giaddr 0, ciaddr im Relay-Netz): ACK aus dem Relay-Netz, nicht NAK aus dem LAN.
+func TestRelayUnicastRenew(t *testing.T) {
+	lan, far := testScope(), testScope()
+	far.ID, far.Relay, far.Subnet = 2, true, netip.MustParsePrefix("10.20.0.0/24")
+	far.Start, far.End, far.Router = netip.MustParseAddr("10.20.0.100"), netip.MustParseAddr("10.20.0.110"), netip.MustParseAddr("10.20.0.1")
+	s, _, now := newTest(t, Config{Scopes: []Scope{lan, far}})
+	s.Import(Lease{Scope: 2, MAC: macA.String(), IP: netip.MustParseAddr("10.20.0.100"), Expires: now.Add(time.Hour), State: StateBound})
+	renew, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest), dhcpv4.WithClientIP(net.ParseIP("10.20.0.100")))
+	r := s.Handle("eth0", renew)
+	if r == nil || r.msg.MessageType() != dhcpv4.MessageTypeAck || r.to != netip.MustParseAddrPort("10.20.0.100:68") {
+		t.Fatalf("relay renew %v", r)
+	}
+	// NAK ueber das Relay mit Broadcast-Bit
+	reboot, _ := dhcpv4.New(dhcpv4.WithHwAddr(macB), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest), dhcpv4.WithGatewayIP(net.ParseIP("10.20.0.1")),
+		dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("10.20.0.200"))))
+	if r := s.Handle("eth0", reboot); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak || !r.msg.IsBroadcast() {
+		t.Fatalf("relay nak %v", r)
+	}
+}
+
+// Pruef-DISCOVER einer anderen Node: Antwort ja, aber kein Angebot und kein Ereignis.
+func TestProbeDiscover(t *testing.T) {
+	s, _, _ := newTest(t, Config{})
+	r := s.Handle("eth0", discover(t, macA, dhcpv4.WithOption(dhcpv4.OptClassIdentifier(ProbeClass))))
+	if r == nil || r.msg.MessageType() != dhcpv4.MessageTypeOffer {
+		t.Fatalf("probe not answered: %v", r)
+	}
+	if v := s.Snapshot(); len(v.Events) != 0 || len(v.Scopes[0].Leases) != 0 {
+		t.Fatalf("probe left state: %+v", v)
+	}
+}
+
+// DNS-Option: Bind-Adresse statt Adresse im Netz; DNS64 nicht auf Port 53 und keine andere Node: der Router.
+func TestDNSOption(t *testing.T) {
+	sc := testScope()
+	sc.DNSBind = netip.MustParseAddr("192.168.1.250")
+	s, _, _ := newTest(t, Config{Scopes: []Scope{sc}})
+	if d := s.Handle("eth0", discover(t, macA)).msg.DNS(); len(d) != 1 || !d[0].Equal(net.ParseIP("192.168.1.250")) {
+		t.Fatalf("bind dns %v", d)
+	}
+	sc.DNSBind, sc.NoSelfDNS = netip.Addr{}, true
+	s, _, _ = newTest(t, Config{Scopes: []Scope{sc}})
+	if d := s.Handle("eth0", discover(t, macA)).msg.DNS(); len(d) != 1 || !d[0].Equal(net.ParseIP("192.168.1.1")) {
+		t.Fatalf("router fallback %v", d)
+	}
+	sc.ExtraDNS = []netip.Addr{netip.MustParseAddr("192.168.1.3")}
+	s, _, _ = newTest(t, Config{Scopes: []Scope{sc}})
+	if d := s.Handle("eth0", discover(t, macA)).msg.DNS(); len(d) != 1 || !d[0].Equal(net.ParseIP("192.168.1.3")) {
+		t.Fatalf("peer dns %v", d)
+	}
+}
+
+// Neustart: laufende Angebote gehen ueber (REQUEST nach dem Neustart bekommt ACK), fremde Server verfallen.
+func TestCarryOffersAndForeignExpiry(t *testing.T) {
+	sc := testScope()
+	sc.Authoritative = false
+	old, _, now := newTest(t, Config{Scopes: []Scope{sc}})
+	off := old.Handle("eth0", discover(t, macA))
+	old.sawForeign(1, netip.MustParseAddr("192.168.1.1"))
+	s, _, _ := newTest(t, Config{Scopes: []Scope{sc}})
+	s.Now = func() time.Time { return *now }
+	s.Carry(old)
+	req, _ := dhcpv4.NewRequestFromOffer(off.msg)
+	if r := s.Handle("eth0", req); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeAck {
+		t.Fatalf("request after restart: %v", r)
+	}
+	*now = now.Add(foreignKeep + time.Minute)
+	if len(s.Snapshot().Foreign) != 0 {
+		t.Fatal("foreign server did not expire in view")
+	}
+	s.cleanup()
+	if s.SawServer(netip.MustParseAddr("192.168.1.1"), time.Hour*24) {
+		t.Fatal("foreign server not forgotten")
 	}
 }
 

@@ -1,5 +1,22 @@
 # Änderungen – DNS64
 
+## 1.37.1 – 2026-11-09
+
+### Behoben (Review des DHCP-Servers)
+- Reserve-Node: springt je Netz ein, sobald die Haupt-Node für dieses Netz weg ist – unabhängig von anderen Nodes im Cluster (bisher hielt jede erreichbare Node sie still). Jede Node meldet dafür ihren DHCP-Zustand im Bereich „DHCP-Vergaben“ (Rolle, Schalter, Server-ID je Netz).
+- Zwei Haupt-Nodes im selben Netz werden erkannt und gemeldet; Haupt- und Reserve-Node verschweigen sich gegenseitig nicht mehr als fremde DHCP-Server.
+- DHCP blieb bei einem gleichzeitigen Neustart von DNS64 still aus bzw. lief nach dem Abschalten weiter; „Aus“ und das Ausschalten des letzten Netzes zeigten den Server weiter als aktiv.
+- Benachrichtigungen kommen als DNS64-Meldung mit eigenem, übersetztem Text und Link auf die DHCP-Seite.
+- Gelöschte Vergaben aus dem Cluster verschwinden auch im laufenden Server; ältere Vergaben einer anderen Node verdrängen keine laufende mehr.
+- Verlängerungen außerhalb des (verkleinerten) Bereichs oder auf der Router-Adresse bekommen NAK; feste Adressen auf Router- oder Node-Adresse werden abgelehnt.
+- Geräte hinter einem DHCP-Relay verlängern per Unicast im richtigen Netz; NAK über ein Relay mit Broadcast-Bit.
+- DHCP-Namen: wer einen Namen hat, behält ihn; eigene Einträge und Umschreibungen gehen vor; wpad, isatap und localhost werden nie vergeben.
+- DNS-Server der Geräte: die Bind-Adresse von DNS64 statt der Adresse im Netz; antwortet DNS64 hier nicht auf Port 53, die anderen Nodes bzw. der Router. Die anderen Nodes stehen auch nach einem Neustart in Option 6.
+- Das Netz eines vorhandenen Netzes lässt sich nicht mehr ändern (Kennung im Cluster); Netze dürfen sich nicht überschneiden.
+- Ein lokal laufender DHCP-Server (z. B. dnsmasq) blockiert Port 67 jetzt sichtbar statt unbemerkt mitzulaufen.
+- Fremde DHCP-Server verschwinden 30 Minuten nach der letzten Antwort aus dem Hinweis und werden später wieder gemeldet.
+- Robuster: Speichern außerhalb der Server-Sperre (ein Backup hält DHCP nicht mehr auf), ARP-Prüfung neuer Adressen nebenläufig, laufende Angebote überstehen einen Neustart, fehlende Schnittstellen und VLANs werden jede Minute neu gesucht, Übernahmen aus dem Cluster starten den Server gebündelt neu.
+
 ## 1.37.0 – 2026-11-09
 
 ### Neu

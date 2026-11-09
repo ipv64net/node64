@@ -16,38 +16,55 @@ const (
 	checkEvery   = 10 * time.Minute // fremde DHCP-Server suchen, alte Leases vergessen
 	foreignWait  = 6 * time.Second  // so lange auf Angebote fremder Server warten (dnsmasq/ISC pingen vorher bis 3 s)
 	firstCheckIn = 2 * time.Second
+	rebindEvery  = time.Minute // fehlende Schnittstellen und Adressen erneut suchen
+	maxDiscover  = 16          // DISCOVER je Schnittstelle gleichzeitig (die ARP-Pruefung wartet bis 300 ms)
 )
 
 var bcast67 = netip.AddrPortFrom(netip.AddrFrom4([4]byte{255, 255, 255, 255}), 67)
 
 // Run oeffnet je Schnittstelle Port 67, sucht regelmaessig fremde DHCP-Server und raeumt auf. Blockiert, bis ctx
 // endet; danach sind alle Sockets zu. Fehler einer Schnittstelle (Port belegt, keine Adresse im Netz) stehen am
-// Netz (Snapshot), die anderen laufen weiter.
+// Netz (Snapshot), die anderen laufen weiter; fehlende Schnittstellen und Adressen sucht Run jede Minute erneut.
 func (s *Server) Run(ctx context.Context) {
-	s.bind()
+	s.bind(false)
 	var wg sync.WaitGroup
-	var conns []*net.UDPConn
-	for _, iface := range s.ifaces() {
-		c, err := listen(ctx, iface, 67)
-		if err != nil {
-			s.ifaceErr(iface, err)
-			s.logger().Warn("dhcp listen", "iface", iface, "err", err)
-			continue
+	var cmu sync.Mutex
+	conns := map[string]*net.UDPConn{}
+	open := func() int {
+		cmu.Lock()
+		defer cmu.Unlock()
+		for _, iface := range s.ifaces() {
+			if conns[iface] != nil || ctx.Err() != nil {
+				continue
+			}
+			c, err := listen(ctx, iface, 67)
+			if err != nil {
+				s.ifaceErr(iface, err)
+				s.logger().Warn("dhcp listen", "iface", iface, "err", err)
+				continue
+			}
+			conns[iface] = c
+			wg.Add(1)
+			go func() { defer wg.Done(); s.serve(ctx, iface, c) }()
 		}
-		conns = append(conns, c)
-		wg.Add(1)
-		go func() { defer wg.Done(); s.serve(ctx, iface, c) }()
+		return len(conns)
 	}
-	s.logger().Info("dhcp started", "interfaces", len(conns), "observe", s.observe)
+	s.logger().Info("dhcp started", "interfaces", open(), "observe", s.observe)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		t := time.NewTimer(firstCheckIn)
 		defer t.Stop()
+		rb := time.NewTicker(rebindEvery)
+		defer rb.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-rb.C:
+				s.bind(true)
+				open()
+				continue
 			case <-t.C:
 			}
 			s.cleanup()
@@ -60,9 +77,11 @@ func (s *Server) Run(ctx context.Context) {
 		}
 	}()
 	<-ctx.Done()
+	cmu.Lock()
 	for _, c := range conns {
 		_ = c.Close()
 	}
+	cmu.Unlock()
 	wg.Wait()
 	s.logger().Info("dhcp stopped")
 }
@@ -92,7 +111,19 @@ func (s *Server) ifaceErr(iface string, err error) {
 	}
 }
 
+// serve liest die Anfragen einer Schnittstelle. DISCOVER laufen nebenlaeufig (die ARP-Pruefung einer neuen Adresse
+// haelt so keine anderen Anfragen auf), alle anderen der Reihe nach.
 func (s *Server) serve(ctx context.Context, iface string, c *net.UDPConn) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	sem := make(chan struct{}, maxDiscover)
+	answer := func(req *dhcpv4.DHCPv4) {
+		if r := s.Handle(iface, req); r != nil {
+			if _, err := c.WriteToUDPAddrPort(r.msg.ToBytes(), r.to); err != nil && ctx.Err() == nil {
+				s.logger().Warn("dhcp send", "iface", iface, "to", r.to, "err", err)
+			}
+		}
+	}
 	buf := make([]byte, 1500)
 	for {
 		n, _, err := c.ReadFromUDPAddrPort(buf)
@@ -107,11 +138,20 @@ func (s *Server) serve(ctx context.Context, iface string, c *net.UDPConn) {
 		if err != nil {
 			continue
 		}
-		if r := s.Handle(iface, req); r != nil {
-			if _, err := c.WriteToUDPAddrPort(r.msg.ToBytes(), r.to); err != nil {
-				s.logger().Warn("dhcp send", "iface", iface, "to", r.to, "err", err)
-			}
+		if req.MessageType() != dhcpv4.MessageTypeDiscover {
+			answer(req)
+			continue
 		}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		wg.Add(1)
+		go func() {
+			defer func() { <-sem; wg.Done() }()
+			answer(req)
+		}()
 	}
 }
 
@@ -161,7 +201,7 @@ func (s *Server) probeForeign(ctx context.Context, iface string, mac net.Hardwar
 	defer c.Close()
 	stop := context.AfterFunc(ctx, func() { _ = c.Close() }) // Stopp wartet nicht auf die Frist
 	defer stop()
-	disc, err := dhcpv4.NewDiscovery(mac, dhcpv4.WithBroadcast(true))
+	disc, err := dhcpv4.NewDiscovery(mac, dhcpv4.WithBroadcast(true), dhcpv4.WithOption(dhcpv4.OptClassIdentifier(ProbeClass)))
 	if err != nil {
 		return nil, err
 	}

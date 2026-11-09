@@ -4,8 +4,6 @@ package dns64cluster
 
 import (
 	"context"
-	"net/netip"
-	"net/url"
 
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/peer"
@@ -34,14 +32,8 @@ func Register(pm *peer.Manager, m *dns64.Module) {
 		if item == "" { // alle Mitglieder (gibt es ueberhaupt einen Cluster?)
 			list, _ = pm.Members(ctx)
 		}
-		for _, x := range list {
-			p := dns64.DHCPPeer{Name: x.Name, Online: x.Online()}
-			if u, err := url.Parse(x.URL); err == nil {
-				if a, err := netip.ParseAddr(u.Hostname()); err == nil {
-					p.Addr = a.Unmap()
-				}
-			}
-			out = append(out, p)
+		for _, x := range list { // Adressen kommen aus dem DHCP-Zustand der Nodes, nicht aus der Cluster-URL
+			out = append(out, dns64.DHCPPeer{NodeID: x.NodeID, Name: x.Name, Online: x.Online()})
 		}
 		return out
 	})

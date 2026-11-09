@@ -3207,6 +3207,9 @@
       "dyndns_addr_failed": "Öffentliche {family}-Adresse {count}-mal hintereinander nicht ermittelt.",
       "dyndns_limit_reached": "ipv64: Tageslimit für Updates erreicht.",
       "cluster_suspended": "Ausgesetzt: {reason}",
+      "dns64_dhcp_foreign": "Weiterer DHCP-Server im Netz gefunden: {server}. Schalte ihn ab, sonst bekommen Geräte widersprüchliche Adressen.",
+      "dns64_dhcp_pool": "Der Adressbereich ist zu {pct} % belegt.",
+      "dns64_dhcp_primary": "Auch {node} vergibt in diesem Netz als Haupt-Node – zwei DHCP-Server. Stelle eine der Nodes auf „Reserve-Node“.",
       "update_ok": "Node64 läuft stabil mit Version {version} (vorher {from}).",
       "update_failed": "Die neue Version {version} ist nicht stabil gelaufen. Node64 läuft wieder mit {back}, die Datenbank von vor dem Update ist zurückgespielt."
     },
@@ -3746,7 +3749,7 @@
       "role_primary": "Haupt-Node",
       "role_reserve": "Reserve-Node",
       "role_hint": "Die Reserve-Node vergibt nur Adressen, wenn die Haupt-Node wirklich weg ist. Dafür auf beiden Nodes im Cluster die Bereiche „DHCP-Netze“ und „DHCP-Vergaben“ einschalten.",
-      "reserve_alone": "Reserve-Node ohne Partner: Sie bleibt still, bis im Cluster der Bereich „DHCP-Vergaben“ auf beiden Nodes eingeschaltet ist.",
+      "reserve_alone": "Reserve-Node ohne Haupt-Node für ihre Netze: Sie bleibt still, bis eine Haupt-Node mit diesem Netz bekannt ist (im Cluster den Bereich „DHCP-Vergaben“ auf beiden Nodes einschalten).",
       "reserve_standby": "Reserve-Node: {nodes} ist erreichbar – diese Node antwortet nicht.",
       "reserve_active": "Reserve-Node: {nodes} ist nicht erreichbar – diese Node vergibt jetzt die Adressen.",
       "relay": "Netz hinter einem DHCP-Relay",
@@ -3756,7 +3759,8 @@
       "group_none": "keine",
       "group_hint": "Nimmt die MAC in die Gruppe auf – ihre Regeln gelten dann auch, wenn sich die IP ändert.",
       "no_iface": "Aus dem Cluster übernommen: Schnittstelle wählen und Netz einschalten.",
-      "result_standby": "Reserve, Haupt-Node aktiv"
+      "result_standby": "Reserve, Haupt-Node aktiv",
+      "two_primary": "Zwei DHCP-Server: Im Netz {net} vergibt auch {nodes} als Haupt-Node. Stelle eine der Nodes auf „Reserve-Node“."
     },
     "pub": {
       "refused": "{n} Anfragen aus nicht erlaubten Netzen abgewiesen (zuletzt {ip}, {time}). Gehört das Netz zu dir, unter „Weitere erlaubte Client-Netze“ eintragen.",
@@ -4304,7 +4308,8 @@
       "dhcp_iface": "Ungültige Schnittstelle (z. B. eth0 oder eth0.20).",
       "dhcp_iface_dup": "Für diese Schnittstelle gibt es schon ein Netz.",
       "dhcp_role": "Unbekannte Rolle (Haupt- oder Reserve-Node).",
-      "dhcp_subnet_dup": "Dieses Netz gibt es schon.",
+      "dhcp_subnet_dup": "Das Netz überschneidet sich mit dem vorhandenen Netz {net}.",
+      "dhcp_subnet_fixed": "Das Netz eines vorhandenen Netzes lässt sich nicht ändern (es kennzeichnet feste Adressen, Vergaben und den Abgleich im Cluster). Lege ein neues Netz an.",
       "dhcp_subnet": "Ungültiges Netz: IPv4 mit Präfix, z. B. 192.168.1.0/24 (/8 bis /30).",
       "dhcp_range": "Ungültiger Adressbereich: Beide Adressen müssen im Netz liegen (von ≤ bis, ohne Netz- und Broadcast-Adresse).",
       "dhcp_router": "Der Router muss eine IPv4-Adresse im Netz sein.",
@@ -4315,7 +4320,7 @@
       "dhcp_boot": "PXE-Angaben ohne Leerzeichen; Boot-Server höchstens 63, Dateien höchstens 127 Zeichen.",
       "dhcp_mac": "Ungültige MAC-Adresse (z. B. aa:bb:cc:dd:ee:ff).",
       "dhcp_scope": "Unbekanntes Netz.",
-      "dhcp_res_ip": "Die feste Adresse muss im Netz liegen (nicht Netz- oder Broadcast-Adresse).",
+      "dhcp_res_ip": "Die feste Adresse muss im Netz liegen und darf nicht Netz-, Broadcast-, Router- oder Node-Adresse sein.",
       "dhcp_res_dup": "MAC oder IP hat in diesem Netz schon eine feste Adresse.",
       "docker_ip": "Adressen für Docker-Einträge: IPv4- bzw. IPv6-Adressen, mit Komma getrennt.",
       "zone_soa": "TTL- und SOA-Werte sind außerhalb des erlaubten Bereichs.",

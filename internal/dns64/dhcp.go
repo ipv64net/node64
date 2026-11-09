@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"maps"
 	"net"
 	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
 	"github.com/ipv64net/node64/internal/dns64/groups"
@@ -20,7 +22,8 @@ import (
 // DHCP-Server (Paket dhcp, Plan docs/PLAN-NODE64-DNS64-DHCP.md): Teil von DNS64, aber opt-in. Schalter dns64.dhcp je
 // Node (nie im Cluster): aus = kein Socket, Probelauf = nur zuhoeren, an = Adressen vergeben. Netze, feste Adressen
 // und Leases in node64.db. Laeuft neben dem DNS-Dienst (ein Neustart von DNS64 nach Einstellungen beruehrt ihn nicht),
-// endet aber mit dem Modul. Nach jeder Aenderung an Netzen oder festen Adressen startet nur der DHCP-Server neu.
+// endet aber mit dem Modul. Nach jeder Aenderung an Netzen oder festen Adressen startet nur der DHCP-Server neu;
+// das ist mit Start, Stopp und Neustart des Moduls ueber m.ctl abgestimmt.
 
 const (
 	setDHCP     = "dns64.dhcp"      // off | observe | on
@@ -80,11 +83,12 @@ type dhcpState struct {
 	poolMu   sync.Mutex
 	poolSent map[int64]bool // Netz fast voll: gemeldet
 
-	soonMu    sync.Mutex
-	namesT    *time.Timer // Namen neu bauen (gebuendelt)
-	leasesT   *time.Timer // Vergaben an den Cluster melden (gebuendelt)
-	standbyAt time.Time   // Reserve: zuletzt geprueft
-	standby   bool
+	soonMu       sync.Mutex
+	namesT       *time.Timer             // Namen neu bauen (gebuendelt)
+	leasesT      *time.Timer             // Vergaben an den Cluster melden (gebuendelt)
+	applyT       *time.Timer             // DHCP-Server nach Uebernahmen neu starten (gebuendelt)
+	standby      map[string]standbyState // Reserve: Zustand je Netz (kurz zwischengespeichert)
+	conflictSent map[string]bool         // zwei Haupt-Nodes: gemeldet (Netz|Node)
 }
 
 func (m *Module) dhcpMode(ctx context.Context) string {
@@ -106,44 +110,56 @@ func (m *Module) SetDHCPMode(ctx context.Context, mode string) error {
 	return nil
 }
 
-// dhcpApply stoppt den DHCP-Server und startet ihn mit dem aktuellen Stand neu, wenn das Modul laeuft, der Schalter
-// nicht aus ist und es ein eingeschaltetes Netz gibt.
+// dhcpApply startet den DHCP-Server mit dem aktuellen Stand neu, wenn das Modul laeuft, der Schalter nicht aus ist
+// und es ein eingeschaltetes Netz gibt; sonst stoppt es ihn. Unter m.ctl: waehrend eines Neustarts von DNS64 wartet
+// es, statt den Server wegen des kurz fehlenden m.life abzuschalten, und nach dem Stopp des Moduls startet es nichts.
 func (m *Module) dhcpApply(ctx context.Context) {
-	m.dh.mu.Lock()
-	defer m.dh.mu.Unlock()
-	old := m.dhcpSrv.Load()
-	m.dhcpHaltLocked()
+	m.ctl.Lock()
+	defer m.ctl.Unlock()
+	m.dhcpApplyLocked(ctx)
+}
+
+// dhcpApplyLocked: dhcpApply mit gehaltenem m.ctl (Start).
+func (m *Module) dhcpApplyLocked(ctx context.Context) {
+	ctx = context.WithoutCancel(ctx) // eine abgebrochene Anfrage darf den DHCP-Server nicht aus (oder ohne Rolle) lassen
 	m.mu.Lock()
 	on := m.life != nil
 	m.mu.Unlock()
-	mode := m.dhcpMode(ctx)
-	if !on || mode == dhcpOff || dhcpBridge() {
-		return
-	}
-	cfg, err := m.dhcpConfig(ctx)
-	if err != nil {
-		if !m.noTable(err) {
-			m.log.Warn("dhcp config", "err", err)
+	mode, role := m.dhcpMode(ctx), m.dhcpRole(ctx)
+	var cfg dhcp.Config
+	start := on && mode != dhcpOff && !dhcpBridge()
+	if start {
+		var err error
+		if cfg, err = m.dhcpConfig(ctx); err != nil { // vor dem Stopp lesen: bei Fehlern laeuft der alte Stand weiter
+			if !m.noTable(err) {
+				m.log.Warn("dhcp config", "err", err)
+			}
+			return
 		}
-		return
+		start = len(cfg.Scopes) > 0
 	}
-	if len(cfg.Scopes) == 0 {
-		return
+	m.dh.mu.Lock()
+	old := m.dhcpSrv.Load()
+	m.dhcpHaltLocked()
+	if start {
+		cfg.Observe = mode == dhcpObserve
+		s := dhcp.New(cfg, dhcpStore{m}, m.log.With("part", "dhcp"))
+		s.Probe = dhcp.ARPProbe
+		s.OnForeign = m.dhcpForeign
+		s.OnChange = m.dhcpChanged
+		if role == dhcpReserve { // Reserve: still, solange eine Haupt-Node fuer das Netz lebt; oefter nach ihr sehen
+			s.Standby, s.CheckEvery = m.dhcpStandby, time.Minute
+		}
+		s.Carry(old)
+		rctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() { defer close(done); s.Run(rctx) }()
+		m.dh.cancel, m.dh.done = cancel, done
+		m.dhcpSrv.Store(s)
 	}
-	cfg.Observe = mode == dhcpObserve
-	s := dhcp.New(cfg, dhcpStore{m}, m.log.With("part", "dhcp"))
-	s.Probe = dhcp.ARPProbe
-	s.OnForeign = m.dhcpForeign
-	s.OnChange = m.dhcpChanged
-	if m.dhcpRole(ctx) == dhcpReserve { // Reserve: still, solange die Haupt-Node lebt; oefter nach ihr sehen
-		s.Standby, s.CheckEvery = m.dhcpStandby, time.Minute
-	}
-	s.Carry(old)
-	rctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { defer close(done); s.Run(rctx) }()
-	m.dh.cancel, m.dh.done = cancel, done
-	m.dhcpSrv.Store(s)
+	m.dh.mu.Unlock()
+	m.dhcpLeasesSoon() // eigener Zustand fuer den Cluster (Rolle, Schalter, Netze)
+	go m.dhcpCheckConflicts(ctx)
 }
 
 // dhcpHalt stoppt den DHCP-Server (Modul aus).
@@ -151,15 +167,16 @@ func (m *Module) dhcpHalt() {
 	m.dh.mu.Lock()
 	defer m.dh.mu.Unlock()
 	m.dhcpHaltLocked()
-	m.dhcpSrv.Store(nil)
 }
 
+// dhcpHaltLocked stoppt den laufenden Server (m.dh.mu gehalten); danach gilt DHCP als aus.
 func (m *Module) dhcpHaltLocked() {
 	if m.dh.cancel != nil {
 		m.dh.cancel()
 		<-m.dh.done
 		m.dh.cancel, m.dh.done = nil, nil
 	}
+	m.dhcpSrv.Store(nil)
 }
 
 // dhcpConfig liest eingeschaltete Netze, feste Adressen und Leases.
@@ -169,10 +186,21 @@ func (m *Module) dhcpConfig(ctx context.Context) (dhcp.Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+	// DNS-Server der Geraete (DNS leer): DNS64 muss dort auf Port 53 antworten (Bind-Adresse, Port)
+	var dnsBind netip.Addr
+	noSelf := m.port(ctx) != 53
+	if b, err := netip.ParseAddr(strings.TrimSpace(m.core.SettingOr(ctx, setBind, ""))); err == nil && !b.IsUnspecified() {
+		if b.Is4() {
+			dnsBind = b
+		} else {
+			noSelf = true
+		}
+	}
 	for _, s := range scopes {
 		if s.Enabled && s.Iface != "" { // aus dem Cluster ohne passende Schnittstelle: aus
 			sc := s.toDHCP()
 			sc.ExtraDNS = m.dhcpPeerDNS(ctx, sc.Subnet)
+			sc.DNSBind, sc.NoSelfDNS = dnsBind, noSelf
 			cfg.Scopes = append(cfg.Scopes, sc)
 		}
 	}
@@ -211,16 +239,24 @@ func dhcpAddrs(list []string) []netip.Addr {
 // dhcpStore speichert Leases in node64.db.
 type dhcpStore struct{ m *Module }
 
+// SaveLease schreibt eine Vergabe (eine Transaktion: die Adresse gehoert danach nur noch dieser MAC).
 func (d dhcpStore) SaveLease(l dhcp.Lease) error {
-	ctx := context.Background()
-	w := d.m.core.Writer()
-	if _, err := w.ExecContext(ctx, `DELETE FROM dns64_dhcp_leases WHERE scope_id = ? AND ip = ? AND mac <> ?`, l.Scope, l.IP.String(), l.MAC); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tx, err := d.m.core.Writer().BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	_, err := w.ExecContext(ctx, `INSERT INTO dns64_dhcp_leases (scope_id, mac, ip, hostname, expires, state) VALUES (?,?,?,?,?,?)
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM dns64_dhcp_leases WHERE scope_id = ? AND ip = ? AND mac <> ?`, l.Scope, l.IP.String(), l.MAC); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO dns64_dhcp_leases (scope_id, mac, ip, hostname, expires, state) VALUES (?,?,?,?,?,?)
 		ON CONFLICT(scope_id, mac) DO UPDATE SET ip = excluded.ip, hostname = excluded.hostname, expires = excluded.expires, state = excluded.state`,
-		l.Scope, l.MAC, l.IP.String(), l.Hostname, l.Expires.UTC().Format(time.RFC3339), l.State)
-	return err
+		l.Scope, l.MAC, l.IP.String(), l.Hostname, l.Expires.UTC().Format(time.RFC3339), l.State); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (d dhcpStore) DeleteLease(scope int64, mac string) error {
@@ -230,7 +266,9 @@ func (d dhcpStore) DeleteLease(scope int64, mac string) error {
 
 // ---- Benachrichtigungen: fremder DHCP-Server, Netz fast voll ----
 
-func (m *Module) dhcpNotify(scope int64, reason string) {
+// dhcpNotify verschickt eine DHCP-Meldung; text ist der Schluessel notify.text.<text> (Sprache des Kanals), data
+// seine Werte.
+func (m *Module) dhcpNotify(scope int64, text string, data map[string]string) {
 	if m.notifier == nil {
 		return
 	}
@@ -238,17 +276,19 @@ func (m *Module) dhcpNotify(scope int64, reason string) {
 	if sc, err := m.dhcpScope(context.Background(), scope); err == nil {
 		name = sc.label()
 	}
+	d := map[string]string{"text": "notify.text." + text}
+	maps.Copy(d, data)
 	now := time.Now().UTC()
-	m.log.Info("notification", "kind", notify.KindDNS64DHCP, "name", name, "reason", reason)
+	m.log.Info("notification", "kind", notify.KindDNS64DHCP, "name", name, "text", text)
 	m.notifier(notify.Alert{EventID: "dns64-dhcp-" + strconv.FormatInt(now.UnixNano(), 36), Kind: notify.KindDNS64DHCP, Time: now,
-		Check: notify.CheckInfo{Name: name, NotifyDown: true, NotifyUp: true, Local: true}, Reason: reason})
+		Check: notify.CheckInfo{Name: name, NotifyDown: true, NotifyUp: true, Local: true}, Data: d})
 }
 
 func (m *Module) dhcpForeign(scope int64, server netip.Addr) {
-	if m.dhcpIsPeer(server) { // Node des Clusters (Haupt-/Reserve-Node), kein fremder Server
+	if m.dhcpExpected(server) { // Haupt-Node des Clusters, waehrend diese Node Reserve ist
 		return
 	}
-	m.dhcpNotify(scope, "other DHCP server "+server.String())
+	m.dhcpNotify(scope, "dns64_dhcp_foreign", map[string]string{"server": server.String()})
 }
 
 // dhcpChanged: Vergaben geaendert (vom Server, ohne gehaltene Sperre) - Belegung pruefen, Namen und Cluster nachziehen.
@@ -269,7 +309,7 @@ func (m *Module) dhcpPoolCheck() {
 	if m.dh.poolSent == nil {
 		m.dh.poolSent = map[int64]bool{}
 	}
-	for _, v := range s.Snapshot().Scopes {
+	for _, v := range s.Usage() {
 		if v.Size == 0 {
 			continue
 		}
@@ -277,7 +317,7 @@ func (m *Module) dhcpPoolCheck() {
 		switch {
 		case pct >= dhcpPoolWarn && !m.dh.poolSent[v.ID]:
 			m.dh.poolSent[v.ID] = true
-			go m.dhcpNotify(v.ID, "address pool "+strconv.Itoa(pct)+"% used")
+			go m.dhcpNotify(v.ID, "dns64_dhcp_pool", map[string]string{"pct": strconv.Itoa(pct)})
 		case pct < dhcpPoolOK:
 			delete(m.dh.poolSent, v.ID)
 		}
@@ -357,7 +397,7 @@ func addr4List(list []string, max int, key string) ([]string, error) {
 	out := []string{}
 	for _, v := range list {
 		a, err := netip.ParseAddr(strings.TrimSpace(v))
-		if err != nil || !a.Is4() {
+		if err != nil || !a.Is4() || a.IsUnspecified() || a.IsLoopback() || a.IsMulticast() || a == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 			return nil, errCfg(key)
 		}
 		out = append(out, a.String())
@@ -440,7 +480,7 @@ func normalizeDHCPScope(s *DHCPScope) error {
 
 // dhcpIfaceTaken: je Schnittstelle ein Netz (Relay-Netze teilen sich die Schnittstelle mit anderen).
 func (m *Module) dhcpIfaceTaken(ctx context.Context, s DHCPScope, id int64) bool {
-	if s.Relay {
+	if s.Relay || s.Iface == "" {
 		return false
 	}
 	var n int
@@ -448,11 +488,20 @@ func (m *Module) dhcpIfaceTaken(ctx context.Context, s DHCPScope, id int64) bool
 	return n > 0
 }
 
-// dhcpSubnetTaken: jedes Netz nur einmal (Kennung im Cluster).
-func (m *Module) dhcpSubnetTaken(ctx context.Context, subnet string, id int64) bool {
-	var n int
-	_ = m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_dhcp_scopes WHERE subnet = ? AND id <> ?`, subnet, id).Scan(&n)
-	return n > 0
+// dhcpOverlap: anderes Netz, das sich mit subnet ueberschneidet (auch gleich) - jedes Netz nur einmal, sonst waere
+// die Zuordnung einer Anfrage nicht eindeutig (und das Netz ist die Kennung im Cluster).
+func (m *Module) dhcpOverlap(ctx context.Context, subnet string, id int64) (string, bool) {
+	p, err := netip.ParsePrefix(subnet)
+	if err != nil {
+		return "", false
+	}
+	scopes, _ := m.DHCPScopes(ctx)
+	for _, s := range scopes {
+		if q, err := netip.ParsePrefix(s.Subnet); err == nil && s.ID != id && q.Overlaps(p) {
+			return s.Subnet, true
+		}
+	}
+	return "", false
 }
 
 // AddDHCPScope legt ein Netz an (je Schnittstelle eins).
@@ -463,8 +512,8 @@ func (m *Module) AddDHCPScope(ctx context.Context, s DHCPScope) (DHCPScope, erro
 	if m.dhcpIfaceTaken(ctx, s, 0) {
 		return s, errCfg("err_dhcp_iface_dup")
 	}
-	if m.dhcpSubnetTaken(ctx, s.Subnet, 0) {
-		return s, errCfg("err_dhcp_subnet_dup")
+	if other, taken := m.dhcpOverlap(ctx, s.Subnet, 0); taken {
+		return s, errCfg("err_dhcp_subnet_dup", "net", other)
 	}
 	s.Enabled, s.CreatedAt = true, time.Now().UTC()
 	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_dhcp_scopes (name, iface, subnet, range_start, range_end, router, dns, domain, lease_hours, ntp, authoritative, boot_server, boot_bios, boot_uefi, boot_ipxe, relay, enabled, created_at)
@@ -487,10 +536,14 @@ func (m *Module) UpdateDHCPScope(ctx context.Context, id int64, s DHCPScope) (DH
 	if m.dhcpIfaceTaken(ctx, s, id) {
 		return s, errCfg("err_dhcp_iface_dup")
 	}
-	if m.dhcpSubnetTaken(ctx, s.Subnet, id) {
-		return s, errCfg("err_dhcp_subnet_dup")
+	cur, err := m.dhcpScope(ctx, id)
+	if err != nil {
+		return s, err
 	}
-	err := m.dhcpExec(ctx, `UPDATE dns64_dhcp_scopes SET name = ?, iface = ?, subnet = ?, range_start = ?, range_end = ?, router = ?, dns = ?, domain = ?, lease_hours = ?, ntp = ?, authoritative = ?,
+	if cur.Subnet != s.Subnet { // das Netz ist die Kennung (Cluster, feste Adressen, Vergaben): neu anlegen statt aendern
+		return s, errCfg("err_dhcp_subnet_fixed")
+	}
+	err = m.dhcpExec(ctx, `UPDATE dns64_dhcp_scopes SET name = ?, iface = ?, subnet = ?, range_start = ?, range_end = ?, router = ?, dns = ?, domain = ?, lease_hours = ?, ntp = ?, authoritative = ?,
 		boot_server = ?, boot_bios = ?, boot_uefi = ?, boot_ipxe = ?, relay = ? WHERE id = ?`, s.Name, s.Iface, s.Subnet, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain,
 		s.LeaseHours, strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.Relay, id)
 	s.ID = id
@@ -555,7 +608,7 @@ func (m *Module) normalizeDHCPReservation(ctx context.Context, r *DHCPReservatio
 	}
 	p, _ := netip.ParsePrefix(sc.Subnet)
 	ip, err := netip.ParseAddr(strings.TrimSpace(r.IP))
-	if err != nil || !p.Contains(ip) || ip == p.Addr() || ip == dhcp.Broadcast(p) {
+	if err != nil || !p.Contains(ip) || ip == p.Addr() || ip == dhcp.Broadcast(p) || ip.String() == sc.Router || dhcpLocalAddr(ip) {
 		return errCfg("err_dhcp_res_ip")
 	}
 	r.IP = ip.String()
@@ -566,10 +619,40 @@ func (m *Module) normalizeDHCPReservation(ctx context.Context, r *DHCPReservatio
 	return nil
 }
 
-// AddDHCPReservation legt eine feste Adresse an (MAC und IP je Netz eindeutig).
+// dhcpLocalAddr: Adresse dieser Node (darf keine feste Adresse fuer ein Geraet sein).
+func dhcpLocalAddr(ip netip.Addr) bool {
+	for _, i := range dhcpInterfaces() {
+		for _, a := range i.Addrs {
+			if a.Addr() == ip {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// AddDHCPReservation legt eine feste Adresse an (MAC und IP je Netz eindeutig); mit GroupID kommt die MAC ausserdem
+// in diese Geraetegruppe (vorher geprueft, Tags bleiben).
 func (m *Module) AddDHCPReservation(ctx context.Context, r DHCPReservation) (DHCPReservation, error) {
 	if err := m.normalizeDHCPReservation(ctx, &r); err != nil {
 		return r, err
+	}
+	var member groups.Member
+	if r.GroupID > 0 {
+		var n int
+		if err := m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_groups WHERE id = ?`, r.GroupID).Scan(&n); err != nil {
+			return r, err
+		}
+		if n == 0 {
+			return r, errNotFound
+		}
+		label := r.Name
+		for utf8.RuneCountInString(label) > 60 { // Grenze der Gruppen-Mitglieder
+			_, size := utf8.DecodeLastRuneInString(label)
+			label = label[:len(label)-size]
+		}
+		member = groups.Member{GroupID: r.GroupID, Kind: groups.KindMAC, Value: r.MAC, Label: label}
+		member.Tags = m.memberTags(ctx, member)
 	}
 	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_dhcp_reservations (scope_id, mac, ip, name, comment) VALUES (?,?,?,?,?)`, r.ScopeID, r.MAC, r.IP, r.Name, r.Comment)
 	if isUnique(err) {
@@ -582,7 +665,7 @@ func (m *Module) AddDHCPReservation(ctx context.Context, r DHCPReservation) (DHC
 	m.dhcpApply(ctx)
 	m.dhcpSynced(ctx)
 	if r.GroupID > 0 { // MAC in die Geraetegruppe aufnehmen (Regeln gelten auch bei neuer IP)
-		if _, err := m.AddMember(ctx, groups.Member{GroupID: r.GroupID, Kind: groups.KindMAC, Value: r.MAC, Label: r.Name}); err != nil {
+		if _, err := m.AddMember(ctx, member); err != nil {
 			return r, err
 		}
 	}

@@ -24723,7 +24723,7 @@
           "DNS64"
         ],
         "summary": "DHCP-Server: Schalter und Zustand",
-        "description": "mode (off, observe = Probelauf, on), role (primary, reserve), standby (Reserve bleibt still, weil die Haupt-Node lebt), running, docker_bridge und state mit Netzen (Belegung, Fehler, Leases), letzten Anfragen, fremden DHCP-Servern und Zählern.",
+        "description": "mode (off, observe = Probelauf, on), role (primary, reserve), standby (Reserve: Netze, in denen sie still bleibt, weil eine Haupt-Node lebt oder keine bekannt ist), conflicts (Netz -> andere Haupt-Nodes, die dort auch vergeben), running, docker_bridge und state mit Netzen (Belegung, Fehler, Leases), letzten Anfragen, fremden DHCP-Servern und Zählern.",
         "responses": {
           "200": {
             "description": "Zustand"
@@ -24862,7 +24862,7 @@
         "tags": [
           "DNS64"
         ],
-        "summary": "DHCP-Netz ändern (an/aus bleibt)",
+        "summary": "DHCP-Netz ändern (an/aus bleibt, das Netz selbst lässt sich nicht ändern)",
         "parameters": [
           {
             "name": "id",

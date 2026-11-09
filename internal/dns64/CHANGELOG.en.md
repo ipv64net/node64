@@ -1,5 +1,22 @@
 # Changes – DNS64
 
+## 1.37.1 – 2026-11-09
+
+### Fixed (review of the DHCP server)
+- Standby node: steps in per network as soon as the primary node for that network is gone – regardless of other nodes in the cluster (so far any reachable node kept it silent). Every node publishes its DHCP state in the area “DHCP leases” (role, switch, server ID per network).
+- Two primary nodes in the same network are detected and reported; primary and standby node no longer hide each other as other DHCP servers.
+- DHCP stayed off after a simultaneous DNS64 restart or kept running after DNS64 was turned off; “Off” and disabling the last network still showed the server as active.
+- Notifications arrive as DNS64 messages with their own translated text and a link to the DHCP page.
+- Leases deleted in the cluster also disappear from the running server; older leases of another node no longer push out a running one.
+- Renewals outside the (reduced) range or on the router address get a NAK; fixed addresses on the router or node address are rejected.
+- Devices behind a DHCP relay renew by unicast in the right network; NAK via a relay with the broadcast bit.
+- DHCP names: whoever has a name keeps it; own records and rewrites take precedence; wpad, isatap and localhost are never handed out.
+- DNS servers of the devices: the bind address of DNS64 instead of the address in the network; if DNS64 does not answer on port 53 here, the other nodes or the router. The other nodes are in option 6 after a restart too.
+- The network of an existing network can no longer be changed (cluster identifier); networks must not overlap.
+- A DHCP server running locally (e.g. dnsmasq) now visibly blocks port 67 instead of running alongside unnoticed.
+- Other DHCP servers disappear from the notice 30 minutes after their last answer and are reported again later.
+- More robust: saving outside the server lock (a backup no longer holds up DHCP), ARP check of new addresses concurrently, pending offers survive a restart, missing interfaces and VLANs are searched for every minute, cluster takeovers restart the server in a batch.
+
 ## 1.37.0 – 2026-11-09
 
 ### New

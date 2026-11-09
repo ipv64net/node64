@@ -8,13 +8,14 @@
 </div>
 <script type="application/json" id="dns64-data">{{$d.JS}}</script>
 {{if $h.Bridge}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.dhcp.bridge"}}<div class="small mt-1 font-monospace">network_mode: host</div></div>{{end}}
+{{range $net, $nodes := $h.Conflicts}}<div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i> {{$.T "dns64.dhcp.two_primary" "net" $net "nodes" (join $nodes ", ")}}</div>{{end}}
 {{range $h.Foreign}}<div class="alert alert-danger"><i class="bi bi-exclamation-octagon"></i> {{$.T "dns64.dhcp.foreign" "server" .Server.String "net" (index $h.ResScope .Scope) "time" ($.Time .LastSeen)}}</div>{{end}}
 <div class="card mb-3">
 	<div class="card-body d-flex flex-wrap align-items-center gap-3">
 		<div class="me-auto" style="max-width: 48rem">
 			{{if eq $h.Mode "on"}}{{.T "dns64.dhcp.hint_on"}}{{else if eq $h.Mode "observe"}}{{.T "dns64.dhcp.hint_observe"}}{{else}}{{.T "dns64.dhcp.hint_off"}}{{end}}
 			{{if and (ne $h.Mode "off") (not $h.Running) (not $h.Bridge)}}<div class="small text-warning-emphasis mt-1"><i class="bi bi-info-circle"></i> {{.T "dns64.dhcp.no_scope"}}</div>{{end}}
-			{{if eq $h.Reserve.Role "reserve"}}<div class="small mt-1">{{if not $h.Reserve.Peers}}<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.dhcp.reserve_alone"}}</span>
+			{{if eq $h.Reserve.Role "reserve"}}<div class="small mt-1">{{if not $h.Reserve.HasPrimary}}<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.dhcp.reserve_alone"}}</span>
 				{{else if $h.Reserve.Standby}}<span class="text-info-emphasis"><i class="bi bi-pause-circle"></i> {{.T "dns64.dhcp.reserve_standby" "nodes" $h.Reserve.Names}}</span>
 				{{else}}<span class="text-warning-emphasis"><i class="bi bi-lightning"></i> {{.T "dns64.dhcp.reserve_active" "nodes" $h.Reserve.Names}}</span>{{end}}</div>{{end}}
 		</div>

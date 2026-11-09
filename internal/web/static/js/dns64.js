@@ -798,6 +798,11 @@
 				if (!o || form.action.indexOf("/edit") >= 0) { return; }
 				["subnet", "start", "end", "router"].forEach(function (k) { form.elements[k].value = o.getAttribute("data-" + k) || ""; });
 			});
+			// das Netz eines vorhandenen Netzes ist fest (Kennung): beim Bearbeiten nur anzeigen
+			document.querySelectorAll('[data-edit-form="dhcp-scope-form"]').forEach(function (b) {
+				b.addEventListener("click", function () { iface.form.elements.subnet.readOnly = true; });
+			});
+			iface.form.querySelector("[data-cancel]").addEventListener("click", function () { iface.form.elements.subnet.readOnly = false; });
 		}
 		document.querySelectorAll("[data-fwd-test]").forEach(function (b) {
 			b.addEventListener("click", function () {

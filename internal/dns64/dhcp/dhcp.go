@@ -39,6 +39,8 @@ type Scope struct {
 	BootIPXE      string        // PXE: Boot-Datei, wenn der Client schon iPXE ist (Option 77 "iPXE")
 	Relay         bool          // Netz hinter einem DHCP-Relay: Anfragen nur mit giaddr, Server-ID = Adresse auf Iface
 	ExtraDNS      []netip.Addr  // DNS leer: nach der Node diese weiteren DNS64-Nodes des Clusters im Netz
+	DNSBind       netip.Addr    // DNS leer: DNS64 lauscht nur auf dieser Adresse (statt der Adresse im Netz)
+	NoSelfDNS     bool          // DNS leer: DNS64 antwortet hier nicht auf Port 53 (nur ExtraDNS, sonst der Router)
 }
 
 // Reservation ist eine feste Adresse fuer eine MAC.
@@ -58,12 +60,12 @@ const (
 
 // Lease ist die Vergabe einer Adresse an eine MAC (je Netz und MAC ein Eintrag).
 type Lease struct {
-	Scope    int64
-	MAC      string
-	IP       netip.Addr
-	Hostname string // vom Client (Option 12)
-	Expires  time.Time
-	State    string
+	Scope    int64      `json:"scope"`
+	MAC      string     `json:"mac"`
+	IP       netip.Addr `json:"ip"`
+	Hostname string     `json:"hostname,omitempty"` // vom Client (Option 12)
+	Expires  time.Time  `json:"expires"`
+	State    string     `json:"state"`
 }
 
 // Active meldet, ob die Adresse zum Zeitpunkt now belegt ist.
@@ -88,6 +90,10 @@ type Event struct {
 	Result   string     `json:"result"` // offer, ack, nak, ignored, observe, standby, full, conflict, decline, release
 }
 
+// ProbeClass kennzeichnet das DISCOVER der Suche nach fremden Servern (Option 60): Andere Nodes beantworten es,
+// merken sich dafuer aber kein Angebot und kein Ereignis (die Reserve-Node sucht jede Minute).
+const ProbeClass = "node64-probe"
+
 // Foreign ist ein fremder DHCP-Server im Netz eines Scopes.
 type Foreign struct {
 	Scope    int64      `json:"scope"`
@@ -109,6 +115,7 @@ const (
 	keepFree     = 30 * 24 * time.Hour // zurueckgegebene/abgelaufene Leases merken (gleiche IP fuer denselben Client)
 	maxEvents    = 100
 	probeWait    = 300 * time.Millisecond
+	foreignKeep  = 30 * time.Minute // fremder Server nicht mehr gesehen: Hinweis verschwindet, spaeter neu gemeldet
 )
 
 // Server vergibt Adressen. Die Felder vor mu werden vor Run gesetzt.
@@ -120,8 +127,8 @@ type Server struct {
 	Now       func() time.Time
 	Addrs     func(iface string) []netip.Prefix    // IPv4-Adressen einer Schnittstelle (Tests), nil = vom System
 	OnForeign func(scope int64, server netip.Addr) // neuer fremder DHCP-Server im Netz (Benachrichtigung)
-	// Standby: Reserve-Node, deren Haupt-Node lebt – dann nur zuhoeren wie im Probelauf (nil = nie)
-	Standby    func() bool
+	// Standby: Reserve-Node, deren Haupt-Node fuer dieses Netz lebt - dann nur zuhoeren wie im Probelauf (nil = nie)
+	Standby    func(subnet netip.Prefix) bool
 	CheckEvery time.Duration // Abstand der Suche nach fremden Servern (0 = 10 min)
 
 	mu        sync.Mutex
@@ -136,6 +143,8 @@ type Server struct {
 
 type scope struct {
 	Scope
+	net   netip.Addr // Netzadresse
+	bcast netip.Addr // Broadcast-Adresse
 	self  netip.Addr // Adresse der Node im Netz (Server-ID), ungueltig = Fehler
 	mac   net.HardwareAddr
 	err   string
@@ -151,7 +160,8 @@ func New(cfg Config, st Store, log *slog.Logger) *Server {
 	s := &Server{Store: st, Log: log, observe: cfg.Observe, conflicts: map[netip.Addr]time.Time{}, foreign: map[int64]map[netip.Addr]time.Time{},
 		probes: map[dhcpv4.TransactionID]bool{}, stats: map[string]uint64{}}
 	for _, c := range cfg.Scopes {
-		sc := &scope{Scope: c, res: map[string]Reservation{}, resIP: map[netip.Addr]string{}, byMAC: map[string]*Lease{}, byIP: map[netip.Addr]*Lease{}}
+		sc := &scope{Scope: c, net: c.Subnet.Masked().Addr(), bcast: Broadcast(c.Subnet), res: map[string]Reservation{}, resIP: map[netip.Addr]string{},
+			byMAC: map[string]*Lease{}, byIP: map[netip.Addr]*Lease{}}
 		for _, r := range cfg.Reservations {
 			if r.Scope == c.ID && c.Subnet.Contains(r.IP) {
 				sc.res[r.MAC], sc.resIP[r.IP] = r, r.MAC
@@ -181,11 +191,15 @@ func (s *Server) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// bind ermittelt je Scope die eigene Adresse und MAC (beim Start).
-func (s *Server) bind() {
+// bind ermittelt je Scope die eigene Adresse und MAC (beim Start; danach jede Minute fuer Netze, deren
+// Schnittstelle oder Adresse fehlte, z. B. ein VLAN, das erst nach dem Start angelegt wurde).
+func (s *Server) bind(onlyMissing bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, sc := range s.scopes {
+		if onlyMissing && sc.kind != "iface" && sc.kind != "addr" {
+			continue
+		}
 		sc.self, sc.err, sc.kind = netip.Addr{}, "", ""
 		addrs := s.ifaceAddrs(sc.Iface)
 		if addrs == nil {
@@ -261,7 +275,7 @@ func (sc *scope) inPool(ip netip.Addr) bool {
 
 // free: Adresse fuer mac vergebbar (s.mu gehalten).
 func (s *Server) free(sc *scope, ip netip.Addr, mac string, now time.Time) bool {
-	if !sc.inPool(ip) || ip == sc.self || ip == sc.Router || ip == sc.Subnet.Masked().Addr() || ip == Broadcast(sc.Subnet) {
+	if !sc.inPool(ip) || !sc.assignable(ip) {
 		return false
 	}
 	if m, ok := sc.resIP[ip]; ok && m != mac {
@@ -273,10 +287,15 @@ func (s *Server) free(sc *scope, ip netip.Addr, mac string, now time.Time) bool 
 	return !s.conflict(ip, now)
 }
 
+// assignable: Adresse darf ueberhaupt an ein Geraet (nicht Netz, Broadcast, Router oder die Node selbst).
+func (sc *scope) assignable(ip netip.Addr) bool {
+	return ip != sc.net && ip != sc.bcast && ip != sc.self && ip != sc.Router
+}
+
 // reserved: feste Adresse von mac, wenn sie gerade nutzbar ist (kein anderer Client haelt sie noch, keine Sperre).
 func (s *Server) reserved(sc *scope, mac string, now time.Time) (netip.Addr, bool) {
 	r, ok := sc.res[mac]
-	if !ok || s.conflict(r.IP, now) {
+	if !ok || s.conflict(r.IP, now) || !sc.assignable(r.IP) {
 		return netip.Addr{}, false
 	}
 	if l := sc.byIP[r.IP]; l != nil && l.MAC != mac && l.Active(now) {
@@ -320,15 +339,16 @@ func (s *Server) conflict(ip netip.Addr, now time.Time) bool {
 	return ok && now.Before(u)
 }
 
-// scopeFor waehlt das Netz einer Anfrage: ueber ein Relay das Netz des giaddr, sonst das der Schnittstelle.
+// scopeFor waehlt das Netz einer Anfrage: ueber ein Relay das Netz des giaddr, sonst das Netz der Client-Adresse
+// (Unicast-Verlaengerung, RELEASE, INFORM - auch hinter einem Relay, RFC 2131 4.3.2), sonst das der Schnittstelle.
 func (s *Server) scopeFor(iface string, req *dhcpv4.DHCPv4) *scope {
-	if gi, ok := netip.AddrFromSlice(req.GatewayIPAddr.To4()); ok && !gi.IsUnspecified() {
-		for _, sc := range s.scopes {
-			if sc.Subnet.Contains(gi) {
-				return sc
-			}
+	if gi := ip4(req.GatewayIPAddr); gi.IsValid() {
+		return s.scopeOf(gi)
+	}
+	if ci := ip4(req.ClientIPAddr); ci.IsValid() {
+		if sc := s.scopeOf(ci); sc != nil && (sc.Relay || sc.Iface == iface) {
+			return sc
 		}
-		return nil
 	}
 	for _, sc := range s.scopes {
 		if sc.Iface == iface && !sc.Relay { // Relay-Netze nur ueber giaddr
@@ -336,6 +356,17 @@ func (s *Server) scopeFor(iface string, req *dhcpv4.DHCPv4) *scope {
 		}
 	}
 	return nil
+}
+
+// scopeOf: das engste Netz, das ip enthaelt (nil = keins).
+func (s *Server) scopeOf(ip netip.Addr) *scope {
+	var best *scope
+	for _, sc := range s.scopes {
+		if sc.Subnet.Contains(ip) && (best == nil || sc.Subnet.Bits() > best.Subnet.Bits()) {
+			best = sc
+		}
+	}
+	return best
 }
 
 // reply ist eine Antwort mit Ziel.
@@ -360,17 +391,23 @@ func (s *Server) Handle(iface string, req *dhcpv4.DHCPv4) *reply {
 		s.mu.Unlock()
 		return nil
 	}
-	s.stats[strings.ToLower(req.MessageType().String())]++
+	probe := req.MessageType() == dhcpv4.MessageTypeDiscover && req.ClassIdentifier() == ProbeClass
+	if !probe {
+		s.stats[strings.ToLower(req.MessageType().String())]++
+	}
 	quiet := ""
 	if s.observe {
 		quiet = "observe"
 	}
 	s.mu.Unlock()
-	if quiet == "" && s.Standby != nil && s.Standby() {
+	if quiet == "" && s.Standby != nil && s.Standby(sc.Subnet) {
 		quiet = "standby"
 	}
 	switch req.MessageType() {
 	case dhcpv4.MessageTypeDiscover:
+		if probe { // Suche einer anderen Node nach DHCP-Servern: antworten, aber nichts merken
+			return s.probeOffer(sc, req, mac, quiet)
+		}
 		return s.discover(sc, req, mac, quiet)
 	case dhcpv4.MessageTypeRequest:
 		return s.request(sc, req, mac, quiet)
@@ -394,6 +431,20 @@ func ip4(ip net.IP) netip.Addr {
 		return netip.Addr{}
 	}
 	return a
+}
+
+// probeOffer beantwortet das Pruef-DISCOVER einer anderen Node (ohne Angebot, Ereignis oder ARP-Pruefung).
+func (s *Server) probeOffer(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *reply {
+	if quiet != "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ip, _ := s.pick(sc, mac, netip.Addr{}, s.now())
+	if !ip.IsValid() {
+		return nil
+	}
+	return s.build(sc, req, dhcpv4.MessageTypeOffer, ip, true)
 }
 
 func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *reply {
@@ -445,33 +496,42 @@ func (s *Server) request(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *repl
 	now := s.now()
 	sid, want, ci := ip4(req.ServerIdentifier()), ip4(req.RequestedIPAddress()), ip4(req.ClientIPAddr)
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	r, saved := s.requestLocked(sc, req, mac, quiet, host, now, sid, want, ci)
+	s.mu.Unlock()
+	if saved != nil {
+		s.save(*saved) // ausserhalb der Sperre: eine belegte Datenbank haelt die anderen Anfragen nicht auf
+	}
+	return r
+}
+
+// requestLocked entscheidet ueber ein REQUEST (s.mu gehalten); saved = zu speicherndes Lease.
+func (s *Server) requestLocked(sc *scope, req *dhcpv4.DHCPv4, mac, quiet, host string, now time.Time, sid, want, ci netip.Addr) (*reply, *Lease) {
 	if sid.IsValid() && sid != sc.self { // Client hat einen anderen Server gewaehlt
 		if l := sc.byMAC[mac]; l != nil && l.State == StateOffered {
 			sc.dropLease(mac)
 		}
 		s.event(sc, "request", mac, host, want, "ignored")
-		return nil
+		return nil, nil
 	}
 	ip := want
 	if !ip.IsValid() {
 		ip = ci
 	}
 	if !ip.IsValid() {
-		return nil
+		return nil, nil
 	}
 	if quiet != "" {
 		s.event(sc, "request", mac, host, ip, quiet)
-		return nil
+		return nil, nil
 	}
 	ok, known := s.mayAck(sc, mac, ip, now, sid.IsValid())
 	if !ok {
 		if !known && !sc.Authoritative {
 			s.event(sc, "request", mac, host, ip, "ignored")
-			return nil
+			return nil, nil
 		}
 		s.event(sc, "request", mac, host, ip, "nak")
-		return s.build(sc, req, dhcpv4.MessageTypeNak, netip.Addr{}, false)
+		return s.build(sc, req, dhcpv4.MessageTypeNak, netip.Addr{}, false), nil
 	}
 	l := Lease{Scope: sc.ID, MAC: mac, IP: ip, Hostname: host, Expires: now.Add(sc.Lease), State: StateBound}
 	if host == "" {
@@ -480,9 +540,8 @@ func (s *Server) request(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *repl
 		}
 	}
 	sc.setLease(l)
-	s.save(l)
 	s.event(sc, "request", mac, l.Hostname, ip, "ack")
-	return s.build(sc, req, dhcpv4.MessageTypeAck, ip, true)
+	return s.build(sc, req, dhcpv4.MessageTypeAck, ip, true), &l
 }
 
 // mayAck: darf mac die Adresse ip bekommen? known = Server hat eine Aussage (sonst schweigt ein nicht
@@ -497,8 +556,8 @@ func (s *Server) mayAck(sc *scope, mac string, ip netip.Addr, now time.Time, sel
 	if m, has := sc.resIP[ip]; has && m != mac {
 		return false, true
 	}
-	if l := sc.byMAC[mac]; l != nil && l.IP == ip && !s.conflict(ip, now) {
-		return true, true
+	if l := sc.byMAC[mac]; l != nil && l.IP == ip && s.free(sc, ip, mac, now) {
+		return true, true // bisherige Adresse, solange sie noch im Bereich liegt (sonst NAK: der Client holt eine neue)
 	}
 	if l := sc.byIP[ip]; l != nil && l.MAC != mac && l.Active(now) {
 		return false, true
@@ -513,32 +572,38 @@ func (s *Server) mayAck(sc *scope, mac string, ip netip.Addr, now time.Time, sel
 func (s *Server) decline(sc *scope, req *dhcpv4.DHCPv4, mac string) {
 	ip := ip4(req.RequestedIPAddress())
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if ip4(req.ServerIdentifier()) != sc.self || !ip.IsValid() {
+		s.mu.Unlock()
 		return
 	}
 	s.conflicts[ip] = s.now().Add(conflictHold)
+	drop := false
 	if l := sc.byMAC[mac]; l != nil && l.IP == ip {
 		sc.dropLease(mac)
-		s.deleteLease(sc.ID, mac)
+		drop = true
 	}
 	s.event(sc, "decline", mac, "", ip, "decline")
+	s.mu.Unlock()
+	if drop {
+		s.deleteLease(sc.ID, mac)
+	}
 	s.logger().Warn("dhcp address declined by client", "ip", ip, "mac", mac)
 }
 
 func (s *Server) release(sc *scope, req *dhcpv4.DHCPv4, mac string) {
 	ci := ip4(req.ClientIPAddr)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	l := sc.byMAC[mac]
 	if l == nil || l.IP != ci || ip4(req.ServerIdentifier()) != sc.self {
+		s.mu.Unlock()
 		return
 	}
 	nl := *l
 	nl.State, nl.Expires = StateFree, s.now()
 	sc.setLease(nl)
-	s.save(nl)
 	s.event(sc, "release", mac, nl.Hostname, ci, "release")
+	s.mu.Unlock()
+	s.save(nl)
 }
 
 func (s *Server) inform(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *reply {
@@ -561,6 +626,9 @@ func (s *Server) build(sc *scope, req *dhcpv4.DHCPv4, mt dhcpv4.MessageType, yi 
 	resp.UpdateOption(dhcpv4.OptServerIdentifier(sc.self.AsSlice()))
 	if mt == dhcpv4.MessageTypeNak {
 		resp.ClientIPAddr, resp.YourIPAddr = net.IPv4zero, net.IPv4zero
+		if ip4(req.GatewayIPAddr).IsValid() {
+			resp.SetBroadcast() // NAK ueber ein Relay: Broadcast-Bit, der Client hat keine gueltige Adresse (RFC 2131 4.1)
+		}
 		return &reply{msg: resp, to: dest(req, true)}
 	}
 	if yi.IsValid() {
@@ -571,11 +639,9 @@ func (s *Server) build(sc *scope, req *dhcpv4.DHCPv4, mt dhcpv4.MessageType, yi 
 	if sc.Router.IsValid() {
 		resp.UpdateOption(dhcpv4.OptRouter(sc.Router.AsSlice()))
 	}
-	dns := sc.DNS
-	if len(dns) == 0 {
-		dns = append([]netip.Addr{sc.self}, sc.ExtraDNS...)
+	if dns := sc.dnsServers(); len(dns) > 0 {
+		resp.UpdateOption(dhcpv4.OptDNS(ips(dns)...))
 	}
-	resp.UpdateOption(dhcpv4.OptDNS(ips(dns)...))
 	if sc.Domain != "" {
 		resp.UpdateOption(dhcpv4.OptDomainName(sc.Domain))
 		dhcpv4.WithDomainSearchList(sc.Domain)(resp)
@@ -601,6 +667,31 @@ func (s *Server) build(sc *scope, req *dhcpv4.DHCPv4, mt dhcpv4.MessageType, yi 
 		}
 	}
 	return &reply{msg: resp, to: dest(req, false)}
+}
+
+// dnsServers: Option 6. Leer eingestellt = DNS64 dieser Node (Adresse im Netz bzw. die feste Bind-Adresse), danach
+// die anderen DNS64-Nodes des Clusters; antwortet DNS64 hier nicht auf Port 53 und gibt es keine andere Node, der Router.
+func (sc *scope) dnsServers() []netip.Addr {
+	if len(sc.DNS) > 0 {
+		return sc.DNS
+	}
+	var out []netip.Addr
+	switch {
+	case sc.NoSelfDNS:
+	case sc.DNSBind.IsValid():
+		out = append(out, sc.DNSBind)
+	default:
+		out = append(out, sc.self)
+	}
+	for _, a := range sc.ExtraDNS {
+		if !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	if len(out) == 0 && sc.Router.IsValid() {
+		out = append(out, sc.Router)
+	}
+	return out
 }
 
 // bootFile waehlt die PXE-Datei: nur fuer PXE-Clients (Option 93 oder Kennung PXEClient), iPXE vor UEFI vor BIOS.
@@ -725,6 +816,16 @@ func (s *Server) cleanup() {
 			delete(s.conflicts, ip)
 		}
 	}
+	for id, f := range s.foreign { // fremde Server, die nicht mehr antworten, vergessen
+		for ip, t := range f {
+			if now.Sub(t) > foreignKeep {
+				delete(f, ip)
+			}
+		}
+		if len(f) == 0 {
+			delete(s.foreign, id)
+		}
+	}
 	s.mu.Unlock()
 	for _, l := range gone {
 		s.deleteLease(l.Scope, l.MAC)
@@ -739,7 +840,7 @@ type ScopeView struct {
 	Self     netip.Addr `json:"self"`
 	Error    string     `json:"error,omitempty"`
 	ErrKind  string     `json:"error_kind,omitempty"` // iface (Schnittstelle fehlt), addr (keine Adresse im Netz), listen (Port 67)
-	Size     int        `json:"size"`                 // Adressen im Bereich
+	Size     int        `json:"size"`                 // vergebbare Adressen im Bereich (ohne Router und die Node)
 	Used     int        `json:"used"`                 // davon vergeben oder angeboten
 	Reserved int        `json:"reserved"`             // feste Adressen im Bereich
 	Leases   []Lease    `json:"leases"`
@@ -758,13 +859,46 @@ type View struct {
 func (s *Server) Snapshot() View {
 	now := s.now()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	v := View{Observe: s.observe, Stats: map[string]uint64{}}
-	for k, n := range s.stats {
-		v.Stats[k] = n
-	}
+	v := View{Observe: s.observe, Stats: map[string]uint64{}, Scopes: s.views(now, true)}
+	maps.Copy(v.Stats, s.stats)
 	for _, sc := range s.scopes {
-		sv := ScopeView{ID: sc.ID, Self: sc.self, Error: sc.err, ErrKind: sc.kind, Size: poolSize(sc.Start, sc.End), Leases: []Lease{}}
+		for ip, t := range s.foreign[sc.ID] {
+			if now.Sub(t) <= foreignKeep {
+				v.Foreign = append(v.Foreign, Foreign{Scope: sc.ID, Server: ip, LastSeen: t})
+			}
+		}
+	}
+	for i := len(s.events) - 1; i >= 0; i-- {
+		v.Events = append(v.Events, s.events[i])
+	}
+	s.mu.Unlock()
+	for i := range v.Scopes { // ausserhalb der Sperre sortieren
+		slices.SortFunc(v.Scopes[i].Leases, func(a, b Lease) int { return a.IP.Compare(b.IP) })
+	}
+	return v
+}
+
+// Usage liefert je Netz Zustand und Belegung ohne die Leases (Belegungs-Warnung, Port-Uebersicht).
+func (s *Server) Usage() []ScopeView {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.views(now, false)
+}
+
+// views zaehlt je Netz (s.mu gehalten); leases = auch die Leases der letzten 24 Stunden kopieren.
+func (s *Server) views(now time.Time, leases bool) []ScopeView {
+	var out []ScopeView
+	for _, sc := range s.scopes {
+		sv := ScopeView{ID: sc.ID, Self: sc.self, Error: sc.err, ErrKind: sc.kind, Size: poolSize(sc.Start, sc.End)}
+		if leases {
+			sv.Leases = []Lease{}
+		}
+		for i, a := range []netip.Addr{sc.self, sc.Router} {
+			if a.IsValid() && sc.inPool(a) && sv.Size > 0 && (i == 0 || a != sc.self) {
+				sv.Size--
+			}
+		}
 		for ip := range sc.resIP {
 			if sc.inPool(ip) {
 				sv.Reserved++
@@ -779,20 +913,13 @@ func (s *Server) Snapshot() View {
 					sv.Used++
 				}
 			}
-			if l.Active(now) || now.Sub(l.Expires) < 24*time.Hour {
+			if leases && (l.Active(now) || now.Sub(l.Expires) < 24*time.Hour) {
 				sv.Leases = append(sv.Leases, *l)
 			}
 		}
-		slices.SortFunc(sv.Leases, func(a, b Lease) int { return a.IP.Compare(b.IP) })
-		v.Scopes = append(v.Scopes, sv)
-		for ip, t := range s.foreign[sc.ID] {
-			v.Foreign = append(v.Foreign, Foreign{Scope: sc.ID, Server: ip, LastSeen: t})
-		}
+		out = append(out, sv)
 	}
-	for i := len(s.events) - 1; i >= 0; i-- {
-		v.Events = append(v.Events, s.events[i])
-	}
-	return v
+	return out
 }
 
 func poolSize(a, b netip.Addr) int {
@@ -803,7 +930,8 @@ func poolSize(a, b netip.Addr) int {
 	return int(uint32(y[0])<<24|uint32(y[1])<<16|uint32(y[2])<<8|uint32(y[3])) - int(uint32(x[0])<<24|uint32(x[1])<<16|uint32(x[2])<<8|uint32(x[3])) + 1
 }
 
-// Carry uebernimmt Anfragen, fremde Server, Sperren und Zaehler des vorigen Servers (Neustart nach Aenderungen).
+// Carry uebernimmt Anfragen, fremde Server, Sperren, Zaehler und laufende Angebote des vorigen Servers (Neustart
+// nach Aenderungen: ein Client zwischen OFFER und REQUEST bekommt trotzdem sein ACK).
 func (s *Server) Carry(old *Server) {
 	if old == nil {
 		return
@@ -818,24 +946,51 @@ func (s *Server) Carry(old *Server) {
 	for id, f := range old.foreign {
 		s.foreign[id] = maps.Clone(f)
 	}
+	now := s.now()
+	for _, osc := range old.scopes {
+		for _, sc := range s.scopes {
+			if sc.ID != osc.ID {
+				continue
+			}
+			for mac, l := range osc.byMAC {
+				if l.State == StateOffered && l.Active(now) && sc.byMAC[mac] == nil && sc.byIP[l.IP] == nil && sc.inPool(l.IP) {
+					sc.setLease(*l)
+				}
+			}
+		}
+	}
 }
 
-// Import uebernimmt ein Lease aus dem Cluster (ohne Speichern: es steht schon in der Datenbank).
+// Import uebernimmt ein Lease aus dem Cluster (ohne Speichern: DNS64 hat es schon in die Datenbank geschrieben). Eine
+// freie Vergabe verdraengt eine laufende Vergabe einer anderen MAC auf derselben Adresse nicht.
 func (s *Server) Import(l Lease) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.now()
 	for _, sc := range s.scopes {
 		if sc.ID != l.Scope || !sc.Subnet.Contains(l.IP) {
 			continue
 		}
-		if l.State == "" { // geloescht
-			sc.dropLease(l.MAC)
-			return
-		}
-		if cur := sc.byMAC[l.MAC]; cur != nil && cur.State == StateOffered && cur.Active(s.now()) && cur.IP != l.IP {
-			return // eigenes laufendes Angebot nicht ueberschreiben
+		if other := sc.byIP[l.IP]; other != nil && other.MAC != l.MAC && other.Active(now) && l.State != StateBound {
+			if old := sc.byMAC[l.MAC]; old != nil && sc.byIP[old.IP] == old {
+				delete(sc.byIP, old.IP)
+			}
+			c := l
+			sc.byMAC[l.MAC] = &c
+			continue
 		}
 		sc.setLease(l)
+	}
+}
+
+// Forget vergisst ein Lease, das im Cluster geloescht wurde (ohne Speichern).
+func (s *Server) Forget(scope int64, mac string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sc := range s.scopes {
+		if sc.ID == scope {
+			sc.dropLease(mac)
+		}
 	}
 }
 

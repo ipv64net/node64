@@ -220,7 +220,7 @@ type Resolver struct {
 	log   *slog.Logger
 	cur   atomic.Pointer[compiled]
 	neigh atomic.Pointer[map[netip.Addr]string] // IP -> MAC aus der Nachbartabelle
-	lease atomic.Pointer[map[netip.Addr]string] // IP -> MAC aus dem DHCP-Server von DNS64 (nil = keiner)
+	lease atomic.Pointer[leases]                // MAC/IP aus dem DHCP-Server von DNS64 (nil = keiner)
 
 	mu        sync.Mutex
 	refreshed time.Time
@@ -308,13 +308,25 @@ func (r *Resolver) mac(ip netip.Addr) string {
 		return m
 	}
 	if l := r.lease.Load(); l != nil {
-		return (*l)[ip]
+		return l.mac[ip]
 	}
 	return ""
 }
 
+// leases: aktive DHCP-Vergaben in beide Richtungen.
+type leases struct {
+	mac map[netip.Addr]string
+	ips map[string][]netip.Addr
+}
+
 // SetLeases uebernimmt die aktiven DHCP-Vergaben (IP -> MAC); die Nachbartabelle geht vor.
-func (r *Resolver) SetLeases(m map[netip.Addr]string) { r.lease.Store(&m) }
+func (r *Resolver) SetLeases(m map[netip.Addr]string) {
+	l := &leases{mac: m, ips: map[string][]netip.Addr{}}
+	for ip, mac := range m {
+		l.ips[mac] = append(l.ips[mac], ip)
+	}
+	r.lease.Store(l)
+}
 
 // IPs liefert die Adressen einer MAC aus der Nachbartabelle (ohne Link-Local), sortiert.
 func (r *Resolver) IPs(mac string) []netip.Addr {
@@ -325,8 +337,8 @@ func (r *Resolver) IPs(mac string) []netip.Addr {
 		}
 	}
 	if l := r.lease.Load(); l != nil {
-		for ip, m := range *l {
-			if m == mac && !slices.Contains(out, ip) {
+		for _, ip := range l.ips[mac] {
+			if !slices.Contains(out, ip) {
 				out = append(out, ip)
 			}
 		}

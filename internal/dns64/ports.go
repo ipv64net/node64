@@ -64,7 +64,7 @@ func dhcpPortState(s *dhcp.Server) (on bool, err string) {
 	if s == nil {
 		return false, ""
 	}
-	for _, v := range s.Snapshot().Scopes {
+	for _, v := range s.Usage() {
 		if v.Error != "" && err == "" {
 			err = v.Error
 		}

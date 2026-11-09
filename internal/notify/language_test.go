@@ -22,6 +22,7 @@ func TestNotifyLanguages(t *testing.T) {
 		{Kind: KindDynFail, Reason: "x509: certificate signed by unknown authority", Data: map[string]string{"text": "notify.text.dyndns_addr_failed", "family": "IPv4", "count": "3"}},
 		{Kind: KindDynLimit, Data: map[string]string{"text": "notify.text.dyndns_limit_reached"}}, {Kind: KindDynOK},
 		{Kind: KindDNS64Down, Reason: "i/o timeout"}, {Kind: KindDNS64Up}, {Kind: KindDNS64Lists}, {Kind: KindDNS64Cert},
+		{Kind: KindDNS64DHCP, Data: map[string]string{"text": "notify.text.dns64_dhcp_foreign", "server": "192.168.1.1"}},
 		{Kind: KindCertFail}, {Kind: KindCertExpiry, Message: "2026-11-01 10:00 UTC"}, {Kind: KindCertOK},
 		{Kind: KindCDNOnlineDown}, {Kind: KindCDNOnlineUp}, {Kind: KindCDNOnlineBlocked, Reason: "traffic"},
 		{Kind: KindClusterDown, Data: map[string]string{"text": "notify.text.cluster_suspended", "reason": "maintenance"}}, {Kind: KindClusterUp},

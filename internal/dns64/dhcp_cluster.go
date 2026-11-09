@@ -17,58 +17,197 @@ import (
 // DHCP im Cluster (Plan D5/D6). Drei Bereiche, wie alle ohne Einstellung aus:
 //   - DHCP-Netze (s:<Netz>): Bereich, Optionen, PXE - nicht die Schnittstelle und nicht an/aus. Ein neues Netz aus dem
 //     Cluster kommt ausgeschaltet an (nie zwei DHCP-Server ungewollt), mit der Schnittstelle, die dort im Netz liegt.
+//     Das Netz eines vorhandenen Netzes laesst sich nicht aendern (es ist die Kennung).
 //   - Feste Adressen (r:<Netz>|<MAC>).
-//   - Vergaben (l:<Netz>|<MAC>): fuer die Reserve-Node und fuer DNS-Namen auf allen Nodes.
+//   - Vergaben (l:<Netz>|<MAC>) und der DHCP-Zustand jeder Node (n:<Node>: Rolle, Schalter, Server-ID je Netz, Adressen
+//     mit DNS64 auf Port 53) - fuer die Reserve-Node, die DNS-Server der Geraete und die DNS-Namen auf allen Nodes.
 //
-// Der Schalter an/aus/Probelauf und die Rolle (Haupt-/Reserve-Node) gelten je Node. Die Reserve antwortet nur, wenn
-// die Haupt-Node wirklich weg ist: kein Mitglied mit dem Bereich "Vergaben" erreichbar (Cluster, 2 Minuten) und
-// keines hat in den letzten 3 Minuten als DHCP-Server geantwortet (eigene Suche jede Minute). Ohne Mitglied mit
-// diesem Bereich bleibt sie still. Das secs-Feld der Clients zaehlt nicht mit: viele Geraete senden dort immer 0.
-// Im Cluster bekommen die Geraete (DNS leer) nach dieser Node auch die anderen Nodes im Netz als DNS-Server.
+// Schalter und Rolle (Haupt-/Reserve-Node) gelten je Node. Die Reserve antwortet in einem Netz nur, wenn es dort eine
+// Haupt-Node gibt (laut ihrem Zustand: Rolle Haupt-Node, Schalter an, Netz eingeschaltet) und keine davon lebt: im
+// Cluster nicht erreichbar (2 Minuten) und ihre Server-ID hat seit 3 Minuten nicht als DHCP-Server geantwortet (die
+// Reserve sucht jede Minute). Ohne Haupt-Node fuer das Netz bleibt sie still. Das secs-Feld der Clients zaehlt nicht
+// mit: viele Geraete senden dort immer 0. Zwei Haupt-Nodes im selben Netz meldet DNS64 als Fehler.
 
 const (
 	ItemDHCPScopes = "dhcp_scopes"       // Netze (s:<Netz>)
 	ItemDHCPRes    = "dhcp_reservations" // feste Adressen (r:<Netz>|<MAC>)
-	ItemDHCPLeases = "dhcp_leases"       // Vergaben (l:<Netz>|<MAC>)
+	ItemDHCPLeases = "dhcp_leases"       // Vergaben (l:<Netz>|<MAC>) und Zustand je Node (n:<Node>)
 
-	standbyCache = 10 * time.Second // Reserve: Zustand so lange merken (nicht je Paket in die Datenbank)
-	peerSeen     = 3 * time.Minute  // Haupt-Node hat zuletzt als DHCP-Server geantwortet
+	setNodeID    = "node.id"              // Kennung dieser Node (Kern)
+	standbyCache = 10 * time.Second       // Reserve: Zustand so lange merken (nicht je Paket in die Datenbank)
+	peerSeen     = 3 * time.Minute        // Haupt-Node hat zuletzt als DHCP-Server geantwortet
+	applySoon    = 500 * time.Millisecond // Neustart nach Uebernahmen aus dem Cluster (gebuendelt)
 )
 
 // DHCPPeer ist eine andere Node, mit der ein DHCP-Bereich abgeglichen wird.
 type DHCPPeer struct {
-	Name   string     `json:"name"`
-	Addr   netip.Addr `json:"addr"` // aus der Adresse der Node im Cluster (ungueltig = Name statt IP)
-	Online bool       `json:"online"`
+	NodeID string `json:"node_id"`
+	Name   string `json:"name"`
+	Online bool   `json:"online"`
 }
 
-// SetDHCPPeers verbindet DNS64 mit den Mitgliedern des Clusters (dns64cluster); item "" = alle Mitglieder.
-func (m *Module) SetDHCPPeers(f func(ctx context.Context, item string) []DHCPPeer) { m.dhcpPeersFn = f }
+// SetDHCPPeers verbindet DNS64 mit den Mitgliedern des Clusters (dns64cluster); item "" = alle Mitglieder. Der
+// DHCP-Server startet danach neu (er kann beim Programmstart vor dem Cluster angelaufen sein: DNS-Server der Nodes).
+func (m *Module) SetDHCPPeers(f func(ctx context.Context, item string) []DHCPPeer) {
+	m.dhcpPeersFn.Store(&f)
+	m.dhcpApplySoon()
+}
 
 func (m *Module) dhcpPeers(ctx context.Context, item string) []DHCPPeer {
-	if m.dhcpPeersFn == nil {
+	f := m.dhcpPeersFn.Load()
+	if f == nil {
 		return nil
 	}
-	return m.dhcpPeersFn(ctx, item)
+	return (*f)(ctx, item)
 }
 
-// dhcpPeerDNS: weitere DNS-Server fuer ein Netz - die anderen Nodes mit dem Bereich "DHCP-Netze" in diesem Netz.
-func (m *Module) dhcpPeerDNS(ctx context.Context, subnet netip.Prefix) []netip.Addr {
-	var out []netip.Addr
-	for _, p := range m.dhcpPeers(ctx, ItemDHCPScopes) {
-		if p.Addr.Is4() && subnet.Contains(p.Addr) && !slices.Contains(out, p.Addr) {
-			out = append(out, p.Addr)
+// dhcpPeerNames: Node-Kennung -> Name (alle Mitglieder).
+func (m *Module) dhcpPeerNames(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	for _, p := range m.dhcpPeers(ctx, "") {
+		out[p.NodeID] = p.Name
+	}
+	return out
+}
+
+// ---- Zustand je Node ----
+
+type clDHCPNode struct {
+	Role string          `json:"role"`
+	Mode string          `json:"mode"`
+	Nets []clDHCPNodeNet `json:"nets,omitempty"` // eingeschaltete Netze mit Server-ID
+	DNS  []string        `json:"dns,omitempty"`  // IPv4-Adressen, unter denen DNS64 dort auf Port 53 antwortet
+}
+
+type clDHCPNodeNet struct {
+	Subnet string `json:"subnet"`
+	Server string `json:"server"`
+}
+
+// primaryFor: Node vergibt als Haupt-Node in diesem Netz; Server-ID dort.
+func (n clDHCPNode) primaryFor(subnet string) (netip.Addr, bool) {
+	if n.Role != dhcpPrimary || n.Mode != dhcpOn {
+		return netip.Addr{}, false
+	}
+	for _, x := range n.Nets {
+		if x.Subnet == subnet {
+			a, _ := netip.ParseAddr(x.Server)
+			return a, true
+		}
+	}
+	return netip.Addr{}, false
+}
+
+// dhcpOwnNode: Zustand dieser Node fuer die anderen.
+func (m *Module) dhcpOwnNode(ctx context.Context) clDHCPNode {
+	n := clDHCPNode{Role: m.dhcpRole(ctx), Mode: m.dhcpMode(ctx)}
+	if scopes, err := m.DHCPScopes(ctx); err == nil {
+		for _, s := range scopes {
+			p, err := netip.ParsePrefix(s.Subnet)
+			if !s.Enabled || s.Iface == "" || err != nil {
+				continue
+			}
+			if a := dhcpServerAddr(s.Iface, p, s.Relay); a.IsValid() {
+				n.Nets = append(n.Nets, clDHCPNodeNet{s.Subnet, a.String()})
+			}
+		}
+	}
+	m.mu.Lock()
+	on := m.life != nil
+	m.mu.Unlock()
+	if on {
+		n.DNS = m.dhcpDNSAddrs(ctx)
+	}
+	return n
+}
+
+// dhcpServerAddr: Server-ID der Node in einem Netz (Adresse der Schnittstelle im Netz, bei Relay-Netzen die erste).
+func dhcpServerAddr(iface string, p netip.Prefix, relay bool) netip.Addr {
+	addrs := dhcp.IfaceAddrs(iface)
+	for _, a := range addrs {
+		if p.Contains(a.Addr()) {
+			return a.Addr()
+		}
+	}
+	if relay && len(addrs) > 0 {
+		return addrs[0].Addr()
+	}
+	return netip.Addr{}
+}
+
+// dhcpDNSAddrs: IPv4-Adressen, unter denen DNS64 dieser Node auf Port 53 antwortet (nichts bei anderem Port).
+func (m *Module) dhcpDNSAddrs(ctx context.Context) []string {
+	if m.port(ctx) != 53 {
+		return nil
+	}
+	if b, err := netip.ParseAddr(strings.TrimSpace(m.core.SettingOr(ctx, setBind, ""))); err == nil && !b.IsUnspecified() {
+		if b.Is4() {
+			return []string{b.String()}
+		}
+		return nil
+	}
+	var out []string
+	for _, i := range dhcpInterfaces() {
+		if virtualIface(i.Name) {
+			continue
+		}
+		for _, a := range i.Addrs {
+			out = append(out, a.Addr().String())
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// dhcpNodes: Zustand der anderen Nodes (aus dem Cluster).
+func (m *Module) dhcpNodes(ctx context.Context) map[string]clDHCPNode {
+	out := map[string]clDHCPNode{}
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT node_id, data FROM dns64_dhcp_nodes`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, data string
+		var n clDHCPNode
+		if rows.Scan(&id, &data) == nil && json.Unmarshal([]byte(data), &n) == nil {
+			out[id] = n
 		}
 	}
 	return out
 }
 
-// dhcpIsPeer: Adresse einer Node des Clusters mit einem DHCP-Bereich (kein fremder DHCP-Server).
-func (m *Module) dhcpIsPeer(ip netip.Addr) bool {
+// dhcpPeerDNS: weitere DNS-Server fuer ein Netz - die anderen erreichbaren Nodes, deren DNS64 dort auf Port 53 antwortet.
+func (m *Module) dhcpPeerDNS(ctx context.Context, subnet netip.Prefix) []netip.Addr {
+	online := map[string]bool{}
+	for _, p := range m.dhcpPeers(ctx, ItemDHCPLeases) {
+		online[p.NodeID] = p.Online
+	}
+	var out []netip.Addr
+	for id, n := range m.dhcpNodes(ctx) {
+		if !online[id] {
+			continue
+		}
+		for _, d := range n.DNS {
+			if a, err := netip.ParseAddr(d); err == nil && subnet.Contains(a) && !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b netip.Addr) int { return a.Compare(b) })
+	return out
+}
+
+// dhcpExpected: Server-ID einer Haupt-Node, waehrend diese Node Reserve ist - kein fremder DHCP-Server. Jede andere
+// Antwort (zweite Haupt-Node, eine Reserve, die vergibt) ist ein Fehler und wird gemeldet.
+func (m *Module) dhcpExpected(server netip.Addr) bool {
 	ctx := context.Background()
-	for _, item := range []string{ItemDHCPLeases, ItemDHCPScopes, ItemDHCPRes} {
-		for _, p := range m.dhcpPeers(ctx, item) {
-			if p.Addr == ip {
+	if m.dhcpRole(ctx) != dhcpReserve {
+		return false
+	}
+	for _, n := range m.dhcpNodes(ctx) {
+		for _, x := range n.Nets {
+			if a, ok := n.primaryFor(x.Subnet); ok && a == server {
 				return true
 			}
 		}
@@ -88,47 +227,125 @@ func (m *Module) SetDHCPRole(ctx context.Context, role string) error {
 	if err := m.core.SetSetting(ctx, setDHCPRole, role); err != nil {
 		return err
 	}
-	m.dh.soonMu.Lock()
-	m.dh.standbyAt = time.Time{}
-	m.dh.soonMu.Unlock()
+	m.dhcpStandbyReset()
 	m.dhcpApply(ctx)
 	return nil
 }
 
-// dhcpStandby: Reserve-Node bleibt still (Server.Standby, ohne gehaltene Sperre des Servers).
-func (m *Module) dhcpStandby() bool {
+func (m *Module) dhcpStandbyReset() {
 	m.dh.soonMu.Lock()
-	if time.Since(m.dh.standbyAt) < standbyCache {
-		v := m.dh.standby
-		m.dh.soonMu.Unlock()
-		return v
-	}
+	m.dh.standby = nil
 	m.dh.soonMu.Unlock()
-	v := m.dhcpPrimaryAlive(context.Background())
-	m.dh.soonMu.Lock()
-	m.dh.standby, m.dh.standbyAt = v, time.Now()
-	m.dh.soonMu.Unlock()
-	return v
 }
 
-// dhcpPrimaryAlive: eine andere Node mit dem Bereich "Vergaben" ist erreichbar bzw. antwortet als DHCP-Server;
-// ohne solche Node gilt sie als lebendig (Reserve ohne Partner bleibt still).
-func (m *Module) dhcpPrimaryAlive(ctx context.Context) bool {
-	peers := m.dhcpPeers(ctx, ItemDHCPLeases)
-	if len(peers) == 0 {
-		return true
+// dhcpStandby: Reserve-Node bleibt in diesem Netz still (Server.Standby, ohne gehaltene Sperre des Servers).
+func (m *Module) dhcpStandby(subnet netip.Prefix) bool {
+	key := subnet.String()
+	m.dh.soonMu.Lock()
+	if e, ok := m.dh.standby[key]; ok && time.Since(e.at) < standbyCache {
+		m.dh.soonMu.Unlock()
+		return e.quiet
 	}
+	m.dh.soonMu.Unlock()
+	alive, _ := m.dhcpPrimaryAlive(context.Background(), key)
+	m.dh.soonMu.Lock()
+	if m.dh.standby == nil {
+		m.dh.standby = map[string]standbyState{}
+	}
+	m.dh.standby[key] = standbyState{alive, time.Now()}
+	m.dh.soonMu.Unlock()
+	return alive
+}
+
+type standbyState struct {
+	quiet bool
+	at    time.Time
+}
+
+// dhcpPrimaryAlive: eine Haupt-Node fuer das Netz lebt (erreichbar oder antwortet als DHCP-Server); gibt es keine,
+// gilt das als lebendig (die Reserve bleibt still). primaries = Namen der Haupt-Nodes fuer das Netz.
+func (m *Module) dhcpPrimaryAlive(ctx context.Context, subnet string) (alive bool, primaries []string) {
+	online := map[string]bool{}
+	for _, p := range m.dhcpPeers(ctx, ItemDHCPLeases) {
+		online[p.NodeID] = p.Online
+	}
+	names := m.dhcpPeerNames(ctx)
 	s := m.dhcpSrv.Load()
-	for _, p := range peers {
-		if p.Online || (s != nil && p.Addr.IsValid() && s.SawServer(p.Addr, peerSeen)) {
-			return true
+	for id, n := range m.dhcpNodes(ctx) {
+		server, ok := n.primaryFor(subnet)
+		if !ok {
+			continue
+		}
+		name := names[id]
+		if name == "" {
+			name = id
+		}
+		primaries = append(primaries, name)
+		if online[id] || (s != nil && server.IsValid() && s.SawServer(server, peerSeen)) {
+			alive = true
 		}
 	}
-	return false
+	slices.Sort(primaries)
+	return alive || len(primaries) == 0, primaries
+}
+
+// dhcpConflicts: Netze, in denen ausser dieser Node noch eine Haupt-Node vergibt (Netz -> Namen der anderen).
+func (m *Module) dhcpConflicts(ctx context.Context) map[string][]string {
+	out := map[string][]string{}
+	own := m.dhcpOwnNode(ctx)
+	if own.Role != dhcpPrimary || own.Mode != dhcpOn {
+		return out
+	}
+	names := m.dhcpPeerNames(ctx)
+	for id, n := range m.dhcpNodes(ctx) {
+		for _, x := range own.Nets {
+			if _, ok := n.primaryFor(x.Subnet); ok {
+				name := names[id]
+				if name == "" {
+					name = id
+				}
+				out[x.Subnet] = append(out[x.Subnet], name)
+			}
+		}
+	}
+	return out
+}
+
+// dhcpCheckConflicts meldet zwei Haupt-Nodes im selben Netz (einmal je Netz und Node).
+func (m *Module) dhcpCheckConflicts(ctx context.Context) {
+	conf := m.dhcpConflicts(ctx)
+	m.dh.soonMu.Lock()
+	if m.dh.conflictSent == nil {
+		m.dh.conflictSent = map[string]bool{}
+	}
+	var send [][2]string
+	seen := map[string]bool{}
+	for subnet, nodes := range conf {
+		for _, n := range nodes {
+			k := subnet + "|" + n
+			seen[k] = true
+			if !m.dh.conflictSent[k] {
+				m.dh.conflictSent[k] = true
+				send = append(send, [2]string{subnet, n})
+			}
+		}
+	}
+	for k := range m.dh.conflictSent {
+		if !seen[k] {
+			delete(m.dh.conflictSent, k)
+		}
+	}
+	m.dh.soonMu.Unlock()
+	for _, x := range send {
+		if sc, ok, _ := m.dhcpScopeBySubnet(ctx, x[0]); ok {
+			m.log.Warn("dhcp: second primary node in network", "network", x[0], "node", x[1])
+			m.dhcpNotify(sc.ID, "dns64_dhcp_primary", map[string]string{"node": x[1]})
+		}
+	}
 }
 
 // dhcpSynced meldet Aenderungen an Netzen und festen Adressen an den Cluster (mit einem Netz verschwinden auch
-// seine Vergaben) und baut die Namen neu.
+// seine Vergaben; der eigene Zustand aendert sich mit) und baut die Namen neu.
 func (m *Module) dhcpSynced(ctx context.Context) {
 	for _, it := range []string{ItemDHCPScopes, ItemDHCPRes, ItemDHCPLeases} {
 		m.clChanged(ctx, it)
@@ -136,7 +353,7 @@ func (m *Module) dhcpSynced(ctx context.Context) {
 	m.dhcpNamesSoon()
 }
 
-// dhcpLeasesSoon meldet die Vergaben gebuendelt an den Cluster.
+// dhcpLeasesSoon meldet Vergaben und eigenen Zustand gebuendelt an den Cluster.
 func (m *Module) dhcpLeasesSoon() {
 	m.dh.soonMu.Lock()
 	defer m.dh.soonMu.Unlock()
@@ -148,6 +365,22 @@ func (m *Module) dhcpLeasesSoon() {
 		m.dh.leasesT = nil
 		m.dh.soonMu.Unlock()
 		m.clChanged(context.Background(), ItemDHCPLeases)
+	})
+}
+
+// dhcpApplySoon startet den DHCP-Server gebuendelt kurz danach neu (Uebernahmen aus dem Cluster: beim ersten
+// Abgleich hunderter fester Adressen nicht je Eintrag).
+func (m *Module) dhcpApplySoon() {
+	m.dh.soonMu.Lock()
+	defer m.dh.soonMu.Unlock()
+	if m.dh.applyT != nil {
+		return
+	}
+	m.dh.applyT = time.AfterFunc(applySoon, func() {
+		m.dh.soonMu.Lock()
+		m.dh.applyT = nil
+		m.dh.soonMu.Unlock()
+		m.dhcpApply(context.Background())
 	})
 }
 
@@ -189,14 +422,9 @@ type clDHCPLease struct {
 }
 
 func clScopeOf(s DHCPScope) clDHCPScope {
-	nz := func(l []string) []string {
-		if len(l) == 0 {
-			return nil
-		}
-		return l
-	}
-	return clDHCPScope{s.Name, s.Subnet, s.Start, s.End, s.Router, nz(s.DNS), s.Domain, s.LeaseHours, nz(s.NTP), s.Authoritative,
-		s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.Relay}
+	return clDHCPScope{Name: s.Name, Subnet: s.Subnet, Start: s.Start, End: s.End, Router: s.Router, DNS: s.DNS, Domain: s.Domain,
+		LeaseHours: s.LeaseHours, NTP: s.NTP, Authoritative: s.Authoritative, BootServer: s.BootServer, BootBIOS: s.BootBIOS,
+		BootUEFI: s.BootUEFI, BootIPXE: s.BootIPXE, Relay: s.Relay}
 }
 
 func clLeaseOf(subnet string, l dhcp.Lease) clDHCPLease {
@@ -236,9 +464,17 @@ func (m *Module) clDHCPCurrent(ctx context.Context, item string) (map[string]str
 		for _, l := range list {
 			out["l:"+subnet[l.Scope]+"|"+l.MAC] = jsonString(clLeaseOf(subnet[l.Scope], l))
 		}
+		if id := m.dhcpNodeID(ctx); id != "" {
+			out["n:"+id] = jsonString(m.dhcpOwnNode(ctx))
+		}
+		for id, n := range m.dhcpNodes(ctx) {
+			out["n:"+id] = jsonString(n)
+		}
 	}
 	return out, nil
 }
+
+func (m *Module) dhcpNodeID(ctx context.Context) string { return m.core.SettingOr(ctx, setNodeID, "") }
 
 func (m *Module) dhcpScopeBySubnet(ctx context.Context, subnet string) (DHCPScope, bool, error) {
 	s, err := scanDHCPScope(m.core.Reader().QueryRowContext(ctx, `SELECT `+dhcpScopeCols+` FROM dns64_dhcp_scopes WHERE subnet = ?`, subnet))
@@ -248,13 +484,16 @@ func (m *Module) dhcpScopeBySubnet(ctx context.Context, subnet string) (DHCPScop
 	return s, err == nil, err
 }
 
-// dhcpGuessIface: Schnittstelle dieser Node mit einer Adresse im Netz ("" = keine).
+// dhcpGuessIface: echte Schnittstelle dieser Node mit einer Adresse im Netz ("" = keine).
 func dhcpGuessIface(subnet string) string {
 	p, err := netip.ParsePrefix(subnet)
 	if err != nil {
 		return ""
 	}
 	for _, i := range dhcpInterfaces() {
+		if virtualIface(i.Name) {
+			continue
+		}
 		for _, a := range i.Addrs {
 			if p.Contains(a.Addr()) {
 				return i.Name
@@ -290,20 +529,29 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 		s := DHCPScope{Name: in.Name, Iface: "cluster", Subnet: in.Subnet, Start: in.Start, End: in.End, Router: in.Router, DNS: in.DNS, Domain: in.Domain,
 			LeaseHours: in.LeaseHours, NTP: in.NTP, Authoritative: in.Authoritative, BootServer: in.BootServer, BootBIOS: in.BootBIOS, BootUEFI: in.BootUEFI,
 			BootIPXE: in.BootIPXE, Relay: in.Relay}
-		if err := normalizeDHCPScope(&s); err != nil {
+		if err := normalizeDHCPScope(&s); err != nil { // Iface "cluster": Platzhalter, die Schnittstelle bleibt je Node
 			return err
 		}
 		if s.Subnet != subnet {
 			return fmt.Errorf("dhcp cluster: subnet %s does not match %s", s.Subnet, subnet)
 		}
+		if other, taken := m.dhcpOverlap(ctx, s.Subnet, cur.ID); taken {
+			return fmt.Errorf("dhcp cluster: network %s overlaps local network %s", s.Subnet, other)
+		}
 		if ok {
-			_, err = w.ExecContext(ctx, `UPDATE dns64_dhcp_scopes SET name = ?, range_start = ?, range_end = ?, router = ?, dns = ?, domain = ?, lease_hours = ?, ntp = ?, authoritative = ?,
-				boot_server = ?, boot_bios = ?, boot_uefi = ?, boot_ipxe = ?, relay = ? WHERE id = ?`, s.Name, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain, s.LeaseHours,
-				strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.Relay, cur.ID)
+			iface, enabled := cur.Iface, cur.Enabled
+			if !s.Relay && iface != "" && m.dhcpIfaceTaken(ctx, DHCPScope{Iface: iface}, cur.ID) { // jetzt direkt: Schnittstelle schon belegt
+				iface, enabled = "", false
+			}
+			_, err = w.ExecContext(ctx, `UPDATE dns64_dhcp_scopes SET name = ?, iface = ?, range_start = ?, range_end = ?, router = ?, dns = ?, domain = ?, lease_hours = ?, ntp = ?,
+				authoritative = ?, boot_server = ?, boot_bios = ?, boot_uefi = ?, boot_ipxe = ?, relay = ?, enabled = ? WHERE id = ?`, s.Name, iface, s.Start, s.End, s.Router,
+				strings.Join(s.DNS, ","), s.Domain, s.LeaseHours, strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.Relay, enabled, cur.ID)
 		} else {
 			iface := ""
 			if !s.Relay {
-				iface = dhcpGuessIface(s.Subnet)
+				if iface = dhcpGuessIface(s.Subnet); iface != "" && m.dhcpIfaceTaken(ctx, DHCPScope{Iface: iface}, 0) {
+					iface = ""
+				}
 			}
 			_, err = w.ExecContext(ctx, `INSERT INTO dns64_dhcp_scopes (name, iface, subnet, range_start, range_end, router, dns, domain, lease_hours, ntp, authoritative, boot_server, boot_bios, boot_uefi, boot_ipxe, relay, enabled, created_at)
 				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)`, s.Name, iface, s.Subnet, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain, s.LeaseHours,
@@ -348,6 +596,9 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 		}
 		m.clSetSnap(item, id, jsonString(clDHCPRes{subnet, r.MAC, r.IP, r.Name, r.Comment}))
 	case ItemDHCPLeases:
+		if node, isNode := strings.CutPrefix(id, "n:"); isNode {
+			return m.clApplyNode(ctx, id, node, data, deleted)
+		}
 		subnet, mac, _ := strings.Cut(strings.TrimPrefix(id, "l:"), "|")
 		sc, ok, err := m.dhcpScopeBySubnet(ctx, subnet)
 		if err != nil {
@@ -359,7 +610,7 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 					return err
 				}
 				if s := m.dhcpSrv.Load(); s != nil {
-					s.Import(dhcp.Lease{Scope: sc.ID, MAC: mac})
+					s.Forget(sc.ID, mac)
 				}
 			}
 			m.clSetSnap(item, id, "")
@@ -382,19 +633,102 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 		if l.State != dhcp.StateBound && l.State != dhcp.StateFree {
 			return fmt.Errorf("dhcp cluster: bad lease state %q", in.State)
 		}
-		if err := (dhcpStore{m}).SaveLease(l); err != nil {
+		applied, err := m.clApplyLease(ctx, l)
+		if err != nil {
 			return err
 		}
-		if s := m.dhcpSrv.Load(); s != nil {
+		if s := m.dhcpSrv.Load(); s != nil && applied {
 			s.Import(l)
 		}
+		// Stand der anderen Node merken: weicht der eigene ab (aelter dort), meldet der naechste Abgleich ihn zurueck
 		m.clSetSnap(item, id, jsonString(clLeaseOf(subnet, l)))
 		m.dhcpNamesSoon()
 		return nil
 	default:
 		return errUnknownItem
 	}
-	m.dhcpApply(ctx)
+	m.dhcpApplySoon()
 	m.dhcpNamesSoon()
 	return nil
+}
+
+// clApplyNode speichert den DHCP-Zustand einer anderen Node.
+func (m *Module) clApplyNode(ctx context.Context, id, node string, data json.RawMessage, deleted bool) error {
+	if node == m.dhcpNodeID(ctx) {
+		return nil // der eigene Zustand entsteht hier
+	}
+	w := m.core.Writer()
+	if deleted {
+		if _, err := w.ExecContext(ctx, `DELETE FROM dns64_dhcp_nodes WHERE node_id = ?`, node); err != nil {
+			return err
+		}
+		m.clSetSnap(ItemDHCPLeases, id, "")
+	} else {
+		var n clDHCPNode
+		if err := json.Unmarshal(data, &n); err != nil {
+			return err
+		}
+		if _, err := w.ExecContext(ctx, `INSERT INTO dns64_dhcp_nodes (node_id, data) VALUES (?, ?) ON CONFLICT(node_id) DO UPDATE SET data = excluded.data`,
+			node, jsonString(n)); err != nil {
+			return err
+		}
+		m.clSetSnap(ItemDHCPLeases, id, jsonString(n))
+	}
+	m.dhcpStandbyReset()
+	m.dhcpApplySoon() // DNS-Server der Geraete koennen sich geaendert haben
+	go m.dhcpCheckConflicts(context.WithoutCancel(ctx))
+	return nil
+}
+
+// clApplyLease uebernimmt eine Vergabe einer anderen Node, wenn sie nicht aelter ist als der Stand hier: eine
+// laengere eigene Vergabe derselben MAC bleibt, und eine laufende Vergabe einer anderen MAC auf derselben IP wird
+// nur von einer noch laengeren gebundenen verdraengt (freie Vergaben verdraengen nie). applied = gespeichert.
+func (m *Module) clApplyLease(ctx context.Context, l dhcp.Lease) (applied bool, err error) {
+	tx, err := m.core.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var curExp string
+	switch err := tx.QueryRowContext(ctx, `SELECT expires FROM dns64_dhcp_leases WHERE scope_id = ? AND mac = ?`, l.Scope, l.MAC).Scan(&curExp); {
+	case err == nil:
+		if t, _ := time.Parse(time.RFC3339, curExp); t.After(l.Expires) {
+			return false, nil
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT mac, expires, state FROM dns64_dhcp_leases WHERE scope_id = ? AND ip = ? AND mac <> ?`, l.Scope, l.IP.String(), l.MAC)
+	if err != nil {
+		return false, err
+	}
+	var others []string
+	now := time.Now()
+	for rows.Next() {
+		var mac, exp, state string
+		if err := rows.Scan(&mac, &exp, &state); err != nil {
+			rows.Close()
+			return false, err
+		}
+		t, _ := time.Parse(time.RFC3339, exp)
+		if state == dhcp.StateBound && now.Before(t) && (l.State != dhcp.StateBound || !l.Expires.After(t)) {
+			rows.Close()
+			return false, nil // laufende Vergabe hier ist neuer
+		}
+		others = append(others, mac)
+	}
+	rows.Close()
+	if l.State == dhcp.StateBound {
+		for _, mac := range others {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM dns64_dhcp_leases WHERE scope_id = ? AND mac = ?`, l.Scope, mac); err != nil {
+				return false, err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO dns64_dhcp_leases (scope_id, mac, ip, hostname, expires, state) VALUES (?,?,?,?,?,?)
+		ON CONFLICT(scope_id, mac) DO UPDATE SET ip = excluded.ip, hostname = excluded.hostname, expires = excluded.expires, state = excluded.state`,
+		l.Scope, l.MAC, l.IP.String(), l.Hostname, l.Expires.UTC().Format(time.RFC3339), l.State); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
