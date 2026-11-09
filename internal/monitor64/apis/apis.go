@@ -40,6 +40,7 @@ const (
 	parallel            = 4                   // gleichzeitige Einzelabfragen (Gast-Config, SMART, inspect)
 	maxPartErrors       = 5                   // so viele Teilfehler im Text
 	staleAfter          = 30 * 24 * time.Hour // PBS: Gruppe ohne Backup so lange -> beim Erkennen nicht vorgewaehlt
+	lockGrace           = 4 * time.Hour       // gestoppter Gast mit Sperre so lange absichtlich aus (wie pveLockGrace in internal/proxmox)
 )
 
 // TestResult ist das Ergebnis von "Verbindung testen" im Assistenten.
@@ -50,7 +51,7 @@ type TestResult struct {
 	Node        string        `json:"node,omitempty"`    // Proxmox VE: Node dieses Hosts (eingestellt bzw. erkannt)
 	Cluster     string        `json:"cluster,omitempty"` // Proxmox VE: Clustername (leer = Einzel-Node)
 	Nodes       []ClusterNode `json:"nodes,omitempty"`   // Proxmox VE: alle Nodes (Vorschlag "als eigene Hosts anlegen")
-	Summary     string        `json:"summary,omitempty"` // kurz, z. B. "12 Gäste" bzw. "8 Container, 7 laufen"
+	Summary     string        `json:"summary,omitempty"` // kurz, z. B. "12 Gaeste" bzw. "8 Container, 7 laufen"
 	Warning     string        `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (Rechte)
 	Fingerprint string        `json:"fingerprint,omitempty"`
 	CertSubject string        `json:"cert_subject,omitempty"`
@@ -61,8 +62,24 @@ type TestResult struct {
 }
 
 // PartialError: einzelne Teilabfragen sind fehlgeschlagen, die uebrigen Dienste wurden geliefert.
+//
+// Prefixes nennt die Dienst-Schluessel, die wegen der Teilfehler in dieser Runde fehlen koennen (Vergleich mit
+// strings.HasPrefix: "vm:" fuer alle VMs, "backup:store/" fuer die Backups eines Datastores, "updates" fuer genau den
+// Dienst updates). Der Kern haelt fehlende Dienste mit diesen Praefixen auf dem vorigen Stand, statt sie
+// "verschwunden" zu nennen. Fehlt ein Dienst ausserhalb der Praefixe, ist er wirklich weg.
 type PartialError struct {
-	Errs []string // je Teilabfrage "was: Fehler"
+	Errs     []string // je Teilabfrage "was: Fehler"
+	Prefixes []string // betroffene Schluessel-Praefixe (sortiert, ohne Doppelte)
+}
+
+// Affects sagt, ob ein fehlender Dienst mit diesem Schluessel vom Teilfehler betroffen sein kann.
+func (e *PartialError) Affects(key string) bool {
+	for _, p := range e.Prefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *PartialError) Error() string {
@@ -83,18 +100,26 @@ func IsPartial(err error) bool {
 
 // partial sammelt Teilfehler einer Runde (sicher fuer gleichzeitige Einzelabfragen).
 type partial struct {
-	mu      sync.Mutex
-	errs    []string
-	secrets []string
+	mu       sync.Mutex
+	errs     []string
+	prefixes map[string]bool
+	secrets  []string
 }
 
-func (p *partial) add(what string, err error) {
+// add merkt einen Teilfehler; prefixes sind die Schluessel-Praefixe der Dienste, die dadurch fehlen koennen.
+func (p *partial) add(what string, err error, prefixes ...string) {
 	if err == nil {
 		return
 	}
 	msg := scrub(what+": "+err.Error(), p.secrets...)
 	p.mu.Lock()
 	p.errs = append(p.errs, msg)
+	for _, pre := range prefixes {
+		if p.prefixes == nil {
+			p.prefixes = map[string]bool{}
+		}
+		p.prefixes[pre] = true
+	}
 	p.mu.Unlock()
 }
 
@@ -105,7 +130,12 @@ func (p *partial) result() error {
 	if len(p.errs) == 0 {
 		return nil
 	}
-	return &PartialError{Errs: append([]string(nil), p.errs...)}
+	pre := make([]string, 0, len(p.prefixes))
+	for k := range p.prefixes {
+		pre = append(pre, k)
+	}
+	sort.Strings(pre)
+	return &PartialError{Errs: append([]string(nil), p.errs...), Prefixes: pre}
 }
 
 // scrub entfernt Geheimnisse aus einem Text (zusaetzliche Sicherung; die Clients schreiben sie ohnehin nicht).
@@ -334,7 +364,7 @@ func hoursText(d time.Duration) string {
 func (p *PVE) Queries() []string {
 	n := "/nodes/" + firstNonEmpty(p.cfg.Node, "{node}")
 	return []string{"GET /cluster/status", "GET " + n + "/status", "GET " + n + "/storage", "GET " + n + "/disks/zfs",
-		"GET " + n + "/qemu", "GET " + n + "/lxc", "GET " + n + "/{qemu|lxc}/{vmid}/config (alle 10 min)",
+		"GET " + n + "/qemu?full=1", "GET " + n + "/lxc", "GET " + n + "/{qemu|lxc}/{vmid}/config (alle 10 min)",
 		"GET /cluster/ha/status/current", "GET /cluster/ceph/status (falls eingerichtet)",
 		"GET " + n + "/disks/list, " + n + "/disks/smart?disk=… (alle 30 min)", "GET " + n + "/apt/update (alle 60 min)"}
 }

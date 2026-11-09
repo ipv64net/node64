@@ -50,21 +50,39 @@ armv7* | armv8l | armhf) ARCH=armv7 ;;
 esac
 FILE="monitor64-agent-linux-$ARCH"
 
+# Bei HTTPS keine Umleitung auf HTTP (sonst koennte jemand Datei und SHA256SUMS gemeinsam austauschen).
 case "$BASE" in
-https://*) ;;
-http://*) say "WARNING: downloading over plain HTTP - the checksum only protects against broken downloads, not against tampering. Use HTTPS if possible." ;;
+https://*) PROTO='=https' ;;
+http://*)
+	PROTO='=http,https'
+	say "WARNING: downloading over plain HTTP - the checksum only protects against broken downloads, not against tampering. Use HTTPS if possible."
+	;;
 *) die "--base must start with https:// or http://" ;;
 esac
 case "$BASE" in */) ;; *) BASE="$BASE/" ;; esac
 
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT INT TERM
+# Nicht unter /tmp ablegen (oft noexec): Download in den Programmordner, sonst /var/tmp.
+LIB=/usr/local/lib/monitor64-agent
+TMP=""
+if mkdir -p "$LIB" 2>/dev/null && chmod 755 "$LIB"; then
+	TMP=$(mktemp -d "$LIB/.download.XXXXXX" 2>/dev/null) || TMP=""
+fi
+[ -n "$TMP" ] || TMP=$(mktemp -d /var/tmp/monitor64-agent.XXXXXX) || die "no directory for the download"
+trap 'rm -rf "$TMP"' EXIT
+trap 'exit 1' INT TERM
 
+# fetch URL DATEI: Zeitlimits (curl: Verbindung 10 s, gesamt 300 s; wget: 10 s ohne Daten), bei HTTPS keine
+# Umleitung auf HTTP.
 fetch() {
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL --proto '=https,http' -o "$2" "$1"
+		curl -fsSL --connect-timeout 10 --max-time 300 --proto "$PROTO" --proto-redir "$PROTO" -o "$2" "$1"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -q -O "$2" "$1"
+		# wget kennt keine Sperre fuer Umleitungen: Kopfzeilen mitlesen und Umleitung auf http:// ablehnen.
+		wget -S -T 10 -t 2 -O "$2" "$1" 2>"$TMP/wget.log" || return 1
+		if [ "$PROTO" = '=https' ] && grep -qi '^ *location: *http:' "$TMP/wget.log"; then
+			say "redirect to plain HTTP refused"
+			return 1
+		fi
 	else
 		die "curl or wget is required"
 	fi

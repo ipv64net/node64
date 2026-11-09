@@ -52,8 +52,9 @@ type PBS struct {
 	groups   map[string][]pbsGroup // Datastore -> Gruppen (alle Namespaces)
 	disks    slowDisks
 	updates  slowUpdates
-	gcPerDS  bool      // /admin/gc fehlt: GC-Status je Datastore
-	gcUntil  time.Time // GC-Status gar nicht vorhanden: bis dahin nicht fragen
+	gcPerDS  bool              // /admin/gc fehlt: GC-Status je Datastore
+	gcUntil  time.Time         // GC-Status gar nicht vorhanden: bis dahin nicht fragen
+	jobLast  map[string]pbsJob // Job-Schluessel -> letzter beendeter Lauf (waehrend ein Job laeuft)
 }
 
 // NewPBS baut den Sammler (prueft Adressen, Token-Format und Pin; fragt noch nichts ab).
@@ -62,7 +63,7 @@ func NewPBS(cfg PBSConfig) (*PBS, error) {
 	if err != nil {
 		return nil, scrubErr(err, cfg.Secret)
 	}
-	return &PBS{cfg: cfg, client: c, now: time.Now, groups: map[string][]pbsGroup{}}, nil
+	return &PBS{cfg: cfg, client: c, now: time.Now, groups: map[string][]pbsGroup{}, jobLast: map[string]pbsJob{}}, nil
 }
 
 func (p *PBS) timeout() time.Duration {
@@ -121,10 +122,13 @@ type pbsJob struct {
 	Store   string `json:"store"`
 	Remote  string `json:"remote"`
 	State   string `json:"last-run-state"`
+	UPID    string `json:"last-run-upid"`
 	End     num    `json:"last-run-endtime"`
 	Next    num    `json:"next-run"`
 	Sched   string `json:"schedule"`
 	Disable bool   `json:"disable"`
+
+	running bool // laeuft gerade (State/End sind dann vom vorigen Lauf)
 }
 
 // Collect ist eine Abfragerunde (nicht gleichzeitig mit sich selbst aufrufen).
@@ -144,12 +148,15 @@ func (p *PBS) Collect(ctx context.Context) ([]model.Service, error) {
 		out = append(out, *svc)
 	}
 	var use []pbsUsage
-	if err := p.client.Get(ctx, "/status/datastore-usage", &use); err != nil {
-		part.add("status/datastore-usage", err)
+	useErr := p.client.Get(ctx, "/status/datastore-usage", &use)
+	if useErr != nil {
+		// ohne Datastore-Liste fehlen die Datastores und der GC-Status je Datastore; die Gruppen (Backups) bleiben
+		// auf dem vorigen Stand und werden in der naechsten Runde neu gelesen
+		part.add("status/datastore-usage", useErr, "ds:", "job:gc:")
 		use = nil
 	}
 	sort.Slice(use, func(i, j int) bool { return use[i].Store < use[j].Store })
-	if p.groupsAt.IsZero() || now.Sub(p.groupsAt) >= slowEvery {
+	if useErr == nil && (p.groupsAt.IsZero() || now.Sub(p.groupsAt) >= slowEvery) {
 		p.fetchGroups(ctx, use, part)
 		p.groupsAt = now
 	}
@@ -157,7 +164,7 @@ func (p *PBS) Collect(ctx context.Context) ([]model.Service, error) {
 		out = append(out, p.datastoreService(u))
 	}
 	out = append(out, p.backupServices(now)...)
-	out = append(out, p.jobs(ctx, now, use, part)...)
+	out = append(out, p.jobs(ctx, now, use, useErr == nil, part)...)
 	out = append(out, p.disks.collect(ctx, p.client, pbsNode, now, p.cfg.SmartEvery, func(d diskEntry) string { return d.dev() }, part)...)
 	sortServices(out)
 	return out, part.result()
@@ -204,7 +211,7 @@ func (p *PBS) fetchGroups(ctx context.Context, use []pbsUsage, part *partial) {
 		}
 		g, err := p.storeGroups(ctx, u.Store)
 		if err != nil {
-			part.add("groups "+u.Store, err)
+			part.add("groups "+u.Store, err, "backup:"+u.Store+"/")
 			if old, ok := p.groups[u.Store]; ok {
 				next[u.Store] = old
 			}
@@ -303,13 +310,21 @@ func (p *PBS) backupServices(now time.Time) []model.Service {
 }
 
 // jobs: letzter Lauf der Verify-, Prune-, Sync- und GC-Jobs.
-func (p *PBS) jobs(ctx context.Context, now time.Time, use []pbsUsage, part *partial) []model.Service {
+func (p *PBS) jobs(ctx context.Context, now time.Time, use []pbsUsage, useOK bool, part *partial) []model.Service {
 	var out []model.Service
+	seen := map[string]bool{}
+	failed := map[string]bool{} // Art -> Liste nicht lesbar (gemerkte Laeufe behalten)
+	add := func(kind, id string, j pbsJob) {
+		key := "job:" + kind + ":" + id
+		seen[key] = true
+		out = append(out, jobService(kind, id, p.jobState(key, j), now))
+	}
 	for _, kind := range []string{"verify", "prune", "sync"} {
 		var list []pbsJob
 		if err := p.client.Get(ctx, "/admin/"+kind, &list); err != nil {
 			if !absent(err) {
-				part.add("admin/"+kind, err)
+				part.add("admin/"+kind, err, "job:"+kind+":")
+				failed[kind] = true
 			}
 			continue
 		}
@@ -317,32 +332,59 @@ func (p *PBS) jobs(ctx context.Context, now time.Time, use []pbsUsage, part *par
 			if j.ID == "" {
 				continue
 			}
-			out = append(out, jobService(kind, j.ID, j, now))
+			add(kind, j.ID, j)
 		}
 	}
-	for _, j := range p.gcJobs(ctx, now, use, part) {
-		out = append(out, jobService("gc", j.Store, j, now))
+	gc, gcOK := p.gcJobs(ctx, now, use, part)
+	failed["gc"] = !gcOK || !useOK // ohne Datastore-Liste fehlt der GC-Status je Datastore
+	for _, j := range gc {
+		add("gc", j.Store, j)
+	}
+	for k := range p.jobLast {
+		kind, _, _ := strings.Cut(strings.TrimPrefix(k, "job:"), ":")
+		if !seen[k] && !failed[kind] {
+			delete(p.jobLast, k)
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out
 }
 
-func (p *PBS) gcJobs(ctx context.Context, now time.Time, use []pbsUsage, part *partial) []pbsJob {
+// jobState: Laeuft ein Job gerade, nennt PBS nur last-run-upid (ohne Ende und Ergebnis). Dann gilt der zuletzt
+// bekannte beendete Lauf weiter (sonst wuerde ein fehlgeschlagener Job bei jedem Lauf kurz "ok"); beendete Laeufe
+// werden gemerkt.
+func (p *PBS) jobState(key string, j pbsJob) pbsJob {
+	if j.UPID == "" || j.End > 0 || strings.TrimSpace(j.State) != "" {
+		if j.End > 0 || strings.TrimSpace(j.State) != "" {
+			p.jobLast[key] = j
+		}
+		return j
+	}
+	j.running = true
+	if last, ok := p.jobLast[key]; ok {
+		j.State, j.End = last.State, last.End
+	}
+	return j
+}
+
+// gcJobs liefert den GC-Status; ok false, wenn er (ganz oder teilweise) nicht lesbar war.
+func (p *PBS) gcJobs(ctx context.Context, now time.Time, use []pbsUsage, part *partial) ([]pbsJob, bool) {
 	if now.Before(p.gcUntil) {
-		return nil
+		return nil, true
 	}
 	if !p.gcPerDS {
 		var list []pbsJob
 		err := p.client.Get(ctx, "/admin/gc", &list)
 		if err == nil {
-			return list
+			return list, true
 		}
 		if !absent(err) {
-			part.add("admin/gc", err)
-			return nil
+			part.add("admin/gc", err, "job:gc:")
+			return nil, false
 		}
 		p.gcPerDS = true
 	}
+	ok := true
 	var out []pbsJob
 	for _, u := range use {
 		if strings.TrimSpace(u.Error) != "" || u.Mount == "notmounted" {
@@ -353,20 +395,22 @@ func (p *PBS) gcJobs(ctx context.Context, now time.Time, use []pbsUsage, part *p
 		if err != nil {
 			if absent(err) { // zu alte Version: kein GC-Status
 				p.gcUntil, p.gcPerDS = now.Add(optionalRetry), false
-				return nil
+				return nil, true
 			}
-			part.add("gc-job-status "+u.Store, err)
+			part.add("gc-job-status "+u.Store, err, "job:gc:"+u.Store)
+			ok = false
 			continue
 		}
 		j.Store = firstNonEmpty(j.Store, u.Store)
 		out = append(out, j)
 	}
-	return out
+	return out, ok
 }
 
 var jobNames = map[string]string{"verify": "Verify-Job", "prune": "Prune-Job", "sync": "Sync-Job", "gc": "Garbage Collection"}
 
-// jobService: letzter Lauf ok bzw. Fehler (job_failed); WARNINGS zaehlt als gelaufen.
+// jobService: letzter Lauf ok bzw. Fehler (job_failed); WARNINGS zaehlt als gelaufen, "unknown" (abgebrochen, z. B.
+// durch einen Neustart des PBS) als Fehler (die Regel job.failed warnt).
 func jobService(kind, id string, j pbsJob, now time.Time) model.Service {
 	name := jobNames[kind] + " " + id
 	if kind != "gc" && j.Store != "" {
@@ -375,9 +419,14 @@ func jobService(kind, id string, j pbsJob, now time.Time) model.Service {
 	s := model.Service{Key: "job:" + kind + ":" + id, Name: name, Kind: "job", Default: !j.Disable}
 	state := strings.TrimSpace(j.State)
 	var parts []string
+	if j.running && !j.Disable {
+		parts = append(parts, "läuft gerade")
+	}
 	switch {
 	case j.Disable:
 		parts = append(parts, "abgeschaltet")
+	case j.running && j.End <= 0 && state == "":
+		// erster bekannter Lauf: noch kein Ergebnis (keine Messgroesse)
 	case j.End <= 0 && state == "":
 		parts = append(parts, "noch nicht gelaufen")
 	default:
@@ -387,16 +436,19 @@ func jobService(kind, id string, j pbsJob, now time.Time) model.Service {
 			when = " " + agoText(age)
 			s.Metrics = append(s.Metrics, model.Metric{Name: "age", Value: round2(age.Hours()), Unit: "h"})
 		}
-		ok := state == "" || strings.EqualFold(state, "OK") || strings.HasPrefix(strings.ToUpper(state), "WARNINGS") ||
-			strings.EqualFold(state, "unknown")
+		ok := state == "" || strings.EqualFold(state, "OK") || strings.HasPrefix(strings.ToUpper(state), "WARNINGS")
 		v := 0.0
 		if !ok {
 			v = 1
 		}
 		s.Metrics = append(s.Metrics, model.Metric{Name: "failed", Value: v})
-		if ok {
+		switch {
+		case ok:
 			parts = append(parts, "letzter Lauf"+when+": "+firstNonEmpty(state, "OK"))
-		} else {
+		case strings.EqualFold(state, "unknown"):
+			parts = append(parts, "letzter Lauf"+when+" abgebrochen (unknown)")
+			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: "abgebrochen (unknown)"})
+		default:
 			parts = append(parts, "letzter Lauf"+when+" fehlgeschlagen: "+state)
 			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: state})
 		}

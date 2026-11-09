@@ -3092,6 +3092,8 @@
         "unknown": "{n} Unbekannt"
       },
       "line": {
+        "gone": "✅ {name}: entfernt bzw. nicht mehr geliefert – Problem beendet",
+        "ok_short": "✅ {name}: wieder OK",
         "problem": "{icon} {name}: {state} – {detail}",
         "better": "{icon} {name}: besser, aber noch {state} – {detail}",
         "ok": "✅ {name}: wieder OK (nach {duration})",
@@ -3104,6 +3106,7 @@
       }
     },
     "subject": {
+      "monitor_better": "🟡 {name}: {summary} besser, aber noch nicht OK",
       "monitor_problem": "{icon} {name}: {summary}",
       "monitor_ok": "✅ {name}: {summary} wieder OK",
       "monitor_unreachable": "🔴 {name} nicht erreichbar",
@@ -5786,7 +5789,8 @@
       "cpu": "CPU",
       "ram": "RAM",
       "net": "Netzwerk",
-      "disk": "Platten-I/O"
+      "disk": "Platten-I/O",
+      "error": "Verlauf nicht geladen: {e}"
     },
     "host": {
       "group": "Gruppe",
@@ -5828,7 +5832,9 @@
       "delete_text": "„{n}“ entfernen? Problem-Historie und Audit-Log bleiben.",
       "delete_keep": "Verlauf behalten (Diagramme bleiben bis zum Ablauf der Aufbewahrung)",
       "delete_hist": "Verlauf jetzt löschen",
-      "delete_hint": "Die Aktion wird mit deinem Namen im Audit-Log gespeichert."
+      "delete_hint": "Die Aktion wird mit deinem Namen im Audit-Log gespeichert.",
+      "pending_free": "seit {m} Min. unter {v} – {s} ab {n} Min.",
+      "more_rules": "+{n} weitere"
     },
     "acc": {
       "type": "Art",
@@ -5848,7 +5854,12 @@
       "delete": "Zugang entfernen",
       "delete_confirm": "Zugang „{n}“ entfernen?",
       "saved_toast": "Zugang gespeichert",
-      "deleted_toast": "Zugang entfernt"
+      "deleted_toast": "Zugang entfernt",
+      "docker_secret": "Zugangsdaten (optional)",
+      "docker_secret_hint": "Für ssh://: privater SSH-Schlüssel (PEM). Für https:// mit TLS: JSON {\"key\": \"…\", \"cert\": \"…\", \"ca\": \"…\"} mit PEM-Blöcken. Leer lassen bei unix:// und tcp://. Wird verschlüsselt gespeichert und nie angezeigt.",
+      "pin_set": "Fingerabdruck als Pin eingetragen – speichern, dann erneut testen.",
+      "pinned": "Fingerabdruck gepinnt",
+      "save_first": "Die Einstellungen wurden geändert: bitte erst speichern (oder das Geheimnis neu eingeben), dann testen."
     },
     "access": {
       "agent": "Agent",
@@ -5882,7 +5893,7 @@
       "hint_used": "Aktuell {v} % belegt.",
       "applies": "Gilt für",
       "scope_service": "nur diesen Dienst",
-      "scope_kind": "alle {c} dieses Hosts",
+      "scope_kind": "alle Dienste dieses Hosts mit „{c}“",
       "report": "Meldung",
       "show_hint": "nur anzeigen = Zustand und Verlauf, keine Benachrichtigung",
       "soll": "Soll-Zustand",
@@ -5902,7 +5913,8 @@
       "ignore": "Dienst ignorieren",
       "ignored_toast": "Dienst wird ignoriert (auf der Host-Seite unter „ignorierte Dienste“ zurückholbar)",
       "reset_toast": "Eigene Werte entfernt – es gilt wieder die nächste Stufe",
-      "saved_toast": "Gespeichert – Neubewertung sofort, im Verlauf mit deinem Namen vermerkt"
+      "saved_toast": "Gespeichert – Neubewertung sofort, im Verlauf mit deinem Namen vermerkt",
+      "thresholds": "Schwellen"
     },
     "f": {
       "name": "Name",
@@ -5958,14 +5970,17 @@
       "unack": "Quittierung aufgehoben von {w}",
       "unack_auto": "Quittierung aufgehoben (verschlechtert)",
       "comment": "Kommentar von {w}",
-      "resolved": "als gelöst markiert von {w}"
+      "resolved": "als gelöst markiert von {w}",
+      "maint": "Wartung eingetragen",
+      "maint_end": "Wartung beendet"
     },
     "how": {
       "auto": "automatisch – Wert wieder in Ordnung",
       "user": "gelöst von {w}",
       "api": "als gelöst markiert über {w}",
       "maint": "in Wartung – nicht gemeldet",
-      "handover": "durch Übergabe beendet"
+      "handover": "durch Übergabe beendet",
+      "removed": "Host entfernt von {w}"
     },
     "csv": {
       "state": "Zustand",
@@ -6017,7 +6032,8 @@
       "st_running": "läuft",
       "st_planned": "geplant",
       "st_recurring": "wiederkehrend",
-      "st_ended": "beendet"
+      "st_ended": "beendet",
+      "tz": "Zeiten in der Zeitzone der Node: {z}"
     },
     "rl": {
       "intro": "Drei Stufen: Standard für alle → Abweichungen für Gruppe/Tag → dieser Host (direkt am Dienst). Die genaueste Stufe gilt, jedes Feld erbt einzeln. Meist reicht der Standard.",
@@ -6048,7 +6064,7 @@
       "add": "Abweichung für Gruppe oder Tag",
       "own": "Am Host eingestellt",
       "own_sub": "gilt vor allen Abweichungen, ändern direkt am Dienst",
-      "own_kind": "alle {c}",
+      "own_kind": "alle Dienste mit „{c}“",
       "own_none": "Nirgends am Host eingestellt.",
       "new": "Neue Abweichung",
       "new_sub": "wird unten angefügt",
@@ -6105,7 +6121,16 @@
       "guest_down": "Gast oder Container läuft nicht, obwohl er soll",
       "systemd_failed": "fehlgeschlagene systemd-Dienste",
       "svc_vanished": "Dienst verschwunden",
-      "access_failed": "ein Zugang antwortet nicht"
+      "access_failed": "ein Zugang antwortet nicht",
+      "ctr_unhealthy": "Container meldet „unhealthy“",
+      "backup_old": "Letztes Backup zu alt (PBS)",
+      "job_failed": "Job fehlgeschlagen (Verify, GC, Prune, Sync)",
+      "store_inactive": "Speicher / Datastore nicht aktiv",
+      "cluster_no_quorum": "Proxmox-Cluster ohne Quorum",
+      "cluster_node_down": "Node des Clusters offline",
+      "ha_error": "HA-Ressource im Fehlerzustand",
+      "ceph_warn": "Ceph: HEALTH_WARN",
+      "ceph_err": "Ceph: HEALTH_ERR"
     },
     "cat": {
       "system": "System",
@@ -6167,21 +6192,20 @@
       "no_key": "<Schlüssel erscheint, sobald Monitor64 läuft>",
       "agent_step1": "1. Agent auf dem Host installieren",
       "agent_safe": "Der Agent nimmt nur Abfragen dieser Node an (Schlüssel) und kann nur Werte liefern – keine Befehle. Port {p}/TCP. Updates kommen automatisch über diese Node.",
-      "agent_offline": "Host ohne Internet? Dieselben Dateien liefert auch diese Node:",
       "agent_step2": "2. Fingerabdruck vergleichen",
       "agent_fp": "Das Installationsskript zeigt den Fingerabdruck des Hosts – „Verbindung testen“ zeigt denselben Wert, danach merkt sich die Node den Schlüssel.",
       "ssh_key": "Diesen Schlüssel auf dem Host hinterlegen",
       "ssh_safe": "Nur von dieser Node, ohne Weiterleitungen. Je Runde läuft ein festes Skript, das nur liest. Empfohlen: eigener Benutzer „monitor64“.",
       "node_ip": "<IP dieser Node>",
-      "smart": "SMART-Werte lesen (braucht eine Zeile in sudoers):",
+      "smart": "SMART-Werte lesen (braucht diese Zeile in sudoers, z. B. mit visudo -f /etc/sudoers.d/monitor64)",
       "pw_auth": "Passwort statt Schlüssel – nur für Systeme, die keinen Schlüssel annehmen",
       "token_id": "API-Token (ID)",
       "token_secret": "API-Token (Geheimnis)",
       "token_cmd": "Token nur lesend anlegen (auf dem Server ausführen)",
       "api_hint": "Nur lesend (Rolle PVEAuditor bzw. Audit). Für Bonding, Fehler je Port und Temperaturen danach zusätzlich SSH oder den Agenten ergänzen.",
       "node": "Node-Name (leer = alle)",
-      "pin": "Zertifikat festpinnen (SHA-256, optional)",
-      "docker_hint": "Lokal: unix:///var/run/docker.sock (Socket in den Node64-Container einbinden). Entfernt: tcp://host:2375 bzw. https://host:2376 mit TLS.",
+      "pin": "Fingerabdruck festpinnen (Zertifikat SHA-256 bzw. SSH-Host-Key, optional)",
+      "docker_hint": "Lokal: unix:///var/run/docker.sock (Socket in den Node64-Container einbinden). Entfernt: tcp://host:2375, https://host:2376 mit TLS oder ssh://benutzer@host.",
       "test": "Verbindung testen",
       "testing": "prüfe …",
       "test_ok": "verbunden – {n} Dienste gefunden, Antwort in {ms} ms",
@@ -6195,7 +6219,19 @@
       "all": "alle",
       "none": "keine",
       "tags_hint": "Tags können eigene Schwellen haben, z. B. „backup“: Speicher erst ab 95 %.",
-      "summary": "{n} ({a}) · {k} · {s} Dienste werden übernommen."
+      "summary": "{n} ({a}) · {k} · {s} Dienste werden übernommen.",
+      "cluster": "Cluster {c}",
+      "version": "Version {v}",
+      "cluster_nodes": "Weitere Nodes im Cluster {c} als eigene Hosts anlegen",
+      "cluster_hint": "Je Node ein Host mit demselben Token; abgefragt über dieselbe Adresse. Dieser Host zeigt dann nur seine eigene Node.",
+      "node_offline": "offline",
+      "node_short": "Node {n}",
+      "nodes_failed": "Nicht angelegt: {n}",
+      "summary_nodes": "Dazu {n} weitere Node(s) als eigene Hosts.",
+      "test_stale": "Geändert – bitte erneut testen.",
+      "fp_confirm": "Zertifikat bzw. Host-Key ist nicht bestätigt – das Token wurde nicht gesendet. Fingerabdruck mit dem Server vergleichen und bestätigen.",
+      "fp_accept": "Fingerabdruck bestätigen und erneut testen",
+      "smart_hint": "Erlaubt nur die Aufrufe, die das Skript braucht (Platten suchen, Werte lesen ohne schlafende Platten zu wecken). Liegt smartctl anders, den Pfad anpassen (command -v smartctl)."
     },
     "nf": {
       "where": "Wohin",
@@ -6273,7 +6309,7 @@
       "agent": "Monitor64-Agent",
       "agent_port": "Port {port}/TCP (je Zugang einstellbar)",
       "node_key": "Schlüssel dieser Node",
-      "agent_download": "Download über GitHub-Releases und node64.de (Linux, Windows). Nicht im Image – die Node lädt die Dateien bei Bedarf nach (Signatur geprüft) und bietet sie dann auch unter /monitor64/agent/ an (für Hosts ohne Internet).",
+      "agent_download": "Download über GitHub-Releases und node64.de (Linux). Nicht im Image.",
       "tech": "Technischer Stand",
       "version": "Modul {version}",
       "uptime": "läuft seit {uptime}",
@@ -6299,10 +6335,10 @@
       "user": "Ungültiger Benutzername.",
       "token_id": "Ungültige Token-ID.",
       "node": "Ungültiger Node-Name.",
-      "pin": "Ungültiger Zertifikats-Pin (SHA-256 hexadezimal).",
-      "url": "Ungültige URL (http://, https://, bei Docker auch unix:// oder tcp://).",
+      "pin": "Ungültiger Fingerabdruck (Zertifikat: SHA-256 hexadezimal, SSH-Host-Key: SHA256:…).",
+      "url": "Ungültige URL (http://, https://, bei Docker auch unix://, tcp:// oder ssh://).",
       "hostkey": "Ungültiger Fingerabdruck.",
-      "secret": "Geheimnis zu lang.",
+      "secret": "Geheimnis zu lang (höchstens 4 KB, Docker-Zugangsdaten 64 KB).",
       "state": "Ungültiger Zustand.",
       "keys": "Keine Dienste gewählt.",
       "soll": "Ungültiger Soll-Zustand.",
@@ -6325,6 +6361,20 @@
       "series": "Ungültige Abfrage des Verlaufs.",
       "comment": "Bitte einen Kommentar eingeben.",
       "action": "Unbekannte Aktion."
+    },
+    "quote": "„{t}“",
+    "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",
+    "detail": {
+      "vanished": "nicht mehr vorhanden seit {since}",
+      "not_running": "läuft nicht (Soll: läuft)",
+      "access": "Zugang {name}",
+      "threshold": "{metric} {value} (Schwelle {limit})",
+      "maint_silent": "in Wartung – nicht gemeldet",
+      "unack": "Quittierung aufgehoben (verschlechtert)",
+      "secret_unreadable": "Zugangsdaten nicht lesbar",
+      "no_data": "keine Daten",
+      "host_removed": "Host entfernt",
+      "zfs_errors": "Datenfehler: {text}"
     }
   }
 }

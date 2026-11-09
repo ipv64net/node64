@@ -18,6 +18,11 @@ type Series interface {
 	Close() error
 }
 
+// seriesQuerier: Verlauf abfragen (Trend, Oberflaeche).
+type seriesQuerier interface {
+	Query(ctx context.Context, key string, from, to time.Time, maxPoints int) (tsdb.Series, error)
+}
+
 // openSeries oeffnet den Verlauf mit der Standard-Aufbewahrung (48 h / 30 Tage / 1 Jahr, Einstellung folgt);
 // gesichert wird alle 5 Minuten durch housekeeping des Moduls.
 func openSeries(path string, log *slog.Logger) (*tsdb.DB, error) {

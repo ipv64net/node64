@@ -168,6 +168,59 @@ func (r Rule) Validate() error {
 // Empty meldet, ob die Regel kein Feld setzt.
 func (r Rule) Empty() bool { return r == Rule{} }
 
+func clonePtr[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+// Clone liefert eine tiefe Kopie (eigene Zeiger je Feld).
+func (r Rule) Clone() Rule {
+	return Rule{Warn: clonePtr(r.Warn), Crit: clonePtr(r.Crit), WarnFree: clonePtr(r.WarnFree),
+		CritFree: clonePtr(r.CritFree), Dir: clonePtr(r.Dir), For: clonePtr(r.For), Hyst: clonePtr(r.Hyst),
+		Mode: clonePtr(r.Mode), Report: clonePtr(r.Report), Severity: clonePtr(r.Severity)}
+}
+
+// Overlay legt o ueber r: gesetzte Felder von o gewinnen, alle anderen kommen aus r. Das Ergebnis ist eine
+// tiefe Kopie und teilt keine Zeiger mit r oder o (z. B. gespeicherte Felder ueber die Standard-Regel legen).
+func (r Rule) Overlay(o Rule) Rule {
+	out := r.Clone()
+	o = o.Clone()
+	if o.Warn != nil {
+		out.Warn = o.Warn
+	}
+	if o.Crit != nil {
+		out.Crit = o.Crit
+	}
+	if o.WarnFree != nil {
+		out.WarnFree = o.WarnFree
+	}
+	if o.CritFree != nil {
+		out.CritFree = o.CritFree
+	}
+	if o.Dir != nil {
+		out.Dir = o.Dir
+	}
+	if o.For != nil {
+		out.For = o.For
+	}
+	if o.Hyst != nil {
+		out.Hyst = o.Hyst
+	}
+	if o.Mode != nil {
+		out.Mode = o.Mode
+	}
+	if o.Report != nil {
+		out.Report = o.Report
+	}
+	if o.Severity != nil {
+		out.Severity = o.Severity
+	}
+	return out
+}
+
 // Feldnamen fuer die Herkunft (Effective.Origin), gleich den JSON-Namen.
 const (
 	FieldWarn     = "warn"
@@ -248,6 +301,18 @@ type HostLevel struct {
 
 // Table ist die Standard-Tabelle je Art.
 type Table map[string]Rule
+
+// Clone liefert eine tiefe Kopie der Tabelle (nil bleibt nil).
+func (t Table) Clone() Table {
+	if t == nil {
+		return nil
+	}
+	out := make(Table, len(t))
+	for k, r := range t {
+		out[k] = r.Clone()
+	}
+	return out
+}
 
 // Effective ist die wirksame Regel nach Aufloesung der drei Stufen, mit Herkunft je Feld.
 type Effective struct {

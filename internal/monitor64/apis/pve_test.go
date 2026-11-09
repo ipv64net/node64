@@ -2,6 +2,8 @@ package apis
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,6 +14,13 @@ import (
 
 // pveFake: Proxmox VE 8 mit drei Nodes (pve3 offline), Abfrage auf pve1.
 func pveFake(t *testing.T) (*fakeAPI, PVEConfig) {
+	f := pveRoutes(t)
+	addr, pin := tlsServer(t, f)
+	return f, PVEConfig{Addresses: []string{addr}, TokenID: "monitor64@pve!node64", Secret: testSecret, Pin: pin}
+}
+
+// pveRoutes: die aufgezeichneten Antworten von pveFake (ohne Server).
+func pveRoutes(t *testing.T) *fakeAPI {
 	f := newFakeAPI(t)
 	f.ok("/version", "@pve/version.json")
 	f.ok("/cluster/status", "@pve/cluster_status.json")
@@ -25,7 +34,7 @@ func pveFake(t *testing.T) (*fakeAPI, PVEConfig) {
 	f.ok("/nodes/pve1/disks/smart?disk=/dev/sdb", "@pve/smart_sdb.json")
 	// /dev/sdc (USB-Stick): keine SMART-Antwort
 	f.ok("/nodes/pve1/apt/update", "@pve/apt_update.json")
-	f.ok("/nodes/pve1/qemu", "@pve/qemu_1.json")
+	f.ok("/nodes/pve1/qemu?full=1", "@pve/qemu_1.json")
 	f.ok("/nodes/pve1/lxc", "@pve/lxc_1.json")
 	for _, id := range []string{"101", "102", "103", "104"} {
 		f.ok("/nodes/pve1/qemu/"+id+"/config", "@pve/qemu_"+id+"_config.json")
@@ -33,8 +42,7 @@ func pveFake(t *testing.T) (*fakeAPI, PVEConfig) {
 	f.ok("/nodes/pve1/lxc/200/config", "@pve/lxc_200_config.json")
 	f.ok("/cluster/ha/status/current", "@pve/ha_status.json")
 	f.set("/cluster/ceph/status", http.StatusInternalServerError, "binary not installed: /usr/bin/ceph-mon")
-	addr, pin := tlsServer(t, f)
-	return f, PVEConfig{Addresses: []string{addr}, TokenID: "monitor64@pve!node64", Secret: testSecret, Pin: pin}
+	return f
 }
 
 func newTestPVE(t *testing.T, cfg PVEConfig, now *time.Time) *PVE {
@@ -202,7 +210,7 @@ func TestPVECollect(t *testing.T) {
 	}
 
 	// Zweite Runde nach 60 s: Raten aus den Zaehlern, LXC neu gestartet (keine Raten), SMART und Config aus dem Speicher
-	f.ok("/nodes/pve1/qemu", "@pve/qemu_2.json")
+	f.ok("/nodes/pve1/qemu?full=1", "@pve/qemu_2.json")
 	f.ok("/nodes/pve1/lxc", "@pve/lxc_2.json")
 	now = now.Add(60 * time.Second)
 	svcs, err = p.Collect(context.Background())
@@ -270,6 +278,10 @@ func TestPVEPartialAndErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "storage") || !strings.Contains(err.Error(), "Gast-Config (1)") {
 		t.Errorf("Teilfehler = %v", err)
 	}
+	// F6-K2: betroffene Schluessel-Praefixe (Gast-Config laesst keinen Dienst fehlen)
+	if pe := partialOf(t, err); !hasPrefix(pe, "store:") || hasPrefix(pe, "vm:") || !pe.Affects("store:local") || pe.Affects("vm:101") {
+		t.Errorf("Prefixes = %v", pe.Prefixes)
+	}
 	if hasSvc(svcs, "store:local") || !hasSvc(svcs, "cpu") || !hasSvc(svcs, "vm:101") {
 		t.Errorf("Dienste bei Teilfehler falsch")
 	}
@@ -278,13 +290,16 @@ func TestPVEPartialAndErrors(t *testing.T) {
 	}
 
 	// Liste der VMs fehlt: Zaehler bleiben fuer die naechste Runde
-	f.set("/nodes/pve1/qemu", http.StatusInternalServerError, "got timeout")
+	f.set("/nodes/pve1/qemu?full=1", http.StatusInternalServerError, "got timeout")
 	now = now.Add(time.Minute)
 	svcs, err = p.Collect(context.Background())
 	if !IsPartial(err) || hasSvc(svcs, "vm:101") {
 		t.Fatalf("ohne qemu-Liste: err=%v", err)
 	}
-	f.ok("/nodes/pve1/qemu", "@pve/qemu_2.json")
+	if pe := partialOf(t, err); !pe.Affects("vm:101") || pe.Affects("ct:200") {
+		t.Errorf("Prefixes ohne qemu-Liste = %v", pe.Prefixes)
+	}
+	f.ok("/nodes/pve1/qemu?full=1", "@pve/qemu_2.json")
 	now = now.Add(time.Minute)
 	svcs, _ = p.Collect(context.Background())
 	if _, ok := metric(svcByKey(t, svcs, "vm:101"), "net_in"); !ok {
@@ -400,12 +415,13 @@ func TestParseSmartTemps(t *testing.T) {
 	if d.critWarn == nil || *d.critWarn != 4 || *d.temp != 72 || *d.wearUsed != 101 {
 		t.Errorf("nvme = %+v", d)
 	}
-	s := diskService(diskEntry{DevPath: "/dev/nvme1n1", Type: "nvme", Serial: "X1"}, &d, false, map[string]uint64{})
+	s := diskService("disk:X1", diskEntry{DevPath: "/dev/nvme1n1", Type: "nvme", Serial: "X1"}, &d, false, map[string]uint64{})
 	if !hasFact(s, "smart_failed") {
 		t.Errorf("NVMe-Warnung ohne smart_failed: %+v", s)
 	}
-	if _, ok := metric(s, "wear"); ok {
-		t.Error("Verschleiss ueber 100 % als Messwert")
+	// F6-K3: ueber 100 % verbraucht -> 100 (nicht verwerfen)
+	if m := mustMetric(t, s, "wear"); m.Value != 100 {
+		t.Errorf("Verschleiss ueber 100 %% = %v, erwartet 100", m.Value)
 	}
 }
 
@@ -416,5 +432,271 @@ func TestUpdatesSecurity(t *testing.T) {
 	}
 	if s := updatesService(nil); s.Text != "keine ausstehend" || len(s.Facts) != 0 {
 		t.Errorf("keine Updates = %+v", s)
+	}
+}
+
+// F6-K1: Gesamtstatus aus den Texten von smartctl (Proxmox VE reicht sie durch) und den Werten von PBS.
+func TestHealthOf(t *testing.T) {
+	for in, want := range map[string]string{"PASSED": "ok", "passed": "ok", "OK": "ok", "FAILED!": "failed", "failed": "failed",
+		"FAILURE PREDICTION THRESHOLD EXCEEDED: ascq=0x5d [asc=5d, ascq=0]": "failed", "UNKNOWN": "", "": ""} {
+		got := ""
+		if b := healthOf(in); b != nil {
+			got = "failed"
+			if *b {
+				got = "ok"
+			}
+		}
+		if got != want {
+			t.Errorf("healthOf(%q) = %q, erwartet %q", in, got, want)
+		}
+	}
+	// SAS-Platte mit Vorhersage: smart_failed
+	s := diskService("disk:S1", diskEntry{DevPath: "/dev/sdd", Type: "hdd", Serial: "S1", Health: "FAILURE PREDICTION THRESHOLD EXCEEDED: ascq=0x5d"},
+		nil, false, map[string]uint64{})
+	if !hasFact(s, "smart_failed") {
+		t.Errorf("SAS-Vorhersage ohne smart_failed: %+v", s)
+	}
+}
+
+// F6-K1: Seriennummer "unknown"/leer nicht als Schluessel; gleiche Nummer mit verschiedener WWN kollidiert nicht.
+func TestDiskKeys(t *testing.T) {
+	list := []diskEntry{
+		{DevPath: "/dev/sda", Serial: "unknown", WWN: "0x5000c500aaaa0001"},
+		{DevPath: "/dev/sdb", Serial: "unknown", WWN: "0x5000c500aaaa0002"},
+		{DevPath: "/dev/sdc", Serial: " "},
+		{DevPath: "/dev/sdd", Serial: "ABC123", WWN: "0x1"},
+		{DevPath: "/dev/sde", Serial: "ABC123", WWN: "0x1"}, // Multipath: ein Dienst
+		{DevPath: "/dev/sdf", Serial: "DUP", WWN: "0x2"},
+		{DevPath: "/dev/sdg", Serial: "DUP", WWN: "0x3"},
+		{Name: "nvme0n1", Serial: "N/A"},
+	}
+	want := []string{"disk:0x5000c500aaaa0001", "disk:0x5000c500aaaa0002", "disk:sdc", "disk:ABC123", "disk:ABC123",
+		"disk:0x2", "disk:0x3", "disk:nvme0n1"}
+	got := diskKeys(list)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Schluessel %d = %q, erwartet %q", i, got[i], want[i])
+		}
+	}
+	// in der Runde: beide Platten mit "unknown" erscheinen
+	f, cfg := pveFake(t)
+	f.ok("/nodes/pve1/disks/list", `[
+  {"devpath":"/dev/sda","type":"ssd","model":"X","serial":"unknown","wwn":"0x5000c500aaaa0001","health":"PASSED","wearout":90},
+  {"devpath":"/dev/sdb","type":"ssd","model":"X","serial":"unknown","wwn":"0x5000c500aaaa0002","health":"FAILED!","wearout":-5}
+]`)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	svcs, _ := newTestPVE(t, cfg, &now).Collect(context.Background())
+	a, b := svcByKey(t, svcs, "disk:0x5000c500aaaa0001"), svcByKey(t, svcs, "disk:0x5000c500aaaa0002")
+	if hasFact(a, "smart_failed") || !hasFact(b, "smart_failed") {
+		t.Errorf("SMART je Platte falsch: %+v / %+v", a.Facts, b.Facts)
+	}
+	// F6-K3: wearout negativ (mehr als 100 % verbraucht) -> 100
+	if m := mustMetric(t, b, "wear"); m.Value != 100 {
+		t.Errorf("wear bei wearout -5 = %v, erwartet 100", m.Value)
+	}
+}
+
+// F6-K1: NVMe bei PBS mit den Schluesseln aus dem JSON von smartctl.
+func TestParseSmartPBSNVMeJSON(t *testing.T) {
+	var r smartResp
+	if err := json.Unmarshal([]byte(fixture(t, "pbs/smart_nvme_json.json")), &r); err != nil {
+		t.Fatal(err)
+	}
+	d := parseSmart(r)
+	if d.critWarn == nil || *d.critWarn != 4 || d.temp == nil || *d.temp != 45 || d.wearUsed == nil || *d.wearUsed != 120 ||
+		d.mediaE == nil || *d.mediaE != 3 {
+		t.Fatalf("parseSmart = %+v", d)
+	}
+	s := diskService("disk:N1", diskEntry{Name: "nvme0n1", DiskType: "nvme", Serial: "N1"}, &d, false, map[string]uint64{})
+	if !hasFact(s, "smart_failed") || !hasFact(s, "smart_sectors") || mustMetric(t, s, "wear").Value != 100 || mustMetric(t, s, "media_err").Value != 3 {
+		t.Errorf("NVMe (JSON-Schluessel) = %+v", s)
+	}
+}
+
+// F6-K4: qmpstatus (io-error, paused, guest-panicked) und Sperre nur begrenzt.
+func TestPVEGuestState(t *testing.T) {
+	f, cfg := pveFake(t)
+	cfg.Node = "pve1"
+	f.ok("/nodes/pve1/qemu?full=1", `[
+  {"vmid":101,"name":"web01","status":"running","qmpstatus":"io-error","cpu":0,"cpus":2,"mem":1073741824,"maxmem":4294967296,"uptime":100,"pid":1},
+  {"vmid":102,"name":"win11","status":"running","qmpstatus":"paused","cpu":0,"cpus":4,"mem":1073741824,"maxmem":8589934592,"uptime":100,"pid":2},
+  {"vmid":103,"name":"test","status":"running","qmpstatus":"guest-panicked","cpus":1,"maxmem":1073741824,"uptime":100,"pid":3,"tags":"nomonitor"},
+  {"vmid":104,"name":"db01","status":"stopped","lock":"backup","cpus":2,"maxmem":4294967296,"uptime":0}
+]`)
+	clock := &testClock{t: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
+	p, err := NewPVE(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.now = clock.now
+	svcs, err := p.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm101 := svcByKey(t, svcs, "vm:101")
+	if !hasFact(vm101, "guest_down") || mustMetric(t, vm101, "running").Value != 0 || !strings.Contains(vm101.Text, "gestört (io-error)") {
+		t.Errorf("vm:101 (io-error) = %+v", vm101)
+	}
+	vm102 := svcByKey(t, svcs, "vm:102")
+	if !hasFact(vm102, "guest_down") || mustMetric(t, vm102, "running").Value != 0 || !strings.Contains(vm102.Text, "pausiert") {
+		t.Errorf("vm:102 (pausiert, onboot) = %+v", vm102)
+	}
+	if vm103 := svcByKey(t, svcs, "vm:103"); !hasFact(vm103, "guest_down") {
+		t.Errorf("vm:103 (guest-panicked, ohne onboot) = %+v", vm103)
+	}
+	vm104 := svcByKey(t, svcs, "vm:104")
+	if hasFact(vm104, "guest_down") || mustMetric(t, vm104, "locked").Value != 1 {
+		t.Errorf("vm:104 (Backup im Stopp-Modus) = %+v", vm104)
+	}
+	if mustMetric(t, vm101, "locked").Value != 0 {
+		t.Error("locked ohne Sperre")
+	}
+	// Sperre haengt seit ueber 4 h: wie gestoppt
+	clock.add(5 * time.Hour)
+	svcs, _ = p.Collect(context.Background())
+	vm104 = svcByKey(t, svcs, "vm:104")
+	if !hasFact(vm104, "guest_down") || mustMetric(t, vm104, "locked").Value != 0 || !strings.Contains(vm104.Text, "Sperre backup seit 5 Std.") {
+		t.Errorf("vm:104 (Sperre seit 5 h) = %+v", vm104)
+	}
+	// andere Sperre: Frist von vorn
+	f.ok("/nodes/pve1/qemu?full=1", `[{"vmid":104,"name":"db01","status":"stopped","lock":"migrate","cpus":2,"maxmem":4294967296,"uptime":0}]`)
+	clock.add(time.Minute)
+	svcs, _ = p.Collect(context.Background())
+	if vm104 = svcByKey(t, svcs, "vm:104"); hasFact(vm104, "guest_down") || mustMetric(t, vm104, "locked").Value != 1 {
+		t.Errorf("vm:104 (neue Sperre migrate) = %+v", vm104)
+	}
+}
+
+// Raten mit dem Abrufzeitpunkt der Gaesteliste, nicht dem Rundenbeginn (vorher dauert z. B. apt/update).
+func TestPVERatesFetchTime(t *testing.T) {
+	f, cfg := pveFake(t)
+	cfg.Node = "pve1"
+	clock := &testClock{t: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
+	f.mu.Lock()
+	f.onHit = func(path string) {
+		if path == "/nodes/pve1/apt/update" {
+			clock.add(30 * time.Second) // langsame Abfrage nur in der ersten Runde (Updates alle 60 min)
+		}
+	}
+	f.mu.Unlock()
+	p, err := NewPVE(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.now = clock.now
+	if _, err := p.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.ok("/nodes/pve1/qemu?full=1", "@pve/qemu_2.json")
+	clock.add(60 * time.Second) // 60 s nach dem Abruf der ersten Liste, 90 s nach Rundenbeginn
+	svcs, err := p.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := mustMetric(t, svcByKey(t, svcs, "vm:101"), "net_in"); !near(m.Value, 10) {
+		t.Errorf("net_in = %v, erwartet 10 (Abrufzeitpunkt)", m.Value)
+	}
+}
+
+// F6-K5: Ceph nur bei "nicht eingerichtet" stuendlich; Fehler eines eingerichteten Ceph = ceph_err.
+func TestPVECephStates(t *testing.T) {
+	f, cfg := pveFake(t)
+	cfg.Node = "pve1"
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	p := newTestPVE(t, cfg, &now)
+	f.set("/cluster/ceph/status", http.StatusInternalServerError, "got timeout")
+	svcs, err := p.Collect(context.Background())
+	if pe := partialOf(t, err); !hasPrefix(pe, "ceph") || hasSvc(svcs, "ceph") {
+		t.Errorf("500 ohne bekanntes Ceph: %v", err)
+	}
+	now = now.Add(time.Minute)
+	_, _ = p.Collect(context.Background())
+	if n := f.count("/cluster/ceph/status"); n != 2 {
+		t.Errorf("Ceph nach 500 %d-mal abgefragt, erwartet 2 (nicht 60 min sperren)", n)
+	}
+	f.ok("/cluster/ceph/status", "@pve/ceph_status.json")
+	now = now.Add(time.Minute)
+	if svcs, _ = p.Collect(context.Background()); !hasSvc(svcs, "ceph") {
+		t.Fatal("Ceph fehlt")
+	}
+	f.set("/cluster/ceph/status", http.StatusInternalServerError, "got timeout")
+	now = now.Add(time.Minute)
+	svcs, err = p.Collect(context.Background())
+	if err != nil {
+		t.Errorf("Ceph-Fehler als Teilfehler statt Zustand: %v", err)
+	}
+	if c := svcByKey(t, svcs, "ceph"); !hasFact(c, "ceph_err") || !strings.Contains(c.Text, "nicht abrufbar") {
+		t.Errorf("eingerichtetes Ceph antwortet nicht: %+v", c)
+	}
+	f.set("/cluster/ceph/status", http.StatusInternalServerError, "pveceph configuration not initialized")
+	now = now.Add(time.Minute)
+	if svcs, _ = p.Collect(context.Background()); hasSvc(svcs, "ceph") {
+		t.Error("Ceph-Dienst nach dem Entfernen")
+	}
+	before := f.count("/cluster/ceph/status")
+	now = now.Add(time.Minute)
+	_, _ = p.Collect(context.Background())
+	if f.count("/cluster/ceph/status") != before {
+		t.Error("nicht eingerichtetes Ceph vor Ablauf der Stunde erneut abgefragt")
+	}
+}
+
+// F6-K5: clusterweite Dienste bewertet nur die Node mit der kleinsten ID unter den Nodes online.
+func TestPVEClusterWide(t *testing.T) {
+	f, cfg := pveFake(t)
+	status := func(pve2Online int) string {
+		return fmt.Sprintf(`[{"type":"cluster","id":"cluster","name":"homelab","nodes":3,"quorate":1,"version":7},
+  {"type":"node","id":"node/pve1","name":"pve1","nodeid":2,"ip":"192.168.10.11","online":1,"local":1},
+  {"type":"node","id":"node/pve2","name":"pve2","nodeid":1,"ip":"192.168.10.12","online":%d,"local":0},
+  {"type":"node","id":"node/pve3","name":"pve3","nodeid":3,"ip":"192.168.10.13","online":0,"local":0}]`, pve2Online)
+	}
+	f.ok("/cluster/status", status(1))
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	p := newTestPVE(t, cfg, &now)
+	svcs, err := p.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"cluster", "ha"} {
+		s := svcByKey(t, svcs, k)
+		if len(s.Facts) != 0 || len(s.Metrics) != 0 || !strings.Contains(s.Text, "gemeldet von Node pve2") {
+			t.Errorf("%s auf nicht zustaendiger Node = %+v", k, s)
+		}
+	}
+	// pve2 offline: pve1 uebernimmt
+	f.ok("/cluster/status", status(0))
+	now = now.Add(time.Minute)
+	svcs, _ = p.Collect(context.Background())
+	if cl := svcByKey(t, svcs, "cluster"); !hasFact(cl, "cluster_node_down") || !strings.Contains(cl.Text, "pve2") {
+		t.Errorf("cluster nach Uebernahme = %+v", cl)
+	}
+	if ha := svcByKey(t, svcs, "ha"); !hasFact(ha, "ha_error") {
+		t.Errorf("ha nach Uebernahme = %+v", ha)
+	}
+}
+
+// F6-K6: Node leer und mehrere Adressen: beim ersten Kontakt festgelegt, bleibt bei Failover.
+func TestPVENodeFixed(t *testing.T) {
+	fa := pveRoutes(t)
+	sa := &switchable{h: fa}
+	addrA, pin := tlsServer(t, sa)
+	fb := pveRoutes(t) // andere Node: dort ist pve2 "local", pve1 wird weitergeleitet
+	fb.ok("/cluster/status", strings.Replace(strings.Replace(fixture(t, "pve/cluster_status.json"),
+		`"online":1,"local":1`, `"online":1,"local":0`, 1), `"nodeid":2,"ip":"192.168.10.12","online":1,"local":0`,
+		`"nodeid":2,"ip":"192.168.10.12","online":1,"local":1`, 1))
+	addrB, _ := tlsServer(t, fb)
+	cfg := PVEConfig{Addresses: []string{addrA, addrB}, TokenID: "monitor64@pve!node64", Secret: testSecret, Pin: pin}
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	p := newTestPVE(t, cfg, &now)
+	if res := p.Test(context.Background()); !res.OK || res.Node != "pve1" || p.Node() != "pve1" {
+		t.Fatalf("Test = %+v, Node() = %q", res, p.Node())
+	}
+	sa.setDown(true)
+	svcs, err := p.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect ueber Adresse B: %v", err)
+	}
+	if p.Node() != "pve1" || !hasSvc(svcs, "cpu") || fb.count("/nodes/pve1/status") != 1 || fb.count("/nodes/pve2/status") != 0 {
+		t.Errorf("Node nach Failover: %q, pve1 %d, pve2 %d", p.Node(), fb.count("/nodes/pve1/status"), fb.count("/nodes/pve2/status"))
 	}
 }

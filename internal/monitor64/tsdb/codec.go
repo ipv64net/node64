@@ -24,8 +24,9 @@ import (
 //	                    (NaN, +Inf, -Inf), danach varint-Deltas der uebrigen Werte
 //	    Modus float64:  je Wert uvarint (Bits XOR vorige Bits)
 //
-// Werte werden auf hoechstens digits Nachkommastellen gerundet; die Skalierung je Spalte ergibt sich aus
-// den Werten (ganze Zahlen brauchen keine Nachkommastelle). Passt ein Wert nicht mehr exakt in eine
+// Werte werden auf hoechstens digits Nachkommastellen gerundet (Spalten mit Betraegen < 1: bis zu 4
+// signifikante Stellen, hoechstens 6 Nachkommastellen); die Skalierung je Spalte ergibt sich aus den Werten
+// (ganze Zahlen brauchen keine Nachkommastelle). Passt ein Wert nicht mehr exakt in eine
 // Ganzzahl (> 2^53), werden zuerst Nachkommastellen geopfert, notfalls die float64-Bits gespeichert.
 
 const (
@@ -38,6 +39,8 @@ const (
 	maxBody      = 8 << 20
 	minDeflate   = 48 // kleinere Rumpfe lohnen das Komprimieren nicht
 	exactInt     = 1 << 53
+	sigDigits    = 4 // signifikante Stellen kleiner Spalten (Betrag < 1)
+	autoDigits   = 6 // hoechstens so viele Nachkommastellen fuer kleine Spalten
 
 	specNaN    = 0
 	specPosInf = 1
@@ -124,7 +127,9 @@ func appendColumn(b []byte, c []float64, digits int) []byte {
 }
 
 // scaleColumn rundet die endlichen Werte auf Ganzzahlen und waehlt die kleinste Zahl an Nachkommastellen,
-// die nach dem Runden auf digits Stellen noch noetig ist.
+// die nach dem Runden auf digits Stellen noch noetig ist. digits ist der Mindestwert: ist der groesste
+// Betrag der Spalte kleiner als 1 (Fehlerraten, kleine Raten), wird so gerundet, dass er sigDigits
+// signifikante Stellen behaelt, hoechstens autoDigits Nachkommastellen (0,0012 bleibt 0,0012 statt 0,001).
 func scaleColumn(c []float64, digits int) (ints []int64, s int, ok bool) {
 	maxAbs := 0.0
 	for _, v := range c {
@@ -133,6 +138,9 @@ func scaleColumn(c []float64, digits int) (ints []int64, s int, ok bool) {
 		}
 	}
 	d := digits
+	if maxAbs > 0 && maxAbs < 1 && d < autoDigits {
+		d = max(d, min(sigDigits-int(math.Ceil(math.Log10(maxAbs))), autoDigits))
+	}
 	for d >= 0 && math.Round(maxAbs*pow10[d]) > exactInt {
 		d--
 	}

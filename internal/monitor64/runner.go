@@ -3,13 +3,16 @@ package monitor64
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"math"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/notify"
@@ -174,8 +177,15 @@ type hostRT struct {
 	mu       sync.Mutex
 	host     *Host
 	accs     []*accRT
+	removed  bool                     // aus dem Planer genommen: eine noch wartende Runde tut nichts mehr
 	Trackers map[string]*eval.Tracker `json:"trackers"`
-	Failures map[string]int           `json:"failures"`
+	Kinds    map[string]string        `json:"kinds,omitempty"`    // Tracker -> Regel-Art (fuer "Unbekannt" bei fehlenden Werten)
+	Failures map[string]int           `json:"failures"`           // Zugang -> Runden in Folge ohne Antwort
+	Missing  map[string]int           `json:"missing,omitempty"`  // Dienst -> Runden in Folge nicht geliefert
+	Provider map[string]string        `json:"provider,omitempty"` // Dienst -> Zugang, der ihn zuletzt lieferte
+	Rising   map[string]time.Time     `json:"rising,omitempty"`   // Platte -> "Sektoren steigen" gilt bis
+	Local    map[string]localState    `json:"local,omitempty"`    // eigene Skripte: letzter Zustand
+	Trend    map[string]trendState    `json:"trend,omitempty"`    // Fuellstand -> letzte Trendrechnung
 	LastDisc time.Time                `json:"last_disc,omitzero"`
 	dirty    bool
 
@@ -184,6 +194,45 @@ type hostRT struct {
 	lastSave       time.Time
 	lastSavedState eval.State
 	lastSavedView  eval.HostView
+}
+
+type localState struct {
+	State eval.State `json:"state"`
+	At    time.Time  `json:"at"`
+	Text  string     `json:"text,omitempty"`
+}
+
+type trendState struct {
+	At   time.Time `json:"at"`
+	Days float64   `json:"days"`
+}
+
+// initMaps legt fehlende Maps an (nach dem Laden aus m64_runtime).
+func (rt *hostRT) initMaps() {
+	if rt.Trackers == nil {
+		rt.Trackers = map[string]*eval.Tracker{}
+	}
+	if rt.Kinds == nil {
+		rt.Kinds = map[string]string{}
+	}
+	if rt.Failures == nil {
+		rt.Failures = map[string]int{}
+	}
+	if rt.Missing == nil {
+		rt.Missing = map[string]int{}
+	}
+	if rt.Provider == nil {
+		rt.Provider = map[string]string{}
+	}
+	if rt.Rising == nil {
+		rt.Rising = map[string]time.Time{}
+	}
+	if rt.Local == nil {
+		rt.Local = map[string]localState{}
+	}
+	if rt.Trend == nil {
+		rt.Trend = map[string]trendState{}
+	}
 }
 
 func (rt *hostRT) setView(v *HostView) {
@@ -204,24 +253,79 @@ type accRT struct {
 	err string
 }
 
-const discoverEvery = time.Hour
+const (
+	discoverEvery = time.Hour
+	vanishRounds  = 3                // so viele Runden in Folge ohne Dienst (bei vollstaendig antwortendem Zugang) = verschwunden
+	risingHold    = 30 * time.Minute // "ausstehende Sektoren steigen" gilt so lange (SMART wird nur alle 30 min gelesen)
+	trendEvery    = time.Hour        // Trend "voll in N Tagen" hoechstens so oft neu rechnen
+	dbTimeout     = 20 * time.Second // Datenbank-Schritte einer Runde (eigenes Zeitlimit, unabhaengig von den Zugaengen)
+)
+
+// i18nText baut einen uebersetzbaren Text ("i18n:<schluessel>?k=v"); Oberflaeche und Meldungen uebersetzen ihn.
+func i18nText(key string, kv ...string) string {
+	if len(kv) == 0 {
+		return "i18n:" + key
+	}
+	q := url.Values{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		q.Set(kv[i], kv[i+1])
+	}
+	return "i18n:" + key + "?" + q.Encode()
+}
+
+// finiteMetrics entfernt nicht endliche Werte (NaN, Inf) – Daten von Hosts sind nicht vertrauenswuerdig.
+func finiteMetrics(in []model.Metric) []model.Metric {
+	out := in[:0:0]
+	for _, mt := range in {
+		if math.IsNaN(mt.Value) || math.IsInf(mt.Value, 0) || math.IsNaN(mt.Max) || math.IsInf(mt.Max, 0) {
+			continue
+		}
+		out = append(out, mt)
+	}
+	return out
+}
+
+// shortErr kuerzt Fehlertexte von Zugaengen (vom Host bestimmt) auf eine vertraegliche Laenge.
+func shortErr(err error) string {
+	s := strings.Map(func(r rune) rune {
+		if r < 32 && r != '\t' {
+			return ' '
+		}
+		return r
+	}, err.Error())
+	if len([]rune(s)) > 300 {
+		s = string([]rune(s)[:300]) + "…"
+	}
+	return s
+}
 
 // poll ist eine Abfragerunde eines Hosts (vom Planer aufgerufen).
 func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
+	if rt.removed {
+		return
+	}
+	rt.initMaps()
 	now := time.Now()
 	h := rt.host
 	if h.Paused {
 		return
 	}
+	// Datenbank-Schritte mit eigenem Zeitlimit: ein langsamer Zugang darf die Runde nicht abbrechen.
+	dbctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	defer cancel()
+
 	// 1. Zugaenge abfragen
 	type got struct {
 		svc  model.Service
 		via  string
+		acc  string
 		rank int
 	}
 	found := map[string]got{}
+	failedAcc := map[string]bool{} // Zugang hat nicht geantwortet
+	partial := map[string]error{}  // Zugang hat nur teilweise geantwortet
 	var accViews []AccessView
 	var accInputs []eval.Access
 	for _, a := range rt.accs {
@@ -230,27 +334,30 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		var svcs []model.Service
 		var err error
 		if a.col == nil {
-			err = fmt.Errorf("%s", a.err)
+			err = errors.New(a.err)
 		} else {
 			svcs, err = a.col.collect(ctx)
 		}
 		if err != nil && len(svcs) == 0 {
 			rt.Failures[a.row.UID]++
-			av.Error = err.Error()
+			failedAcc[a.row.UID] = true
+			av.Error = shortErr(err)
 		} else {
 			rt.Failures[a.row.UID] = 0
 			av.OK = true
-			if err != nil { // Teilfehler (z. B. eine API-Abfrage)
-				av.Error = err.Error()
+			if err != nil { // Teilfehler (z. B. eine API-Abfrage): die fehlenden Dienste nicht "verschwunden" nennen
+				partial[a.row.UID] = err
+				av.Error = shortErr(err)
 			}
 		}
 		av.Failures = rt.Failures[a.row.UID]
 		accViews = append(accViews, av)
-		accInputs = append(accInputs, eval.Access{Name: name, Failures: av.Failures})
+		accInputs = append(accInputs, eval.Access{Name: a.row.UID, Failures: av.Failures})
 		rank := accessRank(a.row.Type)
 		for _, s := range svcs {
+			s.Metrics = finiteMetrics(s.Metrics)
 			if g, ok := found[s.Key]; !ok || rank < g.rank {
-				found[s.Key] = got{svc: s, via: name, rank: rank}
+				found[s.Key] = got{svc: s, via: name, acc: a.row.UID, rank: rank}
 			}
 		}
 	}
@@ -267,66 +374,103 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				offer = append(offer, g.svc)
 			}
 		}
-		if _, err := m.store.UpsertDiscovered(ctx, h.UID, offer, nil, SystemActor); err != nil {
+		if _, err := m.store.UpsertDiscovered(dbctx, h.UID, offer, nil, SystemActor); err != nil {
 			m.log.Warn("monitor64: discover", "host", h.Name, "err", err)
 		}
 		rt.LastDisc, rt.dirty = now, true
 	}
-	rows, err := m.store.Services(ctx, h.UID)
+	rows, err := m.store.Services(dbctx, h.UID)
 	if err != nil {
 		m.log.Warn("monitor64: services", "host", h.Name, "err", err)
 		return
 	}
-	// verschwundene Dienste merken (nur wenn der Host antwortet)
-	if reachable {
-		var gone []string
-		for _, r := range rows {
-			if r.Adopted == 1 && r.VanishedAt.IsZero() {
-				if _, ok := found[r.Key]; !ok && !strings.HasPrefix(r.Key, "access:") {
-					gone = append(gone, r.Key)
-					r.VanishedAt = now
+	// verschwunden: erst nach vanishRounds Runden ohne den Dienst, und nur wenn sein Zugang vollstaendig
+	// geantwortet hat; wieder geliefert = sofort zurueck.
+	var gone []string
+	for _, r := range rows {
+		if r.Adopted != 1 || strings.HasPrefix(r.Key, "access:") {
+			continue
+		}
+		if g, ok := found[r.Key]; ok {
+			rt.Missing[r.Key], rt.Provider[r.Key] = 0, g.acc
+			if !r.VanishedAt.IsZero() {
+				if err := m.store.ClearVanished(dbctx, h.UID, r.Key); err == nil {
+					r.VanishedAt = time.Time{}
 				}
 			}
+			continue
 		}
-		if len(gone) > 0 {
-			_ = m.store.MarkVanished(ctx, h.UID, gone, now)
+		if !reachable || !r.VanishedAt.IsZero() {
+			continue
 		}
+		if prov := rt.Provider[r.Key]; prov != "" {
+			if failedAcc[prov] || partialAffects(partial[prov], r.Key) {
+				continue
+			}
+		} else if len(failedAcc) > 0 || len(partial) > 0 {
+			continue
+		}
+		rt.Missing[r.Key]++
+		if rt.Missing[r.Key] >= vanishRounds {
+			gone = append(gone, r.Key)
+			r.VanishedAt = now
+		}
+	}
+	if len(gone) > 0 {
+		_ = m.store.MarkVanished(dbctx, h.UID, gone, now)
 	}
 
 	// 3. bewerten und speichern
 	cfg := m.config()
 	iv := time.Duration(h.IntervalSec) * time.Second
+	open := m.loadOpen(dbctx, h.UID)
 	var views []SvcView
 	var states []eval.State
 	var inputs []eval.ServiceInput
 	newCount := 0
-	acks := m.openAcks(h.UID)
 	for _, r := range rows {
 		if r.Adopted == 0 {
 			newCount++
 			continue
 		}
-		if r.Adopted < 0 {
+		if r.Adopted < 0 || strings.HasPrefix(r.Key, "access:") {
 			continue
 		}
 		g, ok := found[r.Key]
-		sv := SvcView{Key: r.Key, Name: firstNonEmpty(r.Name, g.svc.Name, r.Key), Kind: r.Kind, Adopted: 1, Vanished: !r.VanishedAt.IsZero(), Via: g.via, Acked: acks[r.Key]}
+		acked := open[r.Key] != nil && open[r.Key].Acked
+		sv := SvcView{Key: r.Key, Name: firstNonEmpty(r.Name, g.svc.Name, r.Key), Kind: r.Kind, Adopted: 1, Vanished: !r.VanishedAt.IsZero(), Via: g.via, Acked: acked}
 		if ok {
 			sv.Text = g.svc.Text
 		}
+		hostRules := parseHostRules(r.HostRule)
 		var ms []eval.MetricStatus
-		hl := m.hostLevel(r)
+		delivered := map[string]bool{}
+		metrics := g.svc.Metrics
+		if ok {
+			metrics = append(metrics, m.trendMetric(dbctx, rt, h.UID, r.Key, g.svc, now)...)
+		}
+		freeOf := map[string]float64{}
+		for _, mt := range metrics {
+			if mt.Name == "free" && mt.Unit == "B" {
+				freeOf[r.Key] = mt.Value
+			}
+		}
 		// Zahlenwerte
-		for _, mt := range g.svc.Metrics {
-			if ok {
+		for _, mt := range metrics {
+			if ok && mt.Name != "trend_days" {
 				m.appendSeries(h.UID, r.Key, mt.Name, now, mt.Value)
 			}
 			mv := MetricView{Metric: mt}
 			if mt.Rule != "" {
-				e := eval.Resolve(cfg.std, cfg.overrides, ref, hl, mt.Rule)
-				tr := rt.tracker(r.Key+"|"+mt.Name, iv)
+				delivered[mt.Name] = true
+				e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, mt.Rule), mt.Rule)
+				key := r.Key + "|" + mt.Name
+				tr := rt.tracker(key, iv)
+				rt.Kinds[key] = mt.Rule
 				free := 0.0
-				if mt.Max > 0 && mt.Unit == "%" {
+				if f, has := freeOf[r.Key]; has && (mt.Name == "used") {
+					free = f // exakt (beruecksichtigt reservierte Bloecke)
+				} else if mt.Max > 0 && mt.Unit == "%" {
 					free = mt.Max * (100 - mt.Value) / 100
 				}
 				mv.Status = tr.Observe(e, eval.Sample{At: now, Value: mt.Value, Free: free})
@@ -335,26 +479,33 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 			sv.Metrics = append(sv.Metrics, mv)
 		}
-		// fehlende Messgroessen (Dienst nicht geliefert): Unbekannt nach 3 Intervallen
-		if !ok {
-			for key, tr := range rt.Trackers {
-				if strings.HasPrefix(key, r.Key+"|") && !strings.Contains(key[len(r.Key)+1:], ":") {
-					name := key[len(r.Key)+1:]
-					kind := m.ruleKindOf(r, name)
-					if kind == "" {
-						continue
-					}
-					e := eval.Resolve(cfg.std, cfg.overrides, ref, hl, kind)
-					st := tr.Status(e, now)
-					ms = append(ms, eval.MetricStatus{Name: name, Status: st, Notify: e.Notify()})
-				}
+		// fehlende Messgroessen (Dienst oder einzelner Wert nicht geliefert): letzter Zustand, nach 3 Intervallen Unbekannt
+		prefix := r.Key + "|"
+		for key, kind := range rt.Kinds {
+			if !strings.HasPrefix(key, prefix) || strings.HasPrefix(key[len(prefix):], "state:") {
+				continue
 			}
+			name := key[len(prefix):]
+			if delivered[name] {
+				continue
+			}
+			tr := rt.Trackers[key]
+			if tr == nil {
+				continue
+			}
+			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind)
+			st := tr.Status(e, now)
+			ms = append(ms, eval.MetricStatus{Name: name, Status: st, Notify: e.Notify()})
 		}
 		// Zustandsregeln (Facts)
 		facts := map[string]string{}
 		for _, f := range g.svc.Facts {
 			facts[f.Code] = f.Text
 		}
+		if _, has := facts["smart_sectors_rising"]; has {
+			rt.Rising[r.Key] = now.Add(risingHold)
+		}
+		_, smartUnreadable := facts["smart_unreadable"]
 		kinds := map[string]bool{}
 		for _, k := range factKinds[r.Kind] {
 			kinds[k] = true
@@ -380,52 +531,79 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 					cond, text = true, t
 				}
 			}
-			if k == eval.KindServiceGone {
-				cond, text = true, "nicht mehr vorhanden seit "+r.VanishedAt.Local().Format("02.01. 15:04")
-			}
-			if k == eval.KindGuestDown && ok { // Soll-Zustand am Dienst geht vor dem Vorschlag (onboot/Neustart-Richtlinie)
-				switch r.Soll {
-				case "off":
-					cond = false
-				case "run":
+			switch k {
+			case eval.KindServiceGone:
+				cond, text = true, i18nText("monitor64.detail.vanished", "since", r.VanishedAt.UTC().Format(time.RFC3339))
+			case eval.KindSmartSectorsUp:
+				if until := rt.Rising[r.Key]; now.Before(until) {
+					cond = true
+				}
+			case eval.KindGuestDown:
+				if ok { // Soll-Zustand am Dienst geht vor dem Vorschlag (onboot/Neustart-Richtlinie)
+					running, locked, hasRun := 1.0, 0.0, false
 					for _, mt := range g.svc.Metrics {
-						if mt.Name == "running" {
-							cond = mt.Value == 0
+						switch mt.Name {
+						case "running":
+							running, hasRun = mt.Value, true
+						case "locked":
+							locked = mt.Value
+						}
+					}
+					switch r.Soll {
+					case "off":
+						cond = false
+					case "run":
+						if hasRun {
+							cond = running == 0 && locked == 0
 							if cond && text == "" {
-								text = "läuft nicht (Soll: läuft)"
+								text = i18nText("monitor64.detail.not_running")
 							}
 						}
 					}
 				}
 			}
-			e := eval.Resolve(cfg.std, cfg.overrides, ref, hl, k)
+			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, k), k)
 			tr := rt.tracker(r.Key+"|state:"+k, iv)
 			var st eval.Status
-			if ok || k == eval.KindServiceGone {
+			isSmart := k == eval.KindSmartFailed || k == eval.KindSmartSectors || k == eval.KindSmartSectorsUp
+			switch {
+			case k == eval.KindServiceGone:
 				st = tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(cond)})
-			} else {
-				st = tr.Status(e, now)
+			case !ok || (isSmart && smartUnreadable && !cond):
+				st = tr.Status(e, now) // keine (lesbaren) Daten: letzter Stand, dann Unbekannt
+			default:
+				st = tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(cond)})
 			}
 			ms = append(ms, eval.MetricStatus{Name: k, Status: st, Notify: e.Notify()})
 			if cond && st.State != eval.OK && text != "" {
 				sv.Cause = text
 			}
 		}
-		// eigene Skripte: Zustand direkt aus dem Skript
-		for code, t := range facts {
-			var s eval.State
-			switch code {
-			case "local_warn":
-				s = eval.Warn
-			case "local_crit":
-				s = eval.Crit
-			case "local_unknown":
-				s = eval.Unknown
-			default:
-				continue
+		// eigene Skripte: Zustand direkt aus dem Skript; ohne Daten letzter Zustand, nach 3 Intervallen Unbekannt
+		if r.Kind == "local" {
+			ls, had := rt.Local[r.Key]
+			if ok {
+				ls = localState{State: eval.OK, At: now}
+				for code, t := range facts {
+					switch code {
+					case "local_warn":
+						ls.State, ls.Text = eval.Warn, t
+					case "local_crit":
+						ls.State, ls.Text = eval.Crit, t
+					case "local_unknown":
+						ls.State, ls.Text = eval.Unknown, t
+					}
+				}
+				rt.Local[r.Key] = ls
 			}
-			ms = append(ms, eval.MetricStatus{Name: code, Status: eval.Status{State: s, Level: s, At: now}, Notify: r.Report != "show"})
-			sv.Cause = t
+			st := ls.State
+			if !ok && (!had || now.Sub(ls.At) > time.Duration(eval.UnknownAfter)*iv) {
+				st = eval.Unknown
+			}
+			ms = append(ms, eval.MetricStatus{Name: "local", Status: eval.Status{State: st, Level: st, At: ls.At}, Notify: r.Report != "show"})
+			if st != eval.OK && ls.Text != "" {
+				sv.Cause = ls.Text
+			}
 		}
 		res := eval.ServiceState(ms)
 		sv.State, sv.ShowOnly = res.State, res.ShowOnly || r.Report == "show"
@@ -442,21 +620,30 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		if detail == "" {
 			detail = sv.Text
 		}
-		inputs = append(inputs, eval.ServiceInput{Key: r.Key, Name: sv.Name, State: notifyState, ShowOnly: sv.ShowOnly, Acked: sv.Acked, Detail: detail})
+		inputs = append(inputs, eval.ServiceInput{Key: r.Key, Name: sv.Name, State: notifyState, ShowOnly: sv.ShowOnly, Acked: acked, Detail: detail})
 	}
-	// gestoerte Zugaenge als eigener Dienst "Zugang X"
+	// Zugaenge als Dienst "Zugang X" (immer mitgeschickt, damit die Erholung eine Entwarnung bekommt)
 	hres := eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs, Services: states})
-	for _, name := range hres.FailedAccess {
-		key := eval.AccessServiceKey(name)
-		detail := ""
-		for _, av := range accViews {
-			if av.Name == name {
-				detail = av.Error
-			}
+	for i, a := range rt.accs {
+		av := accViews[i]
+		key := "access:" + a.row.UID
+		failing := av.Failures >= eval.UnreachableRounds && !hres.Unreachable
+		e := eval.Resolve(cfg.std, cfg.overrides, ref, eval.HostLevel{}, eval.KindAccessFailed)
+		tr := rt.tracker(key+"|state:"+eval.KindAccessFailed, iv)
+		st := tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(failing)})
+		name := i18nText("monitor64.detail.access", "name", av.Name)
+		acked := open[key] != nil && open[key].Acked
+		if st.State != eval.OK {
+			views = append(views, SvcView{Key: key, Name: name, Kind: "access", State: st.State, Cause: av.Error, Adopted: 1, Acked: acked})
+			states = append(states, st.State)
 		}
-		views = append(views, SvcView{Key: key, Name: "Zugang " + name, Kind: "access", State: eval.Warn, Cause: detail, Adopted: 1})
-		inputs = append(inputs, eval.ServiceInput{Key: key, Name: "Zugang " + name, State: eval.Warn, Detail: detail})
+		notifyState := st.State
+		if !e.Notify() {
+			notifyState = eval.OK
+		}
+		inputs = append(inputs, eval.ServiceInput{Key: key, Name: name, State: notifyState, ShowOnly: !e.Notify(), Acked: acked, Detail: av.Error})
 	}
+	hres = eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs, Services: states})
 
 	// 4. Probleme und Benachrichtigung
 	unreachDetail := ""
@@ -467,39 +654,115 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		}
 		unreachDetail = strings.Join(errs, "; ")
 	}
-	m.syncProblems(ctx, h, inputs, hres, unreachDetail, now)
+	m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
 	round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
 	m.notifyMu.Lock()
+	if m.notifier == nil {
+		m.notifyMu.Unlock()
+		return
+	}
 	result := m.notifier.Round(round, eval.ResolveRouting(cfg.notify, cfg.notifyOverrides, ref))
 	hostMem, _ := json.Marshal(m.notifier.Hosts[h.UID])
 	m.notifyMu.Unlock()
 	for _, k := range result.Unack {
-		m.clearAck(ctx, h.UID, k)
+		m.clearAck(dbctx, h.UID, k)
 	}
-	m.recordNotified(ctx, h, result.Lines, now)
+	m.recordNotified(dbctx, h, result.Lines, now)
 	for _, msg := range result.Messages {
-		m.dispatch(h, msg, unreachDetail)
+		m.dispatch(dbctx, h, msg, unreachDetail)
 	}
 
 	// 5. Stand fuer die Oberflaeche und speichern
 	sort.SliceStable(views, func(i, j int) bool { return kindOrder(views[i].Kind) < kindOrder(views[j].Kind) })
 	rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win})
-	m.saveRuntime(ctx, rt, hostMem)
+	m.saveRuntime(dbctx, rt, hostMem)
 }
 
-// describe formuliert die ausloesende Messgroesse ("91 % (ab 90 %)").
+// partialAffects: betrifft ein Teilfehler diesen Dienst? Ohne Angabe der betroffenen Dienste: ja (vorsichtig).
+func partialAffects(err error, key string) bool {
+	if err == nil {
+		return false
+	}
+	var pe *apis.PartialError
+	if errors.As(err, &pe) && len(pe.Prefixes) > 0 {
+		return pe.Affects(key)
+	}
+	return true
+}
+
+// parseHostRules liest die Schwellen der Stufe "dieser Host, nur dieser Dienst" (Regel-Art -> Regel).
+func parseHostRules(raw string) map[string]eval.Rule {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var out map[string]eval.Rule
+	if json.Unmarshal([]byte(raw), &out) != nil {
+		return nil
+	}
+	return out
+}
+
+// hostLevel liefert die Stufe "dieser Host" fuer eine Regel-Art: Dienst (host_rule) und alle Dienste des Hosts
+// mit dieser Art (m64_host_rules).
+func (m *Module) hostLevel(hostUID string, svcRules map[string]eval.Rule, ruleKind string) eval.HostLevel {
+	var hl eval.HostLevel
+	if r, ok := svcRules[ruleKind]; ok {
+		rr := r
+		hl.Service = &rr
+	}
+	if kr := m.config().hostKind[hostUID+"|"+ruleKind]; kr != nil {
+		hl.Kind = kr
+	}
+	return hl
+}
+
+// trendMetric rechnet hoechstens stuendlich den Trend "voll in N Tagen" fuer Fuellstaende (fs.used, store.used)
+// aus dem Verlauf der letzten 7 Tage (Messgroesse trend_days, Regel fs.trend_days).
+func (m *Module) trendMetric(ctx context.Context, rt *hostRT, hostUID, svcKey string, svc model.Service, now time.Time) []model.Metric {
+	var used *model.Metric
+	for i := range svc.Metrics {
+		mt := &svc.Metrics[i]
+		if mt.Name == "used" && (mt.Rule == model.RuleFS || mt.Rule == model.RuleStore) {
+			used = mt
+		}
+	}
+	if used == nil {
+		return nil
+	}
+	ts, ok := rt.Trend[svcKey]
+	if !ok || now.Sub(ts.At) >= trendEvery {
+		days := eval.NoForecast
+		if q, isQ := m.seriesStore().(seriesQuerier); isQ {
+			s, err := q.Query(ctx, seriesKey(hostUID, svcKey, "used"), now.Add(-eval.TrendWindow), now, 400)
+			if err == nil {
+				pts := make([]eval.Point, 0, len(s.Points))
+				for _, p := range s.Points {
+					pts = append(pts, eval.Point{At: time.Unix(p.T, 0), V: p.Avg})
+				}
+				days = eval.Trend(pts, now, 100).Value()
+			}
+		}
+		ts = trendState{At: now, Days: days}
+		rt.Trend[svcKey] = ts
+	}
+	if ts.Days >= eval.NoForecast {
+		return []model.Metric{{Name: "trend_days", Value: eval.NoForecast, Unit: "d", Rule: eval.KindFSTrendDays}}
+	}
+	return []model.Metric{{Name: "trend_days", Value: math.Round(ts.Days*10) / 10, Unit: "d", Rule: eval.KindFSTrendDays}}
+}
+
+// describe formuliert die ausloesende Messgroesse (uebersetzbar: "util 91 (Schwelle 90)").
 func describe(ms eval.MetricStatus) string {
 	st := ms.Status
 	if st.Threshold.Off {
 		return ms.Name
 	}
-	return fmt.Sprintf("%s %s (Schwelle %s)", ms.Name, fmtNum(st.Value), fmtNum(st.Threshold.V))
+	return i18nText("monitor64.detail.threshold", "metric", ms.Name, "value", fmtNum(st.Value), "limit", fmtNum(st.Threshold.V))
 }
 
 func fmtNum(v float64) string {
 	s := strconv.FormatFloat(v, 'f', 2, 64)
-	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
-	return strings.Replace(s, ".", ",", 1)
+	return strings.TrimRight(strings.TrimRight(s, "0"), ".") // sprachneutral (Punkt); Texte werden uebersetzt angezeigt
 }
 
 func (rt *hostRT) tracker(key string, iv time.Duration) *eval.Tracker {
@@ -525,82 +788,84 @@ func (m *Module) appendSeries(hostUID, svcKey, metric string, t time.Time, v flo
 	}
 }
 
-// ruleKindOf: Art der Schwelle einer Messgroesse eines Dienstes (aus der letzten Runde, fuer fehlende Daten).
-func (m *Module) ruleKindOf(r *ServiceRow, metric string) string {
-	switch {
-	case r.Kind == "cpu" && metric == "util":
-		return model.RuleCPU
-	case r.Kind == "load" && metric == "per_core":
-		return model.RuleLoad
-	case r.Kind == "mem" && metric == "used":
-		return model.RuleMem
-	case r.Kind == "swap" && metric == "used":
-		return model.RuleSwap
-	case r.Kind == "fs" && metric == "used":
-		return model.RuleFS
-	case (r.Kind == "zfs" || r.Kind == "store" || r.Kind == "ds") && metric == "used":
-		return model.RuleStore
-	case r.Kind == "if" && metric == "util":
-		return model.RuleIfUtil
-	case r.Kind == "if" && metric == "errrate":
-		return model.RuleIfErrRate
-	case r.Kind == "temp" && metric == "temp":
-		return model.RuleTemp
-	case r.Kind == "disk" && metric == "wear":
-		return model.RuleWear
-	case r.Kind == "disk" && metric == "temp":
-		return model.RuleDiskTemp
-	}
-	return ""
-}
-
-// hostLevel liest die Einstellungen der Stufe "dieser Host" (Dienst und Art).
-func (m *Module) hostLevel(r *ServiceRow) eval.HostLevel {
-	var hl eval.HostLevel
-	if r.HostRule != "" {
-		var rule eval.Rule
-		if json.Unmarshal([]byte(r.HostRule), &rule) == nil {
-			hl.Service = &rule
-		}
-	}
-	if kr := m.config().hostKind[r.HostUID+"|"+r.Kind]; kr != nil {
-		hl.Kind = kr
-	}
-	return hl
-}
-
-// dispatch gibt eine gebuendelte Meldung an den Dispatcher der Node.
-func (m *Module) dispatch(h *Host, msg eval.Message, unreachDetail string) {
+// dispatch gibt eine gebuendelte Meldung an den Dispatcher der Node. "default" (Standardkanaele der Node) und
+// ausdruecklich gewaehlte Kanaele gehen als zwei Meldungen raus (eine mit leerer Auswahl = Standardkanaele, eine mit
+// den uebrigen Kanaelen ohne die Standardkanaele, damit kein Kanal doppelt bekommt).
+func (m *Module) dispatch(ctx context.Context, h *Host, msg eval.Message, unreachDetail string) {
 	if m.dispatchFn == nil {
 		return
 	}
 	var lines []notify.MonitorLine
+	keys := map[string]bool{}
 	for _, l := range msg.Lines {
-		ml := notify.MonitorLine{Kind: string(l.Kind), Key: l.Key, Name: l.Name, State: l.State.String(), Since: l.Since, Detail: l.Detail}
+		ml := notify.MonitorLine{Kind: string(l.Kind), Gone: l.Gone, Key: l.Key, Name: l.Name, State: l.State.String(), Since: l.Since, Detail: l.Detail}
 		if l.Kind == eval.LineUnreachable && ml.Detail == "" {
 			ml.Detail = unreachDetail
 		}
 		lines = append(lines, ml)
+		keys[l.Key] = true
 	}
 	b, _ := json.Marshal(lines)
 	data := map[string]string{"host": h.Name, "path": "/monitor64/host/" + h.UID, "severity": msg.Severity.String(), "lines": string(b)}
-	if len(msg.Lines) == 1 {
+	if len(keys) == 1 {
 		data["key"] = msg.Lines[0].Key
 	}
 	if msg.AfterMaintenance {
 		data["after_maint"] = "1"
 	}
-	info := notify.CheckInfo{Token: "m64:" + h.UID, Name: h.Name, Type: "monitor64", Target: h.Address, Local: true, NotifyDown: true, NotifyUp: true, Critical: msg.CritInQuiet}
+	base := notify.CheckInfo{Token: "m64:" + h.UID, Name: h.Name, Type: "monitor64", Target: h.Address, Local: true, NotifyDown: true, NotifyUp: true, Critical: msg.CritInQuiet}
+	withDefault := false
+	var explicit []int64
 	for _, id := range msg.Channels {
 		if id == defaultChannels {
-			info.Channels = nil // Standardkanaele der Node
-			break
+			withDefault = true
+			continue
 		}
 		if n, err := strconv.ParseInt(id, 10, 64); err == nil {
-			info.Channels = append(info.Channels, n)
+			explicit = append(explicit, n)
 		}
 	}
-	m.dispatchFn(notify.Alert{EventID: newUID(), Kind: notify.Kind(msg.Event), Time: msg.At, Check: info, Data: data})
+	send := func(chans []int64) {
+		info := base
+		info.Channels = chans
+		m.dispatchFn(notify.Alert{EventID: newUID(), Kind: notify.Kind(msg.Event), Time: msg.At, Check: info, Data: data})
+	}
+	if withDefault {
+		send(nil)
+		if len(explicit) > 0 {
+			defaults := m.defaultChannelIDs(ctx)
+			var rest []int64
+			for _, id := range explicit {
+				if !defaults[id] {
+					rest = append(rest, id)
+				}
+			}
+			if len(rest) > 0 {
+				send(rest)
+			}
+		}
+		return
+	}
+	if len(explicit) > 0 {
+		send(explicit)
+	}
+}
+
+// defaultChannelIDs: lokale Standardkanaele der Node (damit ein Kanal nicht doppelt bekommt).
+func (m *Module) defaultChannelIDs(ctx context.Context) map[int64]bool {
+	out := map[int64]bool{}
+	rows, err := m.st.Reader().QueryContext(ctx, `SELECT id FROM nf_channels WHERE is_default = 1 AND enabled = 1`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // defaultChannels steht in der Benachrichtigung fuer "Standardkanaele der Node" (keine eigene Auswahl).

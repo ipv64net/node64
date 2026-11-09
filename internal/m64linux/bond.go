@@ -79,7 +79,10 @@ func ParseBonding(name string, b []byte) (*m64proto.Bond, error) {
 func readBonds(src source) ([]m64proto.Bond, []error) {
 	var out []m64proto.Bond
 	var errs []error
-	for _, n := range src.ReadDir("/proc/net/bonding") {
+	for i, n := range src.ReadDir("/proc/net/bonding") {
+		if i >= 128 {
+			break
+		}
 		b, err := src.ReadFile("/proc/net/bonding/" + n)
 		if err != nil {
 			errs = append(errs, err)

@@ -149,6 +149,7 @@ type diskEntry struct {
 	Status   string `json:"status"`
 	Wearout  optNum `json:"wearout"`
 	Used     string `json:"used"`
+	WWN      string `json:"wwn"`
 }
 
 func (d diskEntry) dev() string {
@@ -160,7 +161,49 @@ func (d diskEntry) dev() string {
 
 func (d diskEntry) kind() string { return strings.ToLower(firstNonEmpty(d.Type, d.DiskType)) }
 
-func (d diskEntry) key() string { return "disk:" + firstNonEmpty(strings.TrimSpace(d.Serial), d.dev()) }
+// serial ist die Seriennummer ohne Platzhalter ("unknown", "N/A" usw. -> leer).
+func (d diskEntry) serial() string {
+	s := strings.TrimSpace(d.Serial)
+	switch strings.ToLower(s) {
+	case "unknown", "n/a", "none", "-", "0":
+		return ""
+	}
+	return s
+}
+
+func (d diskEntry) wwn() string {
+	w := strings.TrimSpace(d.WWN)
+	if strings.EqualFold(w, "unknown") {
+		return ""
+	}
+	return w
+}
+
+// diskKeys vergibt die Dienst-Schluessel: Seriennummer, wenn sie eindeutig ist (gleiche Seriennummer mit gleicher
+// WWN = Multipath, ein Dienst); sonst (fehlt, Platzhalter, zwei Platten mit derselben Nummer) die WWN bzw. der
+// Geraetename, damit keine Platte eine andere verdeckt.
+func diskKeys(list []diskEntry) []string {
+	ids := map[string]map[string]bool{} // Seriennummer -> WWN (ohne WWN: Geraetename)
+	for _, d := range list {
+		s := d.serial()
+		if s == "" {
+			continue
+		}
+		if ids[s] == nil {
+			ids[s] = map[string]bool{}
+		}
+		ids[s][firstNonEmpty(d.wwn(), "dev:"+d.dev())] = true
+	}
+	keys := make([]string, len(list))
+	for i, d := range list {
+		if s := d.serial(); s != "" && len(ids[s]) == 1 {
+			keys[i] = "disk:" + s
+			continue
+		}
+		keys[i] = "disk:" + firstNonEmpty(d.wwn(), d.dev())
+	}
+	return keys
+}
 
 // smartResp ist die Antwort von /nodes/{node}/disks/smart (Proxmox VE: health, type ata|text, text; PBS: status,
 // wearout, NVMe-Werte als Attribute mit Name und Wert).
@@ -198,16 +241,22 @@ func (s *smartData) sectors() uint64 {
 	return n
 }
 
+// healthOf wertet den SMART-Gesamtstatus aus. Proxmox VE reicht den Text von smartctl durch ("PASSED", "FAILED!",
+// SAS: "OK" bzw. "FAILURE PREDICTION THRESHOLD EXCEEDED: ascq=…"), PBS liefert "passed"/"failed"/"unknown".
 func healthOf(s string) *bool {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "passed", "ok":
-		b := true
-		return &b
-	case "failed":
-		b := false
-		return &b
+	u := strings.ToUpper(strings.TrimSpace(s))
+	var b bool
+	switch {
+	case u == "":
+		return nil
+	case strings.Contains(u, "FAIL"):
+		b = false
+	case strings.HasPrefix(u, "PASSED"), u == "OK", strings.HasPrefix(u, "OK "), strings.HasPrefix(u, "OK,"):
+		b = true
+	default:
+		return nil // UNKNOWN u. a.
 	}
-	return nil
+	return &b
 }
 
 // parseSmart wertet die SMART-Antwort aus (ATA-Attribute nach ID, NVMe-Werte aus dem Text bzw. benannten Attributen).
@@ -269,22 +318,36 @@ func parseSmart(r smartResp) smartData {
 			text[strings.ToLower(strings.TrimSpace(k))] = strings.TrimSpace(v)
 		}
 	}
+	// NVMe: Text von smartctl ("Critical Warning: 0x04", hex) bzw. Schluessel aus dem JSON von smartctl, wie PBS sie
+	// als Attributnamen liefert ("critical_warning": 4, dezimal).
 	if v, ok := text["critical warning"]; ok {
 		if n, err := strconv.ParseUint(strings.TrimPrefix(strings.ToLower(strings.Fields(v + " x")[0]), "0x"), 16, 64); err == nil {
 			setU(&d.critWarn, n)
 		}
+	} else if v, ok := text["critical_warning"]; ok {
+		f := strings.ToLower(strings.Fields(v + " x")[0])
+		var n uint64
+		var err error
+		if h, isHex := strings.CutPrefix(f, "0x"); isHex {
+			n, err = strconv.ParseUint(h, 16, 64)
+		} else {
+			n, err = strconv.ParseUint(f, 10, 64)
+		}
+		if err == nil {
+			setU(&d.critWarn, n)
+		}
 	}
-	if v, ok := text["temperature"]; ok && d.temp == nil {
+	if v, ok := firstText(text, "temperature"); ok && d.temp == nil {
 		if n, ok := leadingUint(v); ok && n > 0 && n < 150 {
 			setF(&d.temp, float64(n))
 		}
 	}
-	if v, ok := text["percentage used"]; ok {
+	if v, ok := firstText(text, "percentage used", "percentage_used"); ok {
 		if n, ok := leadingUint(v); ok {
 			setF(&d.wearUsed, float64(n))
 		}
 	}
-	if v, ok := text["media and data integrity errors"]; ok {
+	if v, ok := firstText(text, "media and data integrity errors", "media_errors"); ok {
 		if n, ok := leadingUint(strings.ReplaceAll(v, ",", "")); ok {
 			setU(&d.mediaE, n)
 		}
@@ -295,10 +358,19 @@ func parseSmart(r smartResp) smartData {
 	return d
 }
 
-// diskService baut den Dienst einer Platte (Schluessel Seriennummer) aus disks/list und SMART. prevSectors haelt die
+// firstText liefert den ersten vorhandenen Eintrag zu einem der Namen.
+func firstText(m map[string]string, names ...string) (string, bool) {
+	for _, n := range names {
+		if v, ok := m[n]; ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// diskService baut den Dienst einer Platte (Schluessel aus diskKeys) aus disks/list und SMART. prevSectors haelt die
 // Sektoren der vorigen SMART-Abfrage je Schluessel (steigen -> smart_sectors_rising) und wird aktualisiert.
-func diskService(d diskEntry, sm *smartData, smartErr bool, prevSectors map[string]uint64) model.Service {
-	key := d.key()
+func diskService(key string, d diskEntry, sm *smartData, smartErr bool, prevSectors map[string]uint64) model.Service {
 	name := d.dev()
 	if d.Model != "" {
 		name += " (" + strings.TrimSpace(d.Model) + ")"
@@ -332,9 +404,11 @@ func diskService(d diskEntry, sm *smartData, smartErr bool, prevSectors map[stri
 		s.Metrics = append(s.Metrics, model.Metric{Name: "temp", Value: round2(*sm.temp), Unit: "°C", Rule: rule})
 		parts = append(parts, fmt.Sprintf("%.0f °C", *sm.temp))
 	}
-	if sm.wearUsed != nil && *sm.wearUsed >= 0 && *sm.wearUsed <= 100 && d.kind() != "hdd" {
-		s.Metrics = append(s.Metrics, model.Metric{Name: "wear", Value: round2(*sm.wearUsed), Unit: "%", Rule: model.RuleWear})
-		parts = append(parts, fmt.Sprintf("Verschleiß %.0f %%", *sm.wearUsed))
+	if sm.wearUsed != nil && d.kind() != "hdd" {
+		// ueber 100 % (NVMe "Percentage Used" bis 255, Proxmox-wearout negativ): verbraucht, also 100
+		w := min(max(*sm.wearUsed, 0), 100)
+		s.Metrics = append(s.Metrics, model.Metric{Name: "wear", Value: round2(w), Unit: "%", Rule: model.RuleWear})
+		parts = append(parts, fmt.Sprintf("Verschleiß %.0f %%", w))
 	}
 	addCounter := func(name string, v *uint64) {
 		if v != nil {

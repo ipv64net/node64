@@ -74,12 +74,13 @@ func (c *counts) add(s eval.State) {
 }
 
 // levelOf bewertet den letzten Wert einer Messgroesse mit einer Regel (ohne Dauer und Hysterese; Vorschau).
+// Beide Seiten der Vorschau ("vorher" und "danach") rechnen so, damit nur die Regel den Unterschied macht.
 func levelOf(e eval.Effective, mt MetricView) eval.State {
 	w, c, dir, _ := e.Levels()
 	v := mt.Value
 	if e.Mode == eval.ModeFree {
 		if mt.Max <= 0 || mt.Unit != "%" {
-			return mt.Status.Level
+			return eval.OK
 		}
 		v = mt.Max * (100 - mt.Value) / 100 / eval.GB
 	}
@@ -101,18 +102,22 @@ func levelOf(e eval.Effective, mt MetricView) eval.State {
 	return eval.OK
 }
 
-// ownRule: am Host ist fuer diesen Dienst eine Schwelle eingestellt (gilt vor allen Abweichungen).
-func ownRule(hl eval.HostLevel) bool {
-	set := func(r *eval.Rule) bool {
-		return r != nil && (r.Warn != nil || r.Crit != nil || r.WarnFree != nil || r.CritFree != nil || r.Mode != nil || r.Severity != nil)
+// fromOverride: mindestens ein Feld der wirksamen Regel stammt aus der Abweichung (die Einstellung am Host erbt
+// feldweise; nur wenn sie alles ueberdeckt, wirkt die Abweichung dort nicht).
+func fromOverride(e eval.Effective) bool {
+	for _, st := range e.Origin {
+		if st == eval.StageOverride {
+			return true
+		}
 	}
-	return set(hl.Service) || set(hl.Kind)
+	return false
 }
 
-// effectOf rechnet die Wirkung der Abweichung list[idx] auf den aktuellen Stand aller Hosts.
-func (m *Module) effectOf(ctx context.Context, std eval.Table, list []eval.Override, idx int) effect {
+// effectOf rechnet die Wirkung der Abweichung after[idx] auf den aktuellen Stand aller Hosts – genau wie
+// eval.Resolve im Kern. before ist die Liste ohne die neue bzw. mit der bisherigen Fassung (Vergleich "vorher").
+func (m *Module) effectOf(ctx context.Context, std eval.Table, before, after []eval.Override, idx int) effect {
 	ef := effect{Hosts: []string{}, Own: []string{}, Shadow: map[int][]string{}}
-	o := list[idx]
+	o := after[idx]
 	rows, _ := m.store.Services(ctx, "")
 	byKey := map[string]*ServiceRow{}
 	for _, r := range rows {
@@ -134,34 +139,34 @@ func (m *Module) effectOf(ctx context.Context, std eval.Table, list []eval.Overr
 			if row == nil {
 				row = &ServiceRow{HostUID: v.Host.UID, Key: s.Key, Kind: s.Kind}
 			}
-			hl := m.hostLevel(row)
+			hl := m.hostLevel(v.Host.UID, parseHostRules(row.HostRule), o.Kind)
 			check := func(mt *MetricView) {
-				if ownRule(hl) {
-					ef.Own = addHost(ef.Own, v.Host.Name)
-					return
-				}
-				e := eval.Resolve(std, list, ref, hl, o.Kind)
+				e := eval.Resolve(std, after, ref, hl, o.Kind)
 				if e.Override != idx {
 					if e.Override >= 0 && e.Override < idx {
 						ef.Shadow[e.Override] = addHost(ef.Shadow[e.Override], v.Host.Name)
 					}
 					return
 				}
+				if !fromOverride(e) {
+					ef.Own = addHost(ef.Own, v.Host.Name)
+					return
+				}
 				ef.Services++
 				ef.Hosts = addHost(ef.Hosts, v.Host.Name)
 				if mt != nil {
-					ef.Before.add(mt.Status.Level)
+					ef.Before.add(levelOf(eval.Resolve(std, before, ref, hl, o.Kind), *mt))
 					ef.After.add(levelOf(e, *mt))
 				}
 			}
 			if rk, _ := ruleKindOf(o.Kind); rk.State {
-				if slices.Contains(factKinds[s.Kind], o.Kind) || (o.Kind == eval.KindGuestDown && guestKind(s.Kind)) {
+				if slices.Contains(factKinds[s.Kind], o.Kind) {
 					check(nil)
 				}
 				continue
 			}
 			for i := range s.Metrics {
-				if s.Metrics[i].Metric.Rule == o.Kind {
+				if firstNonEmpty(s.Metrics[i].RuleKind, s.Metrics[i].Metric.Rule) == o.Kind {
 					check(&s.Metrics[i])
 					break
 				}
@@ -182,9 +187,9 @@ type ruleOverrideOut struct {
 type ownOut struct {
 	HostUID string    `json:"host_uid"`
 	Host    string    `json:"host"`
-	Key     string    `json:"key,omitempty"` // leer = alle Dienste der Art
+	Key     string    `json:"key,omitempty"` // leer = alle Dienste des Hosts mit dieser Regel-Art
 	Name    string    `json:"name"`
-	Kind    string    `json:"kind"`
+	Kind    string    `json:"kind"` // Regel-Art
 	Rule    eval.Rule `json:"rule"`
 }
 
@@ -203,7 +208,7 @@ func (m *Module) apiRules(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(o.Data, &rule)
 		out := ruleOverrideOut{overrideRow: o, Rule: rule}
 		if i < len(cfg.overrides) && cfg.overrides[i].ID == o.UID {
-			out.Effect = m.effectOf(ctx, cfg.std, cfg.overrides, i)
+			out.Effect = m.effectOf(ctx, cfg.std, slices.Delete(slices.Clone(cfg.overrides), i, i+1), cfg.overrides, i)
 		}
 		ovs = append(ovs, out)
 	}
@@ -219,11 +224,18 @@ func (m *Module) apiRules(w http.ResponseWriter, r *http.Request) {
 			if s.HostRule == "" || s.Adopted != 1 || hosts[s.HostUID] == "" {
 				continue
 			}
-			var rule eval.Rule
-			if json.Unmarshal([]byte(s.HostRule), &rule) != nil || rule.Empty() {
-				continue
+			rules := parseHostRules(s.HostRule)
+			kinds := make([]string, 0, len(rules))
+			for k := range rules {
+				kinds = append(kinds, k)
 			}
-			own = append(own, ownOut{HostUID: s.HostUID, Host: hosts[s.HostUID], Key: s.Key, Name: firstNonEmpty(s.Name, s.Key), Kind: s.Kind, Rule: rule})
+			sort.Strings(kinds)
+			for _, k := range kinds {
+				if rules[k].Empty() {
+					continue
+				}
+				own = append(own, ownOut{HostUID: s.HostUID, Host: hosts[s.HostUID], Key: s.Key, Name: firstNonEmpty(s.Name, s.Key), Kind: k, Rule: rules[k]})
+			}
 		}
 	}
 	if hr, err := m.store.HostRules(ctx, ""); err == nil {
@@ -286,6 +298,7 @@ func (m *Module) apiRulesStd(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(changed)
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	m.audit(r, "rules.std", "", "changed="+strings.Join(changed, ","))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "changed": changed})
 }
@@ -357,7 +370,7 @@ func (m *Module) apiRulePreview(w http.ResponseWriter, r *http.Request) {
 		list = append(list, in.override("new"))
 		idx = len(list) - 1
 	}
-	writeJSON(w, http.StatusOK, m.effectOf(r.Context(), cfg.std, list, idx))
+	writeJSON(w, http.StatusOK, m.effectOf(r.Context(), cfg.std, cfg.overrides, list, idx))
 }
 
 // apiRuleOverrideSave: POST (neu, unten angefuegt) bzw. PUT (aendern) einer Abweichung der Schwellen.
@@ -383,6 +396,7 @@ func (m *Module) apiRuleOverrideSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	m.audit(r, action, in.TargetType+":"+in.Target, in.Kind+" "+string(data))
 	writeJSON(w, http.StatusOK, map[string]any{"uid": o.UID})
 }
@@ -397,6 +411,7 @@ func (m *Module) apiOverrideDelete(scope string) http.HandlerFunc {
 			return
 		}
 		m.reloadConfig(ctx)
+		m.repollAll() // Neubewertung sofort
 		m.audit(r, scopeAction(scope)+".override.delete", uid, "")
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
@@ -423,6 +438,7 @@ func (m *Module) apiOverrideMove(scope string) http.HandlerFunc {
 			return
 		}
 		m.reloadConfig(ctx)
+		m.repollAll() // Neubewertung sofort
 		m.audit(r, scopeAction(scope)+".override.move", uid, strconv.Itoa(in.Dir))
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
@@ -524,6 +540,7 @@ func (m *Module) apiNotifySave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	m.audit(r, "notify.save", "", string(b))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -580,6 +597,7 @@ func (m *Module) apiNotifyOverrideSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	m.audit(r, action, in.TargetType+":"+in.Target, string(data))
 	writeJSON(w, http.StatusOK, map[string]any{"uid": o.UID})
 }
@@ -613,7 +631,7 @@ func (m *Module) apiNotifyTest(w http.ResponseWriter, r *http.Request) {
 	msg := eval.Message{At: now, Host: eval.HostRef{ID: "test", Name: h.Name}, Event: eval.EvProblem, Severity: eval.Warn, Counts: eval.Counts{Warn: 1},
 		Lines:    []eval.Line{{Kind: eval.LineProblem, Key: "test", Name: t("service"), State: eval.Warn, Since: now, Detail: t("detail")}},
 		Channels: chans}
-	m.dispatch(h, msg, "")
+	m.dispatch(r.Context(), h, msg, "")
 	m.audit(r, "notify.test", "", strings.Join(chans, ","))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "channels": len(chans)})
 }
@@ -625,6 +643,28 @@ type maintOut struct {
 	maintRow
 	Status  string `json:"status"` // running, planned, recurring, ended
 	Running bool   `json:"running"`
+	// Zeiten in der Zeitzone der Node ("2006-01-02T15:04"), so zeigt und bearbeitet die Oberflaeche sie
+	// (unabhaengig von der Zeitzone des Browsers; erneutes Speichern verschiebt nichts).
+	StartLocal string `json:"start_local,omitempty"`
+	EndLocal   string `json:"end_local,omitempty"`
+	EndedLocal string `json:"ended_local,omitempty"`
+}
+
+const localMinute = "2006-01-02T15:04"
+
+func localTime(t time.Time, loc *time.Location) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.In(loc).Format(localMinute)
+}
+
+// tzLabel ist die Zeitzone der Node fuer den Hinweis in der Oberflaeche (ohne Namen: Abstand zu UTC).
+func tzLabel(loc *time.Location, now time.Time) string {
+	if n := loc.String(); n != "" && n != "Local" {
+		return n
+	}
+	return "UTC" + now.In(loc).Format("-07:00")
 }
 
 // maintStatus ermittelt den Stand eines Fensters zum Zeitpunkt now.
@@ -657,7 +697,7 @@ func (m *Module) apiMaint(w http.ResponseWriter, r *http.Request) {
 	items := []maintOut{}
 	for _, mr := range list {
 		st, run := maintStatus(mr, now, loc)
-		items = append(items, maintOut{maintRow: mr, Status: st, Running: run})
+		items = append(items, maintOut{maintRow: mr, Status: st, Running: run, StartLocal: localTime(mr.Start, loc), EndLocal: localTime(mr.End, loc), EndedLocal: localTime(mr.Ended, loc)})
 	}
 	order := map[string]int{"running": 0, "planned": 1, "recurring": 2, "ended": 3}
 	sort.SliceStable(items, func(i, j int) bool { return order[items[i].Status] < order[items[j].Status] })
@@ -673,7 +713,8 @@ func (m *Module) apiMaint(w http.ResponseWriter, r *http.Request) {
 			hosts = append(hosts, hostBrief{UID: h.UID, Name: h.Name, Group: h.Group, Kind: h.Kind})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hosts": hosts, "targets": m.targets(ctx), "tz": loc.String()})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hosts": hosts, "targets": m.targets(ctx), "tz": tzLabel(loc, now),
+		"now_local": localTime(now, loc)})
 }
 
 type maintIn struct {
@@ -720,8 +761,8 @@ func (m *Module) buildMaint(ctx context.Context, in maintIn, mr *maintRow, now t
 			mr.End = now.Add(time.Duration(in.Minutes) * time.Minute)
 		}
 	case "plan":
-		s, err1 := time.ParseInLocation("2006-01-02T15:04", in.Start, loc)
-		e, err2 := time.ParseInLocation("2006-01-02T15:04", in.End, loc)
+		s, err1 := time.ParseInLocation(localMinute, in.Start, loc)
+		e, err2 := time.ParseInLocation(localMinute, in.End, loc)
 		if err1 != nil || err2 != nil || !e.After(s) {
 			return errBad("maint_time")
 		}
@@ -767,6 +808,7 @@ func (m *Module) apiMaintSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	if isNew {
 		m.event(ctx, "", "", "", "maint", mr.Title, by, now)
 	}
@@ -807,6 +849,7 @@ func (m *Module) apiMaintEnd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	m.event(ctx, "", "", "", "maint_end", mr.Title, by, now)
 	m.audit(r, "maint.end", mr.Title, "uid="+mr.UID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -825,6 +868,7 @@ func (m *Module) apiMaintDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.reloadConfig(ctx)
+	m.repollAll() // Neubewertung sofort
 	m.audit(r, "maint.delete", mr.Title, "uid="+mr.UID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

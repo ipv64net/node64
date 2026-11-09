@@ -453,3 +453,210 @@ func TestClip(t *testing.T) {
 		t.Fatal(clip("a\xffb"))
 	}
 }
+
+// Intel IMSM/DDF (F3-K4): der Container (inactive, Mitglieder "(S)", "super external:imsm") ist kein RAID;
+// das Teil-Array md126 ("super external:/md127/0") zaehlt normal. Ein normales inactive-Array bleibt "failed".
+func TestParseMdstatExternalContainer(t *testing.T) {
+	b := []byte(`Personalities : [raid1]
+md126 : active raid1 sda[1] sdb[0]
+      976759808 blocks super external:/md127/0 [2/2] [UU]
+
+md127 : inactive sdb[1](S) sda[0](S)
+      6306 blocks super external:imsm
+
+md125 : inactive sdd[1](S) sdc[0](S)
+      2210 blocks super external:ddf
+
+md124 : active raid1 sdd[1] sdc[0]
+      976759808 blocks super external:-md125/0 [2/1] [U_]
+
+md4 : inactive sdl[0](S)
+      976631512 blocks super 1.2
+
+unused devices: <none>
+`)
+	rs := ParseMdstat(b)
+	var names []string
+	for _, r := range rs {
+		names = append(names, r.Name+"="+r.State)
+	}
+	if got := strings.Join(names, " "); got != "md126=active md124=degraded md4=failed" {
+		t.Fatalf("%s: %+v", got, rs)
+	}
+	if rs[0].Devices != 2 || rs[0].Active != 2 || rs[0].Level != "raid1" {
+		t.Fatalf("%+v", rs[0])
+	}
+}
+
+// ZFS (F3-K5): ONLINE mit Datenfehlern bzw. Geraetefehlern (CKSUM) traegt einen Text ungleich
+// "No known data errors" in Errors.
+func TestParseZpoolErrorsOnline(t *testing.T) {
+	st := []byte(`  pool: tank
+ state: ONLINE
+status: One or more devices has experienced an unrecoverable error.  An
+	attempt was made to correct the error.  Applications are unaffected.
+action: Determine if the device needs to be replaced, and clear the errors
+	using 'zpool clear' or replace the device with 'zpool replace'.
+  scan: scrub repaired 128K in 01:02:03 with 0 errors on Sun Nov  8 01:26:04 2026
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	tank        ONLINE       0     0     0
+	  mirror-0  ONLINE       0     0     0
+	    sda     ONLINE       0     0    12
+	    sdb     ONLINE       0     0     0
+	logs
+	  sdc       ONLINE       0     0     0
+	spares
+	  sdd       AVAIL
+
+errors: No known data errors
+
+  pool: data
+ state: ONLINE
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	data        ONLINE       0     0     0
+	  sde       ONLINE     1.2K    0     0
+
+errors: 2 data errors, use '-v' for a list
+
+  pool: ok
+ state: ONLINE
+status: Some supported and requested features are not enabled on the pool.
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	ok          ONLINE       0     0     0
+	  sdf       ONLINE       0     0     0
+
+errors: No known data errors
+`)
+	pools := []m64proto.ZPool{{Name: "tank", Health: "ONLINE"}, {Name: "data", Health: "ONLINE"}, {Name: "ok", Health: "ONLINE"}}
+	mergeZpoolStatus(pools, ParseZpoolStatus(st))
+	if pools[0].Errors != "No known data errors; Geraetefehler READ 0 WRITE 0 CKSUM 12" {
+		t.Fatalf("tank %q", pools[0].Errors)
+	}
+	if pools[1].Errors != "2 data errors, use '-v' for a list; Geraetefehler READ 1200 WRITE 0 CKSUM 0" {
+		t.Fatalf("data %q", pools[1].Errors)
+	}
+	if pools[2].Errors != "No known data errors" || !strings.HasPrefix(pools[0].ScanText, "scrub repaired 128K") {
+		t.Fatalf("ok %+v %+v", pools[2], pools[0])
+	}
+}
+
+// apt (F3-K6): dist-upgrade-Simulation zaehlt zurueckgehaltene Pakete; neue Abhaengigkeiten zaehlen nicht.
+func TestParseAptSimDistUpgrade(t *testing.T) {
+	sim := []byte(`NOTE: This is only a simulation!
+Inst linux-image-amd64 [6.1.115-1] (6.1.119-1 Debian-Security:12/stable-security [amd64])
+Inst linux-image-6.1.0-28-amd64 (6.1.119-1 Debian-Security:12/stable-security [amd64])
+Inst libfoo2 [2.0-1] (2.1-1 Debian:12.8/stable [amd64])
+Conf linux-image-amd64 (6.1.119-1 Debian-Security:12/stable-security [amd64])
+`)
+	p, s := ParseAptSim(sim)
+	if p != 2 || s != 1 {
+		t.Fatalf("%d/%d", p, s)
+	}
+	if strings.Join(aptSimArgs, " ") != "-s -o Debug::NoLocking=1 dist-upgrade" {
+		t.Fatal(aptSimArgs)
+	}
+}
+
+// EPC-Standby (STANDBY_Y/Z) gilt als Standby; ausstehende und umgelagerte Sektoren bleiben getrennt.
+func TestParseSmartctlStandbyAndSectors(t *testing.T) {
+	for _, msg := range []string{"Device is in STANDBY_Y mode, exit(2)", "Device is in STANDBY mode, exit(2)",
+		"Device is in SLEEP mode, exit(2)", "Device is in STANDBY_Z mode, exit(2)"} {
+		s := ParseSmartctl("/dev/sda", []byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"`+msg+`","severity":"information"}]},"device":{"name":"/dev/sda","protocol":"ATA"}}`))
+		if s.Error != SmartErrStandby {
+			t.Errorf("%q: %+v", msg, s)
+		}
+	}
+	s := ParseSmartctl("/dev/sda", []byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"Device is in IDLE_A mode","severity":"information"}]},"device":{"name":"/dev/sda","protocol":"ATA"},"smart_status":{"passed":true}}`))
+	if s.Error != "" {
+		t.Fatalf("IDLE_A: %+v", s)
+	}
+	s = ParseSmartctl("/dev/sda", []byte(`{"device":{"name":"/dev/sda","protocol":"ATA"},"smart_status":{"passed":true},
+		"ata_smart_attributes":{"table":[{"id":5,"value":100,"raw":{"value":7}},{"id":197,"value":100,"raw":{"value":3}},{"id":198,"value":100,"raw":{"value":1}}]}}`))
+	if *s.Reallocated != 7 || *s.Pending != 3 || *s.Uncorrectable != 1 {
+		t.Fatalf("%+v", s)
+	}
+}
+
+// Seriennummer (F3-K1): device/serial, VPD 0x80, T10-WWID, by-id, zuletzt naa./eui.-WWID.
+func TestDiskSerialSources(t *testing.T) {
+	vpd := append([]byte{0, 0x80, 0, 12}, []byte("  ZDH1234X  ")...)
+	files := map[string][]byte{
+		"/proc/diskstats":                                       []byte("8 0 sda 1 0 2 0 3 0 4 0 0 5 0\n8 16 sdb 1 0 2 0 3 0 4 0 0 5 0\n8 32 sdc 1 0 2 0 3 0 4 0 0 5 0\n8 48 sdd 1 0 2 0 3 0 4 0 0 5 0\n259 0 nvme0n1 1 0 2 0 3 0 4 0 0 5 0\n8 64 sde 1 0 2 0 3 0 4 0 0 5 0\n"),
+		"/sys/block/sda/device/vpd_pg80":                        vpd,
+		"/sys/block/sda/device/wwid":                            []byte("naa.5000c500a1b2c3d4"),
+		"/sys/block/sdb/device/wwid":                            []byte("naa.5000C500A1B2C3D5"),
+		"/sys/block/sdc/device/wwid":                            []byte("t10.ATA     WDC WD40EFRX-68N32N0                    WD-WCC7K1234567"),
+		"/sys/block/sdd/device/model":                           []byte("ST4000VN008"),
+		"/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH9999Y":       []byte("../../sdd"),
+		"/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH9999Y-part1": []byte("../../sdd1"),
+		"/dev/disk/by-id/wwn-0x5000c500a1b2c3d6":                []byte("../../sdd"),
+		"/sys/block/nvme0n1/device/serial":                      []byte("S5GXNF0R123456A     "),
+		"/sys/block/nvme0n1/wwid":                               []byte("eui.0025388b91b2c3d4"),
+		"/sys/block/sde/device/vpd_pg80":                        []byte{0, 0x83, 0, 4, 'a', 'b', 'c', 'd'},
+	}
+	ds, err := readDisks(newMapSource(files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, d := range ds {
+		got[d.Name] = d.Serial
+	}
+	want := map[string]string{"sda": "ZDH1234X", "sdb": "naa.5000c500a1b2c3d5", "sdc": "WD-WCC7K1234567", "sdd": "ZDH9999Y",
+		"nvme0n1": "S5GXNF0R123456A", "sde": ""}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: %q, erwartet %q", k, got[k], v)
+		}
+	}
+	if s := ParseVPD80([]byte{0, 0x80, 0, 3, 'a', 1, 'b'}); s != "" {
+		t.Errorf("Steuerzeichen: %q", s)
+	}
+	// schlafende Platte: Seriennummer und Modell aus /sys, NVMe-Controller nvme0 = Platte nvme0n1
+	sm := []m64proto.SMART{{Device: "/dev/sda", Error: SmartErrStandby}, {Device: "/dev/nvme0", Serial: "eigene"},
+		{Device: "/dev/sdd", Error: SmartErrStandby}, {Device: "/dev/sdx"}}
+	fillSmartSerials(sm, ds)
+	if sm[0].Serial != "ZDH1234X" || sm[1].Serial != "eigene" || sm[2].Serial != "ZDH9999Y" || sm[2].Model != "ST4000VN008" || sm[3].Serial != "" {
+		t.Fatalf("%+v", sm)
+	}
+}
+
+// mapSource (F3-K8): Index statt Durchlauf; Ordner ergeben sich aus den Pfaden.
+func TestMapSourceIndex(t *testing.T) {
+	m := newMapSource(map[string][]byte{
+		"/sys/class/net/eth0/operstate": []byte("up"),
+		"/sys/class/net/eth0/bonding":   []byte("1"),
+		"/sys/class/net/bond0/mtu":      []byte("1500"),
+		"/proc/stat":                    []byte("cpu 1"),
+	})
+	if !m.Exists("/sys/class/net") || !m.Exists("/sys/class/net/eth0/") || !m.Exists("/proc/stat") || m.Exists("/sys/class/ne") || m.Exists("/nix") {
+		t.Fatal("Exists")
+	}
+	if got := strings.Join(m.ReadDir("/sys/class/net"), ","); got != "bond0,eth0" {
+		t.Fatal(got)
+	}
+	if got := strings.Join(m.ReadDir("/"), ","); got != "proc,sys" {
+		t.Fatal(got)
+	}
+	if m.ReadDir("/gibt/es/nicht") != nil {
+		t.Fatal("ReadDir leer erwartet")
+	}
+	if b, err := m.ReadFile("/proc/stat"); err != nil || string(b) != "cpu 1" {
+		t.Fatal(err)
+	}
+}
+
+// mergerfs mit ":" im Geraetenamen ist ein lokales Dateisystem.
+func TestFSFromDFMergerfs(t *testing.T) {
+	df := []byte("Filesystem Type 1024-blocks Used Available Capacity Mounted on\n/dev/sda1 ext4 1000 500 500 50% /\ndisk1:disk2 fuse.mergerfs 8000 4000 4000 50% /mnt/storage\nnas:/export nfs4 9000 1 8999 1% /mnt/nas\n")
+	fs := FSFromDF(ParseDF(df), nil, nil)
+	if got := mountsOf(fs); got != "/ /mnt/storage" {
+		t.Fatalf("%q", got)
+	}
+}

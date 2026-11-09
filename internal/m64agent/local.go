@@ -31,6 +31,10 @@ const (
 	localMaxMetricLen = 100
 )
 
+// localHome ist HOME fuer eigene Skripte (Unix): unter systemd beschreibbar (StateDirectory=monitor64-agent), /root
+// ist dort nur lesbar (ProtectHome=read-only) - Zugangsdateien wie /root/.my.cnf mit vollem Pfad angeben.
+const localHome = "/var/lib/monitor64-agent"
+
 // ParseLocal liest die Ausgabe eines Skripts im Format der CheckMK-"local checks":
 //
 //	<Status> <Name> <Metriken> <Text>
@@ -243,72 +247,145 @@ func cleanText(s string, n int) string {
 	return s
 }
 
-// localRunner fuehrt die Skripte aus local.d aus. Unterordner mit einer Zahl als Namen (z. B. local.d/300/)
-// laufen wie bei CheckMK hoechstens alle N Sekunden; dazwischen liefert der Agent den letzten Stand.
+// localRunner fuehrt die Skripte aus local.d aus. Die Skripte laufen im Hintergrund (je Skript hoechstens ein Lauf
+// gleichzeitig, Zeitlimit LocalTimeoutMs); collect wartet nur kurz auf frisch gestartete Laeufe und liefert sonst
+// das Ergebnis des letzten fertigen Laufs (wie CheckMK "cached"). Unterordner mit einer Zahl als Namen
+// (z. B. local.d/300/) laufen wie bei CheckMK hoechstens alle N Sekunden.
 type localRunner struct {
-	dir string
+	dir    string
+	base   context.Context // endet mit close (Skripte werden abgebrochen)
+	cancel context.CancelFunc
+	sem    chan struct{} // gleichzeitig laufende Skripte
+	wg     sync.WaitGroup
 
-	mu    sync.Mutex
-	cache map[string]localCached // Pfad -> letztes Ergebnis (nur Unterordner mit Intervall)
+	mu     sync.Mutex
+	closed bool
+	state  map[string]*localState // Anzeigename -> Stand
 }
 
-type localCached struct {
-	at     time.Time
-	checks []m64proto.LocalCheck
-	notes  []string
+// localState ist der Stand eines Skripts.
+type localState struct {
+	path    string
+	running bool
+	done    chan struct{} // wird geschlossen, wenn der laufende Lauf endet
+	have    bool          // mindestens ein Lauf fertig
+	at      time.Time     // Ende des letzten Laufs
+	checks  []m64proto.LocalCheck
+	notes   []string
 }
 
 type localScript struct {
-	path  string
+	path  string        // aufgeloester Pfad
 	name  string        // Anzeige: Pfad relativ zu local.d
 	every time.Duration // 0 = jede Runde
 }
 
-// run fuehrt alle Skripte aus und haengt Dienste und Hinweise an den Report.
+// localRound ist eine Abfrage: gefundene Skripte, Hinweise der Suche und die in dieser Runde gestarteten Laeufe.
+type localRound struct {
+	scripts []localScript
+	notes   []string
+	wait    []chan struct{}
+}
+
+func newLocalRunner(dir string) *localRunner {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &localRunner{dir: dir, base: ctx, cancel: cancel, sem: make(chan struct{}, localMaxParallel),
+		state: map[string]*localState{}}
+}
+
+// close bricht laufende Skripte ab und wartet auf sie.
+func (r *localRunner) close() {
+	r.mu.Lock()
+	r.closed = true
+	r.mu.Unlock()
+	r.cancel()
+	r.wg.Wait()
+}
+
+// run startet die faelligen Skripte, wartet hoechstens bis ctx endet und haengt Dienste und Hinweise an den Report.
 func (r *localRunner) run(ctx context.Context, rep *m64proto.Report) {
+	r.finish(ctx, r.begin(), rep)
+}
+
+// begin sucht die Skripte und startet die faelligen im Hintergrund.
+func (r *localRunner) begin() *localRound {
 	scripts, notes := r.list()
+	rd := &localRound{scripts: scripts, notes: notes}
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	seen := make(map[string]bool, len(scripts))
+	for _, sc := range scripts {
+		seen[sc.name] = true
+		st := r.state[sc.name]
+		if st == nil || st.path != sc.path {
+			st = &localState{path: sc.path}
+			r.state[sc.name] = st
+		}
+		due := !st.running && (sc.every == 0 || !st.have || now.Sub(st.at) >= sc.every)
+		if !due || r.closed {
+			continue
+		}
+		st.running = true
+		st.done = make(chan struct{})
+		rd.wait = append(rd.wait, st.done)
+		r.wg.Add(1)
+		go r.exec(sc, st)
+	}
+	for name := range r.state {
+		if !seen[name] {
+			delete(r.state, name) // Skript entfernt
+		}
+	}
+	return rd
+}
+
+// exec fuehrt ein Skript im Hintergrund aus und merkt das Ergebnis.
+func (r *localRunner) exec(sc localScript, st *localState) {
+	defer r.wg.Done()
+	var checks []m64proto.LocalCheck
+	var notes []string
+	select {
+	case r.sem <- struct{}{}:
+		checks, notes = r.runOne(r.base, sc)
+		<-r.sem
+	case <-r.base.Done():
+		notes = []string{sc.name + ": not run (agent stopping)"}
+	}
+	r.mu.Lock()
+	st.running, st.have, st.at = false, true, time.Now()
+	st.checks, st.notes = checks, notes
+	close(st.done)
+	r.mu.Unlock()
+}
+
+// finish wartet auf die in dieser Runde gestarteten Laeufe (hoechstens bis ctx endet) und haengt die letzten
+// Ergebnisse an den Report.
+func (r *localRunner) finish(ctx context.Context, rd *localRound, rep *m64proto.Report) {
+	for _, d := range rd.wait {
+		select {
+		case <-d:
+		case <-ctx.Done():
+		}
+	}
 	type result struct {
 		checks []m64proto.LocalCheck
 		notes  []string
 	}
-	results := make([]result, len(scripts))
-	sem := make(chan struct{}, localMaxParallel)
-	var wg sync.WaitGroup
-	now := time.Now()
-	for i, sc := range scripts {
-		if sc.every > 0 {
-			r.mu.Lock()
-			c, ok := r.cache[sc.path]
-			r.mu.Unlock()
-			if ok && now.Sub(c.at) < sc.every {
-				results[i] = result{c.checks, c.notes}
-				continue
-			}
+	results := make([]result, len(rd.scripts))
+	r.mu.Lock()
+	for i, sc := range rd.scripts {
+		st := r.state[sc.name]
+		switch {
+		case st == nil || st.path != sc.path:
+		case !st.have:
+			results[i].notes = []string{sc.name + ": running for the first time - result follows with the next query"}
+		default:
+			results[i] = result{st.checks, st.notes}
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-			case <-ctx.Done():
-				results[i].notes = []string{sc.name + ": not run (time limit of the request)"}
-				return
-			}
-			defer func() { <-sem }()
-			checks, n := r.runOne(ctx, sc)
-			results[i] = result{checks, n}
-			if sc.every > 0 {
-				r.mu.Lock()
-				if r.cache == nil {
-					r.cache = map[string]localCached{}
-				}
-				r.cache[sc.path] = localCached{at: time.Now(), checks: checks, notes: n}
-				r.mu.Unlock()
-			}
-		}()
 	}
-	wg.Wait()
-	for _, n := range notes {
+	r.mu.Unlock()
+	for _, n := range rd.notes {
 		rep.Notes = append(rep.Notes, m64proto.SectionNote{Section: m64proto.SecLocal, Note: n})
 	}
 add:
@@ -329,7 +406,8 @@ add:
 	}
 }
 
-// list sucht die ausfuehrbaren Skripte und prueft Eigentuemer und Rechte (checkScript, je Plattform).
+// list sucht die ausfuehrbaren Skripte und prueft Eigentuemer und Rechte (checkDir/checkScript, je Plattform:
+// aufgeloester Pfad und alle Vorfahren gehoeren root und sind nicht fuer Gruppe/andere schreibbar).
 func (r *localRunner) list() ([]localScript, []string) {
 	var out []localScript
 	var notes []string
@@ -370,12 +448,8 @@ func (r *localRunner) list() ([]localScript, []string) {
 				notes = append(notes, fmt.Sprintf("more than %d scripts - rest ignored", localMaxScripts))
 				return
 			}
-			real, err := filepath.EvalSymlinks(p)
+			real, err := checkScript(p)
 			if err != nil {
-				notes = append(notes, rel+" ignored: "+err.Error())
-				continue
-			}
-			if err := checkScript(real); err != nil {
 				notes = append(notes, rel+" ignored: "+err.Error())
 				continue
 			}
@@ -386,11 +460,17 @@ func (r *localRunner) list() ([]localScript, []string) {
 	return out, notes
 }
 
-// runOne fuehrt ein Skript mit Zeitlimit und Groessengrenze aus.
+// runOne fuehrt ein Skript mit Zeitlimit und Groessengrenze aus. Ausgefuehrt wird die geoeffnete und gepruefte
+// Datei (Deskriptor), nicht erneut der Pfad - so kann sie zwischen Pruefung und Start niemand austauschen.
 func (r *localRunner) runOne(ctx context.Context, sc localScript) ([]m64proto.LocalCheck, []string) {
+	f, err := openScript(sc.path)
+	if err != nil {
+		return nil, []string{sc.name + " ignored: " + err.Error()}
+	}
+	defer f.Close()
 	ctx, cancel := context.WithTimeout(ctx, m64proto.LocalTimeoutMs*time.Millisecond)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, sc.path)
+	cmd := scriptCmd(ctx, f, sc.path)
 	cmd.Dir = filepath.Dir(sc.path)
 	cmd.Env = localEnv()
 	out := &limitBuf{max: m64proto.LocalMaxBytes}
@@ -399,10 +479,10 @@ func (r *localRunner) runOne(ctx context.Context, sc localScript) ([]m64proto.Lo
 	cmd.Stdin = nil
 	prepareCmd(cmd)
 	cmd.WaitDelay = 2 * time.Second
-	err := cmd.Run()
+	err = cmd.Run()
 	var notes []string
 	if ctx.Err() == context.DeadlineExceeded {
-		notes = append(notes, sc.name+": time limit exceeded")
+		notes = append(notes, fmt.Sprintf("%s: time limit of %d s exceeded - script stopped", sc.name, m64proto.LocalTimeoutMs/1000))
 	} else if err != nil {
 		if _, isExit := err.(*exec.ExitError); !isExit {
 			notes = append(notes, sc.name+": "+err.Error())

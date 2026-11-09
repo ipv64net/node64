@@ -2,6 +2,7 @@ package m64linux
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -40,6 +41,11 @@ func newFakeHost(t *testing.T, file string) *fakeHost {
 		case s.name == "attr":
 			for _, ln := range lines(s.body) {
 				p, v, _ := strings.Cut(ln, "\t")
+				if hp, ok := strings.CutSuffix(p, ".hex"); ok {
+					b, _ := hex.DecodeString(v)
+					files[hp] = b
+					continue
+				}
 				files[p] = []byte(v)
 			}
 		case strings.HasPrefix(s.name, "smart:"):
@@ -65,7 +71,7 @@ func newFakeHost(t *testing.T, file string) *fakeHost {
 			if err := os.MkdirAll(full, 0o755); err != nil {
 				t.Fatal(err)
 			}
-		case base == "master" || base == "device":
+		case base == "master" || base == "device" || strings.HasPrefix(p, "/dev/disk/by-id/"):
 			if err := os.Symlink(filepath.FromSlash(string(v)), full); err != nil {
 				h.symlinks = false // Windows ohne Recht fuer Symlinks
 			}
@@ -114,7 +120,7 @@ func (h *fakeHost) exec(_ context.Context, name string, args ...string) (ExecRes
 		"zpool status":                             "zpool_status",
 		"systemctl --failed --no-legend --plain":   "systemd_failed",
 		"systemctl is-system-running":              "systemd_state",
-		"apt-get -s -o Debug::NoLocking=1 upgrade": "updates:apt",
+		"apt-get " + strings.Join(aptSimArgs, " "): "updates:apt",
 	}[cmd]
 	if cmd == "smartctl --scan-open -j" {
 		var devs []map[string]string
@@ -154,7 +160,10 @@ func TestCollectMatchesScript(t *testing.T) {
 		t.Run(file, func(t *testing.T) {
 			h := newFakeHost(t, file)
 			now := func() time.Time { return testNow }
-			got := Collect(context.Background(), h.options(now))
+			opt := h.options(now)
+			Collect(context.Background(), opt) // SMART/Updates laufen im Hintergrund an
+			opt.Cache.Wait()
+			got := Collect(context.Background(), opt)
 			want, err := ParseScriptOutput(readTestdata(t, file), testNow)
 			if err != nil {
 				t.Fatal(err)
@@ -267,6 +276,8 @@ func TestCollectSlowCache(t *testing.T) {
 	opt.Sections = []string{m64proto.SecSmart, m64proto.SecUpdates}
 	scan := "smartctl --scan-open -j"
 
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
 	r := Collect(context.Background(), opt)
 	if len(r.SMART) != 3 || h.count(scan) != 1 || r.Updates == nil || r.Updates.Checked != testNow.Unix() {
 		t.Fatalf("erster Lauf: %d SMART, %d Scans, %+v", len(r.SMART), h.count(scan), r.Updates)
@@ -292,7 +303,7 @@ func TestCollectSlowCache(t *testing.T) {
 	if *r.SMART[0].Passed {
 		t.Fatal("neuer Stand fehlt")
 	}
-	if h.count("apt-get -s -o Debug::NoLocking=1 upgrade") != 1 {
+	if h.count("apt-get "+strings.Join(aptSimArgs, " ")) != 1 {
 		t.Fatal("Updates zu oft gelesen")
 	}
 	// Uhr rueckwaerts: Stand gilt als veraltet
@@ -334,15 +345,191 @@ func TestCaps(t *testing.T) {
 	}
 }
 
+// Haengender Mount (F3-K3): statfs laeuft je Mount hoechstens einmal; solange er haengt, wird er ohne neuen Versuch
+// als Fehler gemeldet. Gleichzeitige Aufrufe teilen sich einen Aufruf.
 func TestStatfsTimeout(t *testing.T) {
+	old := statfsLimit
+	statfsLimit = 100 * time.Millisecond
+	defer func() { statfsLimit = old }()
 	block := make(chan struct{})
-	defer close(block)
+	var calls int64
+	st := func(p string) (StatFS, error) {
+		atomic.AddInt64(&calls, 1)
+		if p == "/mnt/nfs" {
+			<-block
+		}
+		return StatFS{Total: 1}, nil
+	}
+	c := newCollector(Options{Cache: NewCache()})
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	_, err := statfsTimeout(ctx, func(string) (StatFS, error) { <-block; return StatFS{}, nil }, "/mnt/nfs")
-	if err == nil || time.Since(start) > 2*time.Second {
+	if _, err := c.statfsTimeout(context.Background(), st, "/mnt/nfs"); err == nil || !strings.Contains(err.Error(), "Zeitlimit") {
 		t.Fatalf("%v", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatal("Zeitlimit greift nicht")
+	}
+	for i := 0; i < 5; i++ {
+		start = time.Now()
+		_, err := c.statfsTimeout(context.Background(), st, "/mnt/nfs")
+		if err == nil || !strings.Contains(err.Error(), "haengt") || time.Since(start) > 50*time.Millisecond {
+			t.Fatalf("Runde %d: %v", i, err)
+		}
+	}
+	if n := atomic.LoadInt64(&calls); n != 1 {
+		t.Fatalf("%d statfs-Aufrufe fuer den haengenden Mount", n)
+	}
+	// andere Mounts laufen weiter
+	if s, err := c.statfsTimeout(context.Background(), st, "/"); err != nil || s.Total != 1 {
+		t.Fatalf("%+v %v", s, err)
+	}
+	// Mount kommt zurueck: naechster Aufruf liest neu
+	close(block)
+	for i := 0; i < 200; i++ {
+		c.cache.mu.Lock()
+		n := len(c.cache.statfs)
+		c.cache.mu.Unlock()
+		if n == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if s, err := c.statfsTimeout(context.Background(), st, "/mnt/nfs"); err != nil || s.Total != 1 {
+		t.Fatalf("%+v %v", s, err)
+	}
+	// gleichzeitig: ein Aufruf
+	slow := make(chan struct{})
+	var n2 int64
+	st2 := func(string) (StatFS, error) { atomic.AddInt64(&n2, 1); <-slow; return StatFS{Total: 2}, nil }
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if s, err := c.statfsTimeout(context.Background(), st2, "/data"); err != nil || s.Total != 2 {
+				t.Errorf("%+v %v", s, err)
+			}
+		}()
+	}
+	time.Sleep(20 * time.Millisecond)
+	close(slow)
+	wg.Wait()
+	if n := atomic.LoadInt64(&n2); n != 1 {
+		t.Fatalf("%d gleichzeitige Aufrufe", n)
+	}
+}
+
+// Erster Lauf blockiert nicht (F1-K3): SMART/Updates laufen im Hintergrund, Collect kommt mit Hinweis zurueck.
+func TestCollectSlowFirstRunNonBlocking(t *testing.T) {
+	h := newFakeHost(t, "script_proxmox8.txt")
+	block := make(chan struct{})
+	opt := h.options(func() time.Time { return testNow })
+	inner := opt.Exec
+	opt.Exec = func(ctx context.Context, name string, args ...string) (ExecResult, error) {
+		if name == "smartctl" || name == "apt-get" {
+			select {
+			case <-block:
+			case <-ctx.Done():
+				return ExecResult{}, errors.New(name + ": Zeitlimit")
+			}
+		}
+		return inner(ctx, name, args...)
+	}
+	opt.Sections = []string{m64proto.SecCPU, m64proto.SecSmart, m64proto.SecUpdates}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	r := Collect(ctx, opt)
+	if d := time.Since(start); d > 1500*time.Millisecond {
+		t.Fatalf("Collect blockiert %v", d)
+	}
+	if r.CPU == nil || r.SMART != nil || r.Updates != nil || !hasNote(r, "smart", NoteReading) || !hasNote(r, "updates", NoteReading) {
+		t.Fatalf("%+v %+v", r.SMART, r.Notes)
+	}
+	close(block)
+	opt.Cache.Wait()
+	r = Collect(context.Background(), opt)
+	if len(r.SMART) != 3 || r.Updates == nil || hasNote(r, "smart", NoteReading) {
+		t.Fatalf("%+v %+v", r.SMART, r.Notes)
+	}
+	// Collect mit langer Deadline endet vor ihr (Rand fuer die Antwort)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel2()
+	opt.Sections = []string{m64proto.SecZFS}
+	opt.Exec = func(ctx context.Context, name string, args ...string) (ExecResult, error) {
+		<-ctx.Done()
+		return ExecResult{}, errors.New(name + ": Zeitlimit")
+	}
+	dl, _ := ctx2.Deadline()
+	r = Collect(ctx2, opt)
+	if time.Until(dl) < deadlineMargin/2 || len(r.Errors) == 0 {
+		t.Fatalf("Rand %v, Fehler %+v", time.Until(dl), r.Errors)
+	}
+}
+
+// Abgebrochener Lauf (Zeitlimit im Hintergrund) gilt nur kurz und ersetzt keinen guten Stand.
+func TestCollectSlowAbortRetry(t *testing.T) {
+	old := refreshTimeout
+	refreshTimeout = 100 * time.Millisecond
+	defer func() { refreshTimeout = old }()
+	h := newFakeHost(t, "script_proxmox8.txt")
+	var mu sync.Mutex
+	now := testNow
+	hang := false
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	advance := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+	setHang := func(v bool) { mu.Lock(); hang = v; mu.Unlock() }
+	opt := h.options(clock)
+	inner := opt.Exec
+	opt.Exec = func(ctx context.Context, name string, args ...string) (ExecResult, error) {
+		mu.Lock()
+		hg := hang
+		mu.Unlock()
+		if hg {
+			<-ctx.Done()
+			return ExecResult{}, errors.New(name + ": Zeitlimit")
+		}
+		return inner(ctx, name, args...)
+	}
+	opt.Sections = []string{m64proto.SecSmart}
+	scan := "smartctl --scan-open -j"
+
+	// erster Lauf bricht ab: Fehler, nach 5 min neuer Versuch (nicht erst nach 30 min)
+	setHang(true)
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
+	r := Collect(context.Background(), opt)
+	if len(r.Errors) == 0 || r.Errors[0].Section != "smart" {
+		t.Fatalf("%+v", r.Errors)
+	}
+	setHang(false)
+	advance(4 * time.Minute)
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
+	if h.count(scan) != 0 {
+		t.Fatalf("zu frueh neu gelesen: %d", h.count(scan))
+	}
+	advance(2 * time.Minute)
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
+	r = Collect(context.Background(), opt)
+	if h.count(scan) != 1 || len(r.SMART) != 3 || len(r.Errors) != 0 {
+		t.Fatalf("%d Scans, %+v", h.count(scan), r.Errors)
+	}
+	// guter Stand, dann haengt smartctl: alter Stand bleibt, Versuch nach 5 min
+	setHang(true)
+	advance(31 * time.Minute)
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
+	r = Collect(context.Background(), opt)
+	if len(r.SMART) != 3 || len(r.Errors) != 0 {
+		t.Fatalf("guter Stand ersetzt: %+v %+v", r.SMART, r.Errors)
+	}
+	setHang(false)
+	advance(6 * time.Minute)
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
+	if h.count(scan) != 2 {
+		t.Fatalf("kein neuer Versuch: %d", h.count(scan))
 	}
 }
 
@@ -411,6 +598,8 @@ func TestCollectNeedsRestarting(t *testing.T) {
 			}
 			return ExecResult{Code: 1}, nil
 		}}
+	Collect(context.Background(), opt)
+	opt.Cache.Wait()
 	for i := 0; i < 3; i++ {
 		if r := Collect(context.Background(), opt); r.Reboot == nil || !r.Reboot.Required {
 			t.Fatalf("%+v", r.Reboot)

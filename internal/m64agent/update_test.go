@@ -8,11 +8,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/m64proto"
 )
@@ -112,9 +116,80 @@ func TestApplyUpdate(t *testing.T) {
 	if b, _ := os.ReadFile(exe); string(b) != string(body) {
 		t.Fatalf("new file = %q", b)
 	}
+	// F1-K5: vorherige Version bleibt als .old
+	if b, _ := os.ReadFile(exe + oldSuffix); string(b) != "old" {
+		t.Fatalf("old file = %q", b)
+	}
 	ents, _ := os.ReadDir(dir)
-	if len(ents) != 1 {
+	if len(ents) != 2 {
 		t.Fatalf("leftover files: %v", ents)
+	}
+}
+
+// F1-K5: Merker nach dem Update; startet die neue Version zweimal ohne Bestaetigung, kommt die alte zurueck und die
+// Version wird nicht erneut angenommen.
+func TestUpdateFallback(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "monitor64-agent")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("new")
+	h := signedUpdate(priv, "2.0.0", runtime.GOOS, runtime.GOARCH, body)
+	if err := applyUpdate(bytes.NewReader(body), h, exe); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteUpdateMarker(exe, "1.0.0", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	// erster Start der neuen Version: wartet auf Bestaetigung
+	if pending, rolled, err := UpdateStart(exe, "2.0.0"); !pending || rolled || err != nil {
+		t.Fatalf("first start: pending %v rolled %v err %v", pending, rolled, err)
+	}
+	// zweiter Start ohne Bestaetigung: zurueck auf die alte Datei
+	if pending, rolled, err := UpdateStart(exe, "2.0.0"); pending || !rolled || err != nil {
+		t.Fatalf("second start: pending %v rolled %v err %v", pending, rolled, err)
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "old" {
+		t.Fatalf("exe after rollback = %q", b)
+	}
+	if _, err := os.Stat(exe + markerSuffix); !os.IsNotExist(err) {
+		t.Fatal("marker left after rollback")
+	}
+	// alte Version startet normal
+	if pending, rolled, err := UpdateStart(exe, "1.0.0"); pending || rolled || err != nil {
+		t.Fatalf("old start: pending %v rolled %v err %v", pending, rolled, err)
+	}
+	// dieselbe Version wird nicht erneut eingespielt, eine neuere schon
+	if err := applyUpdate(bytes.NewReader(body), h, exe); err == nil || !strings.Contains(err.Error(), "did not start") {
+		t.Fatalf("failed version accepted again: %v", err)
+	}
+	h3 := signedUpdate(priv, "2.0.1", runtime.GOOS, runtime.GOARCH, body)
+	if err := applyUpdate(bytes.NewReader(body), h3, exe); err != nil {
+		t.Fatal(err)
+	}
+
+	// bestaetigt: Merker weg, kein Rueckfall
+	if err := WriteUpdateMarker(exe, "1.0.0", "2.0.1"); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _, _ := UpdateStart(exe, "2.0.1"); !pending {
+		t.Fatal("pending expected")
+	}
+	ConfirmUpdate(exe)
+	if pending, rolled, _ := UpdateStart(exe, "2.0.1"); pending || rolled {
+		t.Fatal("confirmed update rolled back")
+	}
+	// fremder Merker (andere Version): wird verworfen
+	if err := WriteUpdateMarker(exe, "1.0.0", "9.9.9"); err != nil {
+		t.Fatal(err)
+	}
+	if pending, rolled, _ := UpdateStart(exe, "2.0.1"); pending || rolled {
+		t.Fatal("foreign marker used")
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "new" {
+		t.Fatalf("exe = %q", b)
 	}
 }
 
@@ -144,5 +219,69 @@ func TestParseReleaseKeys(t *testing.T) {
 	}
 	if _, err := ParseReleaseKeys("abc"); err == nil {
 		t.Fatal("garbage accepted")
+	}
+}
+
+// F1-K5: update ueber SSH - Probestart schlaegt fehl: alte Datei zurueck, Version gesperrt; sonst Merker und Neustart.
+func TestUpdateRequestProbe(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "monitor64-agent")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cs, cl := testSigner(t)
+	keys := filepath.Join(dir, "keys")
+	if err := WriteKeysFile(keys, []byte(cl+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	var probeOK atomic.Bool // Zugriff aus dem Server-Goroutine
+	updated := make(chan string, 1)
+	_, addr := startServer(t, Config{KeysFile: keys, Version: "1.0.0", ReleaseKeys: []ed25519.PublicKey{pub}, ExePath: exe,
+		Probe: func(string, string) error {
+			if probeOK.Load() {
+				return nil
+			}
+			return errors.New("exec format error")
+		},
+		OnUpdated: func(v string) { updated <- v }}, nil)
+	send := func(version string) string {
+		body := []byte("new " + version)
+		h := signedUpdate(priv, version, runtime.GOOS, runtime.GOARCH, body)
+		hb, _ := json.Marshal(h)
+		c, err := dialAgent(addr, cs, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		out, _ := runAgent(c, "update", append(append(hb, '\n'), body...))
+		return out
+	}
+	if out := send("2.0.0"); !strings.Contains(out, "new version does not start") {
+		t.Fatalf("probe failure not reported: %q", out)
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "old" {
+		t.Fatalf("exe after failed probe = %q", b)
+	}
+	if out := send("2.0.0"); !strings.Contains(out, "did not start on this host before") {
+		t.Fatalf("failed version accepted again: %q", out)
+	}
+	probeOK.Store(true)
+	if out := send("2.0.1"); !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("update refused: %q", out)
+	}
+	select {
+	case v := <-updated:
+		if v != "2.0.1" {
+			t.Fatalf("OnUpdated(%q)", v)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("OnUpdated not called")
+	}
+	if b, _ := os.ReadFile(exe + markerSuffix); !strings.Contains(string(b), `"to":"2.0.1"`) {
+		t.Fatalf("marker = %q", b)
+	}
+	if b, _ := os.ReadFile(exe + oldSuffix); string(b) != "old" {
+		t.Fatalf(".old = %q", b)
 	}
 }

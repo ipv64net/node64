@@ -63,14 +63,14 @@ func stateRule(sev Severity, dur time.Duration) Rule {
 }
 
 func fill(t Table) Table {
-	// Felder, die in jeder Zeile gleich sind, einmal setzen, damit Resolve immer vollstaendige Werte hat.
-	used, notify := ModeUsed, ReportNotify
+	// Felder, die in jeder Zeile gleich sind, setzen, damit Resolve immer vollstaendige Werte hat. Jede Zeile
+	// bekommt eigene Zeiger: eine Aenderung an einer Art darf keine andere veraendern.
 	for k, r := range t {
 		if r.Mode == nil {
-			r.Mode = &used
+			r.Mode = new(ModeUsed)
 		}
 		if r.Report == nil {
-			r.Report = &notify
+			r.Report = new(ReportNotify)
 		}
 		if r.Severity == nil {
 			if r.WarnFree == nil {

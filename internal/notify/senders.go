@@ -309,7 +309,8 @@ type pushoverSender struct{ ua string }
 
 func (p pushoverSender) Send(ctx context.Context, ch *Channel, m Message) error {
 	prio := ch.Config["priority_up"]
-	if m.Kind == KindDown || m.Kind == KindReminder || m.Kind == KindFlappingStart || m.Kind == KindSummary || m.Kind == KindDegraded || m.Kind == KindUnchecked {
+	if m.Kind == KindDown || m.Kind == KindReminder || m.Kind == KindFlappingStart || m.Kind == KindSummary || m.Kind == KindDegraded || m.Kind == KindUnchecked ||
+		m.Kind == KindMonitorProblem || m.Kind == KindMonitorUnreachable || m.Kind == KindMonitorReminder || m.Kind == KindMonitorFlapping {
 		prio = ch.Config["priority_down"]
 	}
 	if prio == "" {
@@ -466,9 +467,9 @@ func (n ntfySender) Send(ctx context.Context, ch *Channel, m Message) error {
 	prio := ch.Config["priority_up"]
 	tags := "green_circle"
 	switch m.Kind {
-	case KindDown, KindReminder, KindSummary:
+	case KindDown, KindReminder, KindSummary, KindMonitorProblem, KindMonitorUnreachable, KindMonitorReminder:
 		prio, tags = ch.Config["priority_down"], "red_circle"
-	case KindFlappingStart:
+	case KindFlappingStart, KindMonitorFlapping:
 		tags = "orange_circle"
 	case KindTest:
 		tags = "white_check_mark"

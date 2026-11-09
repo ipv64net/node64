@@ -187,7 +187,12 @@ func upsertRow(ctx context.Context, tx *sql.Tx, table string, cols []string, row
 			v = ""
 		}
 		args[i] = v
-		if c != "uid" {
+		switch {
+		case c == "uid":
+		case table == "m64_access" && (c == "secret" || c == "hostkey"):
+			// Import ohne Geheimnis (Export ohne Passwort) bzw. ohne Hostschluessel: vorhandenen Wert behalten
+			sets = append(sets, c+" = CASE WHEN excluded."+c+" = '' THEN "+table+"."+c+" ELSE excluded."+c+" END")
+		default:
 			sets = append(sets, c+" = excluded."+c)
 		}
 	}

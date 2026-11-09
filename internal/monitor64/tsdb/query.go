@@ -9,19 +9,26 @@ import (
 )
 
 // Point ist ein Diagrammpunkt. T ist der Zeitstempel (Unix-Sekunden) bzw. der Beginn des Zeitfensters.
+// S ist die Breite dieses Punkts in Sekunden (0 = einzelner Rohwert). Sie kann groesser als Series.Step
+// sein, wenn groebere Daten eine Luecke fuellen (z. B. Stundenwerte vor 5-Minuten-Werten).
 type Point struct {
 	T   int64   `json:"t"`
 	Min float64 `json:"min"`
 	Avg float64 `json:"avg"`
 	Max float64 `json:"max"`
+	S   int64   `json:"s,omitempty"`
 }
 
 // Series ist das Ergebnis einer Abfrage. Reine Werte ohne Datenbank-Bezug, damit spaeter auch eine
 // andere Node im Cluster antworten kann.
+//
+// Luecken erkennen: zwischen zwei Punkten fehlen Daten erst, wenn ihr Abstand groesser ist als ein Vielfaches
+// von max(Step, S des vorigen Punkts, S des Punkts) – nicht von Step allein, denn bei gemischter Aufloesung
+// liegen aufgefuellte groebere Punkte weiter auseinander.
 type Series struct {
 	Key    string  `json:"key"`
-	Res    string  `json:"res"`  // gewaehlte Aufloesung: raw, 5m, 1h ("" ohne Daten)
-	Step   int64   `json:"step"` // Breite eines Punkts in Sekunden (0 = einzelne Rohwerte)
+	Res    string  `json:"res"`  // gewaehlte Hauptaufloesung: raw, 5m, 1h ("" ohne Daten)
+	Step   int64   `json:"step"` // Breite der Punkte der Hauptaufloesung bzw. Verdichtung (0 = einzelne Rohwerte)
 	Points []Point `json:"points"`
 }
 
@@ -80,7 +87,7 @@ func (db *DB) QueryMulti(ctx context.Context, keys []string, from, to time.Time,
 		}
 		out[i].Points = make([]Point, len(pts))
 		for k, p := range pts {
-			out[i].Points[k] = Point{T: p.t, Min: p.min, Avg: p.avg, Max: p.max}
+			out[i].Points[k] = Point{T: p.t, Min: p.min, Avg: p.avg, Max: p.max, S: p.w}
 		}
 	}
 	return out, nil
@@ -247,6 +254,7 @@ func (db *DB) fetch(ctx context.Context, s *series, lv int, from, to int64) ([]a
 		for _, p := range blocks[k] {
 			// verdichtete Punkte zaehlen, wenn ihr Fenster in den Zeitraum ragt
 			if p.t+max(L.step, 1) > from && p.t <= to && finite(p.avg) {
+				p.w = L.step
 				out = append(out, p)
 			}
 		}
@@ -277,30 +285,33 @@ func niceStep(min int64) int64 {
 }
 
 // downsample fasst Punkte in Fenster zusammen (Min der Min, Max der Max, Mittel nach Anzahl gewichtet).
+// Die Fenster beginnen bei from (nicht an der Epoche), damit [from, to] genau ceil((to-from)/step) <=
+// maxPoints Fenster ergibt; Punkte vor from (ueberlappende Zeitfenster) zaehlen zum ersten, ein Punkt
+// genau bei to zum letzten Fenster. Die Breite eines Ergebnispunkts ist mindestens step, bei groeberen
+// Quellpunkten deren Breite.
 func downsample(pts []aggPt, from, to int64, maxPoints int) ([]aggPt, int64) {
-	step := niceStep((to - from + int64(maxPoints) - 1) / int64(maxPoints))
-	for {
-		out := make([]aggPt, 0, maxPoints+2)
-		for _, p := range pts {
-			b := p.t - p.t%step
-			if len(out) == 0 || out[len(out)-1].t != b {
-				out = append(out, aggPt{t: b, min: p.min, avg: p.avg * p.n, max: p.max, n: p.n})
-				continue
-			}
-			q := &out[len(out)-1]
-			q.min = math.Min(q.min, p.min)
-			q.max = math.Max(q.max, p.max)
-			q.avg += p.avg * p.n
-			q.n += p.n
+	span := max(to-from, 1)
+	step := niceStep((span + int64(maxPoints) - 1) / int64(maxPoints))
+	last := (span+step-1)/step - 1 // Index des letzten Fensters
+	out := make([]aggPt, 0, min(int(last)+1, len(pts)))
+	for _, p := range pts {
+		k := min(max((p.t-from)/step, 0), last)
+		b := from + k*step
+		if len(out) == 0 || out[len(out)-1].t != b {
+			out = append(out, aggPt{t: b, min: p.min, avg: p.avg * p.n, max: p.max, n: p.n, w: max(step, p.w)})
+			continue
 		}
-		for i := range out {
-			if out[i].n > 0 {
-				out[i].avg /= out[i].n
-			}
-		}
-		if len(out) <= maxPoints {
-			return out, step
-		}
-		step = niceStep(step + 1)
+		q := &out[len(out)-1]
+		q.min = math.Min(q.min, p.min)
+		q.max = math.Max(q.max, p.max)
+		q.avg += p.avg * p.n
+		q.n += p.n
+		q.w = max(q.w, p.w)
 	}
+	for i := range out {
+		if out[i].n > 0 {
+			out[i].avg /= out[i].n
+		}
+	}
+	return out, step
 }

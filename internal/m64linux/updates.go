@@ -82,10 +82,19 @@ func ParseAptCheck(b []byte) (pending, security int, err error) {
 	return 0, 0, errFormat
 }
 
-// ParseAptSim zaehlt die "Inst"-Zeilen von "apt-get -s upgrade"; Sicherheitsupdates an der Quelle "*-security".
+// aptSimArgs ist die Simulation fuer apt (Agent und Skript): dist-upgrade statt upgrade, damit auch
+// zurueckgehaltene Pakete ("kept back", brauchen neue Abhaengigkeiten) zaehlen. Nur Simulation (-s), ohne Sperre.
+var aptSimArgs = []string{"-s", "-o", "Debug::NoLocking=1", "dist-upgrade"}
+
+// ParseAptSim zaehlt die "Inst"-Zeilen von "apt-get -s dist-upgrade", die ein vorhandenes Paket erneuern
+// ("Inst paket [alte Version] (neue ...)"); neu hinzukommende Abhaengigkeiten (ohne "[...]") zaehlen nicht.
+// Sicherheitsupdates an der Quelle "*-security".
 func ParseAptSim(b []byte) (pending, security int) {
 	for _, ln := range lines(b) {
 		if !strings.HasPrefix(ln, "Inst ") {
+			continue
+		}
+		if f := strings.Fields(ln); len(f) < 3 || !strings.HasPrefix(f[2], "[") {
 			continue
 		}
 		pending++

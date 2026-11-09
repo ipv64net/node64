@@ -72,7 +72,7 @@ func NewSSHClient(cfg SSHConfig) (*SSHClient, error) {
 		return nil, errors.New("monitor64: neither key nor password")
 	}
 	return &SSHClient{cfg: cfg, conn: newConn(connConfig{
-		addr:        hostPort(cfg.Addr, defaultSSHPort),
+		addr:        HostPort(cfg.Addr, defaultSSHPort),
 		user:        cfg.User,
 		auth:        auth,
 		hostKey:     cfg.HostKey,

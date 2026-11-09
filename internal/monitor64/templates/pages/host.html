@@ -38,7 +38,7 @@
 	<div class="row g-3 mb-3" id="m64-charts"></div>
 	<div class="card mb-3">
 		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.services"}}</span><span class="badge text-bg-secondary ms-2" id="m64-svc-count">0</span><span class="ms-auto small text-body-secondary d-none d-sm-inline">{{.T "monitor64.host.click_hint"}}</span></div>
-		<div class="table-responsive"><table class="table table-hover mb-0 svc-table">
+		<div class="table-responsive"><table class="table table-hover mb-0 svc-table" data-nosort>
 			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.service"}}</th><th>{{.T "monitor64.col.value"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.h24"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.thresholds"}}</th><th class="d-none d-xl-table-cell">{{.T "monitor64.col.access"}}</th></tr></thead>
 			<tbody id="m64-svcs"></tbody>
 		</table></div>

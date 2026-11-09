@@ -22,12 +22,18 @@ import (
 //	/nodes/{node}/status                  CPU, Load, RAM, Swap, Root-Dateisystem
 //	/nodes/{node}/storage                 Speicher (store:<storage>)
 //	/nodes/{node}/disks/zfs               ZFS-Pools (zfs:<pool>)
-//	/nodes/{node}/qemu, /lxc              Gaeste (vm:<vmid>, ct:<vmid>); Raten aus den Zaehlern zweier Runden
+//	/nodes/{node}/qemu?full=1, /lxc       Gaeste (vm:<vmid>, ct:<vmid>); Raten aus den Zaehlern zweier Runden,
+//	                                      full=1 liefert qmpstatus (io-error, guest-panicked, paused …)
 //	/nodes/{node}/{qemu|lxc}/{vmid}/config onboot (Soll-Zustand), je Gast alle 10 min
 //	/cluster/ha/status/current            HA (nur mit HA-Ressourcen)
 //	/cluster/ceph/status                  Ceph (falls eingerichtet, sonst stuendlich neu versucht)
 //
 // Seltener: /nodes/{node}/disks/list + /disks/smart?disk= (SMART, 30 min), /nodes/{node}/apt/update (60 min).
+//
+// Clusterweite Dienste (cluster, ha, ceph) bewertet nur eine Node: die mit der kleinsten Node-ID unter den Nodes,
+// die diese Node online sieht (bei getrenntem Cluster je Teil eine). Auf den uebrigen Nodes erscheinen die Dienste
+// nur als Hinweis ohne Messgroessen und Zustaende ("gemeldet von Node …"), damit jede Meldung einmal kommt und die
+// Dienste beim Wechsel der Zustaendigkeit (Node aus und wieder an) nicht verschwinden.
 
 // PVEConfig sind die Verbindungsdaten eines Proxmox-VE-Hosts.
 type PVEConfig struct {
@@ -35,7 +41,7 @@ type PVEConfig struct {
 	TokenID      string        // user@realm!tokenid
 	Secret       string        // Token-Secret (nie ausgeben)
 	Pin          string        // SHA-256 des Zertifikats (hex); leer = System-CA
-	Node         string        // Node-Name; leer = die Node hinter der Adresse (cluster/status, local)
+	Node         string        // Node-Name; leer = die Node hinter der Adresse beim ersten Kontakt (dann fest)
 	Timeout      time.Duration // ganze Runde (0 = DefaultTimeout)
 	SmartEvery   time.Duration // 0 = DefaultSmartEvery
 	UpdatesEvery time.Duration // 0 = DefaultUpdatesEvery
@@ -60,13 +66,23 @@ type PVE struct {
 	client *proxmox.Client
 	now    func() time.Time
 
+	nodeMu sync.Mutex
+	node   string // erkannte Node (cfg.Node leer): beim ersten Kontakt festgelegt, wechselt bei Failover nicht
+
 	mu        sync.Mutex
-	node      string              // erkannte Node (cfg.Node leer)
 	counters  map[string]*counter // Gast-Schluessel -> Zaehler der vorigen Runde
 	configs   map[string]guestCfg // Gast-Schluessel -> onboot
+	locks     map[string]lockSeen // Gast-Schluessel -> Sperre eines nicht laufenden Gasts seit
 	disks     slowDisks
 	updates   slowUpdates
 	cephUntil time.Time // kein Ceph: bis dahin nicht neu fragen
+	cephSeen  bool      // Ceph hat schon geantwortet (Fehler danach = Stoerung, nicht "kein Ceph")
+	owner     string    // Node, die die clusterweiten Dienste bewertet ("" = diese bzw. unbekannt)
+}
+
+type lockSeen struct {
+	lock  string
+	since time.Time
 }
 
 type guestCfg struct {
@@ -80,7 +96,29 @@ func NewPVE(cfg PVEConfig) (*PVE, error) {
 	if err != nil {
 		return nil, scrubErr(err, cfg.Secret)
 	}
-	return &PVE{cfg: cfg, client: c, now: time.Now, counters: map[string]*counter{}, configs: map[string]guestCfg{}}, nil
+	return &PVE{cfg: cfg, client: c, now: time.Now, counters: map[string]*counter{}, configs: map[string]guestCfg{},
+		locks: map[string]lockSeen{}}, nil
+}
+
+// Node ist die Node dieses Hosts: eingestellt bzw. beim ersten Kontakt erkannt ("" = noch nicht bekannt). Der Kern
+// speichert sie nach dem ersten Test bzw. der ersten Runde, damit ein Failover nicht still eine andere Node abfragt.
+func (p *PVE) Node() string {
+	if p.cfg.Node != "" {
+		return p.cfg.Node
+	}
+	p.nodeMu.Lock()
+	defer p.nodeMu.Unlock()
+	return p.node
+}
+
+// fixNode legt die erkannte Node fest, falls noch keine bekannt ist, und liefert die feste Node.
+func (p *PVE) fixNode(n string) string {
+	p.nodeMu.Lock()
+	defer p.nodeMu.Unlock()
+	if p.node == "" {
+		p.node = n
+	}
+	return p.node
 }
 
 // pveStatus ist ein Eintrag aus /cluster/status.
@@ -142,13 +180,15 @@ func (p *PVE) Test(ctx context.Context) TestResult {
 	cl, nodes, err := p.Nodes(ctx)
 	if err != nil {
 		res.Warning = strings.TrimSpace(res.Warning + " cluster/status: " + err.Error())
-		res.Node = p.cfg.Node
+		res.Node = p.Node()
 		return res
 	}
 	res.Cluster, res.Nodes = cl, nodes
 	res.Node = p.cfg.Node
 	if res.Node == "" {
-		res.Node = localNode(nodes)
+		// erkannte Node festhalten (Rueckgabe an den Assistenten zum Speichern); spaetere Tests und Runden bleiben
+		// bei ihr, auch wenn eine andere Adresse antwortet
+		res.Node = p.fixNode(localNode(nodes))
 	}
 	found := false
 	for _, n := range nodes {
@@ -192,15 +232,12 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 
 	var st []pveStatus
 	stErr := p.client.Get(ctx, "/cluster/status", &st)
-	node := p.cfg.Node
+	node := p.Node()
 	if node == "" {
 		if stErr == nil {
 			_, nodes := parseNodes(st)
-			if n := localNode(nodes); n != "" {
-				p.node = n
-			}
+			node = p.fixNode(localNode(nodes))
 		}
-		node = p.node
 		if node == "" {
 			if stErr != nil {
 				return nil, scrubErr(stErr, p.cfg.Secret)
@@ -217,13 +254,18 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	if svc := p.updates.collect(ctx, p.client, node, now, p.cfg.UpdatesEvery, part); svc != nil {
 		out = append(out, *svc)
 	}
+	var cw []model.Service // clusterweite Dienste
 	if stErr != nil {
-		part.add("cluster/status", stErr)
-	} else if svc, ok := clusterService(st); ok {
-		out = append(out, svc)
+		part.add("cluster/status", stErr, "cluster")
+	} else {
+		p.owner = clusterOwner(st) // bei Fehler gilt der vorige Stand
+		if svc, ok := clusterService(st); ok {
+			cw = append(cw, svc)
+		}
 	}
-	out = append(out, p.ha(ctx, part)...)
-	out = append(out, p.ceph(ctx, now, part)...)
+	cw = append(cw, p.ha(ctx, part)...)
+	cw = append(cw, p.ceph(ctx, now, part)...)
+	out = append(out, clusterWide(cw, node, p.owner)...)
 	out = append(out, p.storages(ctx, nodePath, part)...)
 	out = append(out, p.zfs(ctx, nodePath, part)...)
 	out = append(out, p.disks.collect(ctx, p.client, node, now, p.cfg.SmartEvery, func(d diskEntry) string {
@@ -232,6 +274,41 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	out = append(out, p.guests(ctx, nodePath, now, part)...)
 	sortServices(out)
 	return out, part.result()
+}
+
+// clusterOwner: die Node, die die clusterweiten Dienste bewertet – kleinste Node-ID unter den Nodes online
+// ("" = kein Cluster bzw. keine Angabe: jede Node bewertet selbst).
+func clusterOwner(st []pveStatus) string {
+	isCluster := false
+	for _, e := range st {
+		isCluster = isCluster || e.Type == "cluster"
+	}
+	if !isCluster {
+		return ""
+	}
+	_, nodes := parseNodes(st)
+	best := -1
+	owner := ""
+	for _, n := range nodes {
+		if n.Online && (best < 0 || n.ID < best) {
+			best, owner = n.ID, n.Name
+		}
+	}
+	return owner
+}
+
+// clusterWide: auf der zustaendigen Node die Dienste unveraendert, sonst nur als Hinweis (ohne Messgroessen und
+// Zustaende, Schluessel bleiben).
+func clusterWide(svcs []model.Service, node, owner string) []model.Service {
+	if owner == "" || owner == node {
+		return svcs
+	}
+	for i := range svcs {
+		s := &svcs[i]
+		s.Metrics, s.Facts = nil, nil
+		s.Text = strings.TrimSuffix("gemeldet von Node "+owner+" · "+s.Text, " · ")
+	}
+	return svcs
 }
 
 // clusterService: Quorum und Nodes online (nur im Cluster).
@@ -293,7 +370,7 @@ func (p *PVE) ha(ctx context.Context, part *partial) []model.Service {
 	var list []haEntry
 	if err := p.client.Get(ctx, "/cluster/ha/status/current", &list); err != nil {
 		if !absent(err) {
-			part.add("cluster/ha/status/current", err)
+			part.add("cluster/ha/status/current", err, "ha")
 		}
 		return nil
 	}
@@ -363,18 +440,24 @@ func (p *PVE) ceph(ctx context.Context, now time.Time, part *partial) []model.Se
 	}
 	var cs cephStatus
 	if err := p.client.Get(ctx, "/cluster/ceph/status", &cs); err != nil {
-		var pe *proxmox.Error
-		if errors.As(err, &pe) && pe.Status >= 400 && !authErr(err) {
-			p.cephUntil = now.Add(optionalRetry) // kein Ceph eingerichtet
+		switch {
+		case cephMissing(err): // kein Ceph eingerichtet
+			p.cephSeen, p.cephUntil = false, now.Add(optionalRetry)
 			return nil
+		case p.cephSeen && !authErr(err):
+			// eingerichtetes Ceph antwortet nicht (Monitore ohne Quorum, Zeitlimit): Stoerung
+			msg := scrub(err.Error(), p.cfg.Secret)
+			return []model.Service{{Key: "ceph", Name: "Ceph", Kind: "ceph", Default: true, Text: "Status nicht abrufbar: " + msg,
+				Facts: []model.Fact{{Code: "ceph_err", Text: "Ceph-Status nicht abrufbar: " + msg}}}}
 		}
-		part.add("cluster/ceph/status", err)
+		part.add("cluster/ceph/status", err, "ceph")
 		return nil
 	}
 	if cs.Health.Status == "" {
-		p.cephUntil = now.Add(optionalRetry)
+		p.cephSeen, p.cephUntil = false, now.Add(optionalRetry)
 		return nil
 	}
+	p.cephSeen = true
 	osds, up, in := cs.OSDMap.Num, cs.OSDMap.Up, cs.OSDMap.In
 	if cs.OSDMap.OSDMap != nil {
 		osds, up, in = cs.OSDMap.OSDMap.Num, cs.OSDMap.OSDMap.Up, cs.OSDMap.OSDMap.In
@@ -407,6 +490,29 @@ func (p *PVE) ceph(ctx context.Context, now time.Time, part *partial) []model.Se
 	return []model.Service{s}
 }
 
+// cephMissing: Ceph ist auf diesem Cluster nicht eingerichtet (Proxmox antwortet dann mit 500 und einem Text wie
+// "binary not installed: /usr/bin/ceph-mon" bzw. "pveceph configuration not initialized"). Andere 500er und
+// Zeitlimits sind Fehler eines eingerichteten Ceph.
+func cephMissing(err error) bool {
+	var pe *proxmox.Error
+	if !errors.As(err, &pe) || authErr(err) {
+		return false
+	}
+	if absent(err) {
+		return true
+	}
+	if pe.Status != 500 {
+		return false
+	}
+	d := strings.ToLower(pe.Detail)
+	for _, m := range []string{"not installed", "not initialized", "not configured", "no such file or directory"} {
+		if strings.Contains(d, m) {
+			return true
+		}
+	}
+	return false
+}
+
 // pveStorage ist ein Eintrag aus /nodes/{node}/storage.
 type pveStorage struct {
 	Storage string `json:"storage"`
@@ -423,7 +529,7 @@ type pveStorage struct {
 func (p *PVE) storages(ctx context.Context, nodePath string, part *partial) []model.Service {
 	var list []pveStorage
 	if err := p.client.Get(ctx, nodePath+"/storage", &list); err != nil {
-		part.add("storage", err)
+		part.add("storage", err, "store:")
 		return nil
 	}
 	var out []model.Service
@@ -470,7 +576,7 @@ func (p *PVE) zfs(ctx context.Context, nodePath string, part *partial) []model.S
 	var list []pveZFS
 	if err := p.client.Get(ctx, nodePath+"/disks/zfs", &list); err != nil {
 		if !absent(err) {
-			part.add("disks/zfs", err)
+			part.add("disks/zfs", err, "zfs:")
 		}
 		return nil
 	}
@@ -496,6 +602,7 @@ type pveGuest struct {
 	VMID      num    `json:"vmid"`
 	Name      string `json:"name"`
 	Status    string `json:"status"`
+	QMP       string `json:"qmpstatus"` // nur QEMU mit full=1
 	Lock      string `json:"lock"`
 	Tags      string `json:"tags"`
 	Template  num    `json:"template"`
@@ -517,6 +624,7 @@ type guestItem struct {
 	key  string // vm:101, ct:200
 	vmid int
 	g    pveGuest
+	at   time.Time // Abrufzeitpunkt der Liste (Raten)
 }
 
 func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *partial) []model.Service {
@@ -524,17 +632,22 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 	failed := map[string]bool{} // Praefix -> Liste fehlgeschlagen (Zaehler und Configs behalten)
 	for _, typ := range []string{proxmox.TypeQEMU, proxmox.TypeLXC} {
 		var list []pveGuest
-		if err := p.client.Get(ctx, nodePath+"/"+typ, &list); err != nil {
-			part.add(typ, err)
+		path := nodePath + "/" + typ
+		if typ == proxmox.TypeQEMU {
+			path += "?full=1" // mit qmpstatus
+		}
+		if err := p.client.Get(ctx, path, &list); err != nil {
+			part.add(typ, err, guestPrefix(typ))
 			failed[guestPrefix(typ)] = true
 			continue
 		}
+		at := p.now() // Raten mit dem Abrufzeitpunkt (vorher koennen SMART u. a. dauern)
 		for _, g := range list {
 			if g.Template != 0 || g.VMID <= 0 {
 				continue
 			}
 			vmid := int(g.VMID)
-			items = append(items, guestItem{typ: typ, key: guestPrefix(typ) + strconv.Itoa(vmid), vmid: vmid, g: g})
+			items = append(items, guestItem{typ: typ, key: guestPrefix(typ) + strconv.Itoa(vmid), vmid: vmid, g: g, at: at})
 		}
 	}
 	// onboot je Gast (alle configEvery neu)
@@ -575,7 +688,7 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 	for _, it := range items {
 		keep[it.key] = true
 		cfg, known := p.configs[it.key]
-		out = append(out, p.guestService(it, now, cfg, known))
+		out = append(out, p.guestService(it, cfg, known))
 	}
 	drop := func(k string) bool {
 		pre, _, _ := strings.Cut(k, ":")
@@ -589,6 +702,11 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 	for k := range p.configs {
 		if drop(k) {
 			delete(p.configs, k)
+		}
+	}
+	for k := range p.locks {
+		if drop(k) {
+			delete(p.locks, k)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -613,9 +731,18 @@ func guestID(key string) int {
 	return n
 }
 
+// qmpFault: QEMU-Zustaende, in denen die VM zwar als "running" gilt, aber steht (Speicher voll, Absturz).
+var qmpFault = map[string]bool{"io-error": true, "internal-error": true, "guest-panicked": true}
+
 // guestService: ein Gast als Dienst mit Zustand, CPU, RAM, Platte, Netz- und Disk-Raten und Soll-Zustand (onboot).
-func (p *PVE) guestService(it guestItem, now time.Time, cfg guestCfg, cfgKnown bool) model.Service {
+//
+// Messgroessen fuer den Kern: running (1 = laeuft wirklich; 0 auch bei pausierter bzw. gestoerter VM laut
+// qmpstatus) und locked (1 = eine Sperre wie Backup im Stopp-Modus oder Migration erklaert, dass der Gast nicht
+// laeuft; bei nicht laufenden Gaesten hoechstens lockGrace lang, danach 0). Ein Soll "laeuft" am Dienst soll locked
+// beachten.
+func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Service {
 	g := it.g
+	now := it.at
 	label, kind := "VM", "vm"
 	if it.typ == proxmox.TypeLXC {
 		label, kind = "CT", "ct"
@@ -630,24 +757,63 @@ func (p *PVE) guestService(it guestItem, now time.Time, cfg guestCfg, cfgKnown b
 			s.Default = false
 		}
 	}
-	running := g.Status == "running"
+	running := g.Status == "running" // Prozess laeuft (Werte und Zaehler)
+	qmp := strings.ToLower(strings.TrimSpace(g.QMP))
+	isQEMU := it.typ == proxmox.TypeQEMU
+	fault := running && isQEMU && qmpFault[qmp]
+	held := running && isQEMU && !fault && qmp != "" && qmp != "running" // pausiert, suspended …
+	active := running && !fault && !held
 	run := 0.0
-	if running {
+	if active {
 		run = 1
 	}
-	s.Metrics = append(s.Metrics, model.Metric{Name: "running", Value: run})
 	var parts []string
-	switch g.Status {
-	case "running":
+	switch {
+	case fault:
+		parts = append(parts, "gestört ("+qmp+")")
+	case held && qmp == "paused":
+		parts = append(parts, "pausiert")
+	case held:
+		parts = append(parts, "angehalten ("+qmp+")")
+	case g.Status == "running":
 		parts = append(parts, "läuft")
-	case "stopped":
+	case g.Status == "stopped":
 		parts = append(parts, "gestoppt")
 	default:
 		parts = append(parts, firstNonEmpty(g.Status, "unbekannt"))
 	}
+	// Sperre: bei laufenden Gaesten erklaert (Backup im Snapshot-Modus, Migration), bei nicht laufenden nur
+	// lockGrace lang (eine haengende Sperre verdeckt sonst einen gestoppten Gast); eine Stoerung geht vor.
+	lockOK := false
 	if g.Lock != "" {
-		parts = append(parts, "Sperre "+g.Lock)
+		txt := "Sperre " + g.Lock
+		switch {
+		case fault:
+			delete(p.locks, it.key)
+		case active:
+			lockOK = true
+			delete(p.locks, it.key)
+		default:
+			l, ok := p.locks[it.key]
+			if !ok || l.lock != g.Lock {
+				l = lockSeen{lock: g.Lock, since: now}
+				p.locks[it.key] = l
+			}
+			if d := now.Sub(l.since); d < lockGrace {
+				lockOK = true
+			} else {
+				txt += " seit " + hoursText(d)
+			}
+		}
+		parts = append(parts, txt)
+	} else {
+		delete(p.locks, it.key)
 	}
+	locked := 0.0
+	if lockOK {
+		locked = 1
+	}
+	s.Metrics = append(s.Metrics, model.Metric{Name: "running", Value: run}, model.Metric{Name: "locked", Value: locked})
 	if running {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "cpu", Value: round2(float64(g.CPU) * 100), Unit: "%", Rule: model.RuleCPU})
 		parts = append(parts, fmt.Sprintf("CPU %.0f %%", float64(g.CPU)*100))
@@ -687,11 +853,18 @@ func (p *PVE) guestService(it guestItem, now time.Time, cfg guestCfg, cfgKnown b
 		parts = append(parts, "Soll-Zustand unbekannt")
 	case cfg.onboot:
 		parts = append(parts, "soll laufen (beim Booten starten)")
-		if !running && g.Lock == "" { // mit Sperre (Backup im Stop-Modus, Migration) absichtlich aus
-			s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", soll laufen (beim Booten starten)"})
-		}
 	default:
 		parts = append(parts, "darf aus sein")
+	}
+	switch {
+	case fault: // gestartet, steht aber: unabhaengig vom Soll-Zustand eine Stoerung
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: "VM steht (" + qmp + ")"})
+	case !active && cfgKnown && cfg.onboot && !lockOK:
+		t := parts[0] + ", soll laufen (beim Booten starten)"
+		if g.Lock != "" {
+			t = parts[0] + ", Sperre " + g.Lock + " länger als " + hoursText(lockGrace) + ", soll laufen (beim Booten starten)"
+		}
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: t})
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s

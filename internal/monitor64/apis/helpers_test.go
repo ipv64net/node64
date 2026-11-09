@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/proxmox"
@@ -26,7 +27,8 @@ type fakeAPI struct {
 	mu     sync.Mutex
 	routes map[string]fakeResp
 	hits   map[string]int
-	auth   int // Anfragen mit Authorization-Kopf
+	auth   int               // Anfragen mit Authorization-Kopf
+	onHit  func(path string) // optional, vor der Antwort (z. B. Uhr weiterstellen)
 }
 
 type fakeResp struct {
@@ -69,7 +71,11 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.auth++
 	}
 	resp, ok := f.routes[p]
+	hook := f.onHit
 	f.mu.Unlock()
+	if hook != nil {
+		hook(p)
+	}
 	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -93,6 +99,66 @@ func tlsServer(t *testing.T, h http.Handler) (string, string) {
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return srv.URL, proxmox.CertFingerprint(srv.Certificate().Raw)
+}
+
+// testClock ist eine Uhr fuer Tests, die auch aus dem Server-Handler gestellt werden darf.
+type testClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *testClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *testClock) add(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
+}
+
+// switchable leitet an h weiter; mit down antwortet er 502 (Adresse gestoert, Failover).
+type switchable struct {
+	h    http.Handler
+	mu   sync.Mutex
+	down bool
+}
+
+func (s *switchable) setDown(v bool) {
+	s.mu.Lock()
+	s.down = v
+	s.mu.Unlock()
+}
+
+func (s *switchable) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	down := s.down
+	s.mu.Unlock()
+	if down {
+		w.WriteHeader(http.StatusBadGateway)
+		return
+	}
+	s.h.ServeHTTP(w, r)
+}
+
+func partialOf(t *testing.T, err error) *PartialError {
+	t.Helper()
+	pe, ok := err.(*PartialError)
+	if !ok {
+		t.Fatalf("erwartet *PartialError, got %T %v", err, err)
+	}
+	return pe
+}
+
+func hasPrefix(pe *PartialError, pre string) bool {
+	for _, p := range pe.Prefixes {
+		if p == pre {
+			return true
+		}
+	}
+	return false
 }
 
 func fixture(t *testing.T, name string) string {

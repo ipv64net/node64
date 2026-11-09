@@ -35,7 +35,7 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 	base := "/nodes/" + url.PathEscape(node) + "/disks"
 	var list []diskEntry
 	if err := c.Get(ctx, base+"/list", &list); err != nil {
-		part.add("disks/list", err)
+		part.add("disks/list", err, "disk:")
 		if !s.at.IsZero() && now.Sub(s.at) > 4*every {
 			s.svcs = nil // keine ewig alten Werte
 		}
@@ -56,7 +56,7 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 		if err := c.Get(ctx, base+"/smart?disk="+url.QueryEscape(param(list[i])), &r); err != nil {
 			results[i].bad = true
 			if authErr(err) {
-				authOnce.Do(func() { part.add("disks/smart", err) })
+				authOnce.Do(func() { part.add("disks/smart", err, "disk:") })
 			}
 			return
 		}
@@ -65,11 +65,12 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 	})
 	out := make([]model.Service, 0, len(list))
 	seen := map[string]bool{}
+	keys := diskKeys(list)
 	for i, d := range list {
-		svc := diskService(d, results[i].sm, results[i].bad, s.sectors)
-		if seen[svc.Key] {
-			continue // gleiche Seriennummer zweimal (Multipath): einmal
+		if seen[keys[i]] {
+			continue // gleiche Seriennummer und WWN zweimal (Multipath): einmal
 		}
+		svc := diskService(keys[i], d, results[i].sm, results[i].bad, s.sectors)
 		seen[svc.Key] = true
 		out = append(out, svc)
 	}
@@ -98,7 +99,7 @@ func (s *slowUpdates) collect(ctx context.Context, c *proxmox.Client, node strin
 	}
 	var list []aptUpdate
 	if err := c.Get(ctx, "/nodes/"+url.PathEscape(node)+"/apt/update", &list); err != nil {
-		part.add("apt/update", err)
+		part.add("apt/update", err, "updates")
 		if !s.at.IsZero() && now.Sub(s.at) > 4*every {
 			s.svc = nil
 		}

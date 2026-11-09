@@ -127,14 +127,18 @@ func parseKeyLine(line []byte) (keyEntry, error) {
 		name = strings.ToLower(name)
 		switch {
 		case name == "from" && hasVal:
-			pats := strings.Split(strings.Trim(val, `"`), ",")
-			for _, p := range pats {
-				if p = strings.TrimSpace(p); p != "" {
-					e.from = append(e.from, p)
-				}
+			// Wie OpenSSH: ein ungueltiges Muster (auch verneint) macht die ganze Zeile ungueltig; mehrere from=
+			// in einer Zeile sind nicht eindeutig und werden ebenfalls abgelehnt.
+			if e.from != nil {
+				return keyEntry{}, errors.New("more than one from= option")
 			}
-			if len(e.from) == 0 {
-				return keyEntry{}, errors.New("empty from= option")
+			e.from = []string{}
+			for _, p := range strings.Split(strings.Trim(val, `"`), ",") {
+				p = strings.TrimSpace(p)
+				if err := checkFromPattern(p); err != nil {
+					return keyEntry{}, fmt.Errorf("from=: %w", err)
+				}
+				e.from = append(e.from, p)
 			}
 		case ignoredKeyOptions[name] && !hasVal:
 		default:
@@ -144,26 +148,55 @@ func parseKeyLine(line []byte) (keyEntry, error) {
 	return e, nil
 }
 
+// checkFromPattern prueft ein Muster aus from="...": IP (auch mit Zone), CIDR ohne gesetzte Hostbits oder IP mit
+// * und ?, optional mit "!" verneint. Hostnamen werden nicht aufgeloest und deshalb abgelehnt (ein verneinter
+// Hostname wuerde sonst still nichts sperren).
+func checkFromPattern(p string) error {
+	q := strings.TrimPrefix(p, "!")
+	switch {
+	case q == "":
+		return errors.New("empty pattern")
+	case strings.Contains(q, "/"):
+		pfx, err := netip.ParsePrefix(q)
+		if err != nil || pfx != pfx.Masked() {
+			return fmt.Errorf("invalid network %q", p)
+		}
+		return nil
+	case strings.ContainsAny(q, "*?"):
+		if strings.Trim(q, "0123456789abcdefABCDEF.:*?") != "" {
+			return fmt.Errorf("pattern %q not supported (IP, CIDR or IP with * and ?)", p)
+		}
+		return nil
+	}
+	if _, err := netip.ParseAddr(q); err != nil {
+		return fmt.Errorf("pattern %q not supported (IP, CIDR or IP with * and ?)", p)
+	}
+	return nil
+}
+
 // fromAllows prueft eine Adresse gegen die Muster aus from="..." wie OpenSSH: mindestens ein positives Muster passt
-// und kein verneintes ("!"). Muster: IP, CIDR oder IP mit * und ?; Hostnamen werden nicht aufgeloest (passen nie).
+// und kein verneintes ("!"). Die Zone einer IPv6-Adresse zaehlt nicht (sonst passte "fe80::/10" nicht auf
+// "fe80::1%eth0"). Ein ungueltiges Muster (parseKeyLine laesst keins durch) verweigert immer.
 func fromAllows(pats []string, ip netip.Addr) bool {
 	if len(pats) == 0 {
 		return true
 	}
-	ip = ip.Unmap()
+	ip = ip.Unmap().WithZone("")
 	s := ip.String()
 	allowed := false
 	for _, p := range pats {
+		if checkFromPattern(p) != nil {
+			return false
+		}
 		neg := strings.HasPrefix(p, "!")
 		p = strings.TrimPrefix(p, "!")
 		var hit bool
 		if strings.Contains(p, "/") {
-			if pfx, err := netip.ParsePrefix(p); err == nil {
-				hit = pfx.Contains(ip)
-			}
+			pfx, _ := netip.ParsePrefix(p)
+			hit = pfx.Contains(ip)
 		} else if a, err := netip.ParseAddr(p); err == nil {
-			hit = a.Unmap() == ip
-		} else if !strings.ContainsAny(p, "[\\") {
+			hit = a.Unmap().WithZone("") == ip
+		} else {
 			hit, _ = path.Match(p, s)
 		}
 		if hit {
@@ -198,6 +231,28 @@ func (s *keyStore) lookup(pub ssh.PublicKey) *keyEntry {
 		}
 	}
 	return nil
+}
+
+// allowed prueft Schluessel (Wire-Format) und Adresse gegen die aktuelle Liste (Datei, from=). Liefert den Eintrag
+// oder einen Fehler.
+func (s *keyStore) allowed(wire []byte, remote net.Addr) (*keyEntry, error) {
+	var e *keyEntry
+	for _, k := range s.current() {
+		if bytes.Equal(k.wire, wire) {
+			e = &k
+			break
+		}
+	}
+	if e == nil {
+		return nil, errors.New("unknown key")
+	}
+	if len(e.from) > 0 {
+		ap, err := netip.ParseAddrPort(remote.String())
+		if err != nil || !fromAllows(e.from, ap.Addr()) {
+			return nil, errors.New("address not allowed for this key")
+		}
+	}
+	return e, nil
 }
 
 func (s *keyStore) current() []keyEntry {
@@ -258,13 +313,22 @@ func (s *keyStore) report(msg string, err error) {
 	}
 }
 
-// Fehlversuche je IP bremsen.
+// Fehlversuche je IP bremsen. Als Fehlversuch zaehlt jede Verbindung, die nicht zur Anmeldung fuehrt (falscher
+// Schluessel, Zeitlimit, abgebrochener Handshake, zu viele gleichzeitige Verbindungen ohne Anmeldung).
 const (
-	failFree     = 5                // so viele fehlgeschlagene Anmeldungen ohne Sperre
+	failFree     = 5                // so viele Fehlversuche ohne Sperre
 	failBlockMin = time.Minute      // erste Sperre, verdoppelt sich je weiterem Fehlversuch
 	failBlockMax = 30 * time.Minute //
 	failForget   = time.Hour        // Zaehler verfaellt nach so langer Ruhe
-	failMaxIPs   = 4096             // hoechstens so viele Adressen merken
+	failMaxIPs   = 4096             // hoechstens so viele Adressen merken (volle Liste: aelteste verdraengen)
+	goodForget   = 24 * time.Hour   // Adresse mit erfolgreicher Anmeldung gilt so lange als bekannt
+	goodMaxIPs   = 1024             // hoechstens so viele bekannte Adressen merken
+)
+
+// Verbindungen ohne Anmeldung (Handshake laeuft) begrenzen, damit sie die Plaetze angemeldeter Nodes nicht belegen.
+const (
+	preAuthMax   = 8 // insgesamt
+	preAuthPerIP = 3 // je Adresse (IPv6 je /64)
 )
 
 type failState struct {
@@ -274,8 +338,9 @@ type failState struct {
 }
 
 type limiter struct {
-	mu sync.Mutex
-	m  map[string]*failState
+	mu   sync.Mutex
+	m    map[string]*failState
+	good map[string]time.Time // Adressen mit erfolgreicher Anmeldung (Zeitpunkt)
 }
 
 // limiterKey fasst IPv6 je /64 zusammen (sonst wechselt ein Angreifer einfach die Adresse).
@@ -284,7 +349,7 @@ func limiterKey(addr net.Addr) string {
 	if err != nil {
 		return addr.String()
 	}
-	ip := ap.Addr().Unmap()
+	ip := ap.Addr().Unmap().WithZone("")
 	if ip.Is6() {
 		p, _ := ip.Prefix(64)
 		return p.String()
@@ -299,6 +364,16 @@ func (l *limiter) blocked(key string, now time.Time) bool {
 	return st != nil && now.Before(st.until)
 }
 
+// known meldet, ob sich von der Adresse in den letzten 24 Std. eine Node angemeldet hat. Bekannte Adressen werden
+// nicht gesperrt und zaehlen nicht gegen die Obergrenze fuer Verbindungen ohne Anmeldung (Angreifer duerfen
+// angemeldete Nodes nicht aussperren).
+func (l *limiter) known(key string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	t, ok := l.good[key]
+	return ok && now.Sub(t) < goodForget
+}
+
 func (l *limiter) fail(key string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -308,14 +383,7 @@ func (l *limiter) fail(key string, now time.Time) {
 	st := l.m[key]
 	if st == nil {
 		if len(l.m) >= failMaxIPs {
-			for k, v := range l.m {
-				if now.Sub(v.last) > failForget && !now.Before(v.until) {
-					delete(l.m, k)
-				}
-			}
-			if len(l.m) >= failMaxIPs {
-				return
-			}
+			l.evict(now)
 		}
 		st = &failState{}
 		l.m[key] = st
@@ -331,8 +399,89 @@ func (l *limiter) fail(key string, now time.Time) {
 	}
 }
 
-func (l *limiter) ok(key string) {
+// evict macht Platz in der vollen Liste: erst verfallene Eintraege, sonst der aelteste nicht gesperrte, notfalls der
+// aelteste ueberhaupt (lieber eine alte Sperre vergessen als neue Fehlversuche nicht mehr zaehlen).
+func (l *limiter) evict(now time.Time) {
+	var oldest, oldestFree string
+	var tOld, tFree time.Time
+	for k, v := range l.m {
+		if now.Sub(v.last) > failForget && !now.Before(v.until) {
+			delete(l.m, k)
+			continue
+		}
+		if oldest == "" || v.last.Before(tOld) {
+			oldest, tOld = k, v.last
+		}
+		if !now.Before(v.until) && (oldestFree == "" || v.last.Before(tFree)) {
+			oldestFree, tFree = k, v.last
+		}
+	}
+	if len(l.m) < failMaxIPs {
+		return
+	}
+	if oldestFree != "" {
+		delete(l.m, oldestFree)
+	} else {
+		delete(l.m, oldest)
+	}
+}
+
+// ok vergisst die Fehlversuche und merkt die Adresse als bekannt.
+func (l *limiter) ok(key string, now time.Time) {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	delete(l.m, key)
-	l.mu.Unlock()
+	if l.good == nil {
+		l.good = map[string]time.Time{}
+	}
+	if _, ok := l.good[key]; !ok && len(l.good) >= goodMaxIPs {
+		var oldest string
+		var t time.Time
+		for k, v := range l.good {
+			if now.Sub(v) >= goodForget {
+				delete(l.good, k)
+				continue
+			}
+			if oldest == "" || v.Before(t) {
+				oldest, t = k, v
+			}
+		}
+		if len(l.good) >= goodMaxIPs {
+			delete(l.good, oldest)
+		}
+	}
+	l.good[key] = now
+}
+
+// preAuthGate zaehlt Verbindungen, deren Handshake noch laeuft.
+type preAuthGate struct {
+	mu    sync.Mutex
+	total int
+	per   map[string]int
+}
+
+// acquire belegt einen Platz; known = Adresse einer bereits angemeldeten Node (nur die Grenze je Adresse gilt).
+func (g *preAuthGate) acquire(key string, known bool) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.per == nil {
+		g.per = map[string]int{}
+	}
+	if g.per[key] >= preAuthPerIP || (!known && g.total >= preAuthMax) {
+		return false
+	}
+	g.per[key]++
+	g.total++
+	return true
+}
+
+func (g *preAuthGate) release(key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.per[key] <= 1 {
+		delete(g.per, key)
+	} else {
+		g.per[key]--
+	}
+	g.total--
 }

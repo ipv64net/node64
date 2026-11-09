@@ -301,3 +301,105 @@ func TestEffectiveJSON(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// F5-K1: jede Art hat eigene Zeiger; Ueberlagern einer Art aendert keine andere.
+func TestRuleOverlayAndClone(t *testing.T) {
+	// Nachbau des alten Kerns: gespeicherte Felder per Unmarshal in die Standard-Regel einer Art.
+	std := Defaults()
+	base := std[KindFSUsed]
+	if err := json.Unmarshal([]byte(`{"report":"show","mode":"free","warn_free":100,"crit_free":10}`), &base); err != nil {
+		t.Fatal(err)
+	}
+	std[KindFSUsed] = base
+	for _, k := range []string{KindCPUUtil, KindMemUsed, KindSmartFailed, KindStoreUsed} {
+		if e := Resolve(std, nil, HostRef{ID: "h"}, HostLevel{}, k); e.Mode != ModeUsed || e.Report != ReportNotify {
+			t.Fatalf("%s: Aenderung an fs.used wirkt mit: %+v", k, e)
+		}
+	}
+
+	// Overlay: gesetzte Felder gewinnen, Rest bleibt, keine geteilten Zeiger.
+	std = Defaults()
+	var saved Rule
+	if err := json.Unmarshal([]byte(`{"report":"show","warn":70}`), &saved); err != nil {
+		t.Fatal(err)
+	}
+	orig := std[KindFSUsed]
+	got := orig.Overlay(saved)
+	if got.Warn.V != 70 || got.Crit.V != 90 || *got.Report != ReportShow || *got.Mode != ModeUsed || *got.Dir != Up {
+		t.Fatalf("Overlay: %+v", got)
+	}
+	if got.Warn == saved.Warn || got.Crit == orig.Crit || got.Mode == orig.Mode || got.Report == saved.Report {
+		t.Fatal("Overlay teilt Zeiger")
+	}
+	if orig.Warn.V != 80 || *orig.Report != ReportNotify {
+		t.Fatalf("Overlay aendert die Basis: %+v", orig)
+	}
+	std[KindFSUsed] = got
+	*got.Mode = ModeFree
+	if e := Resolve(std, nil, HostRef{}, HostLevel{}, KindStoreUsed); e.Mode != ModeUsed || e.Report != ReportNotify {
+		t.Fatalf("store.used veraendert: %+v", e)
+	}
+	if (Rule{}).Overlay(Rule{}) != (Rule{}) {
+		t.Fatal("leere Regeln")
+	}
+
+	// Clone ist tief: Aenderungen an der Kopie wirken nicht zurueck.
+	a := Defaults()
+	b := a.Clone()
+	*b[KindCPUUtil].Mode = ModeFree
+	b[KindCPUUtil].Warn.V = 1
+	*b[KindSmartFailed].Severity = SevOff
+	if *a[KindCPUUtil].Mode != ModeUsed || a[KindCPUUtil].Warn.V != 90 || *a[KindSmartFailed].Severity != SevCrit {
+		t.Fatal("Clone teilt Zeiger")
+	}
+	if Table(nil).Clone() != nil || len(b) != len(a) {
+		t.Fatal("Clone Laenge/nil")
+	}
+	// Keine zwei Arten der Standard-Tabelle teilen einen Zeiger.
+	seen := map[any]string{}
+	for k, r := range Defaults() {
+		for _, p := range []any{r.Warn, r.Crit, r.WarnFree, r.CritFree, r.Dir, r.For, r.Hyst, r.Mode, r.Report, r.Severity} {
+			if v := reflectPtr(p); v != nil {
+				if o, ok := seen[v]; ok {
+					t.Fatalf("%s und %s teilen einen Zeiger", k, o)
+				}
+				seen[v] = k
+			}
+		}
+	}
+}
+
+// reflectPtr liefert den Zeiger als vergleichbaren Wert (nil-Zeiger -> nil).
+func reflectPtr(p any) any {
+	switch v := p.(type) {
+	case *Limit:
+		if v != nil {
+			return v
+		}
+	case *Direction:
+		if v != nil {
+			return v
+		}
+	case *Dur:
+		if v != nil {
+			return v
+		}
+	case *float64:
+		if v != nil {
+			return v
+		}
+	case *Mode:
+		if v != nil {
+			return v
+		}
+	case *Report:
+		if v != nil {
+			return v
+		}
+	case *Severity:
+		if v != nil {
+			return v
+		}
+	}
+	return nil
+}

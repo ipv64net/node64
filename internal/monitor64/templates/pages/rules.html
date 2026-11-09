@@ -14,7 +14,7 @@
 			{{range $d.Std}}
 			<div class="card mb-3">
 				<div class="card-header fw-semibold">{{$.T (printf "monitor64.rgroup.%s" .Group)}}</div>
-				<div class="table-responsive"><table class="table mb-0 rules-table">
+				<div class="table-responsive"><table class="table mb-0 rules-table" data-nosort>
 					<thead><tr><th>{{$.T "monitor64.rl.value"}}</th><th>{{$.T "monitor64.rl.warn"}}</th><th>{{$.T "monitor64.rl.crit"}}</th><th class="d-none d-sm-table-cell">{{$.T "monitor64.rl.for"}}</th></tr></thead>
 					<tbody>
 					{{range .Rows}}

@@ -16,12 +16,13 @@ import (
 
 // fakeDocker ist eine Docker Engine API (v1.47, Docker 27) mit aufgezeichneten Antworten.
 type fakeDocker struct {
-	mu      sync.Mutex
-	list    string
-	stats   map[string]string // ID -> stats
-	inspect map[string]string // ID -> inspect
-	fail    map[string]int    // Pfad -> Status
-	hits    map[string]int
+	mu       sync.Mutex
+	list     string
+	stats    map[string]string // ID -> stats
+	inspect  map[string]string // ID -> inspect
+	fail     map[string]int    // Pfad -> Status
+	redirect map[string]string // Pfad -> Ziel (302)
+	hits     map[string]int
 }
 
 func (f *fakeDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +44,10 @@ func (f *fakeDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.hits[p]++
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Api-Version", "1.47")
+	if loc, ok := f.redirect[p]; ok {
+		http.Redirect(w, r, loc, http.StatusFound)
+		return
+	}
 	if st, ok := f.fail[p]; ok {
 		w.WriteHeader(st)
 		_, _ = w.Write([]byte(`{"message":"simulated failure"}`))
@@ -296,5 +301,64 @@ func TestDockerLive(t *testing.T) {
 	t.Logf("Teilfehler: %v", err)
 	for _, s := range svcs {
 		t.Logf("%-30s def=%v %v | %s | %v", s.Key, s.Default, s.Metrics, s.Text, s.Facts)
+	}
+}
+
+// stats nicht abrufbar: keine Messgroessen statt falscher Nullwerte (auch nicht in der Runde danach).
+func TestDockerStatsFailure(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	f, host := dockerFake(t, now)
+	d := newTestDocker(t, host, &now)
+	if _, err := d.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	nci := cid('a')
+	f.mu.Lock()
+	f.fail["/containers/"+nci+"/stats"] = http.StatusInternalServerError
+	f.mu.Unlock()
+	now = now.Add(10 * time.Second)
+	svcs, _ := d.Collect(context.Background())
+	nc := svcByKey(t, svcs, "ctr:nextcloud")
+	for _, n := range []string{"cpu", "mem", "net_in", "net_out", "read", "write"} {
+		if m, ok := metric(nc, n); ok {
+			t.Errorf("ohne stats: %s = %v", n, m.Value)
+		}
+	}
+	if mustMetric(t, nc, "running").Value != 1 {
+		t.Error("running ohne stats")
+	}
+	// stats wieder da: erst eine Runde ohne Raten (vorige Runde ohne Zaehler), dann mit
+	f.mu.Lock()
+	delete(f.fail, "/containers/"+nci+"/stats")
+	f.mu.Unlock()
+	now = now.Add(10 * time.Second)
+	svcs, _ = d.Collect(context.Background())
+	if _, ok := metric(svcByKey(t, svcs, "ctr:nextcloud"), "net_in"); ok {
+		t.Error("Rate direkt nach dem stats-Ausfall")
+	}
+	f.mu.Lock()
+	f.stats[nci] = statsJSON(1e12+2e9, 1e14+4e10, 629145600, 1e9+12.5e6, 1e8+1.25e6, 5e8+1e7, 7e8+2e7)
+	f.mu.Unlock()
+	now = now.Add(10 * time.Second)
+	svcs, _ = d.Collect(context.Background())
+	if m := mustMetric(t, svcByKey(t, svcs, "ctr:nextcloud"), "net_in"); !near(m.Value, 10) {
+		t.Errorf("net_in = %v, erwartet 10", m.Value)
+	}
+}
+
+// Keine Weiterleitungen (Plan): eine Antwort 302 gilt als Fehler, das Ziel wird nicht abgefragt.
+func TestDockerNoRedirect(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	f, host := dockerFake(t, now)
+	f.mu.Lock()
+	f.redirect = map[string]string{"/containers/" + cid('d') + "/json": "/containers/" + cid('a') + "/json"}
+	f.mu.Unlock()
+	d := newTestDocker(t, host, &now)
+	svcs, err := d.Collect(context.Background())
+	if !IsPartial(err) || !strings.Contains(err.Error(), "302") {
+		t.Fatalf("erwartet Teilfehler mit 302: %v", err)
+	}
+	if wk := svcByKey(t, svcs, "ctr:worker"); !strings.Contains(wk.Text, "Soll-Zustand unbekannt") {
+		t.Errorf("worker ueber Weiterleitung gelesen: %+v", wk)
 	}
 }

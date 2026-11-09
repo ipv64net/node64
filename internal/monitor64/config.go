@@ -43,9 +43,9 @@ func (m *Module) reloadConfig(ctx context.Context) {
 		var saved map[string]json.RawMessage
 		if json.Unmarshal([]byte(raw), &saved) == nil {
 			for kind, r := range saved {
-				base := c.std[kind]
-				if json.Unmarshal(r, &base) == nil {
-					c.std[kind] = base
+				var o eval.Rule
+				if json.Unmarshal(r, &o) == nil {
+					c.std[kind] = c.std[kind].Overlay(o) // eigene Kopie, keine geteilten Zeiger
 				}
 			}
 		}
@@ -135,17 +135,27 @@ func (m *Module) inMaintenance(at time.Time, h eval.HostRef) (bool, *eval.Window
 	return eval.InMaintenance(m.config().maint, at, h, m.location())
 }
 
-// location ist die Zeitzone der Node (Einstellung node.timezone, sonst lokal).
+// location ist die Zeitzone der Node (Einstellung node.timezone, sonst lokal); hoechstens jede Minute neu gelesen.
 func (m *Module) location() *time.Location {
+	m.locMu.Lock()
+	defer m.locMu.Unlock()
+	if m.loc != nil && time.Since(m.locAt) < time.Minute {
+		return m.loc
+	}
+	loc := time.Local
 	if tz := m.st.SettingOr(context.Background(), "node.timezone", ""); tz != "" {
-		if loc, err := time.LoadLocation(tz); err == nil {
-			return loc
+		if l, err := time.LoadLocation(tz); err == nil {
+			loc = l
 		}
 	}
-	return time.Local
+	m.loc, m.locAt = loc, time.Now()
+	return loc
 }
 
-// quietNow: Ruhezeit (nur fuer Erinnerungen; Zurueckhalten und Sammelmeldung macht der Dispatcher).
-// Vorerst immer false: Erinnerungen in der Ruhezeit haelt der Dispatcher zurueck und sie erscheinen in der
-// Sammelmeldung (offener Punkt: Ruhezeit-Pruefung des Dispatchers exportieren).
-func (m *Module) quietNow(time.Time) bool { return false }
+// quietNow: Ruhezeit der Node (nur fuer Erinnerungen; Zurueckhalten und Sammelmeldung macht der Dispatcher).
+func (m *Module) quietNow(t time.Time) bool {
+	if m.quietFn == nil {
+		return false
+	}
+	return m.quietFn(t)
+}

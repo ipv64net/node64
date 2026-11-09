@@ -552,6 +552,7 @@ func heldKey(a Alert) string {
 
 // sendDigest fasst die Ereignisse einer Ruhezeit je Kanal zusammen.
 func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
+	list = explodeMonitor(list) // Monitor64: je Dienst der letzte Stand (eine Meldung enthaelt mehrere Dienste)
 	sort.SliceStable(list, func(i, j int) bool { return list[i].Time.Before(list[j].Time) })
 	last := map[string]Alert{} // je Check der letzte Alert
 	first := map[string]Alert{}
@@ -645,6 +646,9 @@ func (d *Dispatcher) location(uid int64) *time.Location {
 }
 
 // inQuietHours prueft das Ruhefenster aus den Einstellungen.
+// InQuietHours meldet, ob now in der Ruhezeit der Node liegt (fuer Module, z. B. Erinnerungen von Monitor64).
+func (d *Dispatcher) InQuietHours(now time.Time) bool { return d.inQuietHours(0, now) }
+
 func (d *Dispatcher) inQuietHours(uid int64, now time.Time) bool {
 	set := d.settings(uid)
 	if set(SetQuietEnabled, "0") != "1" {

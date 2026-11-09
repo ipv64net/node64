@@ -4,7 +4,11 @@
 // Je Reihe und Stunde entsteht ein Rohblock (Delta-of-Delta-Zeitstempel, skalierte Ganzzahl-Deltas,
 // Varint, deflate). Der laufende Block liegt im Speicher und wird alle FlushInterval gesichert (Upsert),
 // ausserdem bei Close. Ist eine Stunde voll, entstehen 5-Minuten- und Stundenwerte (Min/Mittel/Max/Anzahl),
-// gespeichert als Bloecke je Reihe und Tag bzw. je Reihe und 30 Tage. Query waehlt die Aufloesung selbst.
+// gespeichert als Bloecke je Reihe und Tag bzw. je Reihe und 7 Tage. Query waehlt die Aufloesung selbst.
+//
+// Uhr zurueckgestellt: liegt der Stand einer Reihe (laufende Stunde, letzte abgeschlossene Stunde) mehr als
+// maxFuture vor der Uhr, beginnt die Reihe beim naechsten Punkt neu (Zaehler Stats.ClockResets). Die Stunden
+// "aus der Zukunft" bleiben gespeichert, bis neue Daten derselben Stunden sie ersetzen.
 package tsdb
 
 import (
@@ -32,6 +36,16 @@ const (
 	defaultDigits    = 3
 	defaultMaxPoints = 700
 	flushBatch       = 500 // Reihen je Transaktion
+
+	fileVersion = 2 // PRAGMA user_version; 2 = Stundenbloecke je 7 Tage (0: je 30 Tage). Spanne geaendert -> erhoehen
+)
+
+// Obergrenzen fuer abgeschlossene, noch nicht gesicherte Stunden (Sicherung scheitert dauerhaft): je Reihe
+// und insgesamt (Rohpunkte, ca. 12 Byte je Punkt samt Verdichtung). Darueber fallen die aeltesten weg
+// (Stats.DroppedBacklog). Variablen fuer Tests.
+var (
+	maxSealedHours   = 24
+	maxBacklogPoints = int64(2_000_000)
 )
 
 // ErrClosed: die Datenbank ist geschlossen.
@@ -44,10 +58,13 @@ type Options struct {
 	Retention5m  time.Duration // 5-Minuten-Werte (Standard 30 Tage)
 	Retention1h  time.Duration // Stundenwerte (Standard 1 Jahr)
 
-	FlushInterval time.Duration    // Sicherung des laufenden Blocks (0 = 5 min, < 0 = keine Hintergrund-Sicherung)
-	Digits        int              // Nachkommastellen beim Speichern (0 = 3, hoechstens 6)
-	Logger        *slog.Logger     // nil = keine Ausgabe
-	Now           func() time.Time // nil = time.Now (Tests)
+	FlushInterval time.Duration // Sicherung des laufenden Blocks (0 = 5 min, < 0 = keine Hintergrund-Sicherung)
+	// Digits: Nachkommastellen beim Speichern (0 = 3, hoechstens 6). Mindestwert: Spalten eines Blocks mit
+	// kleinen Werten (Betrag < 1, z. B. Fehlerraten) bekommen automatisch mehr Stellen, bis 4 signifikante
+	// Stellen des groessten Betrags, hoechstens 6 (siehe scaleColumn).
+	Digits int
+	Logger *slog.Logger     // nil = keine Ausgabe
+	Now    func() time.Time // nil = time.Now (Tests)
 }
 
 // DefaultOptions liefert die Standard-Aufbewahrung (roh 48 h, 5 min 30 Tage, 1 h 1 Jahr).
@@ -61,11 +78,16 @@ func DefaultOptions() Options {
 
 // Stats beschreibt den Zustand fuer die Einstellungen und Prometheus.
 type Stats struct {
-	Series        int           // bekannte Reihen
-	Points        int           // Rohpunkte im Speicher (laufende und noch nicht gesicherte Stunden)
-	Dropped       uint64        // verworfene Punkte (NaN, verspaetet, doppelt, Zukunft)
-	LastFlush     time.Time     // letzte erfolgreiche Sicherung
-	FlushDuration time.Duration // Dauer der letzten Sicherung
+	Series         int           // bekannte Reihen
+	Points         int           // Rohpunkte im Speicher (laufende und noch nicht gesicherte Stunden)
+	Dropped        uint64        // verworfene Punkte insgesamt (Summe der vier folgenden Zaehler)
+	DroppedInvalid uint64        // NaN/Inf, leerer Schluessel, Zeit <= 0, nach Close
+	DroppedLate    uint64        // abgeschlossene Stunde, doppelter oder rueckwaerts laufender Zeitstempel
+	DroppedFuture  uint64        // mehr als 10 Minuten in der Zukunft
+	DroppedBacklog uint64        // nicht gesicherte Stunden ueber der Obergrenze (Sicherung scheitert dauerhaft)
+	ClockResets    uint64        // Reihen, die nach zurueckgestellter Uhr neu begonnen haben
+	LastFlush      time.Time     // letzte erfolgreiche Sicherung
+	FlushDuration  time.Duration // Dauer der letzten Sicherung
 }
 
 // DB ist ein geoeffneter Verlaufsspeicher. Alle Methoden sind nebenlaeufig sicher.
@@ -82,7 +104,16 @@ type DB struct {
 
 	wmu sync.Mutex // ein Schreiber: Flush, Purge, DeleteSeriesPrefix
 
-	dropped   atomic.Uint64
+	dropInvalid atomic.Uint64
+	dropLate    atomic.Uint64
+	dropFuture  atomic.Uint64
+	dropBacklog atomic.Uint64
+	resets      atomic.Uint64
+	backlog     atomic.Int64 // Rohpunkte in abgeschlossenen, noch nicht gesicherten Stunden
+	logReset    throttle
+	logBacklog  throttle
+	logFlush    throttle
+
 	lastFlush atomic.Int64 // UnixNano
 	flushDur  atomic.Int64
 	closed    atomic.Bool
@@ -94,20 +125,23 @@ type DB struct {
 
 // series ist eine Messreihe mit laufendem Block im Speicher.
 type series struct {
-	mu     sync.Mutex
-	key    string
-	id     int64 // 0 = noch nicht in der Datenbank
-	floor  int64 // Ende der letzten abgeschlossenen Stunde; aeltere Punkte werden verworfen
-	start  int64 // Beginn der laufenden Stunde (gueltig, wenn len(off) > 0)
-	off    []uint16
-	val    []float64
-	saved  int           // so viele Punkte des laufenden Blocks sind gesichert
-	sealed []sealedBlock // abgeschlossene Stunden, noch nicht geschrieben
-	gone   bool          // aus der Map entfernt (geloescht oder aufgeraeumt)
+	mu      sync.Mutex
+	key     string
+	id      int64 // 0 = noch nicht in der Datenbank
+	floor   int64 // Ende der letzten abgeschlossenen Stunde; aeltere Punkte werden verworfen
+	dbFloor int64 // floor in der Datenbank (series.sealed)
+	start   int64 // Beginn der laufenden Stunde (gueltig, wenn len(off) > 0)
+	off     []uint16
+	val     []float64
+	saved   int           // so viele Punkte des laufenden Blocks sind gesichert
+	sealed  []sealedBlock // abgeschlossene Stunden, noch nicht geschrieben (aufsteigend nach seq)
+	seq     uint64        // laufende Nummer der zuletzt abgeschlossenen Stunde
+	gone    bool          // aus der Map entfernt (geloescht oder aufgeraeumt)
 }
 
 // sealedBlock ist eine abgeschlossene Stunde samt Verdichtung.
 type sealedBlock struct {
+	seq   uint64
 	start int64
 	n     int
 	data  []byte
@@ -159,6 +193,19 @@ func Open(path string, opts Options) (*DB, error) {
 		return nil, err
 	}
 	sdb.SetMaxOpenConns(4)
+	var ver, tables int
+	if err := sdb.QueryRow(`PRAGMA user_version`).Scan(&ver); err != nil {
+		sdb.Close()
+		return nil, fmt.Errorf("file version: %w", err)
+	}
+	if err := sdb.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'blk_1h'`).Scan(&tables); err != nil {
+		sdb.Close()
+		return nil, fmt.Errorf("file version: %w", err)
+	}
+	if ver > fileVersion {
+		sdb.Close()
+		return nil, fmt.Errorf("tsdb: Dateiversion %d neuer als unterstuetzt (%d)", ver, fileVersion)
+	}
 	if _, err := sdb.Exec(schema); err != nil {
 		sdb.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
@@ -179,6 +226,13 @@ func Open(path string, opts Options) (*DB, error) {
 		db.digits = defaultDigits
 	}
 	db.digits = min(db.digits, 6)
+	if ver < fileVersion {
+		// vorhandene Datei aelterer Version (0 = vor der Versionierung, Stundenbloecke je 30 Tage)
+		if err := db.migrate(tables > 0); err != nil {
+			sdb.Close()
+			return nil, err
+		}
+	}
 	if err := db.load(); err != nil {
 		sdb.Close()
 		return nil, err
@@ -208,6 +262,7 @@ func (db *DB) load() error {
 			rows.Close()
 			return err
 		}
+		s.dbFloor = s.floor
 		db.series[s.key] = s
 		byID[s.id] = s
 	}
@@ -239,12 +294,19 @@ func (db *DB) load() error {
 			continue
 		}
 		if len(s.off) > 0 {
-			s.seal(db.digits)
+			db.seal(s)
 		}
 		if start < nowHour {
 			// Stunde vorbei, aber nie abgeschlossen (Absturz): beim naechsten Flush nachholen
-			s.sealed = append(s.sealed, makeSealed(start, ts, vs, db.digits))
+			db.pushSealed(s, makeSealed(start, ts, vs, db.digits))
 			s.floor = max(s.floor, start+hour)
+			continue
+		}
+		if start > now+maxFuture {
+			// Stunde in der Zukunft (Uhr zurueckgestellt): abschliessen statt als laufend laden, sonst nimmt
+			// die Reihe bis zum Aufholen der Uhr nichts an; die Untergrenze setzt Append zurueck
+			db.pushSealed(s, makeSealed(start, ts, vs, db.digits))
+			db.log.Warn("monitor64: open block in the future, clock went back?", "series", s.key, "start", time.Unix(start, 0).UTC())
 			continue
 		}
 		s.start = start
@@ -269,8 +331,8 @@ func (db *DB) loop(interval time.Duration) {
 			return
 		case <-t.C:
 			ctx, cancel := context.WithTimeout(context.Background(), interval)
-			if err := db.Flush(ctx); err != nil && !errors.Is(err, ErrClosed) {
-				db.log.Warn("monitor64: flush failed", "err", err)
+			if err := db.Flush(ctx); err != nil && !errors.Is(err, ErrClosed) && db.logFlush.ok(time.Hour) {
+				db.log.Warn("monitor64: flush failed (repeated failures logged hourly)", "err", err)
 			}
 			cancel()
 		}
@@ -300,10 +362,16 @@ func (db *DB) Close() error {
 
 // Append nimmt einen Messwert auf. Verworfen (und gezaehlt) werden NaN/Inf, Punkte aus bereits
 // abgeschlossenen Stunden, nicht aufsteigende Zeitstempel einer Reihe und Punkte weit in der Zukunft.
+// Liegt der Stand der Reihe weit vor der Uhr (Uhr zurueckgestellt), beginnt die Reihe neu.
 func (db *DB) Append(key string, t time.Time, v float64) {
 	ts := t.Unix()
-	if db.closed.Load() || key == "" || !finite(v) || ts <= 0 || ts > db.now().Unix()+maxFuture {
-		db.dropped.Add(1)
+	if db.closed.Load() || key == "" || !finite(v) || ts <= 0 {
+		db.dropInvalid.Add(1)
+		return
+	}
+	now := db.now().Unix()
+	if ts > now+maxFuture {
+		db.dropFuture.Add(1)
 		return
 	}
 	for {
@@ -313,10 +381,17 @@ func (db *DB) Append(key string, t time.Time, v float64) {
 			s.mu.Unlock()
 			continue
 		}
-		ok := s.add(ts, v, db.digits)
+		ok, ahead := db.add(s, ts, now, v)
 		s.mu.Unlock()
 		if !ok {
-			db.dropped.Add(1)
+			db.dropLate.Add(1)
+		}
+		if ahead > 0 {
+			n := db.resets.Add(1)
+			if db.logReset.ok(10 * time.Minute) {
+				db.log.Warn("monitor64: clock went back, series restarted (logged every 10 min)",
+					"series", key, "ahead", time.Duration(ahead)*time.Second, "resets", n)
+			}
 		}
 		return
 	}
@@ -344,18 +419,30 @@ func (db *DB) lookup(key string) *series {
 	return db.series[key]
 }
 
-// add haengt einen Punkt an (s.mu gehalten).
-func (s *series) add(ts int64, v float64, digits int) bool {
-	if ts < s.floor {
-		return false
-	}
+// add haengt einen Punkt an (s.mu gehalten). ahead > 0: der Stand der Reihe lag so viele Sekunden vor der
+// Uhr und die Reihe beginnt neu (Uhr zurueckgestellt).
+func (db *DB) add(s *series, ts, now int64, v float64) (ok bool, ahead int64) {
 	h := ts - ts%hour
+	if ts < s.floor || (len(s.off) > 0 && h < s.start) {
+		// Stand der Reihe weit vor der Uhr: nicht verspaetet, sondern Uhr zurueckgestellt. Laufende Stunde
+		// abschliessen (wird gesichert) und die Untergrenze auf die Stunde des Punkts setzen.
+		top := s.floor
+		if len(s.off) > 0 {
+			top = max(top, s.start)
+		}
+		if top <= now+maxFuture {
+			return false, 0
+		}
+		db.seal(s)
+		s.floor = h
+		ahead = top - now
+	}
 	if len(s.off) > 0 {
 		switch {
 		case h > s.start:
-			s.seal(digits)
-		case h < s.start, uint16(ts-h) <= s.off[len(s.off)-1]:
-			return false
+			db.seal(s)
+		case uint16(ts-h) <= s.off[len(s.off)-1]:
+			return false, ahead
 		}
 	}
 	if len(s.off) == 0 {
@@ -364,19 +451,67 @@ func (s *series) add(ts int64, v float64, digits int) bool {
 	}
 	s.off = append(s.off, uint16(ts-h))
 	s.val = append(s.val, v)
-	return true
+	return true, ahead
 }
 
 // seal schliesst die laufende Stunde ab (s.mu gehalten).
-func (s *series) seal(digits int) {
+func (db *DB) seal(s *series) {
 	if len(s.off) == 0 {
 		return
 	}
-	s.sealed = append(s.sealed, makeSealed(s.start, s.times(), s.val, digits))
+	db.pushSealed(s, makeSealed(s.start, s.times(), s.val, db.digits))
 	s.floor = max(s.floor, s.start+hour)
 	s.off = s.off[:0]
 	s.val = s.val[:0]
 	s.saved = 0
+}
+
+// pushSealed merkt eine abgeschlossene Stunde zum Schreiben vor (s.mu gehalten). Ueber den Obergrenzen
+// (je Reihe, insgesamt) fallen die aeltesten ungesicherten Stunden der Reihe weg; die neueste bleibt.
+func (db *DB) pushSealed(s *series, b sealedBlock) {
+	s.seq++
+	b.seq = s.seq
+	s.sealed = append(s.sealed, b)
+	db.backlog.Add(int64(b.n))
+	for len(s.sealed) > 1 && (len(s.sealed) > maxSealedHours || db.backlog.Load() > maxBacklogPoints) {
+		old := s.sealed[0]
+		s.sealed[0] = sealedBlock{} // Daten freigeben, solange das Feld noch im Array liegt
+		s.sealed = s.sealed[1:]
+		db.backlog.Add(-int64(old.n))
+		n := db.dropBacklog.Add(uint64(old.n))
+		if db.logBacklog.ok(time.Hour) {
+			db.log.Error("monitor64: history not saved, dropping oldest unsaved hours (logged hourly)",
+				"series", s.key, "start", time.Unix(old.start, 0).UTC(), "dropped", n)
+		}
+	}
+}
+
+// unqueue entfernt die geschriebenen Stunden bis seq (s.mu gehalten).
+func (db *DB) unqueue(s *series, seq uint64) {
+	k := 0
+	for k < len(s.sealed) && s.sealed[k].seq <= seq {
+		db.backlog.Add(-int64(s.sealed[k].n))
+		k++
+	}
+	switch {
+	case k == 0:
+	case k == len(s.sealed):
+		s.sealed = nil
+	default:
+		s.sealed = append([]sealedBlock(nil), s.sealed[k:]...)
+	}
+}
+
+// throttle laesst eine Meldung hoechstens einmal je Zeitraum durch (Echtzeit, unabhaengig von Options.Now).
+type throttle struct{ last atomic.Int64 }
+
+func (t *throttle) ok(every time.Duration) bool {
+	now := time.Now().UnixNano()
+	last := t.last.Load()
+	if last != 0 && now-last < int64(every) {
+		return false
+	}
+	return t.last.CompareAndSwap(last, now)
 }
 
 func (s *series) times() []int64 {
@@ -405,7 +540,16 @@ func (db *DB) Stats() Stats {
 		list = append(list, s)
 	}
 	db.mu.RUnlock()
-	st := Stats{Series: len(list), Dropped: db.dropped.Load(), FlushDuration: time.Duration(db.flushDur.Load())}
+	st := Stats{
+		Series:         len(list),
+		DroppedInvalid: db.dropInvalid.Load(),
+		DroppedLate:    db.dropLate.Load(),
+		DroppedFuture:  db.dropFuture.Load(),
+		DroppedBacklog: db.dropBacklog.Load(),
+		ClockResets:    db.resets.Load(),
+		FlushDuration:  time.Duration(db.flushDur.Load()),
+	}
+	st.Dropped = st.DroppedInvalid + st.DroppedLate + st.DroppedFuture + st.DroppedBacklog
 	for _, s := range list {
 		s.mu.Lock()
 		st.Points += len(s.off)
@@ -435,6 +579,7 @@ func (db *DB) Size() int64 {
 type aggPt struct {
 	t                int64
 	min, avg, max, n float64
+	w                int64 // Breite des Zeitfensters in Sekunden, nur bei Abfragen gesetzt (0 = Rohwert)
 }
 
 // aggregate verdichtet aufsteigende Rohpunkte auf Zeitfenster der Breite step.

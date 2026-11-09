@@ -179,27 +179,27 @@ func TestAPIServices(t *testing.T) {
 	}
 	// nur dieser Dienst
 	rule := map[string]any{"warn": 85, "crit": 95}
-	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/", "rule": rule, "name": "Root", "soll": "", "report": ""}); rec.Code != 200 {
+	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/", "rules": map[string]any{"fs.used": map[string]any{"rule": rule}}, "name": "Root", "soll": "", "report": ""}); rec.Code != 200 {
 		t.Fatalf("service rule: %d %s", rec.Code, rec.Body)
 	}
-	if hr := e.col(`SELECT host_rule FROM m64_services WHERE host_uid = ? AND key = 'fs:/'`, h.UID); hr != `{"warn":85,"crit":95}` {
+	if hr := e.col(`SELECT host_rule FROM m64_services WHERE host_uid = ? AND key = 'fs:/'`, h.UID); hr != `{"fs.used":{"warn":85,"crit":95}}` {
 		t.Fatalf("host_rule: %s", hr)
 	}
 	if n := e.col(`SELECT name FROM m64_services WHERE host_uid = ? AND key = 'fs:/'`, h.UID); n != "Root" {
 		t.Fatal(n)
 	}
 	// Warnung ueber Kritisch wird abgelehnt (mit geerbtem Feld)
-	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/data", "rule": map[string]any{"warn": 95}}); rec.Code != 400 || !strings.Contains(rec.Body.String(), `"error":"rule"`) {
+	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/data", "rules": map[string]any{"fs.used": map[string]any{"rule": map[string]any{"warn": 95}}}}); rec.Code != 400 || !strings.Contains(rec.Body.String(), `"error":"rule_kind"`) {
 		t.Fatalf("order check: %d %s", rec.Code, rec.Body)
 	}
 	// alle Dateisysteme dieses Hosts
-	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/data", "rule": map[string]any{"mode": "free", "warn_free": 500, "crit_free": 200}, "scope": "kind"}); rec.Code != 200 {
+	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/data", "rules": map[string]any{"fs.used": map[string]any{"rule": map[string]any{"mode": "free", "warn_free": 500, "crit_free": 200}, "scope": "kind"}}}); rec.Code != 200 {
 		t.Fatalf("kind rule: %d %s", rec.Code, rec.Body)
 	}
-	if r := e.col(`SELECT rule FROM m64_host_rules WHERE host_uid = ? AND kind = 'fs' AND deleted = 0`, h.UID); !strings.Contains(r, `"mode":"free"`) {
+	if r := e.col(`SELECT rule FROM m64_host_rules WHERE host_uid = ? AND kind = 'fs.used' AND deleted = 0`, h.UID); !strings.Contains(r, `"mode":"free"`) {
 		t.Fatalf("kind rule row: %s", r)
 	}
-	if kr := e.m.config().hostKind[h.UID+"|fs"]; kr == nil || kr.Mode == nil || *kr.Mode != eval.ModeFree {
+	if kr := e.m.config().hostKind[h.UID+"|fs.used"]; kr == nil || kr.Mode == nil || *kr.Mode != eval.ModeFree {
 		t.Fatal("config not reloaded after kind rule")
 	}
 	// Soll-Zustand
@@ -395,12 +395,12 @@ func TestEffectPreview(t *testing.T) {
 	mk("h3", "pi", nil, 99)
 	std := eval.Defaults()
 	list := []eval.Override{{ID: "a", Tag: "vip", Kind: eval.KindFSUsed, Rule: eval.Rule{Warn: eval.L(40)}}, {ID: "b", Tag: "backup", Kind: eval.KindFSUsed, Rule: eval.Rule{Warn: eval.L(95), Crit: eval.L(98)}}}
-	ef := e.m.effectOf(context.Background(), std, list, 1)
+	ef := e.m.effectOf(context.Background(), std, list[:1], list, 1)
 	if ef.Services != 1 || len(ef.Hosts) != 1 || ef.Hosts[0] != "nas01" || len(ef.Shadow[0]) != 1 || ef.After.Warn != 0 || ef.After.Crit != 0 {
 		t.Fatalf("effect: %+v", ef)
 	}
 	free := eval.ModeFree
-	ef = e.m.effectOf(context.Background(), std, []eval.Override{{Tag: "backup", Kind: eval.KindFSUsed, Rule: eval.Rule{Mode: &free, WarnFree: eval.L(100), CritFree: eval.L(50)}}}, 0)
+	ef = e.m.effectOf(context.Background(), std, nil, []eval.Override{{Tag: "backup", Kind: eval.KindFSUsed, Rule: eval.Rule{Mode: &free, WarnFree: eval.L(100), CritFree: eval.L(50)}}}, 0)
 	if ef.Services != 2 || ef.After.Crit != 0 || ef.After.Warn != 1 {
 		t.Fatalf("free effect: %+v", ef) // nas01: 80 GB frei -> Warnung (unter 100); nas02: 500 GB frei -> OK
 	}

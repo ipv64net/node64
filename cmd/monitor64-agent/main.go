@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -18,11 +19,13 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -135,6 +138,23 @@ func run(args []string) int {
 		log.Error("monitor64-agent: built-in release keys invalid", "err", err)
 		return 1
 	}
+	// Rueckfall nach einem Update: kam die neue Version beim letzten Start nicht hoch, laeuft wieder die alte.
+	exe := selfPath()
+	pending := false
+	if exe != "" {
+		var rolledBack bool
+		pending, rolledBack, err = m64agent.UpdateStart(exe, Version)
+		if err != nil {
+			log.Warn("monitor64-agent: update check", "err", err)
+		}
+		if rolledBack {
+			log.Warn("monitor64-agent: new version did not start properly - previous version restored", "failed", Version)
+			if err := restartSelf(exe); err != nil {
+				log.Error("monitor64-agent: restart", "err", err)
+				return 1
+			}
+		}
+	}
 	hk, err := m64agent.LoadOrCreateHostKey(f.hostKey)
 	if err != nil {
 		log.Error("monitor64-agent: host key", "err", err)
@@ -148,6 +168,8 @@ func run(args []string) int {
 		Collector:   newCollector(),
 		Version:     Version,
 		ReleaseKeys: relKeys,
+		ExePath:     exe,
+		Probe:       probe,
 		OnUpdated: func(v string) {
 			select {
 			case updated <- v:
@@ -169,19 +191,33 @@ func run(args []string) int {
 	}
 	log.Info("monitor64-agent: running", "version", Version, "addr", ln.Addr().String(),
 		"fingerprint", m64agent.Fingerprint(hk.PublicKey()), "update", len(relKeys) > 0)
+	var confirm *time.Timer
+	if pending {
+		confirm = time.AfterFunc(m64agent.HealthyAfter, func() {
+			m64agent.ConfirmUpdate(exe)
+			log.Info("monitor64-agent: update confirmed", "version", Version)
+		})
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 	code := 0
+	restart := ""
 	select {
 	case <-ctx.Done():
 		log.Info("monitor64-agent: stopping")
+		// Sauber beendet (nicht abgestuerzt): eine neue Version gilt damit als gestartet.
+		if confirm != nil && confirm.Stop() {
+			m64agent.ConfirmUpdate(exe)
+		}
 	case v := <-updated:
-		// Antwort ist geschrieben; kurz warten, dann beenden - systemd startet die neue Datei (Restart=always).
-		log.Info("monitor64-agent: exiting for restart after update", "version", v)
+		// Antwort ist geschrieben; kurz warten, dann die neue Datei im selben Prozess starten (geht auch ohne
+		// systemd; mit systemd bleibt Restart=always als Netz).
+		log.Info("monitor64-agent: restarting after update", "version", v)
 		time.Sleep(500 * time.Millisecond)
+		restart = v
 	case err := <-served:
 		if !errors.Is(err, m64agent.ErrServerClosed) {
 			log.Error("monitor64-agent: serve", "err", err)
@@ -194,7 +230,47 @@ func run(args []string) int {
 	case <-done:
 	case <-time.After(5 * time.Second):
 	}
+	if restart != "" && exe != "" {
+		_ = ln.Close()
+		err := restartSelf(exe)
+		// Exec fehlgeschlagen: alte Datei zurueck und diese starten; geht auch das nicht, beenden (systemd startet neu).
+		log.Error("monitor64-agent: starting the new version failed - restoring the previous one", "err", err)
+		if rerr := m64agent.RollbackUpdate(exe, restart); rerr != nil {
+			log.Error("monitor64-agent: rollback", "err", rerr)
+			return 1
+		}
+		if err := restartSelf(exe); err != nil {
+			log.Error("monitor64-agent: restart", "err", err)
+			return 1
+		}
+	}
 	return code
+}
+
+// selfPath liefert die eigene Programmdatei ohne Symlinks ("" wenn unbekannt).
+func selfPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if exe, err = filepath.EvalSymlinks(exe); err != nil {
+		return ""
+	}
+	return exe
+}
+
+// probe startet die neue Datei probeweise ("version") und prueft, dass sie die erwartete Version meldet.
+func probe(exe, version string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, exe, "version").Output()
+	if err != nil {
+		return err
+	}
+	if f := bytes.Fields(out); len(f) < 2 || strings.TrimPrefix(string(f[1]), "v") != strings.TrimPrefix(version, "v") {
+		return fmt.Errorf("reports %q instead of version %s", bytes.TrimSpace(out), version)
+	}
+	return nil
 }
 
 func fingerprint(args []string) int {

@@ -213,7 +213,7 @@ func (m *Module) overview(ctx context.Context) ovData {
 		return stateRank[a.State] > stateRank[b.State]
 	})
 	// Zuletzt: geloeste Probleme und Wartung
-	if evs, err := m.store.RecentEvents(ctx, []string{"ok", "resolved", "maint"}, 8); err == nil {
+	if evs, err := m.store.RecentEvents(ctx, []string{"ok", "resolved", "maint", "maint_end"}, 8); err == nil {
 		for _, e := range evs {
 			rc := ovRecent{Kind: e.Kind, HostUID: e.HostUID, Host: names[e.HostUID], Text: e.Text, By: e.Actor, At: e.At}
 			if e.Key != "" {
@@ -243,20 +243,24 @@ type overrideBrief struct {
 	Rule       eval.Rule `json:"rule"`
 }
 
-// levelsOut sind die drei Stufen einer Schwelle an einem Dienst (Plan "Schwellen und Regeln im Detail").
+// levelsOut sind die Stufen einer Schwelle an einem Dienst (Plan "Schwellen und Regeln im Detail"), je Regel-Art:
+// eine Messgroesse mit Schwelle oder eine Zustandsregel.
 type levelsOut struct {
-	Kind     string         `json:"kind"`
+	Kind     string         `json:"kind"`             // Regel-Art
+	Metric   string         `json:"metric,omitempty"` // Messgroesse (leer = Zustandsregel)
+	State    bool           `json:"state,omitempty"`  // Zustandsregel
 	Std      eval.Rule      `json:"std"`
 	Override *overrideBrief `json:"override,omitempty"`
-	HostKind *eval.Rule     `json:"host_kind,omitempty"`
-	Service  *eval.Rule     `json:"service,omitempty"`
+	HostKind *eval.Rule     `json:"host_kind,omitempty"` // alle Dienste dieses Hosts mit dieser Regel-Art
+	Service  *eval.Rule     `json:"service,omitempty"`   // nur dieser Dienst
 	Eff      eval.Effective `json:"eff"`
 }
 
 func (m *Module) levels(cfg *cfgCache, h *Host, row *ServiceRow, kind string) *levelsOut {
-	hl := m.hostLevel(row)
+	hl := m.hostLevel(h.UID, parseHostRules(row.HostRule), kind)
 	l := &levelsOut{Kind: kind, Std: cfg.std[kind], HostKind: hl.Kind, Service: hl.Service}
 	l.Eff = eval.Resolve(cfg.std, cfg.overrides, hostRef(h), hl, kind)
+	l.State = l.Eff.IsState
 	if i := l.Eff.Override; i >= 0 && i < len(cfg.overrides) {
 		o := cfg.overrides[i]
 		tt, t := "group", o.Group
@@ -271,17 +275,16 @@ func (m *Module) levels(cfg *cfgCache, h *Host, row *ServiceRow, kind string) *l
 // svcOut ist ein Dienst auf der Host-Seite.
 type svcOut struct {
 	SvcView
-	Category   string     `json:"category"`
-	Since      time.Time  `json:"since,omitzero"`
-	Ack        *ackInfo   `json:"ack,omitempty"`
-	CustomName string     `json:"custom_name,omitempty"`
-	Soll       string     `json:"soll,omitempty"`
-	Report     string     `json:"report,omitempty"`
-	Guest      bool       `json:"guest,omitempty"`
-	Primary    int        `json:"primary"` // Index der Messgroesse mit Schwelle (-1 = keine)
-	Levels     *levelsOut `json:"levels,omitempty"`
-	StateKinds []string   `json:"state_kinds,omitempty"`
-	StateLvls  *levelsOut `json:"state_levels,omitempty"`
+	Category   string       `json:"category"`
+	Since      time.Time    `json:"since,omitzero"`
+	Ack        *ackInfo     `json:"ack,omitempty"`
+	CustomName string       `json:"custom_name,omitempty"`
+	Soll       string       `json:"soll,omitempty"`
+	Report     string       `json:"report,omitempty"`
+	Guest      bool         `json:"guest,omitempty"`
+	Primary    int          `json:"primary"`          // Index der ersten Messgroesse mit Schwelle (-1 = keine)
+	Levels     *levelsOut   `json:"levels,omitempty"` // Schwelle der ersten Messgroesse (Spalte "Schwellen")
+	Rules      []*levelsOut `json:"rules"`            // alle Regel-Arten des Dienstes: Messgroessen, dann Zustandsregeln
 }
 
 // chartDef ist ein Diagramm der Host-Seite.
@@ -300,7 +303,7 @@ type chartSeries struct {
 	Metric string `json:"metric"`
 }
 
-// accessView2 ist ein Zugang auf der Host-Seite: gespeichert (ohne Geheimnis) mit Laufzeitstand.
+// accessState ist ein Zugang auf der Host-Seite: gespeichert (ohne Geheimnis) mit Laufzeitstand.
 type accessState struct {
 	accessOut
 	Name     string `json:"name"`
@@ -311,20 +314,19 @@ type accessState struct {
 }
 
 type hostDetail struct {
-	Host     *Host          `json:"host"`
-	Icon     string         `json:"icon"`
-	State    string         `json:"state"`
-	View     string         `json:"view"`
-	Checked  time.Time      `json:"checked,omitzero"`
-	Maint    *eval.Window   `json:"maint,omitempty"`
-	Unreach  string         `json:"unreach,omitempty"`
-	Services []svcOut       `json:"services"`
-	Accesses []accessState  `json:"accesses"`
-	New      []*ServiceRow  `json:"new"`
-	Ignored  []*ServiceRow  `json:"ignored"`
-	Charts   []chartDef     `json:"charts"`
-	Running  bool           `json:"running"`
-	Kinds    map[string]int `json:"-"`
+	Host     *Host         `json:"host"`
+	Icon     string        `json:"icon"`
+	State    string        `json:"state"`
+	View     string        `json:"view"`
+	Checked  time.Time     `json:"checked,omitzero"`
+	Maint    *eval.Window  `json:"maint,omitempty"`
+	Unreach  string        `json:"unreach,omitempty"`
+	Services []svcOut      `json:"services"`
+	Accesses []accessState `json:"accesses"`
+	New      []*ServiceRow `json:"new"`
+	Ignored  []*ServiceRow `json:"ignored"`
+	Charts   []chartDef    `json:"charts"`
+	Running  bool          `json:"running"`
 }
 
 // hostDetail baut die Daten der Host-Seite.
@@ -375,7 +377,7 @@ func (m *Module) hostDetail(ctx context.Context, uid string) (*hostDetail, error
 	cfg := m.config()
 	if v != nil {
 		for _, s := range v.Services {
-			o := svcOut{SvcView: s, Category: svcCategory(s.Kind), Primary: -1, Guest: guestKind(s.Kind)}
+			o := svcOut{SvcView: s, Category: svcCategory(s.Kind), Primary: -1, Guest: guestKind(s.Kind), Rules: []*levelsOut{}}
 			if op, ok := open[uid+"|"+s.Key]; ok {
 				o.Since, o.Ack = op.Opened, op.Ack
 			}
@@ -384,21 +386,26 @@ func (m *Module) hostDetail(ctx context.Context, uid string) (*hostDetail, error
 				row = &ServiceRow{HostUID: uid, Key: s.Key, Kind: s.Kind}
 			}
 			o.CustomName, o.Soll, o.Report = row.Name, row.Soll, row.Report
+			seen := map[string]bool{}
 			for i, mt := range s.Metrics {
-				if mt.Metric.Rule != "" {
-					o.Primary = i
-					o.Levels = m.levels(cfg, h, row, mt.Metric.Rule)
-					break
+				rk := firstNonEmpty(mt.RuleKind, mt.Metric.Rule)
+				if rk == "" || seen[rk] {
+					continue
+				}
+				seen[rk] = true
+				l := m.levels(cfg, h, row, rk)
+				l.Metric = mt.Name
+				o.Rules = append(o.Rules, l)
+				if o.Primary < 0 {
+					o.Primary, o.Levels = i, l
 				}
 			}
-			if o.Primary < 0 && s.Kind != "access" {
-				kinds := slices.Clone(factKinds[s.Kind])
-				if o.Guest {
-					kinds = append(kinds, eval.KindGuestDown)
-				}
-				if len(kinds) > 0 {
-					o.StateKinds = kinds
-					o.StateLvls = m.levels(cfg, h, row, kinds[0])
+			if s.Kind != "access" && byKey[s.Key] != nil { // Zugaenge sind keine Zeile in m64_services
+				for _, k := range factKinds[s.Kind] {
+					if !seen[k] {
+						seen[k] = true
+						o.Rules = append(o.Rules, m.levels(cfg, h, row, k))
+					}
 				}
 			}
 			d.Services = append(d.Services, o)

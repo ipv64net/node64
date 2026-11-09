@@ -520,3 +520,116 @@ func TestNotifierJSON(t *testing.T) {
 	var z Notifier
 	z.Round(Round{At: t0, Host: nas}, testRouting())
 }
+
+// F5-K6: quittiert, Host nicht erreichbar bzw. Wartung, kommt schlechter zurueck: melden, Quittierung aufheben.
+func TestNotifyAckedWorseAfterUnreachableOrMaintenance(t *testing.T) {
+	ack := func(s State) []ServiceInput {
+		return []ServiceInput{{Key: "disk", Name: "disk", State: s, Acked: true}}
+	}
+	for _, tc := range []struct {
+		name string
+		gap  opt
+	}{{"nicht erreichbar", unreachable}, {"Wartung", maint}} {
+		g := newRig(t)
+		g.one(0, "disk", Warn)
+		g.at(1, ack(Warn))
+		g.at(2, ack(Crit), tc.gap)
+		res := g.at(3, ack(Crit))
+		var open *Line
+		for i, l := range res.Lines {
+			if l.Key == "disk" {
+				open = &res.Lines[i]
+			}
+		}
+		if open == nil || open.Kind != LineOpen || open.State != Crit || open.Prev != Warn || !slices.Contains(open.Channels, "push") {
+			t.Fatalf("%s: Verschlechterung nicht gemeldet: %+v", tc.name, res.Lines)
+		}
+		if !slices.Equal(res.Unack, []string{"disk"}) {
+			t.Fatalf("%s: Quittierung nicht aufgehoben: %v", tc.name, res.Unack)
+		}
+		if res := g.at(4, ack(Crit)); len(res.Lines) != 0 {
+			t.Fatalf("%s: danach erneut: %+v", tc.name, res.Lines)
+		}
+		// unveraendert quittiert bzw. besser: weiter still
+		g = newRig(t)
+		g.one(0, "disk", Crit)
+		g.at(1, ack(Crit))
+		g.at(2, ack(Warn), tc.gap)
+		if res := g.at(3, ack(Warn)); len(res.Unack) != 0 || slices.ContainsFunc(res.Lines, func(l Line) bool { return l.Key == "disk" }) {
+			t.Fatalf("%s: besser und quittiert gemeldet: %+v", tc.name, res)
+		}
+	}
+}
+
+// F5-K7: ein gemeldeter Dienst verschwindet -> Entwarnung an die Kanaele des Problems.
+func TestNotifyVanishedServiceRecovery(t *testing.T) {
+	g := newRig(t)
+	g.at(0, []ServiceInput{svc("cpu", OK)})
+	g.at(1, []ServiceInput{svc("cpu", OK), svc("access:ssh", Crit)})
+	res := g.at(2, []ServiceInput{svc("cpu", OK)})
+	wantChans(t, "verschwunden", res, map[string][]LineKind{"mail": {LineOK}, "push": {LineOK}})
+	if l := res.Lines[0]; !l.Gone || l.Key != "access:ssh" || l.Name != "access:ssh" || l.Prev != Crit || !l.Since.Equal(t0.Add(time.Minute)) || res.Messages[0].Event != EvOK {
+		t.Fatalf("%+v / %+v", l, res.Messages[0])
+	}
+	if _, ok := g.n.Hosts["h1"].Svcs["access:ssh"]; ok {
+		t.Fatal("verschwundener Dienst bleibt")
+	}
+	// kommt wieder: neue Meldung
+	res = g.at(3, []ServiceInput{svc("cpu", OK), svc("access:ssh", Warn)})
+	wantChans(t, "wieder gestoert", res, map[string][]LineKind{"mail": {LineProblem}})
+
+	// nie gemeldet (nur anzeigen) oder schon entwarnt: still vergessen
+	g.at(4, []ServiceInput{svc("cpu", OK), svc("access:ssh", OK), {Key: "t", State: Crit, ShowOnly: true}})
+	if res := g.at(5, []ServiceInput{svc("cpu", OK)}); len(res.Lines) != 0 {
+		t.Fatalf("still vergessen erwartet: %+v", res.Lines)
+	}
+
+	// nicht erreichbar: Dienste fehlen nur, keine Entwarnung
+	g.at(6, []ServiceInput{svc("cpu", Crit)})
+	if res := g.at(7, nil, unreachable); slices.ContainsFunc(res.Lines, func(l Line) bool { return l.Kind == LineOK }) {
+		t.Fatalf("Entwarnung bei nicht erreichbar: %+v", res.Lines)
+	}
+	// wieder erreichbar ohne cpu: Host-Zeile und Entwarnung fuer cpu
+	res = g.at(8, nil)
+	wantChans(t, "erreichbar, cpu weg", res, map[string][]LineKind{"mail": {LineReachable, LineOK}, "push": {LineReachable, LineOK}})
+
+	// in der Wartung verschwunden: Entwarnung in der ersten Runde danach
+	g.at(9, []ServiceInput{svc("cpu", Warn)})
+	if res := g.at(10, nil, maint); len(res.Lines) != 0 {
+		t.Fatal("Meldung in der Wartung")
+	}
+	res = g.at(11, nil)
+	wantChans(t, "nach Wartung weg", res, map[string][]LineKind{"mail": {LineOK}})
+	if len(g.n.Hosts["h1"].Svcs) != 0 {
+		t.Fatal("Dienst nach der Wartung nicht vergessen")
+	}
+}
+
+// F11-K4: "besser, aber noch Warnung" ist eine Entwarnung mit Better; "wieder erreichbar" traegt die schlimmste
+// offene Schwere.
+func TestNotifyBetterAndReachableSeverity(t *testing.T) {
+	g := newRig(t)
+	g.one(0, "fs", Crit)
+	res := g.one(1, "fs", Warn)
+	if m := res.Messages[0]; m.Event != EvOK || !m.Better || m.Severity != Warn {
+		t.Fatalf("besser: %+v", m)
+	}
+	res = g.one(2, "fs", OK)
+	if m := res.Messages[0]; m.Event != EvOK || m.Better || m.Severity != OK {
+		t.Fatalf("OK: %+v", m)
+	}
+
+	g.at(3, []ServiceInput{svc("fs", Crit), svc("b", OK)})
+	g.at(4, nil, unreachable)
+	res = g.at(5, []ServiceInput{svc("fs", Warn), svc("b", OK)})
+	for _, m := range res.Messages {
+		if m.Event != EvReachable || m.Severity != Warn {
+			t.Fatalf("wieder erreichbar mit offener Warnung: %+v", m)
+		}
+	}
+	g.at(6, nil, unreachable)
+	res = g.at(7, []ServiceInput{svc("fs", OK), svc("b", OK)})
+	if m := res.Messages[0]; m.Event != EvReachable || m.Severity != OK {
+		t.Fatalf("wieder erreichbar ohne Offenes: %+v", m)
+	}
+}

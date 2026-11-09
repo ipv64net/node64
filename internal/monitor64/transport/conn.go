@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -28,6 +30,27 @@ const (
 	DefaultIdleTimeout = 5 * time.Minute
 	maxSessionsPerConn = 4 // wie der Agent (mehr Kanaele lehnt er ab)
 	maxStderrBytes     = 4 << 10
+	maxErrorText       = 300 // Fehlertexte vom Host (Disconnect, Algorithmen, stderr) hoechstens so lang
+)
+
+// Erlaubte Verfahren: nur Hostschluessel ohne Zertifikat (der Fingerabdruck bleibt bei erneuertem Zertifikat
+// gleich), kein ssh-rsa mit SHA-1, kein DSA; Schluesseltausch, Verschluesselung und MAC ohne SHA-1/CBC.
+var (
+	hostKeyAlgos = []string{
+		ssh.KeyAlgoED25519,
+		ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521,
+		ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256,
+	}
+	kexAlgos = []string{
+		ssh.KeyExchangeMLKEM768X25519, ssh.KeyExchangeCurve25519,
+		ssh.KeyExchangeECDHP256, ssh.KeyExchangeECDHP384, ssh.KeyExchangeECDHP521,
+		ssh.KeyExchangeDH16SHA512, ssh.KeyExchangeDH14SHA256,
+	}
+	cipherAlgos = []string{
+		ssh.CipherChaCha20Poly1305, ssh.CipherAES256GCM, ssh.CipherAES128GCM,
+		ssh.CipherAES256CTR, ssh.CipherAES192CTR, ssh.CipherAES128CTR,
+	}
+	macAlgos = []string{ssh.HMACSHA256ETM, ssh.HMACSHA512ETM, ssh.HMACSHA256, ssh.HMACSHA512}
 )
 
 var (
@@ -37,6 +60,9 @@ var (
 	ErrTooLarge = errors.New("monitor64: answer too large")
 	// ErrClosed: der Client wurde geschlossen.
 	ErrClosed = errors.New("monitor64: client closed")
+	// ErrTimeout: keine vollstaendige Antwort innerhalb des Zeitlimits (errors.Is; trifft auch auf
+	// context.DeadlineExceeded zu).
+	ErrTimeout = errors.New("monitor64: timeout")
 )
 
 // HostKeyError meldet einen geaenderten Hostschluessel. Es wird nie nachgefragt; die Oberflaeche bietet
@@ -66,6 +92,23 @@ func (e *RemoteError) Error() string {
 	return fmt.Sprintf("monitor64: remote exit status %d: %s", e.Status, e.Stderr)
 }
 
+// TimeoutError: das Zeitlimit einer Anfrage ist abgelaufen (errors.Is ErrTimeout und context.DeadlineExceeded).
+type TimeoutError struct {
+	Limit time.Duration // Zeitlimit der Anfrage (0 = unbekannt)
+}
+
+func (e *TimeoutError) Error() string {
+	if e.Limit <= 0 {
+		return "monitor64: timeout (no answer)"
+	}
+	return fmt.Sprintf("monitor64: timeout (no answer within %s)", e.Limit.Round(100*time.Millisecond))
+}
+
+// Is macht errors.Is(err, ErrTimeout) und errors.Is(err, context.DeadlineExceeded) moeglich.
+func (e *TimeoutError) Is(target error) bool {
+	return target == ErrTimeout || target == context.DeadlineExceeded
+}
+
 // connConfig beschreibt eine Verbindung (gemeinsam fuer Agent und SSH ohne Agent).
 type connConfig struct {
 	addr        string
@@ -77,10 +120,14 @@ type connConfig struct {
 	idleTimeout time.Duration
 }
 
-// conn haelt eine SSH-Verbindung offen und baut sie bei Bedarf neu auf.
+// conn haelt eine SSH-Verbindung offen und baut sie bei Bedarf neu auf. Der Aufbau laeuft ohne c.mu (eigene
+// Sperre dialing), damit Close, HostKey und andere Anfragen nicht hinter einem haengenden Host warten.
 type conn struct {
-	cfg  connConfig
-	sess chan struct{} // Obergrenze gleichzeitiger Kanaele
+	cfg        connConfig
+	sess       chan struct{} // Obergrenze gleichzeitiger Kanaele
+	dialing    chan struct{} // ein Verbindungsaufbau zur Zeit
+	life       context.Context
+	lifeCancel context.CancelFunc // Close bricht einen laufenden Aufbau ab
 
 	mu      sync.Mutex
 	client  *ssh.Client
@@ -98,7 +145,9 @@ func newConn(cfg connConfig) *conn {
 	if cfg.idleTimeout <= 0 {
 		cfg.idleTimeout = DefaultIdleTimeout
 	}
-	return &conn{cfg: cfg, fp: NormalizeFingerprint(cfg.hostKey), sess: make(chan struct{}, maxSessionsPerConn)}
+	life, cancel := context.WithCancel(context.Background())
+	return &conn{cfg: cfg, fp: NormalizeFingerprint(cfg.hostKey), sess: make(chan struct{}, maxSessionsPerConn),
+		dialing: make(chan struct{}, 1), life: life, lifeCancel: cancel, lastUse: time.Now()}
 }
 
 // HostKey liefert den gemerkten Fingerabdruck ("" bis zum ersten Kontakt bei TOFU).
@@ -108,48 +157,93 @@ func (c *conn) HostKey() string {
 	return c.fp
 }
 
-// Close schliesst die Verbindung; spaetere Anfragen liefern ErrClosed.
-func (c *conn) Close() error {
+// usage: laufende Anfragen und Zeitpunkt der letzten Nutzung (fuer das Aufraeumen im Pool).
+func (c *conn) usage() (active int, last time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.active, c.lastUse
+}
+
+// Close schliesst die Verbindung; spaetere Anfragen liefern ErrClosed. Wartet nicht auf einen laufenden Aufbau.
+func (c *conn) Close() error {
+	c.mu.Lock()
 	c.closed = true
+	c.lifeCancel()
 	if c.idle != nil {
 		c.idle.Stop()
 	}
-	if c.client != nil {
-		_ = c.client.Close()
-		c.client = nil
+	cl := c.client
+	c.client = nil
+	c.mu.Unlock()
+	if cl != nil {
+		_ = cl.Close()
 	}
 	return nil
 }
 
-// get liefert die offene Verbindung oder baut sie auf.
-func (c *conn) get(ctx context.Context) (*ssh.Client, error) {
+// take liefert die offene Verbindung (ok = true) oder ErrClosed; ok = false: Verbindung aufbauen.
+func (c *conn) take() (cl *ssh.Client, ok bool, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
-		return nil, ErrClosed
+		return nil, true, ErrClosed
 	}
 	if c.client == nil {
-		cl, err := c.dial(ctx)
-		if err != nil {
-			return nil, err
-		}
-		c.client = cl
-		go func() {
-			_ = cl.Wait()
-			c.mu.Lock()
-			if c.client == cl {
-				c.client = nil
-			}
-			c.mu.Unlock()
-		}()
+		return nil, false, nil
 	}
 	c.active++
+	c.lastUse = time.Now()
 	if c.idle != nil {
 		c.idle.Stop()
 	}
-	return c.client, nil
+	return c.client, true, nil
+}
+
+// get liefert die offene Verbindung oder baut sie auf.
+func (c *conn) get(ctx context.Context) (*ssh.Client, error) {
+	if cl, ok, err := c.take(); ok {
+		return cl, err
+	}
+	select {
+	case c.dialing <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.life.Done():
+		return nil, ErrClosed
+	}
+	defer func() { <-c.dialing }()
+	if cl, ok, err := c.take(); ok { // inzwischen von einer anderen Anfrage aufgebaut
+		return cl, err
+	}
+	cl, learned, err := c.dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		_ = cl.Close()
+		return nil, ErrClosed
+	}
+	c.client = cl
+	c.active++
+	c.lastUse = time.Now()
+	if c.idle != nil {
+		c.idle.Stop()
+	}
+	c.mu.Unlock()
+	go func() {
+		_ = cl.Wait()
+		c.mu.Lock()
+		if c.client == cl {
+			c.client = nil
+		}
+		c.mu.Unlock()
+	}()
+	if learned != "" && c.cfg.onHostKey != nil {
+		c.cfg.onHostKey(learned)
+	}
+	return cl, nil
 }
 
 // release gibt die Verbindung nach einer Anfrage frei; broken schliesst sie (naechste Anfrage baut neu auf).
@@ -158,9 +252,11 @@ func (c *conn) release(cl *ssh.Client, broken bool) {
 	defer c.mu.Unlock()
 	c.active--
 	c.lastUse = time.Now()
-	if broken && c.client == cl {
+	if broken {
 		_ = cl.Close()
-		c.client = nil
+		if c.client == cl {
+			c.client = nil
+		}
 	}
 	if c.active == 0 && c.client != nil && !c.closed {
 		if c.idle == nil {
@@ -180,107 +276,153 @@ func (c *conn) closeIdle() {
 	}
 }
 
-// dial baut die Verbindung auf (unter c.mu) und prueft den Hostschluessel (TOFU).
-func (c *conn) dial(ctx context.Context) (*ssh.Client, error) {
+// dial baut die Verbindung auf (ohne c.mu, unter c.dialing) und prueft den Hostschluessel. learned ist der beim
+// ersten Kontakt uebernommene Fingerabdruck (TOFU), sonst "".
+func (c *conn) dial(ctx context.Context) (cl *ssh.Client, learned string, err error) {
 	deadline := time.Now().Add(c.cfg.dialTimeout)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
 	dctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	stopLife := context.AfterFunc(c.life, cancel) // Close bricht den Aufbau ab
+	defer stopLife()
 	d := net.Dialer{KeepAlive: 30 * time.Second}
 	nc, err := d.DialContext(dctx, "tcp", c.cfg.addr)
 	if err != nil {
-		return nil, err
+		if c.life.Err() != nil {
+			return nil, "", ErrClosed
+		}
+		return nil, "", err
 	}
 	_ = nc.SetDeadline(deadline)
 	stop := context.AfterFunc(dctx, func() { _ = nc.SetDeadline(time.Unix(1, 0)) })
 	defer stop()
 
+	want := c.HostKey()
 	var seen string
 	var hkErr error
 	cfg := &ssh.ClientConfig{
-		User: c.cfg.user,
-		Auth: c.cfg.auth,
+		Config: ssh.Config{KeyExchanges: kexAlgos, Ciphers: cipherAlgos, MACs: macAlgos},
+		User:   c.cfg.user,
+		Auth:   c.cfg.auth,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			seen = Fingerprint(key)
-			if c.fp != "" && seen != c.fp {
-				hkErr = &HostKeyError{Want: c.fp, Got: seen}
+			if want != "" && seen != want {
+				hkErr = &HostKeyError{Want: want, Got: seen}
 				return hkErr
 			}
 			return nil
 		},
-		ClientVersion: "SSH-2.0-node64-monitor64",
-		Timeout:       c.cfg.dialTimeout,
+		HostKeyAlgorithms: hostKeyAlgos,
+		ClientVersion:     "SSH-2.0-node64-monitor64",
+		Timeout:           c.cfg.dialTimeout,
 	}
 	sc, chans, reqs, err := ssh.NewClientConn(nc, c.cfg.addr, cfg)
 	if err != nil {
 		_ = nc.Close()
-		if hkErr != nil {
-			return nil, hkErr
+		switch {
+		case hkErr != nil:
+			return nil, "", hkErr
+		case c.life.Err() != nil:
+			return nil, "", ErrClosed
+		case dctx.Err() != nil && ctx.Err() != nil:
+			return nil, "", ctx.Err()
+		case dctx.Err() != nil:
+			return nil, "", fmt.Errorf("monitor64: connect: no SSH handshake within %s", c.cfg.dialTimeout)
 		}
-		if dctx.Err() != nil && ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, err
+		return nil, "", err
 	}
 	if !stop() {
 		_ = sc.Close()
-		return nil, dctx.Err()
+		if c.life.Err() != nil {
+			return nil, "", ErrClosed
+		}
+		return nil, "", dctx.Err()
 	}
 	_ = nc.SetDeadline(time.Time{})
+	c.mu.Lock()
 	if c.fp == "" {
 		c.fp = seen
-		if c.cfg.onHostKey != nil {
-			c.cfg.onHostKey(seen)
-		}
+		learned = seen
 	}
-	return ssh.NewClient(sc, chans, reqs), nil
+	c.mu.Unlock()
+	return ssh.NewClient(sc, chans, reqs), learned, nil
 }
 
 // exec fuehrt cmd in einem neuen Kanal aus, schickt stdin (falls gesetzt) und liest hoechstens limit Byte.
-// Bei *RemoteError wird die Ausgabe trotzdem geliefert (Agent: JSON mit Fehlertext).
+// Bei *RemoteError wird die Ausgabe trotzdem geliefert (Agent: JSON mit Fehlertext). Fehler sind gekuerzt und
+// bereinigt; ein abgelaufenes Zeitlimit ergibt *TimeoutError.
 func (c *conn) exec(ctx context.Context, cmd string, stdin io.Reader, limit int) ([]byte, error) {
+	start := time.Now()
+	out, err := c.execRaw(ctx, cmd, stdin, limit)
+	if err == nil {
+		return out, nil
+	}
+	return out, finishErr(ctx, start, err)
+}
+
+// finishErr macht aus einem Fehler den Fehler fuer den Aufrufer: Hostschluessel bleibt, Zeitlimit wird
+// *TimeoutError, alles andere gekuerzt und bereinigt (Texte vom Host).
+func finishErr(ctx context.Context, start time.Time, err error) error {
+	var hk *HostKeyError
+	if errors.As(err, &hk) {
+		return err
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		te := &TimeoutError{}
+		if d, ok := ctx.Deadline(); ok {
+			te.Limit = d.Sub(start)
+		}
+		return te
+	}
+	return CleanError(err)
+}
+
+func (c *conn) execRaw(ctx context.Context, cmd string, stdin io.Reader, limit int) ([]byte, error) {
 	select {
 	case c.sess <- struct{}{}:
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-c.life.Done():
+		return nil, ErrClosed
 	}
 	defer func() { <-c.sess }()
 
-	cl, sess, err := c.open(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out, broken, err := runSession(ctx, sess, cmd, stdin, limit)
-	c.release(cl, broken)
-	return out, err
-}
-
-// open baut einen Kanal auf; ist die offene Verbindung tot, wird einmal neu verbunden.
-func (c *conn) open(ctx context.Context) (*ssh.Client, *ssh.Session, error) {
 	for attempt := 0; ; attempt++ {
 		cl, err := c.get(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
+		// Laeuft das Zeitlimit ab, wird die ganze Verbindung geschlossen: ein toter Host bei offener Verbindung
+		// beantwortet weder das Oeffnen eines Kanals noch dessen Schliessen (sonst haengt die Anfrage bis zum
+		// TCP-Abbruch). Andere Anfragen auf derselben Verbindung scheitern dann mit.
+		stopAbort := context.AfterFunc(ctx, func() { _ = cl.Close() })
 		sess, err := cl.NewSession()
-		if err == nil {
-			return cl, sess, nil
+		if err != nil {
+			stopAbort()
+			var oce *ssh.OpenChannelError
+			if errors.As(err, &oce) {
+				c.release(cl, false)
+				return nil, fmt.Errorf("monitor64: channel refused: %s", cleanRemote(oce.Message))
+			}
+			c.release(cl, true)
+			if attempt > 0 || ctx.Err() != nil {
+				return nil, err
+			}
+			continue
 		}
-		var oce *ssh.OpenChannelError
-		if errors.As(err, &oce) {
-			c.release(cl, false)
-			return nil, nil, fmt.Errorf("monitor64: channel refused: %s", cleanRemote(oce.Message))
+		out, broken, err := runSession(ctx, sess, cmd, stdin, limit)
+		if !stopAbort() {
+			broken = true // Verbindung wurde wegen des Zeitlimits geschlossen
 		}
-		c.release(cl, true)
-		if attempt > 0 || ctx.Err() != nil {
-			return nil, nil, err
-		}
+		c.release(cl, broken)
+		return out, err
 	}
 }
 
 // runSession: broken=true, wenn die Verbindung danach nicht mehr verlaesslich ist (Zeitlimit, Transportfehler).
+// Abbruch per ctx erledigt exec (schliesst die Verbindung, dann kehren alle Lese- und Schreibvorgaenge zurueck).
 func runSession(ctx context.Context, sess *ssh.Session, cmd string, stdin io.Reader, limit int) (out []byte, broken bool, err error) {
 	defer sess.Close()
 	stdout, err := sess.StdoutPipe()
@@ -295,8 +437,6 @@ func runSession(ctx context.Context, sess *ssh.Session, cmd string, stdin io.Rea
 			return nil, true, err
 		}
 	}
-	stopCtx := context.AfterFunc(ctx, func() { _ = sess.Close() })
-	defer stopCtx()
 	if err := sess.Start(cmd); err != nil {
 		if ctx.Err() != nil {
 			return nil, true, ctx.Err()
@@ -316,7 +456,7 @@ func runSession(ctx context.Context, sess *ssh.Session, cmd string, stdin io.Rea
 	if rerr == nil && len(out) > limit {
 		_ = sess.Close()
 		if inDone != nil {
-			<-inDone
+			<-inDone // haengt der Host, schliesst exec beim Zeitlimit die Verbindung
 		}
 		return nil, false, fmt.Errorf("%w (limit %d bytes)", ErrTooLarge, limit)
 	}
@@ -364,20 +504,43 @@ func (b *capBuf) String() string {
 	return b.b.String()
 }
 
-// cleanRemote kuerzt Texte vom Host und entfernt Steuerzeichen (fuer Fehlermeldungen und Log).
+// cleanRemote kuerzt Texte vom Host (hoechstens maxErrorText Byte) und ersetzt nicht druckbare Zeichen
+// (Steuerzeichen, Richtungswechsel, ungueltiges UTF-8) durch Leerzeichen (fuer Fehlermeldungen und Log).
 func cleanRemote(s string) string {
-	s = strings.ToValidUTF8(strings.TrimSpace(s), "?")
+	s = strings.ToValidUTF8(s, "?")
 	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
+		if r != ' ' && !unicode.IsPrint(r) {
 			return ' '
 		}
 		return r
 	}, s)
-	if len(s) > 300 {
-		s = s[:300]
-		s = strings.ToValidUTF8(s, "") + "..."
+	s = strings.TrimSpace(s)
+	if len(s) > maxErrorText {
+		s = strings.ToValidUTF8(s[:maxErrorText], "") + "..."
 	}
 	return s
+}
+
+// cleanedError ist ein gekuerzter, bereinigter Fehlertext; errors.Is/As sehen den urspruenglichen Fehler.
+type cleanedError struct {
+	msg string
+	err error
+}
+
+func (e *cleanedError) Error() string { return e.msg }
+func (e *cleanedError) Unwrap() error { return e.err }
+
+// CleanError kuerzt und bereinigt den Text eines Fehlers, der Teile vom Host enthalten kann (Disconnect-Grund,
+// Algorithmenliste, Banner ...), bevor er in Ereignisse, Meldungen oder die Oberflaeche geht.
+func CleanError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if c := cleanRemote(msg); c != msg {
+		return &cleanedError{msg: c, err: err}
+	}
+	return err
 }
 
 // withDefaultTimeout setzt ein Zeitlimit, wenn der Aufrufer keines vorgibt.
@@ -388,10 +551,21 @@ func withDefaultTimeout(ctx context.Context, d time.Duration) (context.Context, 
 	return context.WithTimeout(ctx, d)
 }
 
-// hostPort ergaenzt den Standard-Port.
-func hostPort(addr string, port int) string {
+// HostPort ergaenzt den Port, wenn addr keinen enthaelt: "nas" -> "nas:22", "nas:2222" bleibt, "2001:db8::1" und
+// "[2001:db8::1]" -> "[2001:db8::1]:22", "[2001:db8::1]:2222" bleibt.
+func HostPort(addr string, port int) string {
+	addr = strings.TrimSpace(addr)
 	if _, _, err := net.SplitHostPort(addr); err == nil {
 		return addr
 	}
-	return net.JoinHostPort(strings.Trim(addr, "[]"), fmt.Sprint(port))
+	return net.JoinHostPort(strings.TrimSuffix(strings.TrimPrefix(addr, "["), "]"), strconv.Itoa(port))
+}
+
+// SplitHost liefert den Host ohne Port ("nas:2222" -> "nas", "[2001:db8::1]:22" -> "2001:db8::1").
+func SplitHost(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		return h
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(addr, "["), "]")
 }

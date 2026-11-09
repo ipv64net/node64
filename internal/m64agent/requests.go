@@ -25,8 +25,10 @@ const (
 )
 
 // handleSession wartet auf genau eine exec-Anfrage mit einem der vier Befehle. Alles andere (shell, pty-req,
-// subsystem, env, x11-req, auth-agent-req ...) wird abgelehnt.
-func (s *Server) handleSession(ctx context.Context, ch ssh.Channel, reqs <-chan *ssh.Request, remote, fp string) {
+// subsystem, env, x11-req, auth-agent-req ...) wird abgelehnt. allowed prueft den Schluessel erneut gegen die
+// aktuelle Liste (er kann seit der Anmeldung entfernt worden sein).
+func (s *Server) handleSession(ctx context.Context, ch ssh.Channel, reqs <-chan *ssh.Request, remote, fp string,
+	allowed func() bool) {
 	defer ch.Close()
 	timer := time.NewTimer(s.cfg.HandshakeTimeout)
 	defer timer.Stop()
@@ -45,6 +47,10 @@ func (s *Server) handleSession(ctx context.Context, ch ssh.Channel, reqs <-chan 
 			if err := ssh.Unmarshal(req.Payload, &p); err != nil || len(p.Cmd) > maxExecCommandBytes {
 				_ = req.Reply(false, nil)
 				continue
+			}
+			if !allowed() {
+				_ = req.Reply(false, nil)
+				return
 			}
 			cmd, sections, err := parseCommand(p.Cmd)
 			if err != nil {
@@ -155,8 +161,11 @@ func (s *Server) doInfo(ctx context.Context, ch ssh.Channel) {
 	writeJSON(ch, s.Info(), m64proto.MaxInfoBytes, 0)
 }
 
-// Collect erstellt einen Report (Werte des Collectors und eigene Skripte).
+// Collect erstellt einen Report (Werte des Collectors und eigene Skripte) innerhalb von CollectTimeout. Eigene
+// Skripte laufen im Hintergrund an; was bis kurz vor Ablauf nicht fertig ist, liefert der Agent aus der letzten
+// Runde nach (wie CheckMK "cached").
 func (s *Server) Collect(ctx context.Context, secs []string) (*m64proto.Report, error) {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.CollectTimeout)
 	defer cancel()
 	select {
@@ -168,6 +177,10 @@ func (s *Server) Collect(ctx context.Context, secs []string) (*m64proto.Report, 
 
 	wantLocal := len(secs) == 0 || slices.Contains(secs, m64proto.SecLocal)
 	other := slices.DeleteFunc(slices.Clone(secs), func(x string) bool { return x == m64proto.SecLocal })
+	var round *localRound
+	if wantLocal && s.local != nil {
+		round = s.local.begin() // Skripte starten, waehrend der Collector liest
+	}
 	var rep *m64proto.Report
 	if s.cfg.Collector != nil && (len(secs) == 0 || len(other) > 0) {
 		rep = s.cfg.Collector.Collect(ctx, other)
@@ -182,9 +195,12 @@ func (s *Server) Collect(ctx context.Context, secs []string) (*m64proto.Report, 
 	if rep.Time == 0 {
 		rep.Time = time.Now().UnixMilli()
 	}
-	if wantLocal && s.local != nil {
+	if round != nil {
+		// Auf frisch gestartete Skripte hoechstens bis kurz vor Ablauf warten (Rest fuer JSON und Uebertragung).
+		wctx, wcancel := context.WithDeadline(ctx, start.Add(s.cfg.CollectTimeout*3/4))
 		rep.Local = nil
-		s.local.run(ctx, rep)
+		s.local.finish(wctx, round, rep)
+		wcancel()
 	}
 	return rep, nil
 }
@@ -228,6 +244,9 @@ func (s *Server) doKeys(ctx context.Context, ch ssh.Channel, remote, fp string) 
 	if err == nil {
 		err = WriteKeysFile(s.cfg.KeysFile, data)
 		s.keys.invalidate()
+		// Verbindungen mit entfernten Schluesseln schliessen - kurz nach der Antwort, damit sie die anfragende
+		// Node (Schluesselwechsel) noch erreicht.
+		time.AfterFunc(time.Second, s.revoke)
 	}
 	if err != nil {
 		res.Count = 0
@@ -288,6 +307,19 @@ func (s *Server) doUpdate(ctx context.Context, ch ssh.Channel, remote, fp string
 	if err := applyUpdate(br, h, exe); err != nil {
 		refuse(err)
 		return
+	}
+	// Neue Datei probeweise starten; startet sie nicht, gleich die alte zurueck (Version wird kuenftig abgelehnt).
+	if s.cfg.Probe != nil {
+		if err := s.cfg.Probe(exe, h.Version); err != nil {
+			if rerr := RollbackUpdate(exe, h.Version); rerr != nil {
+				err = fmt.Errorf("%w (restore old file: %v)", err, rerr)
+			}
+			refuse(fmt.Errorf("new version does not start: %w", err))
+			return
+		}
+	}
+	if err := WriteUpdateMarker(exe, s.cfg.Version, h.Version); err != nil {
+		s.log.Warn("monitor64-agent: update marker not written - no automatic fallback", "err", err)
 	}
 	res.OK = true
 	res.Version = h.Version

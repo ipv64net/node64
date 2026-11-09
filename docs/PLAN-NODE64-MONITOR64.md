@@ -575,6 +575,12 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   Meldungen über den Dispatcher (neue Arten `monitor_*`, Texte de/en), Prometheus-Export, Konfig-Export/-Import.
   Ende-zu-Ende-Test (Agent im Prozess) grün. Agent auf agentbox installiert, Host „agentbox“ auf node64-test
   (1.5.0-dev.m64.2). Oberfläche/API und API-Sammler (Proxmox/PBS/Docker) laufen parallel.
+- 2026-11-09: Phase 0/1 lokal committet (d9ddf033, kein Push), auf node64-test ausgerollt (Agent und SSH ohne Agent
+  gegen agentbox, Docker-API). **Code-Review `/code-review max`** über den Commit: 11 Prüfer nach Bereichen, rund 85
+  Kandidaten, die 15 schwersten bestätigt (u. a. Pool schloss Verbindungen nach 30 min, Zeitlimit griff bei totem Host
+  nicht, Fehlalarm „verschwunden“ bei Teilausfall, Standardkanäle schluckten gewählte Kanäle, geteilte Zeiger in der
+  Standard-Tabelle, Host-Schwelle für alle Messgrößen eines Dienstes, NaN von Hosts brach die Oberfläche). Behebung aller
+  Funde parallel nach Bereichen; Liste: Review-Kandidaten im Scratchpad der Sitzung.
 - Offene Punkte aus den Teilberichten: Release-Signierschlüssel für Agent-Updates fehlt (bis dahin Update aus);
   Ruhezeit-Prüfung für Erinnerungen (Dispatcher exportieren); Dienstnamen/-texte aus Mapper/m64linux noch deutsch
   (i18n); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit ändern

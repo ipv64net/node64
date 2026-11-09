@@ -51,10 +51,12 @@ const (
 	// EnvLoadGen startet den Lastgenerator mit N Schein-Hosts (nur Entwicklung, nie in der Oberflaeche).
 	EnvLoadGen = "NODE64_MONITOR64_LOADGEN"
 
-	dbFile     = "monitor64.db"
-	flushEvery = 5 * time.Minute // laufende Bloecke sichern (tsdb)
-	purgeEvery = 6 * time.Hour   // Aufbewahrung durchsetzen
-	stopWait   = 15 * time.Second
+	dbFile       = "monitor64.db"
+	flushEvery   = 5 * time.Minute      // laufende Bloecke sichern (tsdb)
+	purgeEvery   = 6 * time.Hour        // Aufbewahrung durchsetzen
+	purgeFirst   = 5 * time.Minute      // erster Lauf nach dem Start
+	keepProblems = 365 * 24 * time.Hour // Problem-Historie so lange wie die Stundenwerte
+	stopWait     = 15 * time.Second
 )
 
 // Enabled sagt, ob der Schalter fuer Monitor64 gesetzt ist (bis zur Freigabe).
@@ -77,6 +79,7 @@ type Module struct {
 	dataDir     string
 	nodeVersion string
 	dispatchFn  func(notify.Alert)
+	quietFn     func(time.Time) bool
 	g           module.Guards
 	store       *Store
 
@@ -86,6 +89,9 @@ type Module struct {
 	rtMu     sync.Mutex
 	rts      map[string]*hostRT
 	pool     *transport.Pool
+	locMu    sync.Mutex
+	loc      *time.Location
+	locAt    time.Time
 
 	ctl    sync.Mutex // Start/Stop
 	mu     sync.Mutex
@@ -101,6 +107,9 @@ type Module struct {
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dataDir, nodeVersion string) *Module {
 	return &Module{st: core, log: log.With("module", Name), box: box, dataDir: dataDir, nodeVersion: nodeVersion, store: newStore(core)}
 }
+
+// SetQuiet verbindet die Ruhezeit-Pruefung der Benachrichtigung (fuer Erinnerungen).
+func (m *Module) SetQuiet(fn func(time.Time) bool) { m.quietFn = fn }
 
 // SetNotifier verbindet den Dispatcher der Benachrichtigungen.
 func (m *Module) SetNotifier(fn func(notify.Alert)) { m.dispatchFn = fn }
@@ -200,11 +209,18 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.rts = nil
 	m.rtMu.Unlock()
 	for _, rt := range rts { // Laufzeitstand sichern (Tracker, Gedaechtnis der Meldungen)
+		if !rt.mu.TryLock() { // Runde laeuft noch (Stop-Zeitlimit ueberschritten): nicht gleichzeitig lesen
+			continue
+		}
 		m.notifyMu.Lock()
 		mem, _ := json.Marshal(m.notifier.Hosts[rt.host.UID])
 		m.notifyMu.Unlock()
 		rt.dirty = true
-		m.saveRuntime(ctx, rt, mem)
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		m.saveRuntime(sctx, rt, mem)
+		cancel()
+		rt.removed = true
+		rt.mu.Unlock()
 	}
 	if m.pool != nil {
 		m.pool.Close()
@@ -233,7 +249,7 @@ func (m *Module) workers(ctx context.Context) int {
 func (m *Module) housekeeping(ctx context.Context) {
 	flush := time.NewTicker(flushEvery)
 	defer flush.Stop()
-	purge := time.NewTicker(purgeEvery)
+	purge := time.NewTimer(purgeFirst) // erster Lauf kurz nach dem Start (sonst nie bei haeufigen Neustarts)
 	defer purge.Stop()
 	for {
 		select {
@@ -251,6 +267,8 @@ func (m *Module) housekeeping(ctx context.Context) {
 					m.log.Warn("monitor64: purge history", "err", err)
 				}
 			}
+			m.purgeProblems(ctx, time.Now())
+			purge.Reset(purgeEvery)
 		}
 	}
 }

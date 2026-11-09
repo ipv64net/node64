@@ -18,7 +18,7 @@ import (
 // Zeitlimits je Anfrage, wenn der Aufrufer keines vorgibt.
 const (
 	infoTimeout    = 15 * time.Second
-	collectTimeout = 60 * time.Second
+	collectTimeout = 30 * time.Second // wie das hoechste Zeitlimit einer Abfragerunde der Node
 	keysTimeout    = 30 * time.Second
 	updateTimeout  = 10 * time.Minute
 )
@@ -55,7 +55,7 @@ func NewAgentClient(cfg AgentConfig) (*AgentClient, error) {
 		return nil, errors.New("monitor64: address missing")
 	}
 	return &AgentClient{cfg: cfg, conn: newConn(connConfig{
-		addr:        hostPort(cfg.Addr, m64proto.DefaultPort),
+		addr:        HostPort(cfg.Addr, m64proto.DefaultPort),
 		user:        AgentUser,
 		auth:        []ssh.AuthMethod{ssh.PublicKeys(cfg.Signer)},
 		hostKey:     cfg.HostKey,
@@ -75,12 +75,14 @@ func (c *AgentClient) Info(ctx context.Context) (*m64proto.Info, error) {
 	}
 	var info m64proto.Info
 	if err := json.Unmarshal(out, &info); err != nil {
-		return nil, fmt.Errorf("monitor64: info: invalid answer: %w", err)
+		return nil, CleanError(fmt.Errorf("monitor64: info: invalid answer: %w", err))
 	}
 	return &info, nil
 }
 
-// Collect fragt Werte ab; ohne Abschnitte alle.
+// Collect fragt Werte ab; ohne Abschnitte alle. Es gilt das Zeitlimit des Aufrufers (Abfragerunde der Node,
+// 24-30 s; der Agent antwortet innerhalb von 20 s und liefert langsame Abschnitte aus seinem Zwischenspeicher).
+// Laeuft es ab, ist der Fehler *TimeoutError (errors.Is ErrTimeout).
 func (c *AgentClient) Collect(ctx context.Context, sections ...string) (*m64proto.Report, error) {
 	cmd := m64proto.ReqCollect
 	if len(sections) > 0 {
@@ -99,7 +101,7 @@ func (c *AgentClient) Collect(ctx context.Context, sections ...string) (*m64prot
 	}
 	var rep m64proto.Report
 	if err := json.Unmarshal(out, &rep); err != nil {
-		return nil, fmt.Errorf("monitor64: collect: invalid answer: %w", err)
+		return nil, CleanError(fmt.Errorf("monitor64: collect: invalid answer: %w", err))
 	}
 	return &rep, nil
 }
@@ -178,10 +180,11 @@ func (c *AgentClient) SetKeys(ctx context.Context, keys []string) (*m64proto.Key
 // drop schliesst die offene Verbindung (naechste Anfrage verbindet neu).
 func (c *conn) drop() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.client != nil {
-		_ = c.client.Close()
-		c.client = nil
+	cl := c.client
+	c.client = nil
+	c.mu.Unlock()
+	if cl != nil {
+		_ = cl.Close()
 	}
 }
 

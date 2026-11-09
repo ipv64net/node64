@@ -3,7 +3,7 @@
 //
 // Zwei Wege fuehren zum selben m64proto.Report:
 //   - Collect: der Agent liest /proc und /sys direkt, Groessen per statfs, Programme ueber eine injizierbare
-//     Exec-Funktion; langsame Abschnitte (SMART, Updates) puffert ein Cache.
+//     Exec-Funktion; langsame Abschnitte (SMART, Updates) liest ein Cache im Hintergrund (Collect blockiert nicht).
 //   - Script/ParseScriptOutput: die Node schickt ein festes Skript per "sh -s", das nur liest und Rohtexte in
 //     Abschnitten ausgibt; ParseScriptOutput macht daraus den Report.
 //
@@ -93,8 +93,45 @@ func (s osSource) Readlink(p string) (string, error) {
 	return filepath.ToSlash(l), err
 }
 
-// mapSource ist eine Dateitabelle (Pfad -> Inhalt) aus der Skript-Ausgabe. Verzeichnisse ergeben sich aus den Pfaden.
-type mapSource struct{ files map[string][]byte }
+// mapSource ist eine Dateitabelle (Pfad -> Inhalt) aus der Skript-Ausgabe. Verzeichnisse ergeben sich aus den Pfaden;
+// newMapSource baut dafuer einmal einen Index (Ordner -> sortierte Namen), damit Exists und ReadDir bei feindlich
+// grosser Ausgabe nicht jedes Mal alle Eintraege durchlaufen.
+type mapSource struct {
+	files map[string][]byte
+	dirs  map[string][]string
+}
+
+func newMapSource(files map[string][]byte) mapSource {
+	sets := map[string]map[string]bool{}
+	for p := range files {
+		for p != "/" && strings.HasPrefix(p, "/") {
+			dir, name := path.Split(p)
+			dir = dirKey(dir)
+			if name != "" {
+				s := sets[dir]
+				if s == nil {
+					s = map[string]bool{}
+					sets[dir] = s
+				}
+				if s[name] { // Eltern sind dann schon eingetragen
+					break
+				}
+				s[name] = true
+			}
+			p = dir
+		}
+	}
+	dirs := make(map[string][]string, len(sets))
+	for d, s := range sets {
+		l := make([]string, 0, len(s))
+		for n := range s {
+			l = append(l, n)
+		}
+		sort.Strings(l)
+		dirs[d] = l
+	}
+	return mapSource{files: files, dirs: dirs}
+}
 
 func (m mapSource) ReadFile(p string) ([]byte, error) {
 	if b, ok := m.files[p]; ok {
@@ -107,32 +144,24 @@ func (m mapSource) Exists(p string) bool {
 	if _, ok := m.files[p]; ok {
 		return true
 	}
-	pre := p + "/"
-	for k := range m.files {
-		if strings.HasPrefix(k, pre) {
-			return true
-		}
-	}
-	return false
+	_, ok := m.dirs[dirKey(p)]
+	return ok
 }
 
 func (m mapSource) ReadDir(dir string) []string {
-	pre := strings.TrimSuffix(dir, "/") + "/"
-	seen := map[string]bool{}
-	for k := range m.files {
-		rest, ok := strings.CutPrefix(k, pre)
-		if !ok || rest == "" {
-			continue
-		}
-		name, _, _ := strings.Cut(rest, "/")
-		seen[name] = true
+	l := m.dirs[dirKey(dir)]
+	if len(l) > 4*maxItems {
+		l = l[:4*maxItems]
 	}
-	out := make([]string, 0, len(seen))
-	for n := range seen {
-		out = append(out, n)
+	return append([]string(nil), l...)
+}
+
+// dirKey ist der Schluessel eines Ordners im Index (ohne "/" am Ende, Wurzel "/").
+func dirKey(p string) string {
+	if k := strings.TrimRight(p, "/"); k != "" {
+		return k
 	}
-	sort.Strings(out)
-	return out
+	return "/"
 }
 
 func (m mapSource) Readlink(p string) (string, error) {

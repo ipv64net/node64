@@ -10,16 +10,29 @@ import (
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
-// Zeitlimits je Programm.
+// Zeitlimits je Programm (wie im Skript).
 const (
-	timeoutShort   = 15 * time.Second  // systemctl, zpool, needs-restarting
-	timeoutSmart   = 30 * time.Second  // smartctl je Platte
-	timeoutUpdates = 120 * time.Second // Paketverwalter
-	timeoutStatfs  = 5 * time.Second   // statfs je Mount (haengende Mounts)
-	timeoutRefresh = 10 * time.Minute  // Erneuern im Hintergrund insgesamt
+	timeoutShort   = 10 * time.Second // systemctl, zpool
+	timeoutSmart   = 20 * time.Second // smartctl je Platte bzw. --scan-open
+	timeoutUpdates = 90 * time.Second // Paketverwalter
+	timeoutNeeds   = 30 * time.Second // needs-restarting (Python)
+	timeoutStatfs  = 5 * time.Second  // statfs je Mount (haengende Mounts)
+	timeoutRefresh = 10 * time.Minute // Erneuern im Hintergrund insgesamt
 
 	timeoutNeedsRestart = 10 * time.Minute // Puffer fuer needs-restarting
+	slowRetry           = 5 * time.Minute  // gescheiterter langsamer Abschnitt: so bald neu versuchen
+	slowFirstWait       = 2 * time.Second  // erster Lauf: so lange auf das Ergebnis warten, dann Hinweis
+	deadlineMargin      = 3 * time.Second  // Collect endet so viel vor der ctx-Deadline (Antwort muss noch raus)
 )
+
+// In Tests veraenderbar.
+var (
+	refreshTimeout = timeoutRefresh
+	statfsLimit    = timeoutStatfs
+)
+
+// NoteReading steht in Notes (SMART, Updates), solange der erste Lauf im Hintergrund noch nicht fertig ist.
+const NoteReading = "wird gelesen"
 
 // ExecResult ist das Ergebnis eines Programmaufrufs.
 type ExecResult struct {
@@ -43,21 +56,28 @@ type Options struct {
 	Has      func(name string) bool            // Programm vorhanden? nil = Suche in PATH und sbin-Ordnern
 	Statfs   func(path string) (StatFS, error) // nil = statfs (nur Linux)
 	Now      func() time.Time                  // nil = time.Now
-	Cache    *Cache                            // Puffer fuer SMART/Updates; nil = gemeinsamer Puffer des Pakets
+	Cache    *Cache                            // Puffer fuer SMART/Updates und haengende Mounts; nil = Paket-Puffer
 }
 
-// Cache puffert langsame Abschnitte (SMART 30 min, Updates 60 min). Ist ein Stand veraltet, liefert Collect ihn
-// trotzdem sofort und erneuert ihn im Hintergrund; nur beim ersten Mal wird gewartet.
+// Cache puffert langsame Abschnitte (SMART 30 min, Updates 60 min) und merkt sich haengende statfs-Aufrufe.
+//
+// Langsame Abschnitte laufen immer im Hintergrund: ist ein Stand veraltet, liefert Collect ihn sofort und erneuert
+// ihn; beim ersten Mal wartet Collect hoechstens slowFirstWait (bzw. bis ctx endet) und meldet sonst NoteReading.
+// Ein Lauf, der am Zeitlimit abbrach oder Fehler brachte, gilt nur slowRetry lang; ein abgebrochener Lauf ersetzt
+// keinen vorhandenen guten Stand.
 type Cache struct {
 	mu      sync.Mutex
 	entries map[string]*slowEntry
+	statfs  map[string]*statfsCall
 	wg      sync.WaitGroup
 }
 
 type slowEntry struct {
-	at      time.Time
-	running bool
-	res     slowResult
+	res  slowResult
+	have bool          // res stammt aus einem fertigen Lauf
+	at   time.Time     // Ende des letzten Laufs (Uhr rueckwaerts = veraltet)
+	next time.Time     // ab dann erneuern
+	run  chan struct{} // laufende Erneuerung (wird beim Ende geschlossen), nil = keine
 }
 
 // slowResult ist das Ergebnis eines langsamen Abschnitts.
@@ -69,10 +89,20 @@ type slowResult struct {
 	notes    []m64proto.SectionNote
 }
 
-// NewCache legt einen leeren Puffer an.
-func NewCache() *Cache { return &Cache{entries: map[string]*slowEntry{}} }
+// statfsCall ist ein laufender statfs-Aufruf; haengt er, bleibt er hier stehen, bis er zurueckkommt.
+type statfsCall struct {
+	done  chan struct{}
+	start time.Time
+	res   StatFS
+	err   error
+}
 
-// Wait wartet auf laufende Erneuerungen im Hintergrund (Tests, Beenden).
+// NewCache legt einen leeren Puffer an.
+func NewCache() *Cache {
+	return &Cache{entries: map[string]*slowEntry{}, statfs: map[string]*statfsCall{}}
+}
+
+// Wait wartet auf laufende Erneuerungen im Hintergrund (Tests, Beenden). Haengende statfs-Aufrufe zaehlen nicht.
 func (c *Cache) Wait() { c.wg.Wait() }
 
 var defaultCache = NewCache()
@@ -117,7 +147,14 @@ func wantFunc(secs []string) func(string) bool {
 
 // Collect liest die gewuenschten Abschnitte des lokalen Hosts. Fehlende Programme ergeben Notes, Fehler eines
 // Abschnitts Errors; die uebrigen Abschnitte laufen weiter. Collect ist fuer gleichzeitige Aufrufe geeignet.
+// Mit ctx-Deadline endet Collect rechtzeitig davor (langsame Abschnitte laufen im Hintergrund, Programme und statfs
+// haben Zeitlimits innerhalb der Deadline).
 func Collect(ctx context.Context, opt Options) *m64proto.Report {
+	if dl, ok := ctx.Deadline(); ok && time.Until(dl) > 2*deadlineMargin {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, dl.Add(-deadlineMargin))
+		defer cancel()
+	}
 	c := newCollector(opt)
 	r := &m64proto.Report{V: m64proto.Version, Time: c.now().UnixMilli()}
 	want := wantFunc(opt.Sections)
@@ -177,7 +214,8 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 	return r
 }
 
-// slow liefert einen gepufferten Abschnitt; veraltet: alter Stand sofort, Erneuerung im Hintergrund.
+// slow liefert einen gepufferten Abschnitt. Gelesen wird immer im Hintergrund (hoechstens ein Lauf je Schluessel);
+// ohne fertigen Stand wartet slow kurz und liefert sonst den Hinweis NoteReading (Abschnitt key).
 func (c *collector) slow(ctx context.Context, key string, maxAge time.Duration, fn func(context.Context) slowResult) slowResult {
 	ca := c.cache
 	ca.mu.Lock()
@@ -185,34 +223,58 @@ func (c *collector) slow(ctx context.Context, key string, maxAge time.Duration, 
 		ca.entries = map[string]*slowEntry{}
 	}
 	e := ca.entries[key]
+	if e == nil {
+		e = &slowEntry{}
+		ca.entries[key] = e
+	}
 	now := c.now()
-	if e != nil {
+	stale := !e.have || now.Before(e.at) || !now.Before(e.next)
+	if stale && e.run == nil {
+		done := make(chan struct{})
+		e.run = done
+		ca.wg.Add(1)
+		go func() {
+			defer ca.wg.Done()
+			bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshTimeout)
+			defer cancel()
+			nr := fn(bg)
+			aborted := bg.Err() != nil
+			ca.mu.Lock()
+			defer ca.mu.Unlock()
+			t := c.now()
+			if !aborted || !e.have { // abgebrochen: guter alter Stand bleibt
+				e.res, e.have = nr, true
+			}
+			e.at = t
+			if aborted || len(nr.errs) > 0 {
+				e.next = t.Add(slowRetry)
+			} else {
+				e.next = t.Add(maxAge)
+			}
+			e.run = nil
+			close(done)
+		}()
+	}
+	if e.have {
 		res := e.res
-		age := now.Sub(e.at)
-		if (age < 0 || age >= maxAge) && !e.running {
-			e.running = true
-			ca.wg.Add(1)
-			go func() {
-				defer ca.wg.Done()
-				bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeoutRefresh)
-				defer cancel()
-				nr := fn(bg)
-				ca.mu.Lock()
-				e.res, e.at, e.running = nr, c.now(), false
-				ca.mu.Unlock()
-			}()
-		}
 		ca.mu.Unlock()
 		return res
 	}
+	done := e.run
 	ca.mu.Unlock()
-	res := fn(ctx)
-	ca.mu.Lock()
-	if ca.entries[key] == nil {
-		ca.entries[key] = &slowEntry{at: c.now(), res: res}
+	t := time.NewTimer(slowFirstWait)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+	case <-ctx.Done():
 	}
-	ca.mu.Unlock()
-	return res
+	ca.mu.Lock()
+	defer ca.mu.Unlock()
+	if e.have {
+		return e.res
+	}
+	return slowResult{notes: []m64proto.SectionNote{{Section: key, Note: NoteReading}}}
 }
 
 // run startet ein Programm mit Zeitlimit.
@@ -242,7 +304,7 @@ func (c *collector) collectFS(ctx context.Context, r *m64proto.Report) {
 		root := c.opt.Root
 		st = func(p string) (StatFS, error) { return statfsPath(joinRoot(root, p)) }
 	}
-	fsl, errs := FSFromStatfs(ParseMounts(b), func(p string) (StatFS, error) { return statfsTimeout(ctx, st, p) })
+	fsl, errs := FSFromStatfs(ParseMounts(b), func(p string) (StatFS, error) { return c.statfsTimeout(ctx, st, p) })
 	r.FS = fsl
 	for i, e := range errs {
 		if i >= 5 {
@@ -252,22 +314,40 @@ func (c *collector) collectFS(ctx context.Context, r *m64proto.Report) {
 	}
 }
 
-// statfsTimeout ruft statfs mit Zeitlimit auf (haengende Mounts blockieren sonst den ganzen Bericht).
-func statfsTimeout(ctx context.Context, st func(string) (StatFS, error), p string) (StatFS, error) {
-	type res struct {
-		s   StatFS
-		err error
+// statfsTimeout ruft statfs mit Zeitlimit auf (haengende Mounts blockieren sonst den ganzen Bericht). statfs laesst
+// sich nicht abbrechen: der Aufruf bleibt im Cache stehen, bis er zurueckkommt. Je Mount laeuft hoechstens einer;
+// gleichzeitige Aufrufe warten auf denselben, und haengt er schon laenger als statfsLimit, wird der Mount ohne
+// neuen Versuch als Fehler gemeldet (kein Goroutinen-/Thread-Leck bei dauerhaft haengendem NFS).
+func (c *collector) statfsTimeout(ctx context.Context, st func(string) (StatFS, error), p string) (StatFS, error) {
+	ca := c.cache
+	ca.mu.Lock()
+	if ca.statfs == nil {
+		ca.statfs = map[string]*statfsCall{}
 	}
-	ch := make(chan res, 1)
-	go func() {
-		s, err := st(p)
-		ch <- res{s, err}
-	}()
-	t := time.NewTimer(timeoutStatfs)
+	call := ca.statfs[p]
+	if call == nil {
+		call = &statfsCall{done: make(chan struct{}), start: time.Now()}
+		ca.statfs[p] = call
+		go func() {
+			s, err := st(p)
+			ca.mu.Lock()
+			call.res, call.err = s, err
+			if ca.statfs[p] == call {
+				delete(ca.statfs, p)
+			}
+			ca.mu.Unlock()
+			close(call.done)
+		}()
+	} else if since := time.Since(call.start); since >= statfsLimit {
+		ca.mu.Unlock()
+		return StatFS{}, fmt.Errorf("statfs %s: haengt seit %s", p, since.Round(time.Second))
+	}
+	ca.mu.Unlock()
+	t := time.NewTimer(statfsLimit - time.Since(call.start))
 	defer t.Stop()
 	select {
-	case x := <-ch:
-		return x.s, x.err
+	case <-call.done:
+		return call.res, call.err
 	case <-t.C:
 		return StatFS{}, fmt.Errorf("statfs %s: Zeitlimit", p)
 	case <-ctx.Done():
@@ -327,7 +407,7 @@ func (c *collector) collectReboot(ctx context.Context, r *m64proto.Report) {
 	if !rb.Required && c.has("needs-restarting") { // RHEL: Python-Aufruf, daher 10 min gepuffert
 		res := c.slow(ctx, "needs-restarting", timeoutNeedsRestart, func(ctx context.Context) slowResult {
 			var out slowResult
-			if res, err := c.run(ctx, timeoutShort, "needs-restarting", "-r"); err == nil {
+			if res, err := c.run(ctx, timeoutNeeds, "needs-restarting", "-r"); err == nil {
 				if req, ok := ParseNeedsRestarting(res.Code); ok {
 					out.required = &req
 				}
@@ -353,7 +433,7 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 		note("smartctl fehlt")
 		return out
 	}
-	res, err := c.run(ctx, timeoutShort, "smartctl", "--scan-open", "-j")
+	res, err := c.run(ctx, timeoutSmart, "smartctl", "--scan-open", "-j")
 	if errors.Is(err, ErrNotFound) {
 		note("smartctl fehlt")
 		return out
@@ -387,6 +467,9 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 			continue
 		}
 		out.smart = append(out.smart, ParseSmartctl(d.Name, res.Stdout))
+	}
+	if ds, err := readDisks(c.src); err == nil { // Seriennummer schlafender Platten aus /sys
+		fillSmartSerials(out.smart, ds)
 	}
 	return out
 }
@@ -432,7 +515,7 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	}
 	zero := func(code int) bool { return code == 0 }
 	var list, sec *call
-	aptCall := &call{"apt-get", []string{"-s", "-o", "Debug::NoLocking=1", "upgrade"}, zero}
+	aptCall := &call{"apt-get", aptSimArgs, zero}
 	switch mgr {
 	case mgrAptCheck:
 		list = &call{aptCheckPath, nil, zero}

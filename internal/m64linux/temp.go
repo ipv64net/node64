@@ -81,6 +81,9 @@ func readTemps(src source) []m64proto.Temp {
 		}
 		var idx []int
 		for _, f := range src.ReadDir(d.dir) {
+			if len(idx) >= 64 {
+				break
+			}
 			if m := hwTempRE.FindStringSubmatch(f); m != nil {
 				if n, err := strconv.Atoi(m[1]); err == nil {
 					idx = append(idx, n)
@@ -117,9 +120,13 @@ func readTemps(src source) []m64proto.Temp {
 			add(t)
 		}
 	}
+	zones := 0
 	for _, z := range src.ReadDir("/sys/class/thermal") {
 		if !strings.HasPrefix(z, "thermal_zone") {
 			continue
+		}
+		if zones++; zones > 64 {
+			break
 		}
 		base := "/sys/class/thermal/" + z
 		typ := clip(readStr(src, base+"/type"))

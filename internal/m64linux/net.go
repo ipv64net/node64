@@ -93,6 +93,8 @@ func netSysInfo(src source, n *m64proto.NetIf) {
 	if v, ok := readInt(src, base+"/mtu"); ok && v > 0 && v < 1<<20 {
 		n.MTU = int(v)
 	}
+	// rx_crc_errors ist ein Teil von rx_errors (Kernel: "part of aggregate frame errors in rx_errors"): RxCRC
+	// zeigt nur die Art, RxErrors enthaelt die CRC-Fehler schon - nicht zusammenzaehlen. Drops sind keine Fehler.
 	if v, ok := readInt(src, base+"/statistics/rx_crc_errors"); ok && v > 0 {
 		n.RxCRC = uint64(v)
 	}

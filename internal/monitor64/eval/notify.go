@@ -183,6 +183,7 @@ type Line struct {
 	Prev     State     `json:"prev"`
 	Since    time.Time `json:"since,omitzero"` // Problem bzw. "nicht erreichbar" seit (Entwarnung: Dauer)
 	Detail   string    `json:"detail,omitempty"`
+	Gone     bool      `json:"gone,omitzero"`      // Entwarnung, weil der Dienst nicht mehr geliefert wird (entfernt)
 	Channels []string  `json:"channels,omitempty"` // nur in Result.Lines: an wen gemeldet
 }
 
@@ -211,7 +212,8 @@ type Message struct {
 	At               time.Time `json:"at"`
 	Host             HostRef   `json:"host"`
 	Event            Event     `json:"event"`
-	Severity         State     `json:"severity"` // schlimmste Zeile (nicht erreichbar = Kritisch)
+	Severity         State     `json:"severity"`        // schlimmste Zeile (nicht erreichbar = Kritisch; wieder erreichbar: schlimmste offene)
+	Better           bool      `json:"better,omitzero"` // EvOK mit Zeile "besser, aber noch nicht OK": Betreff nicht "wieder OK"
 	Counts           Counts    `json:"counts"`
 	Lines            []Line    `json:"lines"`
 	Channels         []string  `json:"channels"`
@@ -231,6 +233,7 @@ type Result struct {
 
 // ServiceMemory ist der gespeicherte Stand eines Dienstes.
 type ServiceMemory struct {
+	Name       string      `json:"name,omitempty"`       // letzter Name (fuer die Entwarnung, wenn der Dienst verschwindet)
 	Cur        State       `json:"cur"`                  // letzter beobachteter Zustand
 	Sent       State       `json:"sent"`                 // zuletzt gemeldeter Zustand
 	Since      time.Time   `json:"since,omitzero"`       // nicht OK seit
@@ -308,14 +311,18 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 		if hm.Svcs[in.Key] == nil {
 			hm.Svcs[in.Key] = &ServiceMemory{}
 		}
+		hm.Svcs[in.Key].Name = in.Name
 	}
-	if !r.Unreachable {
-		// Dienste, die der Kern nicht mehr liefert, sind entfernt (bei nicht erreichbarem Host fehlen sie nur).
+	// Dienste, die der Kern nicht mehr liefert, sind entfernt (bei nicht erreichbarem Host fehlen sie nur; in
+	// der Wartung bleiben sie bis zur ersten Runde danach, damit die Entwarnung nicht verloren geht).
+	var gone []string
+	if !r.Unreachable && !r.Maintenance {
 		for k := range hm.Svcs {
 			if !seen[k] {
-				delete(hm.Svcs, k)
+				gone = append(gone, k)
 			}
 		}
+		slices.Sort(gone)
 	}
 
 	var res Result
@@ -366,13 +373,18 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 			prev := s.Sent
 			s.observe(in.State, at, false)
 			s.Flapping, s.Changes = false, nil
+			worse := s.Cur.Worse(prev)
 			switch {
-			case s.Cur == OK || in.ShowOnly || in.Acked:
+			case s.Cur == OK || in.ShowOnly || (in.Acked && !worse):
 				s.Sent = s.Cur
 				if s.Cur == OK {
 					s.Chans = nil
 				}
 			default:
+				if in.Acked {
+					// Verschlechterung hebt die Quittierung auch hier auf.
+					res.Unack = append(res.Unack, in.Key)
+				}
 				chans := union(union(base, rt.Route(s.Cur)), s.Chans)
 				add(Line{Kind: LineOpen, Key: in.Key, Name: in.Name, State: s.Cur, Prev: prev, Since: s.Since, Detail: in.Detail}, chans)
 				s.sent(s.Cur, at, chans)
@@ -455,6 +467,14 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 		}
 	}
 
+	// Verschwundene Dienste: Kanaele, die ein offenes Problem kennen, bekommen eine Entwarnung.
+	for _, k := range gone {
+		if s := hm.Svcs[k]; len(s.Chans) > 0 {
+			add(Line{Kind: LineOK, Key: k, Name: s.Name, State: OK, Prev: Worst(s.Sent, s.Cur), Since: s.Since, Gone: true}, s.Chans)
+		}
+		delete(hm.Svcs, k)
+	}
+
 	res.Lines = lines
 	res.Messages = bundle(lines, r, rt, afterMaint)
 	return res
@@ -529,6 +549,7 @@ func (m *Message) finish(rt Routing) {
 		m.Event = EvFlapping
 	case has[LineOK] || has[LineBetter] || has[LineFlapEnd]:
 		m.Event = EvOK
+		m.Better = has[LineBetter]
 	default:
 		m.Event = EvReminder
 	}

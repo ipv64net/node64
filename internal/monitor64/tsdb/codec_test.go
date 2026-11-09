@@ -98,6 +98,12 @@ func TestCodecScale(t *testing.T) {
 		{[]float64{1.0004}, 0}, // auf 3 Stellen gerundet ganz
 		{[]float64{0.001, 1e6}, 3},
 		{[]float64{1e14}, 0},
+		// kleine Spalten (Betrag < 1): 4 signifikante Stellen des groessten Betrags, hoechstens 6 Stellen
+		{[]float64{0.0012, 0, 0.0003}, 4},
+		{[]float64{0.123456}, 4},
+		{[]float64{0.5, 0.25}, 2},
+		{[]float64{0.0000004}, 0},   // unter 6 Stellen: 0
+		{[]float64{2.5, 0.0003}, 1}, // groesster Betrag >= 1: wie bisher 3 Stellen
 	} {
 		_, s, ok := scaleColumn(c.vals, 3)
 		if !ok || s != c.want {
@@ -121,6 +127,13 @@ func TestCodecSize(t *testing.T) {
 		"ganz":      func(i int) float64 { return float64(40 + rng.IntN(3)) },
 		"cpu 2 st.": func(i int) float64 { return math.Round((20+rng.Float64()*5)*100) / 100 },
 		"mbit 3 st": func(i int) float64 { return 50 + rng.Float64()*10 },
+		"fehlerrate": func(i int) float64 { // meist 0, gelegentlich kleine Raten mit 4 Stellen
+			if rng.IntN(4) > 0 {
+				return 0
+			}
+			return math.Round(rng.Float64()*0.05*1e4) / 1e4
+		},
+		"rate klein": func(i int) float64 { return 0.01 + rng.Float64()*0.05 }, // volle 6 Stellen
 	}
 	for name, g := range gen {
 		vals := make([]float64, len(ts))

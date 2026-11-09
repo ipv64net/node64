@@ -1,6 +1,7 @@
 package m64agent
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
@@ -72,6 +73,14 @@ func TestFromAllows(t *testing.T) {
 		{[]string{"2001:db8::/32"}, "2001:db8::1", true},
 		{[]string{"nas.example.com"}, "1.2.3.4", false},
 		{[]string{"127.0.0.1"}, "::ffff:127.0.0.1", true},
+		// Zone zaehlt nicht: verneintes Netz greift auch fuer fe80::1%eth0
+		{[]string{"::/0", "!fe80::/10"}, "fe80::1%eth0", false},
+		{[]string{"fe80::/10"}, "fe80::1%eth0", true},
+		{[]string{"fe80::1"}, "fe80::1%eth0", true},
+		{[]string{"fe80::1%eth1"}, "fe80::1%eth0", true},
+		{[]string{"fe80::*"}, "fe80::1%eth0", true},
+		// ungueltiges Muster verweigert immer (parseKeyLine laesst es gar nicht durch)
+		{[]string{"10.0.0.0/8", "!10.1.2.300"}, "10.9.9.9", false},
 	}
 	for _, c := range cases {
 		if got := fromAllows(c.pats, ip(c.ip)); got != c.want {
@@ -125,9 +134,12 @@ func TestLimiter(t *testing.T) {
 	if !l.blocked("1.2.3.4", now.Add(failBlockMin+time.Second)) {
 		t.Fatal("block must double")
 	}
-	l.ok("1.2.3.4")
+	l.ok("1.2.3.4", now)
 	if l.blocked("1.2.3.4", now) {
 		t.Fatal("ok must reset")
+	}
+	if !l.known("1.2.3.4", now) || l.known("1.2.3.4", now.Add(goodForget)) || l.known("5.6.7.8", now) {
+		t.Fatal("known address wrong")
 	}
 	a := &net.TCPAddr{IP: net.ParseIP("2001:db8:1:2:3:4:5:6"), Port: 1}
 	b := &net.TCPAddr{IP: net.ParseIP("2001:db8:1:2:ffff::1"), Port: 2}
@@ -179,4 +191,42 @@ func manySections(n int) string {
 		secs = append(secs, "s"+strconv.Itoa(i))
 	}
 	return "collect " + strings.Join(secs, ",")
+}
+
+// F1-K6: from= wie OpenSSH: ungueltige Muster (auch verneint) und mehrere from= lehnen die Zeile ab.
+func TestParseKeysFrom(t *testing.T) {
+	k, _ := testKeyLine(t)
+	for _, opt := range []string{
+		`from="10.0.0.0/8,!10.1.2.3"`,
+		`from="192.168.1.*,!192.168.1.5"`,
+		`from="fe80::1%eth0"`,
+		`from="2001:db8::/32,!2001:db8::1"`,
+		`from="1.2.3.4",restrict`,
+	} {
+		if _, err := ParseKeys([]byte(opt + " " + k)); err != nil {
+			t.Errorf("%s refused: %v", opt, err)
+		}
+	}
+	for _, opt := range []string{
+		`from="10.0.0.0/33"`,
+		`from="10.0.0.0/8,!10.1.2.300"`,
+		`from="10.0.0.0/8,!nas.example.com"`,
+		`from="nas.example.com"`,
+		`from="10.0.0.1/8"`,
+		`from="10.0.0.0/8,"`,
+		`from="!"`,
+		`from=""`,
+		`from="1.2.3.[4]"`,
+		`from="10.0.0.0/8",from="1.2.3.4"`,
+	} {
+		if _, err := ParseKeys([]byte(opt + " " + k)); err == nil {
+			t.Errorf("%s accepted", opt)
+		}
+	}
+	// Datei: Zeile mit ungueltigem Muster wird uebersprungen (Schluessel gar nicht erlaubt), Rest bleibt
+	k2, p2 := testKeyLine(t)
+	keys, err := parseKeys([]byte(`from="!bad.example" `+k+"\n"+k2+"\n"), false)
+	if err == nil || len(keys) != 1 || !bytes.Equal(keys[0].wire, p2.Marshal()) {
+		t.Fatalf("lenient: %d keys, err %v", len(keys), err)
+	}
 }

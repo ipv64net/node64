@@ -2,6 +2,7 @@ package notify
 
 import (
 	"encoding/json"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +19,8 @@ import (
 
 // MonitorLine ist eine Zeile einer Monitor64-Meldung.
 type MonitorLine struct {
-	Kind   string    `json:"kind"` // problem, better, ok, flapping, flap_end, reminder, open, unreachable, reachable
+	Kind   string    `json:"kind"`           // problem, better, ok, flapping, flap_end, reminder, open, unreachable, reachable
+	Gone   bool      `json:"gone,omitempty"` // Entwarnung, weil der Dienst entfernt bzw. nicht mehr geliefert wird
 	Key    string    `json:"key,omitempty"`
 	Name   string    `json:"name,omitempty"`
 	State  string    `json:"state"` // ok, warn, crit, unknown
@@ -54,7 +56,14 @@ func (d *Dispatcher) monitorLineText(lang string, l MonitorLine, now time.Time) 
 		dur = d.i18n.FormatDuration(lang, now.Sub(l.Since).Truncate(time.Minute))
 	}
 	state := t("monitor64.state." + l.State)
-	return t("notify.monitor.line."+l.Kind, "icon", monitorIcon(l.State), "name", l.Name, "state", state, "detail", l.Detail, "duration", dur)
+	kind := l.Kind
+	if kind == "ok" && l.Gone {
+		kind = "gone"
+	}
+	if kind == "ok" && dur == "" {
+		kind = "ok_short"
+	}
+	return t("notify.monitor.line."+kind, "icon", monitorIcon(l.State), "name", d.tx(lang, l.Name), "state", state, "detail", d.tx(lang, l.Detail), "duration", dur)
 }
 
 // monitorTitle ist der Betreff ("🔴 nas01: 1 Kritisch, 2 Warnung").
@@ -76,9 +85,17 @@ func (d *Dispatcher) monitorTitle(lang string, a Alert, lines []MonitorLine) str
 	}
 	summary := strings.Join(parts, ", ")
 	if len(lines) == 1 {
-		summary = lines[0].Name
+		summary = d.tx(lang, lines[0].Name)
 	}
-	return t("notify.subject."+string(a.Kind), "icon", monitorIcon(a.Data["severity"]), "name", host, "summary", summary)
+	subject := "notify.subject." + string(a.Kind)
+	if a.Kind == KindMonitorOK {
+		for _, l := range lines {
+			if l.Kind == "better" { // besser, aber noch nicht OK: nicht "wieder OK" im Betreff
+				subject = "notify.subject.monitor_better"
+			}
+		}
+	}
+	return t(subject, "icon", monitorIcon(a.Data["severity"]), "name", host, "summary", summary)
 }
 
 func (d *Dispatcher) composeMonitor(lang string, a Alert, m Message) Message {
@@ -111,7 +128,14 @@ func (d *Dispatcher) composeMonitor(lang string, a Alert, m Message) Message {
 	for _, l := range lines {
 		counts[l.State]++
 	}
-	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "time": m.Time.UTC().Format(time.RFC3339), "name": a.Data["host"],
+	status := "down"
+	switch a.Kind {
+	case KindMonitorOK, KindMonitorReachable:
+		status = "up"
+	case KindMonitorFlapping:
+		status = "flapping"
+	}
+	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "status": status, "time": m.Time.UTC().Format(time.RFC3339), "name": a.Data["host"],
 		"severity": a.Data["severity"], "lines": lines, "counts": counts, "url": m.URL, "title": m.Title, "text": m.Text,
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
 	return m
@@ -122,12 +146,12 @@ func (d *Dispatcher) monitorSummary(lang string, a Alert) string {
 	lines := monitorLines(a)
 	var parts []string
 	for _, l := range lines {
-		s := monitorIcon(l.State) + " " + l.Name
+		s := monitorIcon(l.State) + " " + d.tx(lang, l.Name)
 		if l.Name == "" {
 			s = monitorIcon(l.State)
 		}
 		if l.Detail != "" {
-			s += ": " + l.Detail
+			s += ": " + d.tx(lang, l.Detail)
 		}
 		parts = append(parts, s)
 		if len(parts) == 3 && len(lines) > 3 {
@@ -136,4 +160,80 @@ func (d *Dispatcher) monitorSummary(lang string, a Alert) string {
 		}
 	}
 	return strings.Join(parts, "; ")
+}
+
+// tx uebersetzt Texte von Monitor64 im Format "i18n:<schluessel>?k=v&..." in die Sprache des Kanals (Werte
+// "since"/"at" als RFC3339 werden als Datum/Uhrzeit formatiert); andere Texte bleiben unveraendert.
+func (d *Dispatcher) tx(lang, s string) string {
+	rest, ok := strings.CutPrefix(s, "i18n:")
+	if !ok {
+		return s
+	}
+	key, query, _ := strings.Cut(rest, "?")
+	if !strings.HasPrefix(key, "monitor64.") {
+		return s
+	}
+	vals, err := url.ParseQuery(query)
+	if err != nil {
+		return s
+	}
+	var args []any
+	for k, v := range vals {
+		val := ""
+		if len(v) > 0 {
+			val = v[0]
+		}
+		if k == "since" || k == "at" {
+			if t, err := time.Parse(time.RFC3339, val); err == nil {
+				val = d.i18n.FormatDateTime(lang, t, d.location(0))
+			}
+		}
+		args = append(args, k, val)
+	}
+	return d.i18n.T(lang, key, args...)
+}
+
+// explodeMonitor teilt Monitor64-Meldungen mit mehreren Zeilen fuer die Sammelmeldung in je eine Meldung je Dienst
+// (heldKey je Dienst: es zaehlt der letzte Stand jedes Dienstes).
+func explodeMonitor(list []Alert) []Alert {
+	out := make([]Alert, 0, len(list))
+	for _, a := range list {
+		if !IsMonitor(a.Kind) {
+			out = append(out, a)
+			continue
+		}
+		lines := monitorLines(a)
+		if len(lines) <= 1 {
+			if len(lines) == 1 && a.Data["key"] != lines[0].Key {
+				a.Data = cloneData(a.Data)
+				a.Data["key"] = lines[0].Key
+			}
+			out = append(out, a)
+			continue
+		}
+		for _, l := range lines {
+			b := a
+			b.Data = cloneData(a.Data)
+			raw, _ := json.Marshal([]MonitorLine{l})
+			b.Data["lines"], b.Data["key"], b.Data["severity"] = string(raw), l.Key, l.State
+			switch l.Kind {
+			case "ok", "reachable":
+				b.Kind = KindMonitorOK
+			case "unreachable":
+				b.Kind = KindMonitorUnreachable
+			default:
+				b.Kind = KindMonitorProblem
+			}
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+func cloneData(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m)+2)
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }

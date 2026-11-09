@@ -400,9 +400,20 @@ func TestAgentUpdate(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("OnUpdated not called")
 	}
+	// Erlaubt: neue Datei, vorherige Version fuer den Rueckfall (.old) und der Merker der unbestaetigten neuen
+	// Version (.update); sonst nichts (keine Reste von Zwischendateien).
 	ents, _ := os.ReadDir(filepath.Dir(e.exe))
-	if len(ents) != 1 {
-		t.Fatalf("leftover files: %v", ents)
+	base := filepath.Base(e.exe)
+	for _, ent := range ents {
+		switch ent.Name() {
+		case base, base + ".update":
+		case base + ".old":
+			if b, _ := os.ReadFile(e.exe + ".old"); string(b) != "old binary" {
+				t.Fatalf(".old has wrong content")
+			}
+		default:
+			t.Fatalf("leftover files: %v", ents)
+		}
 	}
 }
 

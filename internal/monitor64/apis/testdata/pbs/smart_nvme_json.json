@@ -1,0 +1,6 @@
+{"status":"passed","wearout":null,"attributes":[
+  {"name":"critical_warning","value":"4","normalized":4.0},{"name":"temperature","value":"45","normalized":45.0},
+  {"name":"available_spare","value":"100","normalized":100.0},{"name":"available_spare_threshold","value":"10","normalized":10.0},
+  {"name":"percentage_used","value":"120","normalized":120.0},{"name":"data_units_read","value":"9876543","normalized":9876543.0},
+  {"name":"media_errors","value":"3","normalized":3.0},{"name":"num_err_log_entries","value":"12","normalized":12.0}
+]}

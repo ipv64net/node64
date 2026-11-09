@@ -213,6 +213,9 @@ func TestTextsComplete(t *testing.T) {
 	for _, k := range ruleKinds {
 		keys = append(keys, "monitor64.kind."+kindKey(k.Kind))
 	}
+	for _, k := range coreTexts {
+		keys = append(keys, "monitor64."+k)
+	}
 	for _, c := range svcCategories {
 		keys = append(keys, "monitor64.cat."+c)
 	}

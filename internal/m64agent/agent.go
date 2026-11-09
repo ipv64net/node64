@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,9 +30,10 @@ const (
 	maxKeysFileBytes    = m64proto.MaxKeysBytes
 	defaultHandshake    = 10 * time.Second
 	defaultIdle         = 15 * time.Minute
-	defaultCollect      = 45 * time.Second
-	infoTimeout         = 10 * time.Second
+	defaultCollect      = 15 * time.Second // Node bricht nach 24-30 s ab (Verbindung, Handshake und Uebertragung dazu)
+	maxCollect          = 20 * time.Second
 	keysTimeout         = 30 * time.Second
+	revokeEvery         = 5 * time.Second // offene Verbindungen gegen die aktuelle Schluesselliste pruefen
 	updateTimeout       = 10 * time.Minute
 	maxExecCommandBytes = 1024
 )
@@ -61,12 +61,15 @@ type Config struct {
 	ReleaseKeys []ed25519.PublicKey  // Schluessel fuer Updates; leer = update abgelehnt
 	ExePath     string               // Datei, die update ersetzt; leer = os.Executable()
 	OnUpdated   func(version string) // nach erfolgreichem Update (Aufrufer beendet den Prozess)
-	MaxConns    int                  // gleichzeitige Verbindungen (0 = DefaultMaxConns)
+	MaxConns    int                  // gleichzeitige angemeldete Verbindungen (0 = DefaultMaxConns)
 	Logger      *slog.Logger
+
+	// Probe (optional) startet die neue Datei nach update probeweise; Fehler = alte Datei zurueck, update abgelehnt.
+	Probe func(exe, version string) error
 
 	HandshakeTimeout time.Duration // 0 = 10 s
 	IdleTimeout      time.Duration // Verbindung ohne offenen Kanal schliessen (0 = 15 min)
-	CollectTimeout   time.Duration // 0 = 45 s
+	CollectTimeout   time.Duration // 0 = 15 s, hoechstens 20 s
 }
 
 // Server ist der laufende Agent.
@@ -75,8 +78,15 @@ type Server struct {
 	log   *slog.Logger
 	keys  *keyStore
 	lim   limiter
-	sem   chan struct{}
+	gate  preAuthGate   // Verbindungen ohne Anmeldung
+	sem   chan struct{} // angemeldete Verbindungen
 	local *localRunner
+
+	revokeEvery time.Duration
+	authMu      sync.Mutex
+	authed      map[*ssh.ServerConn][]byte // angemeldete Verbindungen -> Schluessel (Wire-Format)
+	sweepOnce   sync.Once
+	done        chan struct{}
 
 	collectMu chan struct{} // collect nacheinander (mehrere Nodes gleichzeitig)
 	updateMu  sync.Mutex
@@ -108,6 +118,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.CollectTimeout <= 0 {
 		cfg.CollectTimeout = defaultCollect
 	}
+	cfg.CollectTimeout = min(cfg.CollectTimeout, maxCollect)
 	if cfg.Version == "" {
 		cfg.Version = "0.0.0"
 	}
@@ -123,9 +134,13 @@ func New(cfg Config) (*Server, error) {
 		collectMu: make(chan struct{}, 1),
 		ln:        map[net.Listener]struct{}{},
 		conns:     map[net.Conn]struct{}{},
+
+		revokeEvery: revokeEvery,
+		authed:      map[*ssh.ServerConn][]byte{},
+		done:        make(chan struct{}),
 	}
 	if cfg.LocalDir != "" {
-		s.local = &localRunner{dir: cfg.LocalDir}
+		s.local = newLocalRunner(cfg.LocalDir)
 	}
 	return s, nil
 }
@@ -139,6 +154,10 @@ func (s *Server) Serve(ln net.Listener) error {
 		return ErrServerClosed
 	}
 	s.ln[ln] = struct{}{}
+	s.sweepOnce.Do(func() {
+		s.wg.Add(1)
+		go s.sweepLoop()
+	})
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
@@ -162,26 +181,29 @@ func (s *Server) Serve(ln net.Listener) error {
 		}
 		delay = 0
 		key := limiterKey(c.RemoteAddr())
-		if s.lim.blocked(key, time.Now()) {
+		now := time.Now()
+		known := s.lim.known(key, now)
+		if !known && s.lim.blocked(key, now) {
 			_ = c.Close()
 			continue
 		}
-		select {
-		case s.sem <- struct{}{}:
-		default:
-			s.log.Warn("monitor64-agent: too many connections", "remote", c.RemoteAddr().String())
+		// Bis zur Anmeldung zaehlt die Verbindung nur gegen die kleinere Grenze fuer Verbindungen ohne Anmeldung.
+		if !s.gate.acquire(key, known) {
+			s.log.Debug("monitor64-agent: too many connections without login", "remote", c.RemoteAddr().String())
+			if !known {
+				s.lim.fail(key, now)
+			}
 			_ = c.Close()
 			continue
 		}
 		if !s.track(c, true) {
-			<-s.sem
+			s.gate.release(key)
 			_ = c.Close()
 			return ErrServerClosed
 		}
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			defer func() { <-s.sem }()
 			defer s.track(c, false)
 			defer c.Close()
 			s.handleConn(c, key)
@@ -192,7 +214,9 @@ func (s *Server) Serve(ln net.Listener) error {
 // Close beendet alle Listener und Verbindungen und wartet auf laufende Anfragen.
 func (s *Server) Close() error {
 	s.mu.Lock()
-	s.closed.Store(true)
+	if !s.closed.Swap(true) {
+		close(s.done)
+	}
 	for ln := range s.ln {
 		_ = ln.Close()
 	}
@@ -201,6 +225,9 @@ func (s *Server) Close() error {
 	}
 	s.mu.Unlock()
 	s.wg.Wait()
+	if s.local != nil {
+		s.local.close()
+	}
 	return nil
 }
 
@@ -225,19 +252,16 @@ func (s *Server) sshConfig(rejected *atomic.Bool) *ssh.ServerConfig {
 		MaxAuthTries:            6,
 		PublicKeyAuthAlgorithms: pubKeyAuthAlgos,
 		PublicKeyCallback: func(meta ssh.ConnMetadata, pub ssh.PublicKey) (*ssh.Permissions, error) {
-			e := s.keys.lookup(pub)
-			if e == nil {
-				return nil, errors.New("unknown key")
+			wire := pub.Marshal()
+			e, err := s.keys.allowed(wire, meta.RemoteAddr())
+			if err != nil {
+				return nil, err
 			}
-			if len(e.from) > 0 {
-				ap, err := netip.ParseAddrPort(meta.RemoteAddr().String())
-				if err != nil || !fromAllows(e.from, ap.Addr()) {
-					return nil, errors.New("address not allowed for this key")
-				}
-			}
+			// Der Schluessel wird gemerkt: jede weitere Anfrage prueft ihn erneut gegen die aktuelle Liste.
 			return &ssh.Permissions{Extensions: map[string]string{
 				"fp":      Fingerprint(pub),
 				"comment": e.comment,
+				"key":     string(wire),
 			}}, nil
 		},
 		AuthLogCallback: func(meta ssh.ConnMetadata, method string, err error) {
@@ -255,10 +279,16 @@ func (s *Server) handleConn(c net.Conn, limKey string) {
 	_ = c.SetDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
 	var rejected atomic.Bool
 	sc, chans, reqs, err := ssh.NewServerConn(c, s.sshConfig(&rejected))
+	s.gate.release(limKey)
 	if err != nil {
+		// Jede Verbindung ohne Anmeldung zaehlt als Fehlversuch (auch Zeitlimit und abgebrochener Handshake),
+		// sonst koennten stille Verbindungen beliebig oft Plaetze belegen.
+		now := time.Now()
+		if !s.lim.known(limKey, now) {
+			s.lim.fail(limKey, now)
+		}
 		var ae *ssh.ServerAuthError
 		if errors.As(err, &ae) && rejected.Load() {
-			s.lim.fail(limKey, time.Now())
 			s.log.Warn("monitor64-agent: login refused", "remote", remote)
 		} else {
 			s.log.Debug("monitor64-agent: handshake failed", "remote", remote, "err", err)
@@ -267,7 +297,32 @@ func (s *Server) handleConn(c net.Conn, limKey string) {
 	}
 	defer sc.Close()
 	_ = c.SetDeadline(time.Time{})
-	s.lim.ok(limKey)
+	s.lim.ok(limKey, time.Now())
+	select {
+	case s.sem <- struct{}{}:
+		defer func() { <-s.sem }()
+	default:
+		s.log.Warn("monitor64-agent: too many connections", "remote", remote)
+		return
+	}
+	wire := []byte(sc.Permissions.Extensions["key"])
+	s.authMu.Lock()
+	s.authed[sc] = wire
+	s.authMu.Unlock()
+	defer func() {
+		s.authMu.Lock()
+		delete(s.authed, sc)
+		s.authMu.Unlock()
+	}()
+	// allowed prueft vor jedem Kanal und jeder Anfrage, ob der Schluessel noch in der Liste steht.
+	allowed := func() bool {
+		if _, err := s.keys.allowed(wire, c.RemoteAddr()); err != nil {
+			s.log.Warn("monitor64-agent: key no longer allowed - connection closed", "remote", remote, "err", err)
+			_ = sc.Close()
+			return false
+		}
+		return true
+	}
 	fp := sc.Permissions.Extensions["fp"]
 	s.log.Info("monitor64-agent: connected", "remote", remote, "key", fp, "comment", sc.Permissions.Extensions["comment"])
 	defer s.log.Info("monitor64-agent: disconnected", "remote", remote)
@@ -291,6 +346,10 @@ func (s *Server) handleConn(c net.Conn, limKey string) {
 	defer idle.Stop()
 
 	for nc := range chans {
+		if !allowed() {
+			_ = nc.Reject(ssh.Prohibited, "key no longer allowed")
+			continue
+		}
 		if nc.ChannelType() != "session" {
 			_ = nc.Reject(ssh.UnknownChannelType, "only session channels")
 			continue
@@ -308,11 +367,43 @@ func (s *Server) handleConn(c net.Conn, limKey string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.handleSession(ctx, ch, chReqs, remote, fp)
+			s.handleSession(ctx, ch, chReqs, remote, fp, allowed)
 			if active.Add(-1) == 0 {
 				idle.Reset(s.cfg.IdleTimeout)
 			}
 		}()
+	}
+}
+
+// sweepLoop prueft regelmaessig die offenen Verbindungen gegen die Schluesselliste (Datei geaendert).
+func (s *Server) sweepLoop() {
+	defer s.wg.Done()
+	t := time.NewTicker(s.revokeEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			s.revoke()
+		case <-s.done:
+			return
+		}
+	}
+}
+
+// revoke schliesst angemeldete Verbindungen, deren Schluessel (oder Adresse) nicht mehr erlaubt ist.
+func (s *Server) revoke() {
+	s.authMu.Lock()
+	conns := make(map[*ssh.ServerConn][]byte, len(s.authed))
+	for sc, w := range s.authed {
+		conns[sc] = w
+	}
+	s.authMu.Unlock()
+	for sc, w := range conns {
+		if _, err := s.keys.allowed(w, sc.RemoteAddr()); err != nil {
+			s.log.Warn("monitor64-agent: key no longer allowed - connection closed", "remote", sc.RemoteAddr().String(),
+				"key", sc.Permissions.Extensions["fp"], "err", err)
+			_ = sc.Close()
+		}
 	}
 }
 

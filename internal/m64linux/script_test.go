@@ -3,6 +3,7 @@ package m64linux
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -192,7 +193,7 @@ func TestScriptUnraid(t *testing.T) {
 	for _, d := range r.Disks {
 		disks = append(disks, d.Name)
 	}
-	if strings.Join(disks, " ") != "sda sdb sdc sdd nvme0n1" {
+	if strings.Join(disks, " ") != "sda sdb sdc sdd nvme0n1" || r.Disks[3].Serial != "WX61A1234567" || r.Disks[0].Serial != "" {
 		t.Fatalf("disk %v", disks)
 	}
 	if r.Systemd != nil || !hasNote(r, "systemd", "kein systemd") || !hasNote(r, "updates", "kein Paketverwalter") {
@@ -209,7 +210,7 @@ func TestScriptUnraid(t *testing.T) {
 	for _, s := range r.SMART {
 		sm[s.Device] = s
 	}
-	if sm["/dev/sda"].Error != "SMART nicht verfuegbar" || sm["/dev/sdb"].Error != SmartErrStandby {
+	if sm["/dev/sda"].Error != "SMART nicht verfuegbar" || sm["/dev/sdb"].Error != SmartErrStandby || sm["/dev/sdb"].Serial != "WWZ1ABCD" {
 		t.Fatalf("smart %+v", r.SMART)
 	}
 	if c := sm["/dev/sdc"]; *c.Pending != 8 || *c.Uncorrectable != 8 || *c.Reallocated != 16 || !*c.Passed || c.WearPercentUsed != nil {
@@ -376,5 +377,152 @@ func TestScriptRunLocal(t *testing.T) {
 	}
 	if r.CPU == nil || r.Mem == nil || r.Load == nil || hasNote(r, "script", "unvollstaendig") {
 		t.Fatalf("%+v", r)
+	}
+}
+
+// Fehler-Abschnitte (F3-K2/K6): Zeitlimit bzw. Exit-Code eines Programms landet in Errors (bzw. SMART.Error), ohne
+// dass der Rest der Ausgabe verloren geht; kein "df fehlt" bzw. "kein systemd" daneben.
+func TestScriptErrSections(t *testing.T) {
+	out := "\n<<<m64:start>>>\n1\n<<<m64:err:bogus>>>\nx\n\n<<<m64:file:/proc/stat>>>\ncpu 1 2 3 4 5 6 7 8\ncpu0 1 2 3 4 5 6 7 8\n" +
+		"\n<<<m64:file:/proc/diskstats>>>\n8 0 sda 1 0 2 0 3 0 4 0 0 5 0\n" +
+		"\n<<<m64:attr>>>\n/sys/block/sda/device/vpd_pg80.hex\t008000085a4448313233345800\n" +
+		"/dev/disk/by-id/ata-X_Y\t../../sdz\n" +
+		"\n<<<m64:err:fs>>>\ndf: Zeitlimit\n" +
+		"\n<<<m64:err:zfs>>>\nzpool: Zeitlimit\n" +
+		"\n<<<m64:err:systemd>>>\nsystemctl --failed: Exit-Code 1\n" +
+		"\n<<<m64:err:updates>>>\ndnf: Exit-Code 1\n" +
+		"\n<<<m64:note>>>\nupdates Sicherheitsupdates unbekannt: dnf: Exit-Code 1\n" +
+		"\n<<<m64:smart:/dev/sda>>>\n" +
+		"\n<<<m64:err:smart:/dev/sda>>>\nsmartctl: Zeitlimit\n" +
+		"\n<<<m64:smart:/dev/sdb>>>\n{\"device\":{\"name\":\"/dev/sdb\",\"protocol\":\"ATA\"},\"smart_status\":{\"passed\":true}}\n" +
+		"\n<<<m64:end>>>\n"
+	r, err := ParseScriptOutput([]byte(out), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"fs": "df: Zeitlimit", "zfs": "zpool: Zeitlimit", "systemd": "systemctl --failed: Exit-Code 1", "updates": "dnf: Exit-Code 1"}
+	got := map[string]string{}
+	for _, e := range r.Errors {
+		if _, dup := got[e.Section]; dup {
+			t.Errorf("doppelt: %+v", e)
+		}
+		got[e.Section] = e.Error
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: %q, erwartet %q", k, got[k], v)
+		}
+	}
+	if got["disk"] != "" || got["smart"] != "" {
+		t.Errorf("Errors %+v", r.Errors)
+	}
+	if r.Systemd != nil || hasNote(r, "systemd", "kein systemd") || r.Updates != nil || r.FS != nil || !hasNote(r, "updates", "Sicherheitsupdates unbekannt") {
+		t.Fatalf("%+v %+v", r.Systemd, r.Notes)
+	}
+	// SMART: Zeitlimit je Platte wie beim Agent; Seriennummer aus VPD 0x80 (Hex im attr-Abschnitt)
+	if len(r.SMART) != 2 || r.SMART[0].Error != "smartctl: Zeitlimit" || r.SMART[0].Serial != "ZDH1234X" || r.SMART[1].Passed == nil {
+		t.Fatalf("%+v", r.SMART)
+	}
+	if len(r.Disks) != 1 || r.Disks[0].Serial != "ZDH1234X" {
+		t.Fatalf("%+v", r.Disks)
+	}
+	// zpool list mit Exit-Code und unlesbarer Ausgabe: Fehler wie beim Agent
+	out = "\n<<<m64:start>>>\n1\n\n<<<m64:zpool_list>>>\nkaputt\n\n<<<m64:zpool_list_rc>>>\n1\n\n<<<m64:end>>>\n"
+	r, _ = ParseScriptOutput([]byte(out), testNow)
+	if !hasErr(r, "zfs", "zpool list: Exit-Code 1") || r.ZFS != nil {
+		t.Fatalf("%+v", r.Errors)
+	}
+	// ohne Pools und ohne Ausgabe (Modul nicht geladen): still
+	out = "\n<<<m64:start>>>\n1\n\n<<<m64:zpool_list>>>\n\n<<<m64:zpool_list_rc>>>\n1\n\n<<<m64:end>>>\n"
+	r, _ = ParseScriptOutput([]byte(out), testNow)
+	if hasErr(r, "zfs", "") {
+		t.Fatalf("%+v", r.Errors)
+	}
+}
+
+func hasErr(r *m64proto.Report, sec, sub string) bool {
+	for _, e := range r.Errors {
+		if e.Section == sec && strings.Contains(e.Error, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// Abschnittsmarken (F3-K8): nur ganze Zeilen mit bekanntem Namen; eine FUSE-Zeile in df, die wie eine Marke
+// aussieht, schneidet den Abschnitt nicht ab. Maskierte Zeilen (Leerzeichen davor) sind nie Marken.
+func TestScriptMarkerInjection(t *testing.T) {
+	out := "\n<<<m64:start>>>\n1\n\n<<<m64:df>>>\nFilesystem Type 1024-blocks Used Available Capacity Mounted on\n" +
+		"<<<m64:file:/x fuse.evil 0 0 0 - /y>>>\n" +
+		"<<<m64:bogus>>>\n" +
+		" <<<m64:end>>>\n" +
+		"<<<m64:file:/proc/evil fuse 0 0 0 - /z>>>\n" +
+		"/dev/sda1 ext4 1000 500 500 50% /\n" +
+		"/dev/sdb1 ext4 2000 500 1500 25% /data\n" +
+		"\n<<<m64:end>>>\n"
+	r, err := ParseScriptOutput([]byte(out), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := mountsOf(r.FS); !strings.HasSuffix(got, " / /data") { // die falschen Marken sind df-Zeilen
+		t.Fatalf("fs %q", got)
+	}
+	if hasNote(r, "script", "unvollstaendig") || hasErr(r, "fs", "") {
+		t.Fatalf("%+v %+v", r.Notes, r.Errors)
+	}
+	for _, n := range []string{"file:/x fuse.evil", "bogus", "err:cpu", "err:smart:/dev/sda;x", "updates:Apt", "smart:/dev/../x y"} {
+		if knownSection(n) {
+			t.Errorf("%q als Abschnitt erkannt", n)
+		}
+	}
+	for _, n := range []string{"file:/proc/stat", "err:fs", "err:smart:/dev/sda", "updates_sec:dnf", "smart:/dev/bus/0", "zpool_list_rc"} {
+		if !knownSection(n) {
+			t.Errorf("%q nicht erkannt", n)
+		}
+	}
+}
+
+// Feindlich grosse Ausgabe (F3-K8): bleibt linear und begrenzt.
+func TestScriptHostileOutput(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("<<<m64:start>>>\n1\n<<<m64:attr>>>\n")
+	for i := 0; b.Len() < m64proto.MaxReportBytes/2; i++ {
+		fmt.Fprintf(&b, "/sys/class/hwmon/hwmon%d/temp%d_input\t42000\n", i%1000, i)
+	}
+	for i := 0; b.Len() < m64proto.MaxReportBytes-200; i++ {
+		fmt.Fprintf(&b, "<<<m64:file:/proc/net/bonding/b%d>>>\nBonding Mode: x\n", i)
+	}
+	start := time.Now()
+	r, err := ParseScriptOutput([]byte(b.String()), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("zu langsam: %v", d)
+	}
+	if len(r.Temps) > maxItems || len(r.Bonds) > 64 || len(r.Errors) > 200 {
+		t.Fatalf("%d Temps, %d Bonds, %d Fehler", len(r.Temps), len(r.Bonds), len(r.Errors))
+	}
+}
+
+// Skript (F3-K2, K6, Nebenpunkte): Zeitlimits, dist-upgrade, kein "df -l", needs-restarting nur mit "updates",
+// Ausgaben maskiert.
+func TestScriptTimeoutsAndCommands(t *testing.T) {
+	for _, want := range []string{"m64_run TERM 90", "m64_smartctl 20 -j -a -n standby", "m64_run KILL 5 df",
+		"m64_run TERM 5 zpool list", "m64_run TERM 5 zpool status", `m64_try "systemctl --failed" 0 5 systemctl`,
+		"apt-get -s -o Debug::NoLocking=1 dist-upgrade", `m64_err "smart:$m64_dev" "smartctl: Zeitlimit"`,
+		"sed 's/^<<<m64:/ <<<m64:/'", "-x nfs4", "vpd_pg80", "/dev/disk/by-id/"} {
+		if !strings.Contains(Script, want) {
+			t.Errorf("fehlt: %s", want)
+		}
+	}
+	if regexp.MustCompile(`df -P[a-zA-Z]*l`).MatchString(Script) || strings.Contains(Script, " upgrade\n") {
+		t.Error("df -l bzw. apt-get upgrade im Skript")
+	}
+	// needs-restarting nur im Updates-Block
+	upd := strings.Index(Script, `if [ "$m64_updates" = 1 ]; then`)
+	nr := strings.Index(Script, "needs-restarting -r")
+	if upd < 0 || nr < upd {
+		t.Error("needs-restarting ausserhalb des Updates-Blocks")
 	}
 }

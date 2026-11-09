@@ -124,6 +124,7 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		out = append(out, Service{Key: "winsvc:" + w.Name, Name: firstNonEmpty(w.Display, w.Name), Kind: "winsvc", Default: w.StartType == "auto", Text: w.State})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return kindOrder(out[i].Kind) < kindOrder(out[j].Kind) })
+	out = dedupeKeys(out)
 	return out
 }
 
@@ -242,20 +243,39 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			}
 		}
 	}
-	prevSmartDev := map[string]m64proto.SMART{}
+	// Seriennummern aus diskstats (sysfs) – damit auch schlafende Platten ihren Schluessel behalten
+	serialByName := map[string]string{}
+	for _, d := range cur.Disks {
+		if d.Serial != "" {
+			serialByName[d.Name] = d.Serial
+		}
+	}
+	prevBySerial, prevByDev := map[string]m64proto.SMART{}, map[string]m64proto.SMART{}
 	if prev != nil {
 		for _, sm := range prev.SMART {
-			prevSmartDev[sm.Device] = sm
+			if sm.Serial != "" {
+				prevBySerial[sm.Serial] = sm
+			} else {
+				prevByDev[sm.Device] = sm
+			}
 		}
 	}
 	for i := range cur.SMART {
 		sm := &cur.SMART[i]
-		if sm.Error == m64linux.SmartErrStandby { // Platte schlaeft: letzten Stand behalten statt "nicht lesbar"
-			if p, ok := prevSmartDev[sm.Device]; ok && p.Error == "" {
+		devName := strings.TrimPrefix(sm.Device, "/dev/")
+		if sm.Serial == "" {
+			sm.Serial = serialByName[devName]
+		}
+		if isStandby(sm.Error) { // Platte schlaeft: letzten Stand behalten statt "nicht lesbar"
+			p, ok := prevBySerial[sm.Serial]
+			if !ok && sm.Serial == "" {
+				p, ok = prevByDev[sm.Device]
+			}
+			if ok && p.Error == "" && (sm.Serial == "" || p.Serial == sm.Serial) {
 				cur.SMART[i] = p
 				sm = &cur.SMART[i]
 			} else {
-				continue
+				continue // ohne Vorstand: nur I/O (Dienst bleibt ueber die Seriennummer aus sysfs erhalten)
 			}
 		}
 		name := strings.TrimPrefix(sm.Device, "/dev/")
@@ -292,6 +312,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			var parts []string
 			if sm.Error != "" {
 				parts = append(parts, "SMART nicht lesbar")
+				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_unreadable", Text: sm.Error})
 			} else if sm.Passed != nil {
 				if *sm.Passed {
 					parts = append(parts, "SMART ok")
@@ -330,8 +351,8 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			addCounter("media_err", sm.MediaErrors)
 			if sectors > 0 {
 				code := "smart_sectors"
-				if p, ok := prevSmart[firstNonEmpty(sm.Serial, sm.Device)]; ok && sectorsOf(p) < sectors {
-					code = "smart_sectors_rising"
+				if p, ok := prevSmart[firstNonEmpty(sm.Serial, sm.Device)]; ok && p.Pending != nil && sm.Pending != nil && *p.Pending < *sm.Pending {
+					code = "smart_sectors_rising" // nur steigende ausstehende Sektoren (Plan)
 				}
 				a.s.Facts = append(a.s.Facts, Fact{Code: code, Text: fmt.Sprintf("%d umgelegte/ausstehende Sektoren", sectors)})
 				parts = append(parts, fmt.Sprintf("%d Sektoren", sectors))
@@ -393,14 +414,19 @@ func mapNet(prev, cur *m64proto.Report, dt float64) []Service {
 			}
 			rp, ok3 := delta(p.RxPackets, n.RxPackets)
 			tp, ok4 := delta(p.TxPackets, n.TxPackets)
-			re, ok5 := delta(p.RxErrors+p.RxDropped+p.RxCRC, n.RxErrors+n.RxDropped+n.RxCRC)
-			te, ok6 := delta(p.TxErrors+p.TxDropped, n.TxErrors+n.TxDropped)
+			// Fehler ohne Verwerfungen (rx_dropped steigt auch bei harmlosen Frames, z. B. LLDP) und ohne
+			// zusaetzliches CRC (rx_errors enthaelt die CRC-Fehler schon)
+			re, ok5 := delta(p.RxErrors, n.RxErrors)
+			te, ok6 := delta(p.TxErrors, n.TxErrors)
 			if ok3 && ok4 && ok5 && ok6 {
 				rate := 0.0
 				if rp+tp > 0 {
 					rate = float64(re+te) / float64(rp+tp) * 100
 				}
 				s.Metrics = append(s.Metrics, Metric{Name: "errrate", Value: round4(rate), Unit: "%", Rule: RuleIfErrRate}, Metric{Name: "errors", Value: float64(re + te)})
+				if rd, okd := delta(p.RxDropped+p.TxDropped, n.RxDropped+n.TxDropped); okd {
+					s.Metrics = append(s.Metrics, Metric{Name: "drops", Value: float64(rd)})
+				}
 				if re+te > 0 {
 					s.Text = strings.TrimSpace(s.Text + fmt.Sprintf(" · %d Fehler", re+te))
 				}
@@ -476,6 +502,8 @@ func mapZFS(z m64proto.ZPool) Service {
 	s.Text = fmt.Sprintf("%s · %s frei", z.Health, bytesText(z.Free))
 	if !strings.EqualFold(z.Health, "ONLINE") {
 		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: z.Health + " " + z.Errors})
+	} else if e := strings.TrimSpace(z.Errors); e != "" && !strings.Contains(strings.ToLower(e), "no known data errors") {
+		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: e}) // ONLINE, aber Daten-/Pruefsummenfehler
 	}
 	return s
 }
@@ -577,4 +605,23 @@ func mbitText(v float64) string {
 		return fmt.Sprintf("%.0f Mbit/s", v)
 	}
 	return strings.Replace(fmt.Sprintf("%.1f Mbit/s", v), ".", ",", 1)
+}
+
+// isStandby: SMART meldet eine schlafende Platte (auch EPC-Zustaende wie STANDBY_Y).
+func isStandby(e string) bool {
+	return e == m64linux.SmartErrStandby || strings.Contains(strings.ToLower(e), "standby")
+}
+
+// dedupeKeys: doppelte Dienst-Schluessel (z. B. Multipath ohne Seriennummer) bekommen einen Zusatz, damit das
+// Erkennen nicht an UNIQUE(host_uid, key) scheitert.
+func dedupeKeys(in []Service) []Service {
+	seen := map[string]int{}
+	for i := range in {
+		k := in[i].Key
+		if n := seen[k]; n > 0 {
+			in[i].Key = fmt.Sprintf("%s#%d", k, n+1)
+		}
+		seen[k]++
+	}
+	return in
 }

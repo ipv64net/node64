@@ -287,6 +287,12 @@ func (s *Scheduler) exec(ctx context.Context, j *job) {
 		return
 	}
 	defer func() { <-s.sem }()
+	s.mu.Lock()
+	stale := j.gen == 0 // waehrend des Wartens entfernt oder ersetzt
+	s.mu.Unlock()
+	if stale {
+		return
+	}
 	s.running.Add(1)
 	defer s.running.Add(-1)
 	start := s.now()

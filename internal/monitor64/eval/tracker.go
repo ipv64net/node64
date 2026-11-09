@@ -20,8 +20,9 @@ type Sample struct {
 //   - Dauer: eine Stufe gilt erst, wenn alle Messungen seit mindestens For ueber der Schwelle liegen.
 //   - Hysterese: eine aktive Stufe bleibt, bis der Wert die um Hyst verschobene Schwelle verlaesst
 //     (Warnung ab 80, Hyst 2: OK erst unter 78). Die Rueckkehr wartet nicht auf die Dauer.
-//   - Lueckenhafte Daten (mehr als UnknownAfter Intervalle) oder eine rueckwaerts springende Uhr setzen die
-//     Dauer neu an; die aktive Stufe bleibt fuer die Hysterese erhalten.
+//   - Eine Luecke ohne Daten unterbricht die Dauer nicht (keine Messung lag unter der Schwelle); erst eine
+//     Luecke laenger als UnknownAfter Intervalle und laenger als die Dauer oder eine rueckwaerts springende
+//     Uhr setzen sie neu an. Die aktive Stufe bleibt fuer die Hysterese erhalten.
 //   - Ohne Daten seit mehr als UnknownAfter Intervallen ist der Zustand Unbekannt.
 type Tracker struct {
 	Interval  Dur       `json:"iv,omitzero"`         // Abfrage-Intervall (setzt der Kern), 0 = DefaultInterval
@@ -84,8 +85,9 @@ func relaxed(limit float64, dir Direction, h float64) float64 {
 
 // Observe nimmt eine Messung auf und liefert den Status zum Zeitpunkt der Messung.
 func (t *Tracker) Observe(e Effective, s Sample) Status {
-	if !t.LastAt.IsZero() && (s.At.Before(t.LastAt) || s.At.Sub(t.LastAt) > t.staleAfter()) {
-		// Luecke oder Uhr rueckwaerts: Dauer neu ansetzen.
+	if !t.LastAt.IsZero() && (s.At.Before(t.LastAt) || s.At.Sub(t.LastAt) > max(t.staleAfter(), time.Duration(e.For))) {
+		// Sehr grosse Luecke oder Uhr rueckwaerts: Dauer neu ansetzen. Kuerzere Luecken halten sie, sonst
+		// melden lange Dauern (z. B. 24 h) nie, wenn zwischendurch ein paar Abfragen ausfallen.
 		t.WarnSince, t.CritSince = time.Time{}, time.Time{}
 	}
 	t.LastAt, t.Last, t.LastFree = s.At, s.Value, s.Free

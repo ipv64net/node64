@@ -3092,6 +3092,8 @@
         "unknown": "{n} unknown"
       },
       "line": {
+        "gone": "✅ {name}: removed or no longer delivered – problem closed",
+        "ok_short": "✅ {name}: OK again",
         "problem": "{icon} {name}: {state} – {detail}",
         "better": "{icon} {name}: better, but still {state} – {detail}",
         "ok": "✅ {name}: OK again (after {duration})",
@@ -3104,6 +3106,7 @@
       }
     },
     "subject": {
+      "monitor_better": "🟡 {name}: {summary} better, but not OK yet",
       "monitor_problem": "{icon} {name}: {summary}",
       "monitor_ok": "✅ {name}: {summary} OK again",
       "monitor_unreachable": "🔴 {name} unreachable",
@@ -5786,7 +5789,8 @@
       "cpu": "CPU",
       "ram": "RAM",
       "net": "Network",
-      "disk": "Disk I/O"
+      "disk": "Disk I/O",
+      "error": "History not loaded: {e}"
     },
     "host": {
       "group": "Group",
@@ -5828,7 +5832,9 @@
       "delete_text": "Remove “{n}”? Problem history and audit log are kept.",
       "delete_keep": "Keep history (charts stay until retention expires)",
       "delete_hist": "Delete history now",
-      "delete_hint": "This action is recorded with your name in the audit log."
+      "delete_hint": "This action is recorded with your name in the audit log.",
+      "pending_free": "below {v} for {m} min – {s} after {n} min",
+      "more_rules": "+{n} more"
     },
     "acc": {
       "type": "Type",
@@ -5848,7 +5854,12 @@
       "delete": "Remove access",
       "delete_confirm": "Remove access “{n}”?",
       "saved_toast": "Access saved",
-      "deleted_toast": "Access removed"
+      "deleted_toast": "Access removed",
+      "docker_secret": "Credentials (optional)",
+      "docker_secret_hint": "For ssh://: private SSH key (PEM). For https:// with TLS: JSON {\"key\": \"…\", \"cert\": \"…\", \"ca\": \"…\"} with PEM blocks. Leave empty for unix:// and tcp://. Stored encrypted and never shown.",
+      "pin_set": "Fingerprint entered as pin – save, then test again.",
+      "pinned": "fingerprint pinned",
+      "save_first": "Settings were changed: please save first (or enter the secret again), then test."
     },
     "access": {
       "agent": "Agent",
@@ -5882,7 +5893,7 @@
       "hint_used": "Currently {v} % used.",
       "applies": "Applies to",
       "scope_service": "this service only",
-      "scope_kind": "all {c} of this host",
+      "scope_kind": "all services of this host with “{c}”",
       "report": "Notification",
       "show_hint": "display only = state and history, no notification",
       "soll": "Expected state",
@@ -5902,7 +5913,8 @@
       "ignore": "Ignore service",
       "ignored_toast": "Service ignored (restore it on the host page under “ignored services”)",
       "reset_toast": "Own values removed – the next level applies again",
-      "saved_toast": "Saved – re-evaluated immediately, recorded with your name in the history"
+      "saved_toast": "Saved – re-evaluated immediately, recorded with your name in the history",
+      "thresholds": "Thresholds"
     },
     "f": {
       "name": "Name",
@@ -5958,14 +5970,17 @@
       "unack": "acknowledgement removed by {w}",
       "unack_auto": "acknowledgement removed (got worse)",
       "comment": "comment by {w}",
-      "resolved": "marked as resolved by {w}"
+      "resolved": "marked as resolved by {w}",
+      "maint": "Maintenance scheduled",
+      "maint_end": "Maintenance ended"
     },
     "how": {
       "auto": "automatically – value back to normal",
       "user": "resolved by {w}",
       "api": "marked as resolved via {w}",
       "maint": "in maintenance – not notified",
-      "handover": "ended by handover"
+      "handover": "ended by handover",
+      "removed": "host removed by {w}"
     },
     "csv": {
       "state": "State",
@@ -6017,7 +6032,8 @@
       "st_running": "running",
       "st_planned": "scheduled",
       "st_recurring": "recurring",
-      "st_ended": "ended"
+      "st_ended": "ended",
+      "tz": "Times in the node’s time zone: {z}"
     },
     "rl": {
       "intro": "Three levels: default for all → overrides for group/tag → this host (directly at the service). The most specific level wins, each field inherits separately. The default is usually enough.",
@@ -6048,7 +6064,7 @@
       "add": "Override for group or tag",
       "own": "Set at the host",
       "own_sub": "wins over all overrides, change it directly at the service",
-      "own_kind": "all {c}",
+      "own_kind": "all services with “{c}”",
       "own_none": "Nothing set at any host.",
       "new": "New override",
       "new_sub": "is appended at the bottom",
@@ -6105,7 +6121,16 @@
       "guest_down": "Guest or container not running although it should",
       "systemd_failed": "failed systemd units",
       "svc_vanished": "Service vanished",
-      "access_failed": "an access method does not answer"
+      "access_failed": "an access method does not answer",
+      "ctr_unhealthy": "Container reports “unhealthy”",
+      "backup_old": "Last backup too old (PBS)",
+      "job_failed": "Job failed (verify, GC, prune, sync)",
+      "store_inactive": "Storage / datastore not active",
+      "cluster_no_quorum": "Proxmox cluster without quorum",
+      "cluster_node_down": "Cluster node offline",
+      "ha_error": "HA resource in error state",
+      "ceph_warn": "Ceph: HEALTH_WARN",
+      "ceph_err": "Ceph: HEALTH_ERR"
     },
     "cat": {
       "system": "System",
@@ -6167,21 +6192,20 @@
       "no_key": "<key appears once Monitor64 is running>",
       "agent_step1": "1. Install the agent on the host",
       "agent_safe": "The agent only accepts queries from this node (key) and can only deliver values – no commands. Port {p}/TCP. Updates arrive automatically via this node.",
-      "agent_offline": "Host without internet? This node serves the same files:",
       "agent_step2": "2. Compare the fingerprint",
       "agent_fp": "The install script shows the host's fingerprint – “Test connection” shows the same value, then the node remembers the key.",
       "ssh_key": "Add this key on the host",
       "ssh_safe": "Only from this node, without forwarding. Each round runs a fixed, read-only script. Recommended: a dedicated user “monitor64”.",
       "node_ip": "<IP of this node>",
-      "smart": "Read SMART values (needs one line in sudoers):",
+      "smart": "Read SMART values (needs this line in sudoers, e.g. via visudo -f /etc/sudoers.d/monitor64)",
       "pw_auth": "Password instead of key – only for systems that do not accept keys",
       "token_id": "API token (ID)",
       "token_secret": "API token (secret)",
       "token_cmd": "Create a read-only token (run on the server)",
       "api_hint": "Read-only (role PVEAuditor or Audit). For bonding, per-port errors and temperatures, add SSH or the agent afterwards.",
       "node": "Node name (empty = all)",
-      "pin": "Pin certificate (SHA-256, optional)",
-      "docker_hint": "Local: unix:///var/run/docker.sock (mount the socket into the Node64 container). Remote: tcp://host:2375 or https://host:2376 with TLS.",
+      "pin": "Pin fingerprint (certificate SHA-256 or SSH host key, optional)",
+      "docker_hint": "Local: unix:///var/run/docker.sock (mount the socket into the Node64 container). Remote: tcp://host:2375, https://host:2376 with TLS or ssh://user@host.",
       "test": "Test connection",
       "testing": "checking …",
       "test_ok": "connected – {n} services found, answer in {ms} ms",
@@ -6195,7 +6219,19 @@
       "all": "all",
       "none": "none",
       "tags_hint": "Tags can have their own thresholds, e.g. “backup”: storage only from 95 %.",
-      "summary": "{n} ({a}) · {k} · {s} services will be adopted."
+      "summary": "{n} ({a}) · {k} · {s} services will be adopted.",
+      "cluster": "cluster {c}",
+      "version": "version {v}",
+      "cluster_nodes": "Add further nodes of cluster {c} as separate hosts",
+      "cluster_hint": "One host per node with the same token, queried via the same address. This host then shows only its own node.",
+      "node_offline": "offline",
+      "node_short": "node {n}",
+      "nodes_failed": "Not created: {n}",
+      "summary_nodes": "Plus {n} further node(s) as separate hosts.",
+      "test_stale": "Changed – please test again.",
+      "fp_confirm": "Certificate or host key is not confirmed – the token was not sent. Compare the fingerprint with the server and confirm it.",
+      "fp_accept": "Confirm fingerprint and test again",
+      "smart_hint": "Allows only the calls the script needs (find disks, read values without waking sleeping disks). If smartctl lives elsewhere, adjust the path (command -v smartctl)."
     },
     "nf": {
       "where": "Where to",
@@ -6273,7 +6309,7 @@
       "agent": "Monitor64 agent",
       "agent_port": "Port {port}/TCP (configurable per access)",
       "node_key": "Key of this node",
-      "agent_download": "Download via GitHub releases and node64.de (Linux, Windows). Not in the image – the node fetches the files on demand (signature checked) and then also offers them under /monitor64/agent/ (for hosts without internet).",
+      "agent_download": "Download via GitHub releases and node64.de (Linux). Not in the image.",
       "tech": "Technical status",
       "version": "Module {version}",
       "uptime": "running for {uptime}",
@@ -6299,10 +6335,10 @@
       "user": "Invalid user name.",
       "token_id": "Invalid token ID.",
       "node": "Invalid node name.",
-      "pin": "Invalid certificate pin (SHA-256 hex).",
-      "url": "Invalid URL (http://, https://, for Docker also unix:// or tcp://).",
+      "pin": "Invalid fingerprint (certificate: SHA-256 hex, SSH host key: SHA256:…).",
+      "url": "Invalid URL (http://, https://, for Docker also unix://, tcp:// or ssh://).",
       "hostkey": "Invalid fingerprint.",
-      "secret": "Secret too long.",
+      "secret": "Secret too long (at most 4 KB, Docker credentials 64 KB).",
       "state": "Invalid state.",
       "keys": "No services selected.",
       "soll": "Invalid expected state.",
@@ -6325,6 +6361,20 @@
       "series": "Invalid history query.",
       "comment": "Please enter a comment.",
       "action": "Unknown action."
+    },
+    "quote": "“{t}”",
+    "err_session": "Session expired or not permitted – please reload the page and sign in again.",
+    "detail": {
+      "vanished": "gone since {since}",
+      "not_running": "not running (expected: running)",
+      "access": "Access {name}",
+      "threshold": "{metric} {value} (threshold {limit})",
+      "maint_silent": "in maintenance – not notified",
+      "unack": "acknowledgement cleared (got worse)",
+      "secret_unreadable": "credentials unreadable",
+      "no_data": "no data",
+      "host_removed": "host removed",
+      "zfs_errors": "data errors: {text}"
     }
   }
 }

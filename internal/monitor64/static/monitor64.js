@@ -28,13 +28,54 @@ function fmtNum(v, d) {
 	if (d === undefined) { d = Math.abs(v) < 10 && v % 1 !== 0 ? (Math.abs(v) < 0.1 ? 3 : 1) : 0; }
 	return Number(v).toLocaleString(LOC, { minimumFractionDigits: 0, maximumFractionDigits: d });
 }
+// parseNum liest eine Zahl unabhaengig von der Sprache: genau ein Komma oder Punkt ist der Dezimaltrenner
+// ("3.5" und "3,5" = 3,5); Tausendertrenner nur bei eindeutigem Muster ("1.000.000", "1.234,5", "1,234.5").
+// Leer = null, alles andere (Buchstaben, "1,2,3") = NaN -> Fehlermeldung statt stiller Umdeutung.
+function thousandsOK(s, t) { return new RegExp('^\\d{1,3}(\\' + t + '\\d{3})+$').test(s); }
 function parseNum(s) {
-	s = String(s || '').trim();
+	s = String(s === undefined || s === null ? '' : s).replace(/[\s  ']/g, '');
 	if (s === '') { return null; }
-	if (LOC === 'de-DE') { s = s.replace(/\./g, '').replace(',', '.'); } else { s = s.replace(/,/g, ''); }
-	var v = parseFloat(s);
-	return isNaN(v) ? NaN : v;
+	var sign = '';
+	if (s.charAt(0) === '-' || s.charAt(0) === '+') { sign = s.charAt(0) === '-' ? '-' : ''; s = s.slice(1); }
+	if (!/^[0-9.,]+$/.test(s) || !/[0-9]/.test(s)) { return NaN; }
+	var dots = (s.match(/\./g) || []).length, commas = (s.match(/,/g) || []).length;
+	if (dots && commas) {
+		var dec = s.lastIndexOf('.') > s.lastIndexOf(',') ? '.' : ',', th = dec === '.' ? ',' : '.', parts = s.split(dec);
+		if (parts.length !== 2 || !thousandsOK(parts[0], th)) { return NaN; }
+		s = parts[0].split(th).join('') + '.' + parts[1];
+	} else if (dots + commas > 1) {
+		var t = dots ? '.' : ',';
+		if (!thousandsOK(s, t)) { return NaN; }
+		s = s.split(t).join('');
+	} else {
+		s = s.replace(',', '.');
+	}
+	var v = Number(sign + s);
+	return isFinite(v) ? v : NaN;
 }
+// numIn zeigt einen Wert exakt im Eingabefeld (ohne Rundung der Anzeige; Dezimalkomma auf Deutsch).
+function numIn(v) {
+	if (v === null || v === undefined || v === 'off' || isNaN(v)) { return ''; }
+	var s = String(+Number(v).toPrecision(12));
+	return LOC === 'de-DE' ? s.replace('.', ',') : s;
+}
+// tx uebersetzt Texte des Kerns: "i18n:monitor64.detail.vanished?since=2026-11-09T10:00:00Z" (auch mitten im
+// Text, z. B. "SSH: i18n:..."). Werte sind URL-kodiert; since/at sind Zeitpunkte und werden formatiert.
+var reI18n = /i18n:([a-z0-9_.]+)(\?[^\s;]*)?/g;
+function tx(s) {
+	if (s === undefined || s === null) { return ''; }
+	s = String(s);
+	if (s.indexOf('i18n:') < 0) { return s; }
+	return s.replace(reI18n, function (all, key, q) {
+		var k = key.indexOf('monitor64.') === 0 ? key.slice(10) : key, a = {};
+		if (q) {
+			try { new URLSearchParams(q.slice(1)).forEach(function (v, n) { a[n] = (n === 'since' || n === 'at') && toDate(v) ? fmtTime(v) : tx(v); }); } catch (e) { a = {}; }
+		}
+		if (!TX[k]) { return Object.keys(a).length ? k + ' (' + Object.keys(a).map(function (n) { return a[n]; }).join(', ') + ')' : k; }
+		return L(k, a);
+	});
+}
+function quote(t) { return L('quote', { t: tx(t) }); }
 function fmtBytes(b) {
 	if (b === null || b === undefined) { return '–'; }
 	var u = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'], i = 0;
@@ -59,7 +100,13 @@ function fmtTime(s) {
 	var now = new Date(), y = new Date(now.getTime() - 86400000), hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
 	if (d.toDateString() === now.toDateString()) { return L('time.today', { t: hm }); }
 	if (d.toDateString() === y.toDateString()) { return L('time.yesterday', { t: hm }); }
-	return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + (d.getFullYear() !== now.getFullYear() ? String(d.getFullYear()).slice(2) : '') + ' ' + hm;
+	return fmtDay(d, d.getFullYear() !== now.getFullYear()) + ' ' + hm;
+}
+// fmtDay: Tag und Monat (optional Jahr) im Format der Sprache (de 09.11., en 11/09).
+function fmtDay(d, year) {
+	var o = { day: '2-digit', month: '2-digit' };
+	if (year) { o.year = '2-digit'; }
+	try { return d.toLocaleDateString(LOC, o); } catch (e) { return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.'; }
 }
 function fmtDur(sec) {
 	sec = Math.max(0, Math.round(sec || 0));
@@ -74,7 +121,6 @@ function since(s) { var d = toDate(s); return d ? L('time.since', { d: fmtDur((D
 function ago(s) { var d = toDate(s); return d ? L('time.ago', { d: fmtDur((Date.now() - d.getTime()) / 1000) }) : ''; }
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 var ST = { ok: L('state.ok'), warn: L('state.warn'), crit: L('state.crit'), unknown: L('state.unknown'), unreachable: L('state.unreachable') };
-var RANK = { crit: 4, unreachable: 4, unknown: 2, warn: 1, ok: 0 };
 function stLabel(s) { return ST[s] || s; }
 function stBadge(s, txt) { var c = s === 'unreachable' ? 'unknown' : s; return '<span class="st-badge ' + esc(c) + '">' + esc(txt || stLabel(s)) + '</span>'; }
 function tag(t) { return '<span class="tag">' + esc(t) + '</span>'; }
@@ -97,12 +143,27 @@ function api(method, url, body) {
 	if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
 	return fetch(url, opt).then(function (r) {
 		return r.json().catch(function () { return {}; }).then(function (j) {
-			if (!r.ok) { var e = new Error(j.message || j.error || ('HTTP ' + r.status)); e.code = j.error; throw e; }
+			if (r.status === 401 || r.status === 403) { var se = new Error(L('err_session')); se.code = 'session'; se.session = true; throw se; }
+			if (!r.ok) {
+				var msg = j.message || (j.error === 'internal' ? L('err.internal') : j.error) || ('HTTP ' + r.status);
+				var e = new Error(msg); e.code = j.error; throw e;
+			}
 			return j;
 		});
 	});
 }
-function fail(e) { toast(e && e.message ? e.message : String(e), true); }
+function fail(e) { toast(e && e.message ? tx(e.message) : String(e), true); }
+// failQuiet: Fehler bei Hintergrund-Aktualisierungen nur zeigen, wenn die Sitzung abgelaufen ist (einmal).
+var sessionShown = false;
+function failQuiet(e) { if (e && e.session && !sessionShown) { sessionShown = true; fail(e); } }
+// lock sperrt einen Knopf, bis die Aktion fertig ist (kein doppeltes Absenden per Doppelklick).
+function lock(btn, fn) {
+	if (btn && btn.disabled) { return Promise.resolve(); }
+	if (btn) { btn.disabled = true; }
+	var p;
+	try { p = Promise.resolve(fn()); } catch (e) { p = Promise.reject(e); }
+	return p.then(function (v) { if (btn) { btn.disabled = false; } return v; }, function (e) { if (btn) { btn.disabled = false; } throw e; });
+}
 
 // modal: Dialog mit eigenem Inhalt; buttons = [{label, cls, click(close)}].
 var modalEl = document.getElementById('m64-modal');
@@ -119,14 +180,17 @@ function modal(title, body, buttons, wide) {
 		btn.type = 'button';
 		btn.className = 'btn ' + (b.cls || 'btn-outline-secondary');
 		btn.textContent = b.label;
-		btn.onclick = function () { if (b.click) { b.click(function () { inst.hide(); }, btn); } else { inst.hide(); } };
+		btn.onclick = function () {
+			if (!b.click) { inst.hide(); return; }
+			lock(btn, function () { return b.click(function () { inst.hide(); }, btn); }).catch(fail);
+		};
 		foot.appendChild(btn);
 	});
 	inst.show();
 	return $('#m64-modal-body');
 }
 function confirmBox(title, text, okLabel, cb) {
-	modal(title, '<p class="mb-0">' + esc(text) + '</p>', [{ label: L('cancel') }, { label: okLabel, cls: 'btn-danger', click: function (close) { close(); cb(); } }]);
+	modal(title, '<p class="mb-0">' + esc(text) + '</p>', [{ label: L('cancel') }, { label: okLabel, cls: 'btn-danger', click: function (close) { return Promise.resolve(cb()).then(close); } }]);
 }
 function store(k, v) { try { if (v === undefined) { return localStorage.getItem('m64.' + k); } localStorage.setItem('m64.' + k, v); } catch (e) {} return null; }
 function spark(vals, cls) {
@@ -178,7 +242,10 @@ function sevLabel(s) { return s === 'crit' ? ST.crit : s === 'warn' ? ST.warn : 
 
 // ---------- Uebersicht ----------
 function pageOverview() {
-	var OV = { group: store('group') || '', only: store('only') === '1', q: '', view: store('view') || 'tiles' };
+	// group: null = alle, '' = ohne Gruppe, sonst der Name (gespeichert als JSON)
+	var OV = { group: null, only: store('only') === '1', q: '', view: store('view') || 'tiles' };
+	try { var gs = store('groupsel'); OV.group = gs ? JSON.parse(gs) : null; } catch (e) { OV.group = null; }
+	if (OV.group !== null && typeof OV.group !== 'string') { OV.group = null; }
 	var data = D.overview || { hosts: [], problems: [], recent: [], counts: {}, groups: [] };
 	var sparks = {};
 	function statCard(cls, label, val, sub, icon) {
@@ -198,10 +265,10 @@ function pageOverview() {
 		else if (!h.checked) { foot = '<span class="small text-body-secondary">' + esc(L('ov.waiting')) + '</span>'; }
 		else { foot = '<span class="small text-body-secondary">' + esc(L('ov.services_ok', { n: h.services })) + '</span>'; }
 		var body = '';
-		if (h.view === 'unreachable') { body = '<div class="small text-body-secondary mt-2"><i class="bi bi-plug"></i> ' + esc(h.unreach || L('state.unreachable')) + '</div>'; }
+		if (h.view === 'unreachable') { body = '<div class="small text-body-secondary mt-2"><i class="bi bi-plug"></i> ' + esc(tx(h.unreach) || L('state.unreachable')) + '</div>'; }
 		else {
 			body = (h.meters || []).map(meter).join('');
-			if (!body && h.text) { body = '<div class="small text-body-secondary mt-2 text-truncate">' + esc(h.text) + '</div>'; }
+			if (!body && h.text) { body = '<div class="small text-body-secondary mt-2 text-truncate">' + esc(tx(h.text)) + '</div>'; }
 			if (sparks[h.uid]) { body += '<div class="mt-2">' + spark(sparks[h.uid], st === 'ok' ? '' : 's-' + st) + '</div>'; }
 		}
 		var extra = '';
@@ -219,19 +286,19 @@ function pageOverview() {
 			'<td>' + (h.problems ? stBadge(st, String(h.problems)) : '<span class="text-body-secondary small">–</span>') + '</td></tr>';
 	}
 	function probRow(p) {
-		var title = p.unreach ? L('ov.unreachable') : p.name;
+		var title = p.unreach ? L('ov.unreachable') : tx(p.name);
 		var icon = p.maint ? '<i class="bi bi-cone-striped text-body-secondary" title="' + esc(L('ov.maint')) + '"></i>' : '<span class="st-dot ' + (p.acked ? 'st-ack' : 'st-' + esc(p.state === 'unreachable' ? 'unknown' : p.state)) + '" title="' + esc(stLabel(p.state)) + '"></span>';
 		return '<div class="prob-row' + (p.acked ? ' acked' : '') + '" data-host="' + esc(p.host_uid) + '" data-key="' + esc(p.key) + '" role="link" tabindex="0">' + icon +
-			'<div class="prob-main"><div class="prob-title">' + esc(p.host) + ' · ' + esc(title) + '</div><div class="prob-sub">' + esc(p.detail || '') + '</div></div>' +
+			'<div class="prob-main"><div class="prob-title">' + esc(p.host) + ' · ' + esc(title) + '</div><div class="prob-sub">' + esc(tx(p.detail)) + '</div></div>' +
 			'<span class="prob-since d-none d-sm-inline">' + (p.acked ? '<i class="bi bi-check2"></i> ' + esc(L('ov.acked')) : esc(since(p.since))) + '</span>' +
 			'<button class="btn btn-sm btn-outline-secondary" type="button" data-ack="' + (p.acked ? 'unack' : 'ack') + '" title="' + esc(p.acked ? L('ov.unack') : L('ov.ack_hint')) + '" aria-label="' + esc(p.acked ? L('ov.unack') : L('ov.ack')) + '"><i class="bi ' + (p.acked ? 'bi-arrow-counterclockwise' : 'bi-check2') + '"></i></button></div>';
 	}
 	function recentRow(r) {
 		var icon = 'bi-arrow-repeat text-success', t = '', sub = '';
-		var name = (r.host || '') + (r.name ? ' · ' + r.name : '');
+		var name = (r.host || '') + (r.name ? ' · ' + tx(r.name) : '');
 		switch (r.kind) {
 		case 'ok': t = L('ov.r_ok', { n: name }); sub = L('ov.r_ok_sub'); break;
-		case 'resolved': icon = 'bi-person-check text-primary'; t = L('ov.r_resolved', { n: name }); sub = L('ov.r_by', { w: whoTxt(r.by) }) + (r.text ? ' – „' + r.text + '“' : ''); break;
+		case 'resolved': icon = 'bi-person-check text-primary'; t = L('ov.r_resolved', { n: name }); sub = L('ov.r_by', { w: whoTxt(r.by) }) + (r.text ? ' – ' + quote(r.text) : ''); break;
 		case 'maint': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint', { n: r.text || '' }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
 		case 'maint_end': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint_end', { n: r.text || '' }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
 		}
@@ -247,12 +314,14 @@ function pageOverview() {
 		$('#m64-problems').innerHTML = data.problems.length ? data.problems.map(probRow).join('') : '<div class="p-3 small text-body-secondary"><i class="bi bi-check-circle text-success"></i> ' + esc(L('ov.no_problems')) + '</div>';
 		$('#m64-recent').innerHTML = data.recent.length ? data.recent.map(recentRow).join('') : '<div class="p-3 small text-body-secondary">' + esc(L('ov.no_recent')) + '</div>';
 		var groups = data.groups || [];
-		$('#m64-groups').innerHTML = [''].concat(groups).map(function (g) { return '<span class="chip' + (g === OV.group ? ' active' : '') + '" data-group="' + esc(g) + '" role="button" tabindex="0">' + esc(g === '' ? L('ov.all') : g || L('ov.no_group')) + '</span>'; }).join('');
+		if (OV.group !== null && groups.indexOf(OV.group) < 0) { OV.group = null; }
+		$('#m64-groups').innerHTML = '<span class="chip' + (OV.group === null ? ' active' : '') + '" data-group-all="1" role="button" tabindex="0" aria-pressed="' + (OV.group === null) + '">' + esc(L('ov.all')) + '</span>' +
+			groups.map(function (g) { var on = g === OV.group; return '<span class="chip' + (on ? ' active' : '') + '" data-group="' + esc(g) + '" role="button" tabindex="0" aria-pressed="' + on + '">' + esc(g === '' ? L('ov.no_group') : g) + '</span>'; }).join('');
 		$('#m64-only-prob').checked = OV.only;
 		$$('[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === OV.view); });
 		var q = OV.q.toLowerCase();
 		var hs = data.hosts.filter(function (h) {
-			if (OV.group && h.group !== OV.group) { return false; }
+			if (OV.group !== null && h.group !== OV.group) { return false; }
 			if (OV.only && hostState(h) === 'ok' && !h.vanished) { return false; }
 			if (!q) { return true; }
 			return (h.name + ' ' + h.address + ' ' + h.kind + ' ' + (h.tags || []).join(' ') + ' ' + h.group).toLowerCase().indexOf(q) >= 0;
@@ -285,14 +354,16 @@ function pageOverview() {
 		if (b) {
 			ev.stopPropagation();
 			var r = b.closest('.prob-row');
-			api('POST', '/api/monitor64/problems/action', { host: r.dataset.host, key: r.dataset.key, action: b.dataset.ack, comment: '' }).then(function () {
-				toast(b.dataset.ack === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast'));
-				refresh();
+			lock(b, function () {
+				return api('POST', '/api/monitor64/problems/action', { host: r.dataset.host, key: r.dataset.key, action: b.dataset.ack, comment: '' }).then(function () {
+					toast(b.dataset.ack === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast'));
+					refresh();
+				});
 			}).catch(fail);
 			return;
 		}
-		var g = ev.target.closest('[data-group]');
-		if (g) { OV.group = g.dataset.group; store('group', OV.group); render(); return; }
+		var g = ev.target.closest('[data-group],[data-group-all]');
+		if (g) { OV.group = g.dataset.groupAll ? null : g.dataset.group; store('groupsel', JSON.stringify(OV.group)); render(); return; }
 		var v = ev.target.closest('[data-view]');
 		if (v) { OV.view = v.dataset.view; store('view', OV.view); render(); return; }
 		var t = ev.target.closest('[data-host],[data-goto]');
@@ -300,13 +371,14 @@ function pageOverview() {
 	});
 	root.addEventListener('keydown', function (ev) {
 		if (ev.key !== 'Enter' && ev.key !== ' ') { return; }
-		var t = ev.target.closest('[data-host],[data-goto],[data-group]');
+		if (ev.target.closest('button, a, input, select, textarea')) { return; } // Knoepfe (z. B. Quittieren) bedient der Browser selbst
+		var t = ev.target.closest('[data-host],[data-goto],[data-group],[data-group-all]');
 		if (t) { ev.preventDefault(); t.click(); }
 	});
 	$('#m64-only-prob').onchange = function () { OV.only = this.checked; store('only', OV.only ? '1' : '0'); render(); };
 	$('#m64-q').oninput = function () { OV.q = this.value; render(); };
-	function refresh() { api('GET', '/api/monitor64/overview').then(function (d) { data = d; render(); }).catch(function () {}); }
-	function loadSparks() { api('GET', '/api/monitor64/sparks').then(function (s) { sparks = s || {}; render(); }).catch(function () {}); }
+	function refresh() { api('GET', '/api/monitor64/overview').then(function (d) { data = d; render(); }).catch(failQuiet); }
+	function loadSparks() { api('GET', '/api/monitor64/sparks').then(function (s) { sparks = s || {}; render(); }).catch(failQuiet); }
 	render();
 	loadSparks();
 	setInterval(function () { if (!document.hidden) { refresh(); } }, 15000);
@@ -319,17 +391,20 @@ function chartColors() { return [cssVar('--bs-primary') || '#0d6efd', cssVar('--
 function tickFmt(span) {
 	return function (v) {
 		var d = new Date(v * 1000);
-		if (span > 40 * 86400) { return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + String(d.getFullYear()).slice(2); }
-		if (span > 2 * 86400) { return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '. ' + pad(d.getHours()) + ':00'; }
+		if (span > 40 * 86400) { return fmtDay(d, true); }
+		if (span > 2 * 86400) { return fmtDay(d, false) + ' ' + pad(d.getHours()) + ':00'; }
 		return pad(d.getHours()) + ':' + pad(d.getMinutes());
 	};
 }
-// toPoints: Punkte der API in Chart.js-Punkte; Luecken (mehr als 3 Schritte) unterbrechen die Linie.
+// toPoints: Punkte der API in Chart.js-Punkte; Luecken (mehr als 3 Schritte) unterbrechen die Linie. Bei gemischter
+// Aufloesung zaehlt die groessere Breite der beiden Punkte (s, 0 = Rohwert), sonst verschwinden aufgefuellte
+// groebere Punkte.
 function toPoints(s, factor) {
 	var out = [], pts = s.points || [], step = s.step || 0;
 	if (!step && pts.length > 1) { step = Math.max(60, (pts[pts.length - 1].t - pts[0].t) / pts.length); }
 	for (var i = 0; i < pts.length; i++) {
-		if (i && step && pts[i].t - pts[i - 1].t > 3 * step) { out.push({ x: pts[i - 1].t + step, y: null }); }
+		var gap = i ? Math.max(step, pts[i - 1].s || 0, pts[i].s || 0) : 0;
+		if (i && gap && pts[i].t - pts[i - 1].t > 3 * gap) { out.push({ x: pts[i - 1].t + gap, y: null }); }
 		out.push({ x: pts[i].t, y: pts[i].avg / (factor || 1) });
 	}
 	return out;
@@ -363,12 +438,13 @@ function lineChart(canvas, opt) {
 		}
 	});
 }
-// dragZoom: Bereich im Diagramm aufziehen -> onZoom(von, bis) in Unix-Sekunden.
+// dragZoom: Bereich im Diagramm aufziehen -> onZoom(von, bis) in Unix-Sekunden. Liefert eine Funktion, die den
+// Listener am Fenster wieder entfernt (beim Zerstoeren des Diagramms).
 function dragZoom(canvas, chart, onZoom) {
 	var box = canvas.parentNode, sel = $('.zoom-sel', box), x0 = null;
 	canvas.addEventListener('mousedown', function (e) { x0 = e.offsetX; sel.style.left = x0 + 'px'; sel.style.width = '0'; sel.style.display = 'block'; });
 	canvas.addEventListener('mousemove', function (e) { if (x0 === null) { return; } sel.style.left = Math.min(x0, e.offsetX) + 'px'; sel.style.width = Math.abs(e.offsetX - x0) + 'px'; });
-	window.addEventListener('mouseup', function (e) {
+	function up(e) {
 		if (x0 === null) { return; }
 		var r = canvas.getBoundingClientRect(), x1 = e.clientX - r.left, start = x0;
 		x0 = null;
@@ -377,55 +453,94 @@ function dragZoom(canvas, chart, onZoom) {
 		var a = chart.scales.x.getValueForPixel(Math.min(start, x1)), b = chart.scales.x.getValueForPixel(Math.max(start, x1));
 		if (b - a < 120) { return; }
 		onZoom(Math.round(a), Math.round(b));
-	});
+	}
+	window.addEventListener('mouseup', up);
+	return function () { window.removeEventListener('mouseup', up); };
+}
+// chartFail zeigt einen Fehler im Diagramm (statt ihn stumm zu schlucken).
+function chartFail(canvas, e) {
+	var box = canvas && canvas.parentNode;
+	if (!box) { return; }
+	box.innerHTML = '<div class="small text-body-secondary p-3"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('chart.error', { e: e && e.message ? tx(e.message) : String(e) })) + '</div>';
+}
+// destroyable: Diagramm, dessen destroy auch den Zoom-Listener entfernt.
+function destroyable(ch, off) {
+	var d = ch.destroy.bind(ch);
+	ch.destroy = function () { if (off) { off(); off = null; } d(); };
+	return ch;
 }
 function unitFmt(unit) {
 	if (unit === 'B/s') { return { factor: 1e6, label: 'MB/s', fmt: function (v) { return fmtNum(v, 1) + ' MB/s'; } }; }
 	return { factor: 1, label: unit, fmt: function (v) { return fmtNum(v, unit === '%' ? 0 : 1) + ' ' + unit; } };
 }
 
+// ---------- Verbindung testen (Host-Seite und Assistent) ----------
+// testHTML: Ergebnis von "Verbindung testen"; bei API-Zugaengen ohne bestaetigtes Zertifikat bzw. Host-Key ein
+// Knopf "Fingerabdruck bestaetigen" (data-fp-confirm), der ihn als Pin uebernimmt und erneut testet.
+function testHTML(r) {
+	var fp = r.fingerprint ? '<div class="small mt-1">' + esc(L('new.fp')) + ' <code>' + esc(r.fingerprint) + '</code>' + (r.cert_subject ? ' <span class="text-body-secondary">' + esc(r.cert_subject) + '</span>' : '') + '</div>' : '';
+	if (r.need_confirm) {
+		return '<span class="text-warning-emphasis"><i class="bi bi-shield-exclamation"></i> ' + esc(L('new.fp_confirm')) + '</span>' + fp +
+			(r.fingerprint ? '<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-fp-confirm="' + esc(r.fingerprint) + '"><i class="bi bi-check2"></i> ' + esc(L('new.fp_accept')) + '</button>' : '');
+	}
+	var n = (r.services || []).length, extra = '';
+	if (r.summary || r.version) { extra += '<div class="small text-body-secondary mt-1">' + esc([r.version ? L('new.version', { v: r.version }) : '', r.cluster ? L('new.cluster', { c: r.cluster }) : '', tx(r.summary || '')].filter(Boolean).join(' · ')) + '</div>'; }
+	if (r.warning) { extra += '<div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle"></i> ' + esc(tx(r.warning)) + '</div>'; }
+	if (r.ok && !r.error) { return '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + esc(L('new.test_ok', { n: n, ms: r.ms })) + '</span>' + extra + fp; }
+	if (r.ok) { return '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('new.test_partial', { n: n, e: tx(r.error) })) + '</span>' + extra + fp; }
+	return '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> ' + esc(r.error ? tx(r.error) : L('new.test_fail')) + '</span>' + fp;
+}
+// setHTML setzt Inhalt nur bei Aenderung (die 15-s-Aktualisierung zerstoert sonst Fokus, Auswahl und Zustand).
+function setHTML(el, html) {
+	if (!el || el._m64html === html) { return false; }
+	el._m64html = html;
+	el.innerHTML = html;
+	return true;
+}
+
 // ---------- Host ----------
 function pageHost() {
-	var uid = root.dataset.host, H = D.host, sparks = {}, charts = [], HV = { range: store('range') || '24h', off: 0, zoom: null };
-	var detailFor = null;
-	function svcName(s) { return s.name; }
+	var uid = root.dataset.host, H = D.host, sparks = {}, charts = [], HV = { range: store('range') || '24h', off: 0, zoom: null, gen: 0 };
+	var detailFor = null, newSel = {}, ignOpen = false;
+	function svcName(s) { return tx(s.name); }
 	function accState(a) {
 		if (!a.enabled) { return '<i class="bi bi-dash-circle" title="' + esc(L('host.acc_off')) + '"></i>'; }
 		if (!a.known) { return '<i class="bi bi-hourglass-split text-body-secondary" title="' + esc(L('host.acc_wait')) + '"></i>'; }
-		return a.ok ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-x-circle-fill"></i>';
+		return a.ok ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-x-circle-fill" title="' + esc(tx(a.error || '')) + '"></i>';
 	}
 	function renderHead() {
 		var h = H.host, st = H.view === 'unreachable' ? 'unknown' : H.state;
 		var badge = H.view === 'maintenance' ? '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>' : H.view === 'unreachable' ? stBadge('unknown', L('state.unreachable')) : H.checked ? stBadge(st) : '<span class="st-badge unknown">' + esc(L('ov.waiting')) + '</span>';
 		if (h.paused) { badge += ' <span class="st-badge unknown"><i class="bi bi-pause-circle"></i> ' + esc(L('ov.paused')) + '</span>'; }
 		var kl = ((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '';
-		$('#m64-host-head').innerHTML = '<div class="d-flex align-items-center gap-2"><i class="bi ' + esc(H.icon) + ' fs-4 text-body-secondary"></i><h1 class="h3 mb-0">' + esc(h.name) + '</h1>' + badge + '</div>' +
+		setHTML($('#m64-host-head'), '<div class="d-flex align-items-center gap-2"><i class="bi ' + esc(H.icon) + ' fs-4 text-body-secondary"></i><h1 class="h3 mb-0">' + esc(h.name) + '</h1>' + badge + '</div>' +
 			'<div class="text-body-secondary small mt-1">' + esc(kl) + ' · ' + esc(h.address) + (h.group ? ' · ' + esc(L('host.group')) + ' ' + esc(h.group) : '') + ' ' + (h.tags || []).map(tag).join('') +
 			(H.checked ? ' · ' + esc(L('host.checked', { t: ago(H.checked) })) : '') + '</div>' +
 			'<div class="d-flex flex-wrap gap-2 mt-2">' + H.accesses.map(function (a) { return '<span class="access-chip access-row">' + accState(a) + esc(accLabel(a.type)) + '</span>'; }).join('') +
-			'<a href="#" class="small align-self-center" data-act="access-add"><i class="bi bi-plus"></i> ' + esc(L('host.access_add')) + '</a></div>';
+			'<a href="#" class="small align-self-center" data-act="access-add"><i class="bi bi-plus"></i> ' + esc(L('host.access_add')) + '</a></div>');
 		var pl = $('[data-pause-label]');
 		if (pl) { pl.textContent = h.paused ? L('host.resume') : L('host.pause'); }
 		var al = '';
 		if (H.maint) { al += '<div class="alert alert-warning py-2 small"><i class="bi bi-cone-striped"></i> ' + esc(L('host.in_maint', { r: H.maint.reason || '–', t: H.maint.end ? fmtTime(H.maint.end) : L('mt.until_ended') })) + '</div>'; }
-		if (H.view === 'unreachable') { al += '<div class="alert alert-secondary d-flex align-items-center gap-2"><i class="bi bi-plug fs-5"></i><div><strong>' + esc(L('state.unreachable')) + '.</strong> ' + esc(H.unreach || '') + ' ' + esc(L('host.unreach_hint')) + '</div></div>'; }
-		if (!H.running) { al += ''; }
-		$('#m64-host-alerts').innerHTML = al;
+		if (H.view === 'unreachable') { al += '<div class="alert alert-secondary d-flex align-items-center gap-2"><i class="bi bi-plug fs-5"></i><div><strong>' + esc(L('state.unreachable')) + '.</strong> ' + esc(tx(H.unreach || '')) + ' ' + esc(L('host.unreach_hint')) + '</div></div>'; }
+		setHTML($('#m64-host-alerts'), al);
 	}
+	// Neue Dienste: Haekchen merken (newSel), damit die Aktualisierung die Auswahl nicht zuruecksetzt.
 	function renderNew() {
 		var n = H.new || [], html = '';
 		if (n.length) {
 			html = '<div class="card mb-3 new-svc"><div class="card-body py-2"><div class="d-flex flex-wrap align-items-center gap-2 mb-2"><i class="bi bi-stars text-primary"></i><strong>' + esc(L('host.new_n', { n: n.length })) + '</strong><span class="small text-body-secondary">' + esc(L('host.new_hint')) + '</span>' +
 				'<div class="ms-auto d-flex gap-2"><button class="btn btn-sm btn-primary" type="button" data-new="1"><i class="bi bi-check2"></i> ' + esc(L('host.adopt')) + '</button><button class="btn btn-sm btn-outline-secondary" type="button" data-new="-1"><i class="bi bi-eye-slash"></i> ' + esc(L('host.ignore')) + '</button></div></div>' +
-				'<div class="row g-1">' + n.map(function (s, i) { return '<div class="col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64n' + i + '" value="' + esc(s.key) + '" checked><label class="form-check-label small" for="m64n' + i + '">' + esc(s.name || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></label></div></div>'; }).join('') + '</div></div></div>';
+				'<div class="row g-1">' + n.map(function (s, i) { return '<div class="col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64n' + i + '" data-newsel="' + esc(s.key) + '"' + (newSel[s.key] === false ? '' : ' checked') + '><label class="form-check-label small" for="m64n' + i + '">' + esc(tx(s.name) || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></label></div></div>'; }).join('') + '</div></div></div>';
 		}
 		var gone = H.services.filter(function (s) { return s.vanished; });
 		if (gone.length) {
 			html += '<div class="alert alert-warning py-2 small d-flex flex-wrap align-items-center gap-2"><i class="bi bi-question-diamond"></i> ' + esc(L('host.vanished_n', { n: gone.length })) + ' <span class="text-body-secondary">' + esc(gone.map(svcName).join(', ')) + '</span>' +
 				'<button class="btn btn-sm btn-outline-danger ms-auto" type="button" data-remove-gone="1"><i class="bi bi-trash"></i> ' + esc(L('host.remove_all')) + '</button></div>';
 		}
-		$('#m64-new').innerHTML = html;
+		setHTML($('#m64-new'), html);
 	}
+	function isFree(lv) { return !!(lv && lv.eff && lv.eff.mode === 'free'); }
 	function valueCell(s) {
 		var mt = s.primary >= 0 ? s.metrics[s.primary] : (s.metrics && s.metrics.length && !s.text ? s.metrics[0] : null);
 		var st = H.view === 'unreachable' ? 'unknown' : s.state, html = '';
@@ -434,25 +549,28 @@ function pageHost() {
 			if (mt.unit === '%') { html += '<span class="bar"><span class="' + (st === 'ok' ? '' : esc(st)) + '" style="width:' + Math.max(0, Math.min(100, mt.value)) + '%"></span></span>'; }
 			var p = mt.status || {};
 			if ((p.pending === 'warn' || p.pending === 'crit') && toDate(p.pending_since)) {
-				html += '<div class="small text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ' + esc(pendText(p, mt.unit)) + '</div>';
+				html += '<div class="small text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ' + esc(pendText(p, mt.unit, s.primary >= 0 && isFree(s.levels))) + '</div>';
 			}
-			if (s.text) { html += '<div class="small text-body-secondary">' + esc(s.text) + '</div>'; }
+			if (s.text) { html += '<div class="small text-body-secondary">' + esc(tx(s.text)) + '</div>'; }
 		} else {
-			html = '<span class="small">' + esc(s.text || '') + '</span>';
+			html = '<span class="small">' + esc(tx(s.text || '')) + '</span>';
 		}
-		if (s.cause && st !== 'ok') { html += '<div class="small text-danger-emphasis">' + esc(s.cause) + '</div>'; }
+		if (s.cause && st !== 'ok') { html += '<div class="small text-danger-emphasis">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="small text-warning-emphasis"><i class="bi bi-question-diamond"></i> ' + esc(L('host.vanished')) + '</div>'; }
 		return html;
 	}
-	function pendText(p, unit) {
-		var s = toDate(p.pending_since), a = toDate(p.pending_at);
+	// pendText: "seit N Min. ueber X" – im Modus "GB frei" ist die Schwelle in GB frei.
+	function pendText(p, unit, free) {
+		var s = toDate(p.pending_since), a = toDate(p.pending_at), v = lim(p.pending_limit);
 		var mins = Math.max(0, Math.round((Date.now() - s.getTime()) / 60000)), need = a ? Math.round((a.getTime() - s.getTime()) / 60000) : 0;
-		return L('host.pending', { m: mins, v: fmtVal(lim(p.pending_limit), unit), s: stLabel(p.pending), n: need });
+		var a2 = { m: mins, v: free ? fmtNum(v) + ' ' + L('unit.gb_free') : fmtVal(v, unit), s: stLabel(p.pending), n: need };
+		return free ? L('host.pending_free', a2) : L('host.pending', a2);
 	}
 	function thrCell(s) {
 		if (!s.levels) { return '<span class="text-body-tertiary">–</span>'; }
 		var src = srcLabel(s.levels), e = s.levels.eff;
-		return thrVals(e, s.metrics[s.primary].unit) + '<div class="src' + (src.own ? ' src-own' : '') + '">' + esc(src.t) + (e['for'] ? ' · ' + esc(durLabel(e['for'])) : '') + (e.report === 'show' ? ' · ' + esc(L('rl.show')) : '') + '</div>';
+		return thrVals(e, s.metrics[s.primary].unit) + '<div class="src' + (src.own ? ' src-own' : '') + '">' + esc(src.t) + (e['for'] ? ' · ' + esc(durLabel(e['for'])) : '') + (e.report === 'show' ? ' · ' + esc(L('rl.show')) : '') +
+			((s.rules || []).length > 1 ? ' · ' + esc(L('host.more_rules', { n: s.rules.length - 1 })) : '') + '</div>';
 	}
 	function renderServices() {
 		var cats = D.cat_order || [], html = '';
@@ -465,13 +583,13 @@ function pageHost() {
 			rows.forEach(function (s) {
 				var st = H.view === 'unreachable' ? 'unknown' : s.state;
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
-				html += '<tr data-svc="' + esc(s.key) + '"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(s.name) + (s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
+				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) + (s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
 					'<td class="d-none d-lg-table-cell spark-cell">' + (sparks[s.key] ? spark(sparks[s.key], st === 'ok' ? '' : 's-' + st) : '') + '</td>' +
-					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary">' + esc(s.via || '') + '</td></tr>';
+					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary">' + esc(tx(s.via || '')) + '</td></tr>';
 			});
 		});
 		if (!list.length) { html = '<tr><td colspan="6" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
-		$('#m64-svcs').innerHTML = html;
+		setHTML($('#m64-svcs'), html);
 	}
 	function accSummary(a) {
 		var c = a.config || {}, p = [];
@@ -479,6 +597,8 @@ function pageHost() {
 		if (c.port) { p.push(L('acc.port') + ' ' + c.port); }
 		if (c.url) { p.push(c.url); }
 		if (c.token_id) { p.push(c.token_id); }
+		if (c.node) { p.push(L('new.node_short', { n: c.node })); }
+		if (c.pin) { p.push(L('acc.pinned')); }
 		if (c.smart) { p.push('SMART'); }
 		if (a.secret_set) { p.push(L('acc.secret_set')); }
 		return p.join(' · ');
@@ -487,26 +607,29 @@ function pageHost() {
 		var html = H.accesses.map(function (a) {
 			return '<div class="list-group-item d-flex flex-wrap align-items-center gap-2 access-row" data-acc="' + esc(a.uid) + '">' + accState(a) + '<div class="me-auto min-w-0"><div class="fw-semibold">' + esc(accLabel(a.type)) + (a.enabled ? '' : ' <span class="badge text-bg-secondary">' + esc(L('host.acc_off')) + '</span>') + '</div>' +
 				'<div class="small text-body-secondary text-truncate">' + esc(accSummary(a)) + (a.hostkey ? ' · ' + esc(L('acc.hostkey')) + ' <code>' + esc(a.hostkey) + '</code>' : '') + '</div>' +
-				(a.error ? '<div class="small text-danger-emphasis">' + esc(a.error) + '</div>' : '') + '</div>' +
+				(a.error ? '<div class="small text-danger-emphasis">' + esc(tx(a.error)) + '</div>' : '') + '</div>' +
 				'<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" data-acc-act="test"><i class="bi bi-plug"></i> ' + esc(L('acc.test')) + '</button>' +
 				'<button class="btn btn-outline-secondary" type="button" data-acc-act="edit" title="' + esc(L('acc.edit')) + '" aria-label="' + esc(L('acc.edit')) + '"><i class="bi bi-pencil"></i></button>' +
 				(a.hostkey ? '<button class="btn btn-outline-secondary" type="button" data-acc-act="hostkey" title="' + esc(L('acc.hostkey_reset')) + '" aria-label="' + esc(L('acc.hostkey_reset')) + '"><i class="bi bi-key"></i></button>' : '') +
 				'<button class="btn btn-outline-secondary" type="button" data-acc-act="delete" title="' + esc(L('acc.delete')) + '" aria-label="' + esc(L('acc.delete')) + '"><i class="bi bi-trash"></i></button></div></div>';
 		}).join('');
-		$('#m64-accesses').innerHTML = html || '<div class="list-group-item small text-body-secondary">' + esc(L('host.no_access')) + '</div>';
+		setHTML($('#m64-accesses'), html || '<div class="list-group-item small text-body-secondary">' + esc(L('host.no_access')) + '</div>');
 		var ig = H.ignored || [];
-		$('#m64-ignored').innerHTML = ig.length ? '<details class="mb-3"><summary class="small text-body-secondary">' + esc(L('host.ignored_n', { n: ig.length })) + '</summary><div class="list-group mt-2">' +
-			ig.map(function (s) { return '<div class="list-group-item d-flex align-items-center gap-2 small"><span class="me-auto">' + esc(s.name || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></span><button class="btn btn-sm btn-outline-secondary" type="button" data-ign="' + esc(s.key) + '">' + esc(L('host.adopt')) + '</button></div>'; }).join('') + '</div></details>' : '';
+		setHTML($('#m64-ignored'), ig.length ? '<details class="mb-3" data-ign-box' + (ignOpen ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('host.ignored_n', { n: ig.length })) + '</summary><div class="list-group mt-2">' +
+			ig.map(function (s) { return '<div class="list-group-item d-flex align-items-center gap-2 small"><span class="me-auto">' + esc(tx(s.name) || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></span><button class="btn btn-sm btn-outline-secondary" type="button" data-ign="' + esc(s.key) + '">' + esc(L('host.adopt')) + '</button></div>'; }).join('') + '</div></details>' : '');
 	}
+	root.addEventListener('toggle', function (ev) { if (ev.target.matches && ev.target.matches('[data-ign-box]')) { ignOpen = ev.target.open; } }, true);
+	root.addEventListener('change', function (ev) { var k = ev.target.dataset && ev.target.dataset.newsel; if (k !== undefined) { newSel[k] = ev.target.checked; } });
 	function renderAll() { renderHead(); renderNew(); renderServices(); renderAccesses(); }
 	function reload() { return api('GET', '/api/monitor64/hosts/' + encodeURIComponent(uid)).then(function (d) { H = d; renderAll(); return d; }); }
-	function loadSparks() { api('GET', '/api/monitor64/sparks?host=' + encodeURIComponent(uid)).then(function (s) { sparks = s || {}; renderServices(); }).catch(function () {}); }
+	function loadSparks() { api('GET', '/api/monitor64/sparks?host=' + encodeURIComponent(uid)).then(function (s) { sparks = s || {}; renderServices(); }).catch(failQuiet); }
 
 	// Diagramme
 	function chartTitle(id) { return { cpu: L('chart.cpu'), ram: L('chart.ram'), net: L('chart.net'), disk: L('chart.disk') }[id] || id; }
 	function buildCharts() {
 		charts.forEach(function (c) { c.destroy(); });
 		charts = [];
+		var gen = ++HV.gen; // aeltere Antworten werden verworfen
 		var defs = H.charts || [];
 		$('#m64-chart-bar').classList.toggle('d-none', !defs.length);
 		var box = $('#m64-charts');
@@ -526,22 +649,24 @@ function pageHost() {
 			qs += HV.zoom ? '&from=' + HV.zoom[0] + '&to=' + HV.zoom[1] : '&range=' + HV.range + '&off=' + HV.off;
 			api('GET', '/api/monitor64/series?' + qs).then(function (res) {
 				var cv = document.getElementById('m64-ch-' + c.id);
-				if (!cv) { return; }
+				if (!cv || gen !== HV.gen) { return; }
+				var old = window.Chart && window.Chart.getChart ? window.Chart.getChart(cv) : null;
+				if (old) { old.destroy(); }
 				var u = unitFmt(c.unit);
 				var ch = lineChart(cv, { from: res.from, to: res.to, max: c.max, warn: c.warn, crit: c.crit, fmt: u.fmt,
-					series: c.series.map(function (s, i) { return { label: s.label, data: toPoints(res.series[i] || {}, u.factor) }; }) });
+					series: c.series.map(function (s, i) { return { label: tx(s.label), data: toPoints(res.series[i] || {}, u.factor) }; }) });
 				if (!ch) { return; }
-				charts.push(ch);
-				dragZoom(cv, ch, function (a, b) { HV.zoom = [a, b]; buildCharts(); });
-			}).catch(function () {});
+				charts.push(destroyable(ch, dragZoom(cv, ch, function (a, b) { HV.zoom = [a, b]; buildCharts(); })));
+			}).catch(function (e) { if (gen === HV.gen) { chartFail(document.getElementById('m64-ch-' + c.id), e); } });
 		});
 	}
 	$$('[data-range]').forEach(function (b) { b.onclick = function () { HV.range = b.dataset.range; HV.off = 0; HV.zoom = null; store('range', HV.range); buildCharts(); }; });
 	$('#m64-older').onclick = function () { HV.zoom = null; HV.off++; buildCharts(); };
 	$('#m64-newer').onclick = function () { if (HV.zoom) { HV.zoom = null; } else { HV.off = Math.max(0, HV.off - 1); } buildCharts(); };
 
-	// Dienst-Details (Offcanvas): Verlauf, drei Stufen der Schwelle, Soll-Zustand, Melden, Erweitert
-	var sdChart = null;
+	// Dienst-Details (Offcanvas): Verlauf, je Messgroesse bzw. Zustandsregel die Stufen der Schwelle mit eigener
+	// Einstellung "dieser Host", Soll-Zustand, Erweitert
+	var sdChart = null, sdGen = 0;
 	function lvlBox(active, icon, title, vals) {
 		return '<div class="lvl' + (active ? ' active' : '') + '"><div class="lvl-head"><span><i class="bi ' + icon + '"></i> ' + title + '</span><span class="lvl-vals">' + vals + '</span></div></div>';
 	}
@@ -560,52 +685,132 @@ function pageHost() {
 		if (r.report === 'show') { parts.push('<span class="badge text-bg-secondary">' + esc(L('rl.show')) + '</span>'); }
 		return parts.join(' · ') || '<span class="text-body-tertiary">' + esc(L('sd.none')) + '</span>';
 	}
+	function stdVals(r, kind) { // Standard einer Art als Anzeige-Werte (Felder der Effective-Form)
+		var e = { warn: 'off', crit: 'off', warn_free: 'off', crit_free: 'off', dir: 'up', mode: 'used', kind: kind };
+		if (r) { Object.keys(r).forEach(function (k) { e[k] = r[k]; }); }
+		return e;
+	}
+	function metricByName(s, n) { var r = null; (s.metrics || []).forEach(function (m) { if (n && m.name === n) { r = m; } }); return r; }
+	function unitOf(lv, s) {
+		var meta = kindMeta(lv.kind) || {}, mt = metricByName(s, lv.metric);
+		if (meta.unit === 'min') { return L('unit.min'); }
+		if (meta.unit === 'days') { return L('unit.days'); }
+		return (mt && mt.unit) || meta.unit || '';
+	}
+	function durOpts(cur, inherit) {
+		var list = [0, 300, 900, 3600, 86400];
+		if (cur !== undefined && list.indexOf(cur) < 0) { list.push(cur); }
+		return '<option value="">' + esc(L('sd.inherits', { v: durLabel(inherit) })) + '</option>' + list.map(function (x) { return '<option value="' + x + '"' + (cur === x ? ' selected' : '') + '>' + esc(durLabel(x)) + '</option>'; }).join('');
+	}
+	// ruleBlock: eine Regel-Art des Dienstes mit den drei Stufen und der eigenen Einstellung am Host.
+	function ruleBlock(s, lv, i) {
+		var meta = kindMeta(lv.kind) || {}, e = lv.eff, unit = unitOf(lv, s), mt = metricByName(s, lv.metric);
+		var own = !!(lv.service || lv.host_kind), grp = !own && !!lv.override, cur = lv.service || lv.host_kind || {}, scopeKind = !lv.service && !!lv.host_kind;
+		var id = 'm64-sd' + i + '-', free = cur.mode === 'free' || (!cur.mode && e.mode === 'free');
+		var sv = lv.state ? esc(sevLabel(lv.std && lv.std.severity)) : thrVals(stdVals(lv.std, lv.kind), unit);
+		sv += lv.std && lv.std['for'] ? ' · ' + esc(durLabel(lv.std['for'])) : '';
+		var html = '<div class="rule-block mb-3" data-rk="' + esc(lv.kind) + '"><div class="d-flex align-items-baseline gap-2 mb-1"><span class="fw-semibold me-auto">' + esc(kindLabel(lv.kind)) + '</span>' + (mt ? '<span class="small">' + esc(fmtVal(mt.value, mt.unit)) + '</span>' : '') + '</div>' +
+			lvlBox(!grp && !own, 'bi-globe2', esc(L('sd.lvl_std')), sv) +
+			lvlBox(grp, 'bi-tags', lv.override ? esc(targetLabel(lv.override.target_type, lv.override.target)) + ' <span class="text-body-tertiary small">' + esc(L('sd.ovr_no', { n: lv.override.index + 1 })) + '</span>' : esc(L('sd.lvl_ovr')), lv.override ? ruleVals(lv.override.rule, e, unit) : '<span class="text-body-tertiary">' + esc(L('sd.none')) + '</span>');
+		html += '<div class="lvl' + (own ? ' active' : '') + '"><div class="lvl-head mb-2"><span><i class="bi bi-hdd"></i> ' + esc(L('sd.lvl_host')) + '</span>' +
+			(own ? '<button class="btn btn-link btn-sm p-0" type="button" data-sd-reset="' + esc(lv.kind) + '"><i class="bi bi-arrow-counterclockwise"></i> ' + esc(L('sd.reset')) + '</button>' : '<span class="text-body-tertiary small">' + esc(L('sd.not_set')) + '</span>') + '</div>';
+		if (lv.state) {
+			html += '<div class="row g-2"><div class="col-6"><label class="form-label small mb-0" for="' + id + 'sev">' + esc(L('sd.on_fault')) + '</label><select class="form-select form-select-sm rb-sev" id="' + id + 'sev"><option value="">' + esc(L('sd.inherits', { v: sevLabel(e.severity) })) + '</option>' +
+				['crit', 'warn', 'off'].map(function (x) { return '<option value="' + x + '"' + (cur.severity === x ? ' selected' : '') + '>' + esc(sevLabel(x)) + '</option>'; }).join('') + '</select></div>' +
+				'<div class="col-6"><label class="form-label small mb-0" for="' + id + 'f">' + esc(L('rl.for')) + '</label><select class="form-select form-select-sm rb-for" id="' + id + 'f">' + durOpts(cur['for'], e['for']) + '</select></div></div>';
+		} else {
+			html += (meta.store ? '<div class="btn-group btn-group-sm mb-2" role="group"><input type="radio" class="btn-check rb-mode" name="' + id + 'mode" id="' + id + 'mp" value="used"' + (free ? '' : ' checked') + '><label class="btn btn-outline-secondary" for="' + id + 'mp">' + esc(L('sd.mode_used')) + '</label>' +
+				'<input type="radio" class="btn-check rb-mode" name="' + id + 'mode" id="' + id + 'mf" value="free"' + (free ? ' checked' : '') + '><label class="btn btn-outline-secondary" for="' + id + 'mf">' + esc(L('sd.mode_free')) + '</label></div>' : '') +
+				'<div class="row g-2"><div class="col-4"><label class="form-label small mb-0 rb-lw" for="' + id + 'w">' + esc(L('rl.warn')) + '</label><div class="input-group input-group-sm"><input class="form-control rb-w" id="' + id + 'w" inputmode="decimal"><span class="input-group-text rb-u"></span></div></div>' +
+				'<div class="col-4"><label class="form-label small mb-0 rb-lc" for="' + id + 'c">' + esc(L('rl.crit')) + '</label><div class="input-group input-group-sm"><input class="form-control rb-c" id="' + id + 'c" inputmode="decimal"><span class="input-group-text rb-u"></span></div></div>' +
+				'<div class="col-4"><label class="form-label small mb-0" for="' + id + 'f">' + esc(L('rl.for')) + '</label><select class="form-select form-select-sm rb-for" id="' + id + 'f">' + durOpts(cur['for'], e['for']) + '</select></div>' +
+				'<div class="col-4"><label class="form-label small mb-0" for="' + id + 'h">' + esc(L('sd.hyst')) + '</label><div class="input-group input-group-sm"><input class="form-control rb-h" id="' + id + 'h" inputmode="decimal" placeholder="' + esc(L('sd.inherits', { v: fmtNum(e.hyst) })) + '" value="' + esc(numIn(cur.hyst)) + '"><span class="input-group-text rb-u"></span></div></div>' +
+				'<div class="col-8 small text-body-secondary align-self-end rb-hint"></div></div>';
+		}
+		html += '<div class="d-flex flex-wrap align-items-center gap-2 mt-2 small"><label class="text-body-secondary" for="' + id + 'r">' + esc(L('sd.report')) + '</label><select class="form-select form-select-sm w-auto rb-r" id="' + id + 'r"><option value="">' + esc(L('sd.inherits', { v: e.report === 'show' ? L('rl.show') : L('rl.notify') })) + '</option><option value="notify"' + (cur.report === 'notify' ? ' selected' : '') + '>' + esc(L('rl.notify')) + '</option><option value="show"' + (cur.report === 'show' ? ' selected' : '') + '>' + esc(L('rl.show')) + '</option></select>' +
+			'<span class="text-body-tertiary">' + esc(L('sd.show_hint')) + '</span></div>' +
+			'<div class="mt-2 small"><span class="text-body-secondary me-2">' + esc(L('sd.applies')) + '</span>' +
+			'<div class="form-check form-check-inline"><input class="form-check-input rb-scope" type="radio" name="' + id + 'scope" id="' + id + 's1" value="service"' + (scopeKind ? '' : ' checked') + '><label class="form-check-label" for="' + id + 's1">' + esc(L('sd.scope_service')) + '</label></div>' +
+			'<div class="form-check form-check-inline"><input class="form-check-input rb-scope" type="radio" name="' + id + 'scope" id="' + id + 's2" value="kind"' + (scopeKind ? ' checked' : '') + '><label class="form-check-label" for="' + id + 's2">' + esc(L('sd.scope_kind', { c: kindLabel(lv.kind) })) + '</label></div></div></div></div>';
+		return html;
+	}
+	// Block: Eingaben vorbelegen (exakte Werte), Modus umschalten, Stand merken (nur geaenderte Arten werden gesendet).
+	function initBlock(el, lv, s) {
+		var meta = kindMeta(lv.kind) || {}, f = meta.factor || 1, e = lv.eff, unit = unitOf(lv, s), mt = metricByName(s, lv.metric), cur = lv.service || lv.host_kind || {};
+		var b = { el: el, lv: lv, f: f, store: !!meta.store, unit: unit };
+		function q(c) { return $('.' + c, el); }
+		b.mode = function () { var r = $('.rb-mode:checked', el); return r ? r.value : (e.mode === 'free' ? 'free' : 'used'); };
+		function capGB() { return mt && mt.max ? mt.max / 1e9 : 0; }
+		function setMode(changed) {
+			var free = b.mode() === 'free';
+			$$('.rb-u', el).forEach(function (x) { x.textContent = free ? L('unit.gb_free') : (unit || '–'); });
+			q('rb-lw').textContent = free ? L('sd.warn_below') : L('rl.warn');
+			q('rb-lc').textContent = free ? L('sd.crit_below') : L('rl.crit');
+			var iw = free ? lim(e.warn_free) : lim(e.warn), ic = free ? lim(e.crit_free) : lim(e.crit);
+			if (!free && iw !== null) { iw /= f; }
+			if (!free && ic !== null) { ic /= f; }
+			var same = (e.mode === 'free') === free;
+			q('rb-w').placeholder = same && iw !== null ? L('sd.inherits', { v: fmtNum(iw) }) : (free ? L('sd.example', { v: fmtNum(Math.round(capGB() * 0.1)) }) : '');
+			q('rb-c').placeholder = same && ic !== null ? L('sd.inherits', { v: fmtNum(ic) }) : (free ? L('sd.example', { v: fmtNum(Math.round(capGB() * 0.05)) }) : '');
+			if (!changed) {
+				var cw = free ? cur.warn_free : cur.warn, cc = free ? cur.crit_free : cur.crit;
+				q('rb-w').value = cw === undefined || lim(cw) === null ? '' : numIn(free ? cw : cw / f);
+				q('rb-c').value = cc === undefined || lim(cc) === null ? '' : numIn(free ? cc : cc / f);
+			} else { q('rb-w').value = ''; q('rb-c').value = ''; }
+			var hint = '';
+			if (b.store && mt) { hint = free ? L('sd.hint_free', { f: fmtNum(capGB() * (100 - mt.value) / 100), c: fmtNum(capGB()) }) : L('sd.hint_used', { v: fmtNum(mt.value) }); }
+			else if (!free && lim(e.warn) !== null) { hint = L('sd.hyst_hint', { v: fmtNum(lim(e.warn) / f), h: fmtNum(e.hyst) }); }
+			q('rb-hint').textContent = hint;
+		}
+		if (!lv.state) {
+			setMode(false);
+			$$('.rb-mode', el).forEach(function (r) { r.onchange = function () { setMode(true); }; });
+		}
+		b.snap = snapshot(el);
+		return b;
+	}
+	function snapshot(el) { return $$('input, select', el).map(function (x) { return x.type === 'radio' || x.type === 'checkbox' ? (x.checked ? '1' : '0') : x.value; }).join('|'); }
+	// ruleOf: Regel aus den Eingaben eines Blocks (null = ungueltige Zahl).
+	function ruleOf(b) {
+		var el = b.el, lv = b.lv, rule = {};
+		function v(c) { var x = $('.' + c, el); return x ? x.value : ''; }
+		if (lv.state) {
+			if (v('rb-sev')) { rule.severity = v('rb-sev'); }
+		} else {
+			var free = b.mode() === 'free', w = parseNum(v('rb-w')), c = parseNum(v('rb-c')), h = parseNum(v('rb-h'));
+			if ((w !== null && isNaN(w)) || (c !== null && isNaN(c)) || (h !== null && (isNaN(h) || h < 0))) { return null; }
+			if (b.store && (free !== (lv.eff.mode === 'free') || (lv.service || lv.host_kind || {}).mode)) { rule.mode = free ? 'free' : 'used'; }
+			if (w !== null) { rule[free ? 'warn_free' : 'warn'] = free ? w : w * b.f; }
+			if (c !== null) { rule[free ? 'crit_free' : 'crit'] = free ? c : c * b.f; }
+			if (h !== null) { rule.hyst = h; }
+		}
+		if (v('rb-for') !== '') { rule['for'] = parseInt(v('rb-for'), 10); }
+		if (v('rb-r')) { rule.report = v('rb-r'); }
+		return rule;
+	}
 	function openDetail(key) {
 		var s = null;
 		H.services.forEach(function (x) { if (x.key === key) { s = x; } });
 		if (!s) { return; }
 		detailFor = key;
 		$('#m64-sd-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
-		$('#m64-sd-title').textContent = s.name;
-		var st = H.view === 'unreachable' ? 'unknown' : s.state, lv = s.levels, mt = s.primary >= 0 ? s.metrics[s.primary] : null;
-		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(s.text || '') + '</span></div>';
-		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(s.cause) + '</div>'; }
+		$('#m64-sd-title').textContent = svcName(s);
+		var st = H.view === 'unreachable' ? 'unknown' : s.state, lv = s.levels, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
+		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(tx(s.text || '')) + '</span></div>';
+		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
 		if (mt && mt.status && (mt.status.pending === 'warn' || mt.status.pending === 'crit') && toDate(mt.status.pending_since)) {
 			var p = mt.status, ps = toDate(p.pending_since), pa = toDate(p.pending_at), need = pa ? (pa.getTime() - ps.getTime()) / 60000 : 1, done = (Date.now() - ps.getTime()) / 60000;
-			html += '<div class="pend mb-3"><div class="small mb-1"><i class="bi bi-hourglass-split"></i> ' + esc(pendText(p, mt.unit)) + '</div><div class="progress" style="height:.35rem"><div class="progress-bar bg-warning" style="width:' + Math.min(100, Math.round(done / Math.max(need, 1) * 100)) + '%"></div></div><div class="small text-body-secondary mt-1">' + esc(L('sd.pending_hint')) + '</div></div>';
+			html += '<div class="pend mb-3"><div class="small mb-1"><i class="bi bi-hourglass-split"></i> ' + esc(pendText(p, mt.unit, isFree(lv))) + '</div><div class="progress" style="height:.35rem"><div class="progress-bar bg-warning" style="width:' + Math.min(100, Math.round(done / Math.max(need, 1) * 100)) + '%"></div></div><div class="small text-body-secondary mt-1">' + esc(L('sd.pending_hint')) + '</div></div>';
 		}
 		(s.metrics || []).forEach(function (m) {
-			if (m.rule === 'fs.trend_days' && m.value < 1e5) { html += '<div class="alert alert-danger py-2 small"><i class="bi bi-graph-up-arrow"></i> ' + esc(L('sd.trend', { n: fmtNum(m.value, 1) })) + '</div>'; }
+			if ((m.rule_kind || m.rule) === 'fs.trend_days' && m.value < 1e5) { html += '<div class="alert alert-danger py-2 small"><i class="bi bi-graph-up-arrow"></i> ' + esc(L('sd.trend', { n: fmtNum(m.value, 1) })) + '</div>'; }
 		});
 		var chartMetric = mt || ((s.metrics || []).length ? s.metrics[0] : null);
 		if (chartMetric) { html += '<div class="chart-box mb-3"><canvas id="m64-sd-chart"></canvas><div class="zoom-sel"></div></div>'; }
-		var store_ = false, unit = '';
-		if (lv) {
-			var meta = kindMeta(lv.kind) || {}, e = lv.eff, f = meta.factor || 1;
-			unit = meta.unit === 'min' ? L('unit.min') : meta.unit === 'days' ? L('unit.days') : (mt ? mt.unit : meta.unit) || '';
-			store_ = !!meta.store;
-			var own = !!(lv.service || lv.host_kind), grp = !own && !!lv.override;
-			var cur = lv.service || lv.host_kind || {};
-			var scopeKind = !lv.service && !!lv.host_kind;
-			html += '<h6 class="mt-2">' + esc(L('sd.threshold')) + ' <span class="small text-body-secondary fw-normal">– ' + esc(L('sd.threshold_sub')) + '</span></h6>' +
-				lvlBox(!grp && !own, 'bi-globe2', esc(L('sd.lvl_std')), thrVals(eval1(lv.std, lv.kind), unit) + (lv.std && lv.std['for'] ? ' · ' + esc(durLabel(lv.std['for'])) : '')) +
-				lvlBox(grp, 'bi-tags', lv.override ? esc(targetLabel(lv.override.target_type, lv.override.target)) + ' <span class="text-body-tertiary small">' + esc(L('sd.ovr_no', { n: lv.override.index + 1 })) + '</span>' : esc(L('sd.lvl_ovr')), lv.override ? ruleVals(lv.override.rule, e, unit) : '<span class="text-body-tertiary">' + esc(L('sd.none')) + '</span>');
-			var free = cur.mode === 'free' || (!cur.mode && e.mode === 'free');
-			html += '<div class="lvl' + (own ? ' active' : '') + '"><div class="lvl-head mb-2"><span><i class="bi bi-hdd"></i> ' + esc(L('sd.lvl_host')) + '</span>' +
-				(own ? '<button class="btn btn-link btn-sm p-0" type="button" data-sd="reset"><i class="bi bi-arrow-counterclockwise"></i> ' + esc(L('sd.reset')) + '</button>' : '<span class="text-body-tertiary small">' + esc(L('sd.not_set')) + '</span>') + '</div>' +
-				(store_ ? '<div class="btn-group btn-group-sm mb-2" role="group"><input type="radio" class="btn-check" name="m64-sd-mode" id="m64-sd-mp" value="used"' + (free ? '' : ' checked') + '><label class="btn btn-outline-secondary" for="m64-sd-mp">' + esc(L('sd.mode_used')) + '</label>' +
-					'<input type="radio" class="btn-check" name="m64-sd-mode" id="m64-sd-mf" value="free"' + (free ? ' checked' : '') + '><label class="btn btn-outline-secondary" for="m64-sd-mf">' + esc(L('sd.mode_free')) + '</label></div>' : '') +
-				'<div class="row g-2"><div class="col-4"><label class="form-label small mb-0" for="m64-sd-w" id="m64-sd-lw">' + esc(L('rl.warn')) + '</label><div class="input-group input-group-sm"><input class="form-control" id="m64-sd-w" inputmode="decimal"><span class="input-group-text m64-sd-u"></span></div></div>' +
-				'<div class="col-4"><label class="form-label small mb-0" for="m64-sd-c" id="m64-sd-lc">' + esc(L('rl.crit')) + '</label><div class="input-group input-group-sm"><input class="form-control" id="m64-sd-c" inputmode="decimal"><span class="input-group-text m64-sd-u"></span></div></div>' +
-				'<div class="col-4"><label class="form-label small mb-0" for="m64-sd-f">' + esc(L('rl.for')) + '</label><select class="form-select form-select-sm" id="m64-sd-f"><option value="">' + esc(L('sd.inherits', { v: durLabel(e['for']) })) + '</option>' +
-				[0, 300, 900, 3600].map(function (x) { return '<option value="' + x + '"' + (cur['for'] === x ? ' selected' : '') + '>' + esc(durLabel(x)) + '</option>'; }).join('') + '</select></div></div>' +
-				'<div class="small text-body-secondary mt-1" id="m64-sd-hint"></div>' +
-				'<div class="mt-2 small"><span class="text-body-secondary me-2">' + esc(L('sd.applies')) + '</span>' +
-				'<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="m64-sd-scope" id="m64-sd-s1" value="service"' + (scopeKind ? '' : ' checked') + '><label class="form-check-label" for="m64-sd-s1">' + esc(L('sd.scope_service')) + '</label></div>' +
-				'<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="m64-sd-scope" id="m64-sd-s2" value="kind"' + (scopeKind ? ' checked' : '') + '><label class="form-check-label" for="m64-sd-s2">' + esc(L('sd.scope_kind', { c: (D.cats || {})[s.category] || s.category })) + '</label></div></div></div>';
-			html += '<div class="d-flex flex-wrap align-items-center gap-2 mt-2 small"><label class="text-body-secondary" for="m64-sd-r">' + esc(L('sd.report')) + '</label><select class="form-select form-select-sm w-auto" id="m64-sd-r"><option value="">' + esc(L('sd.inherits', { v: e.report === 'show' ? L('rl.show') : L('rl.notify') })) + '</option><option value="notify"' + (cur.report === 'notify' ? ' selected' : '') + '>' + esc(L('rl.notify')) + '</option><option value="show"' + (cur.report === 'show' ? ' selected' : '') + '>' + esc(L('rl.show')) + '</option></select>' +
-				'<span class="text-body-tertiary">' + esc(L('sd.show_hint')) + '</span></div>';
+		if (rules.length) {
+			html += '<h6 class="mt-2">' + esc(rules.length > 1 ? L('sd.thresholds') : L('sd.threshold')) + ' <span class="small text-body-secondary fw-normal">– ' + esc(L('sd.threshold_sub')) + '</span></h6>';
+			rules.forEach(function (r, i) { html += ruleBlock(s, r, i); });
 		}
 		if (s.guest) {
 			html += '<h6 class="mt-3">' + esc(L('sd.soll')) + '</h6><div class="lvl active"><div class="btn-group btn-group-sm mb-2" role="group">' +
@@ -614,17 +819,9 @@ function pageHost() {
 				'<input type="radio" class="btn-check" name="m64-sd-soll" id="m64-sd-so2" value="off"' + (s.soll === 'off' ? ' checked' : '') + '><label class="btn btn-outline-secondary" for="m64-sd-so2"><i class="bi bi-pause-fill"></i> ' + esc(L('sd.soll_off')) + '</label></div>' +
 				'<div class="small text-body-secondary"><i class="bi bi-magic"></i> ' + esc(L('sd.soll_hint')) + '</div></div>';
 		}
-		if (!lv && s.state_levels) {
-			var sl = s.state_levels, scur = (sl.service && sl.service.severity) || '';
-			html += '<div class="small text-body-secondary mb-2 mt-2"><i class="bi bi-info-circle"></i> ' + esc(L('sd.state_info')) + '</div>' +
-				'<div class="d-flex align-items-center gap-2 small"><label class="text-body-secondary" for="m64-sd-sev">' + esc(L('sd.on_fault')) + '</label><select class="form-select form-select-sm w-auto" id="m64-sd-sev"><option value="">' + esc(L('sd.inherits', { v: sevLabel(sl.eff.severity) })) + '</option>' +
-				['crit', 'warn', 'off'].map(function (x) { return '<option value="' + x + '"' + (scur === x ? ' selected' : '') + '>' + esc(sevLabel(x)) + '</option>'; }).join('') + '</select></div>';
-		}
 		html += '<details class="mt-3"><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2">' +
-			'<div class="mb-2"><label class="form-label small mb-0" for="m64-sd-name">' + esc(L('sd.display_name')) + '</label><input class="form-control form-control-sm" id="m64-sd-name" maxlength="200" value="' + esc(s.custom_name || '') + '" placeholder="' + esc(s.name) + '"></div>' +
-			(lv && lv.eff.mode !== 'free' ? '<div class="row g-2 align-items-center mb-2"><div class="col-auto small"><label for="m64-sd-h">' + esc(L('sd.hyst')) + '</label></div><div class="col-auto"><div class="input-group input-group-sm" style="width:8rem"><input class="form-control" id="m64-sd-h" inputmode="decimal" placeholder="' + esc(L('sd.inherits', { v: fmtNum(lv.eff.hyst) })) + '" value="' + (lv.service && lv.service.hyst !== undefined ? esc(fmtNum(lv.service.hyst)) : '') + '"><span class="input-group-text">' + esc(unit || '–') + '</span></div></div>' +
-				'<div class="col small text-body-secondary">' + esc(L('sd.hyst_hint', { v: fmtNum(lim(lv.eff.warn)), h: fmtNum(lv.eff.hyst) })) + '</div></div>' : '') +
-			'<div class="small text-body-secondary mt-1">' + esc(L('sd.access_info', { a: s.via || '–', i: fmtDur(H.host.interval_sec) })) + '</div><div class="small text-body-tertiary">' + esc(s.key) + '</div></div></details>';
+			'<div class="mb-2"><label class="form-label small mb-0" for="m64-sd-name">' + esc(L('sd.display_name')) + '</label><input class="form-control form-control-sm" id="m64-sd-name" maxlength="200" value="' + esc(s.custom_name || '') + '" placeholder="' + esc(svcName(s)) + '"></div>' +
+			'<div class="small text-body-secondary mt-1">' + esc(L('sd.access_info', { a: tx(s.via || '') || '–', i: fmtDur(H.host.interval_sec) })) + '</div><div class="small text-body-tertiary">' + esc(s.key) + '</div></div></details>';
 		var canAck = st !== 'ok' && s.since;
 		html += '<div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-primary btn-sm" type="button" data-sd="save">' + esc(L('save')) + '</button>' +
 			(canAck && !s.ack ? '<button class="btn btn-outline-secondary btn-sm" type="button" data-sd="ack"><i class="bi bi-check2"></i> ' + esc(L('ov.ack')) + '</button>' : '') +
@@ -633,43 +830,28 @@ function pageHost() {
 				s.kind !== 'access' ? '<button class="btn btn-outline-secondary btn-sm ms-auto" type="button" data-sd="ignore"><i class="bi bi-eye-slash"></i> ' + esc(L('sd.ignore')) + '</button>' : '') + '</div>';
 		var body = $('#m64-sd-body');
 		body.innerHTML = html;
-		if (lv) { setMode(); $$('[name=m64-sd-mode]', body).forEach(function (r) { r.onchange = function () { setMode(true); }; }); }
-		function curMode() { var r = $('[name=m64-sd-mode]:checked', body); return r ? r.value : 'used'; }
-		function setMode(changed) {
-			var e = lv.eff, meta = kindMeta(lv.kind) || {}, f = meta.factor || 1, free = curMode() === 'free', cur = lv.service || lv.host_kind || {};
-			$$('.m64-sd-u', body).forEach(function (x) { x.textContent = free ? L('unit.gb_free') : (unit || '–'); });
-			$('#m64-sd-lw').textContent = free ? L('sd.warn_below') : L('rl.warn');
-			$('#m64-sd-lc').textContent = free ? L('sd.crit_below') : L('rl.crit');
-			var iw = free ? lim(e.warn_free) : lim(e.warn), ic = free ? lim(e.crit_free) : lim(e.crit);
-			if (!free && iw !== null) { iw /= f; }
-			if (!free && ic !== null) { ic /= f; }
-			var effFree = e.mode === 'free';
-			$('#m64-sd-w').placeholder = effFree === free && iw !== null ? L('sd.inherits', { v: fmtNum(iw) }) : (free ? L('sd.example', { v: fmtNum(Math.round(capGB() * 0.1)) }) : '');
-			$('#m64-sd-c').placeholder = effFree === free && ic !== null ? L('sd.inherits', { v: fmtNum(ic) }) : (free ? L('sd.example', { v: fmtNum(Math.round(capGB() * 0.05)) }) : '');
-			var cw = free ? cur.warn_free : cur.warn, cc = free ? cur.crit_free : cur.crit;
-			if (!changed) {
-				$('#m64-sd-w').value = cw === undefined ? '' : lim(cw) === null ? '' : fmtNum(free ? cw : cw / f);
-				$('#m64-sd-c').value = cc === undefined ? '' : lim(cc) === null ? '' : fmtNum(free ? cc : cc / f);
-			} else { $('#m64-sd-w').value = ''; $('#m64-sd-c').value = ''; }
-			var hint = '';
-			if (store_ && mt) { hint = free ? L('sd.hint_free', { f: fmtNum(capGB() * (100 - mt.value) / 100), c: fmtNum(capGB()) }) : L('sd.hint_used', { v: fmtNum(mt.value) }); }
-			$('#m64-sd-hint').textContent = hint;
-		}
-		function capGB() { return mt && mt.max ? mt.max / 1e9 : 0; }
+		var blocks = $$('[data-rk]', body).map(function (el, i) { return initBlock(el, rules[i], s); });
+		var svcURL = '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/service';
+		function after(msg) { return function () { toast(msg); closeDetail(); return reload(); }; }
+		$$('[data-sd-reset]', body).forEach(function (b) {
+			b.onclick = function () {
+				var rq = { key: s.key, rules: {} };
+				rq.rules[b.dataset.sdReset] = { reset: true };
+				lock(b, function () { return api('PUT', svcURL, rq).then(after(L('sd.reset_toast'))); }).catch(fail);
+			};
+		});
 		$$('[data-sd]', body).forEach(function (b) {
 			b.onclick = function () {
 				var a = b.dataset.sd;
 				if (a === 'ack' || a === 'unack') {
-					api('POST', '/api/monitor64/problems/action', { host: uid, key: s.key, action: a, comment: '' }).then(function () { toast(a === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast')); closeDetail(); reload(); }).catch(fail);
+					lock(b, function () { return api('POST', '/api/monitor64/problems/action', { host: uid, key: s.key, action: a, comment: '' }).then(after(a === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast'))); }).catch(fail);
 				} else if (a === 'ignore') {
-					api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [s.key], state: -1 }).then(function () { toast(L('sd.ignored_toast')); closeDetail(); reload(); }).catch(fail);
+					lock(b, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [s.key], state: -1 }).then(after(L('sd.ignored_toast'))); }).catch(fail);
 				} else if (a === 'remove') {
-					confirmBox(L('sd.remove'), L('sd.remove_confirm', { n: s.name }), L('sd.remove'), function () {
-						api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/remove', { keys: [s.key] }).then(function () { toast(L('sd.removed_toast')); closeDetail(); reload(); }).catch(fail);
+					confirmBox(L('sd.remove'), L('sd.remove_confirm', { n: svcName(s) }), L('sd.remove'), function () {
+						return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/remove', { keys: [s.key] }).then(after(L('sd.removed_toast'))).catch(fail);
 					});
-				} else if (a === 'reset') {
-					api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/service', { key: s.key, reset: true }).then(function () { toast(L('sd.reset_toast')); closeDetail(); reload(); }).catch(fail);
-				} else if (a === 'save') { save(); }
+				} else if (a === 'save') { lock(b, save).catch(fail); }
 			};
 		});
 		function save() {
@@ -678,62 +860,38 @@ function pageHost() {
 			if (nm !== (s.custom_name || '')) { req.name = nm; }
 			var so = $('[name=m64-sd-soll]:checked', body);
 			if (so && so.value !== (s.soll || '')) { req.soll = so.value; }
-			var rule = null;
-			if (lv) {
-				var meta = kindMeta(lv.kind) || {}, f = meta.factor || 1, free = curMode() === 'free';
-				rule = {};
-				var w = parseNum($('#m64-sd-w').value), c = parseNum($('#m64-sd-c').value);
-				if ((w !== null && isNaN(w)) || (c !== null && isNaN(c))) { toast(L('err_number'), true); return; }
-				if (store_) {
-					var effMode = lv.eff.mode;
-					if (free !== (effMode === 'free') || (lv.service || lv.host_kind || {}).mode) { rule.mode = free ? 'free' : 'used'; }
-				}
-				if (w !== null) { rule[free ? 'warn_free' : 'warn'] = free ? w : w * f; }
-				if (c !== null) { rule[free ? 'crit_free' : 'crit'] = free ? c : c * f; }
-				var fv = $('#m64-sd-f').value;
-				if (fv !== '') { rule['for'] = parseInt(fv, 10); }
-				var rv = $('#m64-sd-r').value;
-				if (rv) { rule.report = rv; }
-				var hy = $('#m64-sd-h', body);
-				if (hy && hy.value.trim() !== '') { var hv = parseNum(hy.value); if (isNaN(hv) || hv < 0) { toast(L('err_number'), true); return; } rule.hyst = hv; }
-			} else if (s.state_levels) {
-				var sev = $('#m64-sd-sev', body).value;
-				rule = sev ? { severity: sev } : {};
-			}
-			var scopeEl = $('[name=m64-sd-scope]:checked', body), scope = scopeEl ? scopeEl.value : 'service';
-			var chain = Promise.resolve();
-			if (rule !== null) {
-				req.rule = rule;
-				req.scope = scope;
-				var hadSvc = lv ? !!lv.service : !!(s.state_levels && s.state_levels.service);
-				if (scope === 'kind' && hadSvc) { // Einstellung "nur dieser Dienst" weicht der fuer alle dieser Art
-					chain = api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/service', { key: s.key, rule: {}, scope: 'service' });
-				}
-			}
-			chain.then(function () { return api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/service', req); })
-				.then(function () { toast(L('sd.saved_toast')); closeDetail(); reload(); }).catch(fail);
+			var changes = {}, bad = false;
+			blocks.forEach(function (b) {
+				if (snapshot(b.el) === b.snap) { return; } // unveraendert: nicht senden
+				var rule = ruleOf(b), sc = $('.rb-scope:checked', b.el);
+				if (rule === null) { bad = true; return; }
+				changes[b.lv.kind] = { rule: rule, scope: sc ? sc.value : 'service' };
+			});
+			if (bad) { toast(L('err_number'), true); return Promise.resolve(); }
+			if (Object.keys(changes).length) { req.rules = changes; }
+			if (Object.keys(req).length === 1) { closeDetail(); return Promise.resolve(); }
+			return api('PUT', svcURL, req).then(after(L('sd.saved_toast')));
 		}
 		var oc = window.bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('m64-detail'));
 		oc.show();
 		if (sdChart) { sdChart.destroy(); sdChart = null; }
 		if (chartMetric) {
+			var gen = ++sdGen;
 			api('GET', '/api/monitor64/series?host=' + encodeURIComponent(uid) + '&s=' + encodeURIComponent(s.key + '|' + chartMetric.name) + '&range=24h').then(function (res) {
 				var cv = document.getElementById('m64-sd-chart');
-				if (!cv || detailFor !== key) { return; }
+				if (!cv || detailFor !== key || gen !== sdGen) { return; }
+				if (sdChart) { sdChart.destroy(); sdChart = null; }
 				var u = unitFmt(chartMetric.unit), w = null, c = null;
-				if (lv && lv.eff.mode !== 'free' && chartMetric === mt) { w = lim(lv.eff.warn); c = lim(lv.eff.crit); }
-				sdChart = lineChart(cv, { from: res.from, to: res.to, warn: w, crit: c, fmt: u.fmt, max: chartMetric.unit === '%' ? 100 : undefined, series: [{ label: s.name, data: toPoints(res.series[0] || {}, u.factor) }] });
-			}).catch(function () {});
+				if (lv && lv.eff.mode !== 'free' && chartMetric === mt) { w = lim(lv.eff.warn); c = lim(lv.eff.crit); } // Schwellen in der Einheit der Messgroesse
+				sdChart = lineChart(cv, { from: res.from, to: res.to, warn: w, crit: c, fmt: u.fmt, max: chartMetric.unit === '%' ? 100 : undefined, series: [{ label: svcName(s), data: toPoints(res.series[0] || {}, u.factor) }] });
+			}).catch(function (e) { if (gen === sdGen) { chartFail(document.getElementById('m64-sd-chart'), e); } });
 		}
-	}
-	function eval1(r) { // Standard einer Art als Anzeige-Werte
-		var e = { warn: 'off', crit: 'off', warn_free: 'off', crit_free: 'off', dir: 'up', mode: 'used', kind: arguments[1] };
-		if (r) { Object.keys(r).forEach(function (k) { e[k] = r[k]; }); }
-		return e;
 	}
 	function closeDetail() { var oc = window.bootstrap.Offcanvas.getInstance(document.getElementById('m64-detail')); if (oc) { oc.hide(); } detailFor = null; }
 	document.getElementById('m64-detail').addEventListener('hidden.bs.offcanvas', function () {
 		detailFor = null;
+		sdGen++;
+		if (sdChart) { sdChart.destroy(); sdChart = null; }
 		if (location.hash.indexOf('#svc=') === 0) { history.replaceState(null, '', location.pathname); }
 	});
 
@@ -764,16 +922,20 @@ function pageHost() {
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + (c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
 			'<div class="col-md-8" data-af="ssh"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
-			'<div class="col-12" data-af="pve pbs docker"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.10:8006"></div>' +
+			'<div class="col-12" data-af="pve pbs docker"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.10:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
 			'<div class="col-md-6" data-af="pve"><label class="form-label" for="m64-af-node">' + esc(L('new.node')) + '</label><input class="form-control" id="m64-af-node" maxlength="64" value="' + esc(c.node || '') + '"></div>' +
 			'<div class="col-12" data-af="pve pbs docker"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
-			'<div class="col-12" data-af="ssh pve pbs docker"><label class="form-label" for="m64-af-secret">' + esc(L('acc.secret')) + '</label><input class="form-control" id="m64-af-secret" type="password" autocomplete="new-password" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '') + '">' +
-			'<div class="form-text">' + esc(L('acc.secret_hint')) + '</div>' + (a && a.secret_set ? '<div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="m64-af-clear"><label class="form-check-label small" for="m64-af-clear">' + esc(L('acc.secret_clear')) + '</label></div>' : '') + '</div></div>';
+			'<div class="col-12" data-af="ssh pve pbs"><label class="form-label" for="m64-af-secret">' + esc(L('acc.secret')) + '</label><input class="form-control" id="m64-af-secret" type="password" autocomplete="new-password" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '') + '">' +
+			'<div class="form-text">' + esc(L('acc.secret_hint')) + '</div></div>' +
+			'<div class="col-12" data-af="docker"><label class="form-label" for="m64-af-dsecret">' + esc(L('acc.docker_secret')) + '</label><textarea class="form-control font-monospace small" id="m64-af-dsecret" rows="4" spellcheck="false" autocomplete="off" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '-----BEGIN …') + '"></textarea>' +
+			'<div class="form-text">' + esc(L('acc.docker_secret_hint')) + '</div></div>' +
+			(a && a.secret_set ? '<div class="col-12" data-af="ssh pve pbs docker"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-clear"><label class="form-check-label small" for="m64-af-clear">' + esc(L('acc.secret_clear')) + '</label></div></div>' : '') + '</div>';
 	}
 	function accessShow(body) {
 		var t = $('#m64-af-type', body).value;
 		$$('[data-af]', body).forEach(function (x) { x.classList.toggle('d-none', x.dataset.af.split(' ').indexOf(t) < 0); });
+		$('#m64-af-url', body).placeholder = t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.10') + ':' + (t === 'pbs' ? 8007 : 8006);
 	}
 	function accessFromForm(body) {
 		var t = $('#m64-af-type', body).value, cfg = {};
@@ -783,15 +945,48 @@ function pageHost() {
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = $('#m64-af-url', body).value.trim(); cfg.pin = $('#m64-af-pin', body).value.trim(); }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = $('#m64-af-tid', body).value.trim(); }
 		if (t === 'pve') { cfg.node = $('#m64-af-node', body).value.trim(); }
-		var out = { type: t, config: cfg, secret: $('#m64-af-secret', body).value, enabled: $('#m64-af-en', body).checked };
+		var out = { type: t, config: cfg, secret: t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value, enabled: $('#m64-af-en', body).checked };
 		var cl = $('#m64-af-clear', body);
 		if (cl && cl.checked) { out.clear_secret = true; }
 		return out;
 	}
-	function testResult(r) {
-		if (r.ok && !r.error) { return '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + esc(L('new.test_ok', { n: r.services.length, ms: r.ms })) + '</span>' + (r.fingerprint ? '<div class="small mt-1">' + esc(L('new.fp')) + ' <code>' + esc(r.fingerprint) + '</code></div>' : ''); }
-		if (r.ok) { return '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('new.test_partial', { n: r.services.length, e: r.error })) + '</span>'; }
-		return '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> ' + esc(r.error || L('new.test_fail')) + '</span>';
+	// accessDialog: Zugang anlegen (a = null) bzw. aendern, mit "Verbindung testen" und Bestaetigung des Fingerabdrucks.
+	function accessDialog(a) {
+		var au = a ? '/api/monitor64/access/' + encodeURIComponent(a.uid) : '';
+		var body = modal(a ? L('acc.edit') + ' · ' + accLabel(a.type) : L('host.access_add'), accessForm(a), [{ label: L('cancel') }, { label: L('acc.test'), click: function () {
+			var acc = accessFromForm(body), res = $('#m64-af-res', body), stored = a && !acc.secret && !acc.clear_secret;
+			if (stored && JSON.stringify(acc.config) !== JSON.stringify(cleanCfg(a.config, a.type))) { // gespeichertes Geheimnis gibt es nur zur gespeicherten Konfiguration
+				res.innerHTML = '<span class="text-warning-emphasis">' + esc(L('acc.save_first')) + '</span>';
+				return null;
+			}
+			res.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + esc(L('new.testing'));
+			var p = stored ? api('POST', au + '/test') : api('POST', '/api/monitor64/test', { address: H.host.address, access: acc });
+			return p.then(function (r) { res.innerHTML = testHTML(r); }).catch(function (e) { res.innerHTML = '<span class="text-danger">' + esc(tx(e.message)) + '</span>'; });
+		} }, { label: L('save'), cls: 'btn-primary', click: function (close) {
+			var acc = accessFromForm(body);
+			if (a) { delete acc.type; }
+			return api(a ? 'PUT' : 'POST', a ? au : '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/access', acc).then(function () { close(); toast(L('acc.saved_toast')); return reload(); });
+		} }], true);
+		body.insertAdjacentHTML('beforeend', '<div class="mt-3 small" id="m64-af-res"></div>');
+		$('#m64-af-type', body).onchange = function () { accessShow(body); $('#m64-af-res', body).innerHTML = ''; };
+		body.addEventListener('click', function (ev) {
+			var fb = ev.target.closest('[data-fp-confirm]');
+			if (!fb) { return; }
+			$('#m64-af-pin', body).value = fb.dataset.fpConfirm;
+			$('#m64-af-res', body).innerHTML = '<span class="small text-body-secondary">' + esc(L('acc.pin_set')) + '</span>';
+		});
+		accessShow(body);
+	}
+	// cleanCfg: gespeicherte Konfiguration in der Form des Formulars (Vergleich "geaendert?").
+	function cleanCfg(c, t) {
+		c = c || {};
+		var o = {};
+		if ((t === 'agent' || t === 'ssh') && c.port) { o.port = c.port; }
+		if (t === 'ssh') { o.user = c.user || ''; o.smart = !!c.smart; }
+		if (t === 'pve' || t === 'pbs' || t === 'docker') { o.url = c.url || ''; o.pin = c.pin || ''; }
+		if (t === 'pve' || t === 'pbs') { o.token_id = c.token_id || ''; }
+		if (t === 'pve') { o.node = c.node || ''; }
+		return o;
 	}
 	root.addEventListener('click', function (ev) {
 		var act = ev.target.closest('[data-act]');
@@ -800,27 +995,28 @@ function pageHost() {
 			var h = H.host;
 			switch (act.dataset.act) {
 			case 'discover':
-				act.disabled = true;
-				api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/discover').then(function (r) {
-					toast(L('host.discovered', { a: r.added, n: r['new'], v: r.vanished }));
-					return reload();
-				}).catch(fail).then(function () { act.disabled = false; });
+				lock(act, function () {
+					return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/discover').then(function (r) {
+						toast(L('host.discovered', { a: r.added, n: r['new'], v: r.vanished }));
+						return reload();
+					});
+				}).catch(fail);
 				break;
 			case 'edit':
 				modal(L('host.edit'), hostForm(h), [{ label: L('cancel') }, { label: L('save'), cls: 'btn-primary', click: function (close) {
-					hostPut(hostFromForm(h)).then(function () { close(); toast(L('host.saved_toast')); reload().then(buildCharts); }).catch(fail);
+					return hostPut(hostFromForm(h)).then(function () { close(); toast(L('host.saved_toast')); return reload().then(buildCharts); });
 				} }], true);
 				break;
 			case 'pause':
 				var b = { name: h.name, address: h.address, kind: h.kind, group: h.group, tags: h.tags || [], interval_sec: h.interval_sec, notes: h.notes || '', paused: !h.paused, agent_autoupdate: h.agent_autoupdate };
-				hostPut(b).then(function () { toast(b.paused ? L('host.paused_toast') : L('host.resumed_toast')); reload(); }).catch(fail);
+				lock(act, function () { return hostPut(b).then(function () { toast(b.paused ? L('host.paused_toast') : L('host.resumed_toast')); return reload(); }); }).catch(fail);
 				break;
 			case 'delete':
 				modal(L('host.delete'), '<p>' + esc(L('host.delete_text', { n: h.name })) + '</p><div class="form-check"><input class="form-check-input" type="radio" name="m64-del-hist" id="m64-dh1" value="keep" checked><label class="form-check-label" for="m64-dh1">' + esc(L('host.delete_keep')) + '</label></div>' +
 					'<div class="form-check"><input class="form-check-input" type="radio" name="m64-del-hist" id="m64-dh2" value="delete"><label class="form-check-label" for="m64-dh2">' + esc(L('host.delete_hist')) + '</label></div><div class="small text-body-secondary mt-2">' + esc(L('host.delete_hint')) + '</div>',
 				[{ label: L('cancel') }, { label: L('host.delete'), cls: 'btn-danger', click: function (close) {
 					var hist = $('[name=m64-del-hist]:checked').value;
-					api('DELETE', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '?history=' + hist).then(function () { close(); location.href = '/monitor64'; }).catch(fail);
+					return api('DELETE', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '?history=' + hist).then(function () { close(); location.href = '/monitor64'; });
 				} }]);
 				break;
 			case 'maint':
@@ -828,20 +1024,11 @@ function pageHost() {
 					[[30, L('mt.for', { d: fmtDur(1800) })], [60, L('mt.for', { d: fmtDur(3600) })], [120, L('mt.for', { d: fmtDur(7200) })], [240, L('mt.for', { d: fmtDur(14400) })], [0, L('mt.until_ended')]].map(function (o, i) { return '<option value="' + o[0] + '"' + (i === 1 ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
 					'</select></div><div class="col-md-6"><label class="form-label" for="m64-hm-r">' + esc(L('mt.reason')) + '</label><input class="form-control" id="m64-hm-r" maxlength="200" placeholder="' + esc(L('mt.reason_ph')) + '"></div></div><div class="small text-body-secondary mt-2">' + esc(L('mt.intro')) + '</div>',
 				[{ label: L('cancel') }, { label: L('mt.save'), cls: 'btn-primary', click: function (close) {
-					api('POST', '/api/monitor64/maintenance', { title: $('#m64-hm-r').value, hosts: [uid], mode: 'now', minutes: parseInt($('#m64-hm-d').value, 10) }).then(function () { close(); toast(L('mt.saved_toast')); reload(); }).catch(fail);
+					return api('POST', '/api/monitor64/maintenance', { title: $('#m64-hm-r').value, hosts: [uid], mode: 'now', minutes: parseInt($('#m64-hm-d').value, 10) }).then(function () { close(); toast(L('mt.saved_toast')); return reload(); });
 				} }]);
 				break;
 			case 'access-add':
-				var bodyA = modal(L('host.access_add'), accessForm(null), [{ label: L('cancel') }, { label: L('acc.test'), click: function (close, btn) {
-					var a = accessFromForm(bodyA);
-					btn.disabled = true;
-					api('POST', '/api/monitor64/test', { address: h.address, access: a }).then(function (r) { $('#m64-af-res', bodyA).innerHTML = testResult(r); }).catch(fail).then(function () { btn.disabled = false; });
-				} }, { label: L('save'), cls: 'btn-primary', click: function (close) {
-					api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/access', accessFromForm(bodyA)).then(function () { close(); toast(L('acc.saved_toast')); reload(); }).catch(fail);
-				} }], true);
-				bodyA.insertAdjacentHTML('beforeend', '<div class="mt-3 small" id="m64-af-res"></div>');
-				$('#m64-af-type', bodyA).onchange = function () { accessShow(bodyA); };
-				accessShow(bodyA);
+				accessDialog(null);
 				break;
 			}
 			return;
@@ -854,55 +1041,67 @@ function pageHost() {
 			var au = '/api/monitor64/access/' + encodeURIComponent(acc.uid);
 			switch (aa.dataset.accAct) {
 			case 'test':
-				aa.disabled = true;
-				api('POST', au + '/test').then(function (r) { modal(L('acc.test') + ' · ' + accLabel(acc.type), '<div>' + testResult(r) + '</div>', [{ label: L('close') }]); }).catch(fail).then(function () { aa.disabled = false; });
+				lock(aa, function () {
+					return api('POST', au + '/test').then(function (r) {
+						var mb = modal(L('acc.test') + ' · ' + accLabel(acc.type), '<div>' + testHTML(r) + '</div>', [{ label: L('close') }]);
+						var fb = mb && $('[data-fp-confirm]', mb);
+						if (fb) {
+							fb.onclick = function () {
+								var cfg = Object.assign({}, acc.config || {}, { pin: fb.dataset.fpConfirm });
+								lock(fb, function () { return api('PUT', au, { config: cfg }).then(function () { return api('POST', au + '/test'); }).then(function (r2) { mb.innerHTML = '<div>' + testHTML(r2) + '</div>'; return reload(); }); }).catch(fail);
+							};
+						}
+					});
+				}).catch(fail);
 				break;
 			case 'edit':
-				var bodyE = modal(L('acc.edit') + ' · ' + accLabel(acc.type), accessForm(acc), [{ label: L('cancel') }, { label: L('save'), cls: 'btn-primary', click: function (close) {
-					var a = accessFromForm(bodyE);
-					delete a.type;
-					api('PUT', au, a).then(function () { close(); toast(L('acc.saved_toast')); reload(); }).catch(fail);
-				} }], true);
-				accessShow(bodyE);
+				accessDialog(acc);
 				break;
 			case 'hostkey':
-				confirmBox(L('acc.hostkey_reset'), L('acc.hostkey_confirm'), L('acc.hostkey_reset'), function () { api('POST', au + '/hostkey-reset').then(function () { toast(L('acc.saved_toast')); reload(); }).catch(fail); });
+				confirmBox(L('acc.hostkey_reset'), L('acc.hostkey_confirm'), L('acc.hostkey_reset'), function () { return api('POST', au + '/hostkey-reset').then(function () { toast(L('acc.saved_toast')); return reload(); }).catch(fail); });
 				break;
 			case 'delete':
-				confirmBox(L('acc.delete'), L('acc.delete_confirm', { n: accLabel(acc.type) }), L('acc.delete'), function () { api('DELETE', au).then(function () { toast(L('acc.deleted_toast')); reload(); }).catch(fail); });
+				confirmBox(L('acc.delete'), L('acc.delete_confirm', { n: accLabel(acc.type) }), L('acc.delete'), function () { return api('DELETE', au).then(function () { toast(L('acc.deleted_toast')); return reload(); }).catch(fail); });
 				break;
 			}
 			return;
 		}
 		var nb = ev.target.closest('[data-new]');
 		if (nb) {
-			var keys = $$('#m64-new input[type=checkbox]:checked').map(function (x) { return x.value; });
+			var keys = $$('#m64-new input[data-newsel]:checked').map(function (x) { return x.dataset.newsel; });
 			if (!keys.length) { return; }
-			api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: keys, state: parseInt(nb.dataset['new'], 10) }).then(function (r) {
-				toast(nb.dataset['new'] === '1' ? L('host.adopted_toast', { n: r.changed }) : L('host.ignored_toast', { n: r.changed })); reload();
+			lock(nb, function () {
+				return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: keys, state: parseInt(nb.dataset['new'], 10) }).then(function (r) {
+					toast(nb.dataset['new'] === '1' ? L('host.adopted_toast', { n: r.changed }) : L('host.ignored_toast', { n: r.changed }));
+					keys.forEach(function (k) { delete newSel[k]; });
+					return reload();
+				});
 			}).catch(fail);
 			return;
 		}
 		if (ev.target.closest('[data-remove-gone]')) {
 			var gone = H.services.filter(function (s) { return s.vanished; }).map(function (s) { return s.key; });
 			confirmBox(L('host.remove_all'), L('host.remove_all_confirm', { n: gone.length }), L('host.remove_all'), function () {
-				api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/remove', { keys: gone }).then(function () { toast(L('sd.removed_toast')); reload(); }).catch(fail);
+				return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/remove', { keys: gone }).then(function () { toast(L('sd.removed_toast')); return reload(); }).catch(fail);
 			});
 			return;
 		}
 		var ig = ev.target.closest('[data-ign]');
 		if (ig) {
-			api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [ig.dataset.ign], state: 1 }).then(function () { toast(L('host.adopted_toast', { n: 1 })); reload(); }).catch(fail);
+			lock(ig, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [ig.dataset.ign], state: 1 }).then(function () { toast(L('host.adopted_toast', { n: 1 })); return reload(); }); }).catch(fail);
 			return;
 		}
 		var tr = ev.target.closest('tr[data-svc]');
 		if (tr) { history.replaceState(null, '', '#svc=' + encodeURIComponent(tr.dataset.svc)); openDetail(tr.dataset.svc); }
 	});
+	root.addEventListener('keydown', function (ev) {
+		if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('tr[data-svc]')) { ev.preventDefault(); ev.target.click(); }
+	});
 	renderAll();
 	buildCharts();
 	loadSparks();
 	if (location.hash.indexOf('#svc=') === 0) { openDetail(decodeURIComponent(location.hash.slice(5))); }
-	setInterval(function () { if (!document.hidden && !detailFor && !(modalEl && modalEl.classList.contains('show'))) { reload().catch(function () {}); } }, 15000);
+	setInterval(function () { if (!document.hidden && !detailFor && !(modalEl && modalEl.classList.contains('show'))) { reload().catch(failQuiet); } }, 15000);
 	setInterval(function () { if (!document.hidden) { loadSparks(); } }, 300000);
 }
 
@@ -911,7 +1110,7 @@ var TLI = { warn: ['bi-exclamation-triangle-fill', 'text-warning'], crit: ['bi-x
 	ok: ['bi-check-circle-fill', 'text-success'], bell: ['bi-bell', 'text-body-secondary'], held: ['bi-moon-stars', 'text-body-secondary'], ack: ['bi-check2-square', 'text-primary'], unack: ['bi-arrow-counterclockwise', 'text-body-secondary'],
 	comment: ['bi-chat-left-text', 'text-primary'], resolved: ['bi-person-check', 'text-primary'], maint: ['bi-cone-striped', 'text-body-secondary'], takeover: ['bi-diagram-3', 'text-body-secondary'] };
 function evText(e, chans) {
-	var t = e.text || '', w = whoTxt(e.actor);
+	var t = tx(e.text || ''), w = whoTxt(e.actor);
 	switch (e.kind) {
 	case 'warn': case 'crit': case 'unknown': return stLabel(e.kind) + (t ? ': ' + t : '');
 	case 'unreachable': return L('ev.unreachable') + (t ? ': ' + t : '');
@@ -921,10 +1120,12 @@ function evText(e, chans) {
 		var cs = { c: names.join(', ') };
 		return p[0] === 'ok' || p[0] === 'better' ? L('ev.bell_ok', cs) : p[0] === 'reminder' ? L('ev.bell_reminder', cs) : L('ev.bell_problem', cs);
 	case 'held': return L('ev.held');
-	case 'ack': return L('ev.ack', { w: w }) + (t ? ': „' + t + '“' : '');
+	case 'ack': return L('ev.ack', { w: w }) + (t ? ': ' + quote(t) : '');
 	case 'unack': return e.actor && e.actor.kind === 'system' ? L('ev.unack_auto') : L('ev.unack', { w: w });
-	case 'comment': return L('ev.comment', { w: w }) + ': „' + t + '“';
-	case 'resolved': return L('ev.resolved', { w: w }) + (t ? ': „' + t + '“' : '');
+	case 'comment': return L('ev.comment', { w: w }) + ': ' + quote(t);
+	case 'resolved': return L('ev.resolved', { w: w }) + (t ? ': ' + quote(t) : '');
+	case 'maint': return L('ev.maint') + (t ? ': ' + t : '');
+	case 'maint_end': return L('ev.maint_end') + (t ? ': ' + t : '');
 	}
 	return e.kind + (t ? ': ' + t : '');
 }
@@ -941,6 +1142,7 @@ function howText(p) {
 	case 'api': return L('how.api', { w: whoTxt(p.closed_by) });
 	case 'maint': return L('how.maint');
 	case 'handover': return L('how.handover');
+	case 'removed': return L('how.removed', { w: whoTxt(p.closed_by) });
 	}
 	return p.how || '';
 }
@@ -983,7 +1185,7 @@ function pageProblems() {
 			var maxSt = !open ? ' <span class="small text-body-secondary text-nowrap"><span class="st-dot st-' + esc(p.worst === 'unreachable' ? 'unknown' : p.worst) + '" style="width:.5rem;height:.5rem"></span> ' + esc(L('pb.max', { s: stLabel(p.worst) })) + '</span>' : '';
 			var how = open ? (acked ? '<span class="text-primary small"><i class="bi bi-check2-square"></i> ' + esc(L('ov.acked')) + '</span> ' + who(p.ack.by) : '<span class="text-body-secondary">' + esc(L('pb.open_state')) + '</span>') :
 				(p.how === 'maint' ? '<i class="bi bi-cone-striped"></i> ' + esc(L('pb.maint')) : who(p.closed_by));
-			var name = p.key ? p.name : L('ov.unreachable');
+			var name = p.key ? tx(p.name) : L('ov.unreachable');
 			html += '<tr data-row="' + esc(p.uid) + '" tabindex="0"><td>' + badge + '</td><td><span class="fw-semibold">' + esc(p.host) + '</span>' + (p.host_gone ? ' <span class="badge text-bg-light">' + esc(L('pb.host_gone')) + '</span>' : '') + ' · ' + esc(name) + maxSt + '</td><td class="d-none d-md-table-cell small">' + esc(fmtTime(p.opened)) + '</td><td class="d-none d-sm-table-cell small">' + esc(fmtDur(p.duration)) + '</td><td class="small">' + how + '</td><td class="d-none d-lg-table-cell small text-body-secondary">' + esc(p.channels.join(', ') || '–') + '</td></tr>';
 			if (PB.open === p.uid) { html += '<tr class="pb-detail"><td colspan="6" id="m64-pb-detail"><span class="spinner-border spinner-border-sm"></span></td></tr>'; }
 		});
@@ -1016,8 +1218,10 @@ function pageProblems() {
 					ev.stopPropagation();
 					var a = b.dataset.pa, c = ($('#m64-ack-c', box) || {}).value || '';
 					if (a === 'comment' && !c.trim()) { toast(L('pb.comment_empty'), true); return; }
-					api('POST', '/api/monitor64/problems/action', { host: p.host_uid, key: p.key, action: a, comment: c }).then(function () {
-						toast({ ack: L('pb.done_ack'), unack: L('pb.done_unack'), comment: L('pb.done_comment'), resolve: L('pb.done_resolve') }[a]); load();
+					lock(b, function () {
+						return api('POST', '/api/monitor64/problems/action', { host: p.host_uid, key: p.key, action: a, comment: c }).then(function () {
+							toast({ ack: L('pb.done_ack'), unack: L('pb.done_unack'), comment: L('pb.done_comment'), resolve: L('pb.done_resolve') }[a]); load();
+						});
 					}).catch(fail);
 				};
 			});
@@ -1043,7 +1247,14 @@ var DAYS = [1, 2, 3, 4, 5, 6, 0];
 var DAYN = [L('day.0'), L('day.1'), L('day.2'), L('day.3'), L('day.4'), L('day.5'), L('day.6')];
 function dayName(d) { return DAYN[d]; }
 function pageMaint() {
-	var M = { items: [], hosts: [], targets: { groups: [], tags: [] }, form: null };
+	var M = { items: [], hosts: [], targets: { groups: [], tags: [] }, form: null, tz: '', now: '' };
+	// Zeiten kommen und gehen als Wanduhrzeit der Node ("2006-01-02T15:04", Zeitzone M.tz), nicht des Browsers.
+	function wall(s) {
+		var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(s || '');
+		return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+	}
+	function wallStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+	function fmtWall(s) { var d = wall(s); return d ? fmtTime(d) : '–'; }
 	function hostName(u) { var n = u; M.hosts.forEach(function (h) { if (h.uid === u) { n = h.name; } }); return n; }
 	function targetsText(m) {
 		var p = (m.hosts || []).map(hostName);
@@ -1056,12 +1267,14 @@ function pageMaint() {
 			var days = (m.recur.days && m.recur.days.length && m.recur.days.length < 7) ? DAYS.filter(function (d) { return m.recur.days.indexOf(d) >= 0; }).map(dayName).join(', ') : L('mt.every_day');
 			return esc(m.recur.from + ' – ' + m.recur.to) + '<div class="text-body-secondary">' + esc(days) + '</div>';
 		}
-		var end = m.ended && (!m.end || m.ended < m.end) ? m.ended : m.end;
-		return esc(fmtTime(m.start)) + ' – ' + esc(end ? fmtTime(end) : L('mt.until_ended'));
+		var end = m.ended && (!m.end || m.ended < m.end) ? m.ended_local : m.end_local;
+		return esc(fmtWall(m.start_local)) + ' – ' + esc(end ? fmtWall(end) : L('mt.until_ended'));
 	}
 	var MST = { running: L('mt.st_running'), planned: L('mt.st_planned'), recurring: L('mt.st_recurring'), ended: L('mt.st_ended') };
 	var CLS = { running: 'text-bg-warning', planned: 'text-bg-primary', recurring: 'text-bg-info', ended: 'text-bg-secondary' };
 	function render() {
+		var tzEl = $('#m64-maint-tz');
+		if (tzEl) { tzEl.textContent = M.tz ? L('mt.tz', { z: M.tz }) : ''; }
 		$('#m64-maint-list').innerHTML = M.items.length ? M.items.map(function (m) {
 			var btns = '';
 			if (m.status === 'running' || (m.status === 'recurring')) { btns += '<button class="btn btn-sm btn-outline-secondary" type="button" data-end="' + esc(m.uid) + '">' + esc(m.status === 'recurring' ? L('mt.stop') : L('mt.end')) + '</button> '; }
@@ -1071,14 +1284,13 @@ function pageMaint() {
 				'<td class="d-none d-md-table-cell small">' + timeText(m) + '</td><td><span class="badge ' + CLS[m.status] + '">' + esc(MST[m.status] || m.status) + '</span>' + (m.status === 'recurring' && m.running ? ' <span class="badge text-bg-warning">' + esc(L('mt.st_running')) + '</span>' : '') + '</td><td class="text-end text-nowrap">' + btns + '</td></tr>';
 		}).join('') : '<tr><td colspan="5" class="text-center text-body-secondary p-4">' + esc(L('mt.none')) + '</td></tr>';
 	}
-	function load() { api('GET', '/api/monitor64/maintenance').then(function (d) { M.items = d.items || []; M.hosts = d.hosts || []; M.targets = d.targets || M.targets; render(); }).catch(fail); }
-	function isoLocal(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+	function load() { return api('GET', '/api/monitor64/maintenance').then(function (d) { M.items = d.items || []; M.hosts = d.hosts || []; M.targets = d.targets || M.targets; M.tz = d.tz || ''; M.now = d.now_local || ''; render(); }).catch(fail); }
 	function form(m) {
 		var f = M.form = { uid: m ? m.uid : '', mode: m ? (m.recur ? 'recur' : 'plan') : 'now' };
 		var sel = { hosts: (m && m.hosts) || [], groups: (m && m.groups) || [], tags: (m && m.tags) || [] };
 		var groups = [];
 		M.hosts.forEach(function (h) { if (groups.indexOf(h.group) < 0) { groups.push(h.group); } });
-		var now = new Date(), later = new Date(now.getTime() + 3600000);
+		var now = wall(M.now) || new Date(), later = new Date(now.getTime() + 3600000);
 		var html = '<div class="card mb-3 border-primary"><div class="card-body"><div class="row g-3"><div class="col-lg-6"><div class="form-label">' + esc(L('mt.systems')) + '</div><div class="maint-pick">' +
 			groups.map(function (g) {
 				return '<div class="small fw-semibold mt-1"><input class="form-check-input me-1" type="checkbox" data-mg="' + esc(g) + '"' + (sel.groups.indexOf(g) >= 0 ? ' checked' : '') + ' id="m64-mg-' + esc(g) + '" aria-label="' + esc(targetLabel('group', g)) + '"><label for="m64-mg-' + esc(g) + '">' + esc(g ? targetLabel('group', g) : L('ov.no_group')) + '</label></div>' +
@@ -1088,9 +1300,11 @@ function pageMaint() {
 			'<div class="small text-body-secondary mt-1">' + esc(L('mt.group_hint')) + '</div></div>' +
 			'<div class="col-lg-6"><div class="form-label">' + esc(L('mt.when')) + '</div><div class="btn-group btn-group-sm w-100 mb-2">' + [['now', L('mt.m_now')], ['plan', L('mt.m_plan')], ['recur', L('mt.m_recur')]].map(function (x) { return '<button class="btn btn-outline-secondary' + (f.mode === x[0] ? ' active' : '') + '" type="button" data-mode="' + x[0] + '">' + esc(x[1]) + '</button>'; }).join('') + '</div>' +
 			'<div data-mm="now"><select class="form-select form-select-sm" id="m64-mf-dur" aria-label="' + esc(L('mt.duration')) + '">' + [[30, L('mt.for', { d: fmtDur(1800) })], [60, L('mt.for', { d: fmtDur(3600) })], [120, L('mt.for', { d: fmtDur(7200) })], [240, L('mt.for', { d: fmtDur(14400) })], [0, L('mt.until_ended')]].map(function (o, i) { return '<option value="' + o[0] + '"' + (i === 1 ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></div>' +
-			'<div data-mm="plan" class="row g-2"><div class="col-6"><label class="small" for="m64-mf-from">' + esc(L('mt.from')) + '</label><input class="form-control form-control-sm" type="datetime-local" id="m64-mf-from" value="' + esc(m && m.start && !m.recur ? isoLocal(new Date(m.start)) : isoLocal(now)) + '"></div><div class="col-6"><label class="small" for="m64-mf-to">' + esc(L('mt.to')) + '</label><input class="form-control form-control-sm" type="datetime-local" id="m64-mf-to" value="' + esc(m && m.end && !m.recur ? isoLocal(new Date(m.end)) : isoLocal(later)) + '"></div></div>' +
+			'<div data-mm="plan" class="row g-2"><div class="col-6"><label class="small" for="m64-mf-from">' + esc(L('mt.from')) + '</label><input class="form-control form-control-sm" type="datetime-local" id="m64-mf-from" value="' + esc(m && m.start_local && !m.recur ? m.start_local : wallStr(now)) + '"></div><div class="col-6"><label class="small" for="m64-mf-to">' + esc(L('mt.to')) + '</label><input class="form-control form-control-sm" type="datetime-local" id="m64-mf-to" value="' + esc(m && m.end_local && !m.recur ? m.end_local : wallStr(later)) + '"></div>' +
+				(M.tz ? '<div class="col-12 small text-body-secondary"><i class="bi bi-globe2"></i> ' + esc(L('mt.tz', { z: M.tz })) + '</div>' : '') + '</div>' +
 			'<div data-mm="recur" class="row g-2"><div class="col-12 d-flex flex-wrap gap-2">' + DAYS.map(function (d) { var on = m && m.recur ? (!m.recur.days || !m.recur.days.length || m.recur.days.indexOf(d) >= 0) : d === 0; return '<div class="form-check form-check-inline me-1"><input class="form-check-input" type="checkbox" data-day="' + d + '" id="m64-md-' + d + '"' + (on ? ' checked' : '') + '><label class="form-check-label small" for="m64-md-' + d + '">' + esc(dayName(d)) + '</label></div>'; }).join('') + '</div>' +
-			'<div class="col-6"><label class="small" for="m64-mf-rf">' + esc(L('mt.from')) + '</label><input class="form-control form-control-sm" type="time" id="m64-mf-rf" value="' + esc(m && m.recur ? m.recur.from : '02:00') + '"></div><div class="col-6"><label class="small" for="m64-mf-rt">' + esc(L('mt.to')) + '</label><input class="form-control form-control-sm" type="time" id="m64-mf-rt" value="' + esc(m && m.recur ? m.recur.to : '04:00') + '"></div></div>' +
+			'<div class="col-6"><label class="small" for="m64-mf-rf">' + esc(L('mt.from')) + '</label><input class="form-control form-control-sm" type="time" id="m64-mf-rf" value="' + esc(m && m.recur ? m.recur.from : '02:00') + '"></div><div class="col-6"><label class="small" for="m64-mf-rt">' + esc(L('mt.to')) + '</label><input class="form-control form-control-sm" type="time" id="m64-mf-rt" value="' + esc(m && m.recur ? m.recur.to : '04:00') + '"></div>' +
+				(M.tz ? '<div class="col-12 small text-body-secondary"><i class="bi bi-globe2"></i> ' + esc(L('mt.tz', { z: M.tz })) + '</div>' : '') + '</div>' +
 			'<label class="form-label mt-2" for="m64-mf-title">' + esc(L('mt.reason')) + '</label><input class="form-control form-control-sm" id="m64-mf-title" maxlength="200" value="' + esc(m ? m.title : '') + '" placeholder="' + esc(L('mt.reason_ph')) + '"></div></div></div>' +
 			'<div class="card-footer d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" type="button" id="m64-mf-cancel">' + esc(L('cancel')) + '</button><button class="btn btn-primary btn-sm ms-auto" type="button" id="m64-mf-save">' + esc(m ? L('save') : L('mt.save')) + '</button></div></div>';
 		var box = $('#m64-maint-form');
@@ -1098,7 +1312,11 @@ function pageMaint() {
 		function showMode() { $$('[data-mm]', box).forEach(function (x) { x.classList.toggle('d-none', x.dataset.mm !== f.mode); }); $$('[data-mode]', box).forEach(function (b) { b.classList.toggle('active', b.dataset.mode === f.mode); }); }
 		showMode();
 		$$('[data-mode]', box).forEach(function (b) { b.onclick = function () { f.mode = b.dataset.mode; showMode(); }; });
-		$$('[data-mt]', box).forEach(function (c) { c.onclick = function () { c.classList.toggle('active'); }; });
+		$$('[data-mt]', box).forEach(function (c) {
+			c.setAttribute('aria-pressed', c.classList.contains('active') ? 'true' : 'false');
+			c.onclick = function () { c.classList.toggle('active'); c.setAttribute('aria-pressed', c.classList.contains('active') ? 'true' : 'false'); };
+			c.onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); c.click(); } };
+		});
 		$('#m64-mf-cancel').onclick = function () { box.innerHTML = ''; };
 		$('#m64-mf-save').onclick = function () {
 			var body = { title: $('#m64-mf-title').value, mode: f.mode,
@@ -1112,18 +1330,18 @@ function pageMaint() {
 				if (body.days.length === 7) { body.days = []; }
 				body.from = $('#m64-mf-rf').value; body.to = $('#m64-mf-rt').value;
 			}
-			api(f.uid ? 'PUT' : 'POST', '/api/monitor64/maintenance' + (f.uid ? '/' + encodeURIComponent(f.uid) : ''), body).then(function () { box.innerHTML = ''; toast(L('mt.saved_toast')); load(); }).catch(fail);
+			lock(this, function () { return api(f.uid ? 'PUT' : 'POST', '/api/monitor64/maintenance' + (f.uid ? '/' + encodeURIComponent(f.uid) : ''), body).then(function () { box.innerHTML = ''; toast(L('mt.saved_toast')); return load(); }); }).catch(fail);
 		};
 		box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 	$('#m64-maint-new').onclick = function () { form(null); };
 	root.addEventListener('click', function (ev) {
 		var e = ev.target.closest('[data-end]');
-		if (e) { api('POST', '/api/monitor64/maintenance/' + encodeURIComponent(e.dataset.end) + '/end').then(function () { toast(L('mt.ended_toast')); load(); }).catch(fail); return; }
+		if (e) { lock(e, function () { return api('POST', '/api/monitor64/maintenance/' + encodeURIComponent(e.dataset.end) + '/end').then(function () { toast(L('mt.ended_toast')); return load(); }); }).catch(fail); return; }
 		var ed = ev.target.closest('[data-edit]');
 		if (ed) { M.items.forEach(function (m) { if (m.uid === ed.dataset.edit) { form(m); } }); return; }
 		var d = ev.target.closest('[data-del]');
-		if (d) { confirmBox(L('mt.delete'), L('mt.delete_confirm'), L('mt.delete'), function () { api('DELETE', '/api/monitor64/maintenance/' + encodeURIComponent(d.dataset.del)).then(function () { toast(L('mt.deleted_toast')); load(); }).catch(fail); }); }
+		if (d) { confirmBox(L('mt.delete'), L('mt.delete_confirm'), L('mt.delete'), function () { return api('DELETE', '/api/monitor64/maintenance/' + encodeURIComponent(d.dataset.del)).then(function () { toast(L('mt.deleted_toast')); return load(); }).catch(fail); }); }
 	});
 	load();
 }
@@ -1148,7 +1366,8 @@ function pageRules() {
 		});
 		$$('#m64-std-form li[data-kind]').forEach(function (li) { rules[li.dataset.kind] = { severity: $('[name=severity]', li).value }; });
 		if (bad) { toast(L('err_number'), true); return; }
-		api('PUT', '/api/monitor64/rules/std', { rules: rules }).then(function (r) { toast(L('rl.std_saved', { n: (r.changed || []).length })); loadOvr(); }).catch(fail);
+		var sb = $('#m64-std-form [type=submit]');
+		lock(sb, function () { return api('PUT', '/api/monitor64/rules/std', { rules: rules }).then(function (r) { toast(L('rl.std_saved', { n: (r.changed || []).length })); loadOvr(); }); }).catch(fail);
 	};
 	function ovrVals(o) {
 		var meta = kindMeta(o.kind) || {}, r = o.rule || {}, f = meta.factor || 1;
@@ -1186,15 +1405,14 @@ function pageRules() {
 		var own = R.own;
 		$('#m64-own').innerHTML = '<div class="card"><div class="card-header fw-semibold">' + esc(L('rl.own')) + ' <span class="badge text-bg-secondary">' + own.length + '</span> <span class="small text-body-secondary fw-normal">– ' + esc(L('rl.own_sub')) + '</span></div><div class="table-responsive"><table class="table table-sm mb-0 align-middle"><tbody>' +
 			own.map(function (x) {
-				var kl = x.key ? x.name : L('rl.own_kind', { c: (D.cats || {})[catOf(x.kind)] || x.kind });
-				return '<tr class="clickable" data-goto="/monitor64/host/' + encodeURIComponent(x.host_uid) + (x.key ? '#svc=' + encodeURIComponent(x.key) : '') + '"><td class="fw-semibold">' + esc(x.host) + '</td><td>' + esc(kl) + '</td><td class="text-end small">' + esc(ruleSummary(x.rule)) + '</td><td class="text-end"><i class="bi bi-chevron-right text-body-tertiary"></i></td></tr>';
+				var kl = x.key ? tx(x.name) + ' · ' + kindLabel(x.kind) : L('rl.own_kind', { c: kindLabel(x.kind) });
+				return '<tr class="clickable" tabindex="0" data-goto="/monitor64/host/' + encodeURIComponent(x.host_uid) + (x.key ? '#svc=' + encodeURIComponent(x.key) : '') + '"><td class="fw-semibold">' + esc(x.host) + '</td><td>' + esc(kl) + '</td><td class="text-end small">' + esc(ruleSummary(x.rule, x.kind)) + '</td><td class="text-end"><i class="bi bi-chevron-right text-body-tertiary"></i></td></tr>';
 			}).join('') + (own.length ? '' : '<tr><td class="small text-body-secondary">' + esc(L('rl.own_none')) + '</td></tr>') + '</tbody></table></div></div>';
 	}
-	function catOf(kind) { var m = { fs: 'fs', zfs: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', vm: 'guests', ct: 'guests', ctr: 'docker' }; return m[kind] || 'system'; }
-	function ruleSummary(r) {
-		var p = [];
+	function ruleSummary(r, kind) {
+		var p = [], f = (kindMeta(kind) || {}).factor || 1, n = function (v) { return lim(v) === null ? '–' : fmtNum(lim(v) / f); };
 		if (r.mode === 'free') { p.push('< ' + fmtNum(lim(r.warn_free)) + ' / < ' + fmtNum(lim(r.crit_free)) + ' ' + L('unit.gb_free')); }
-		else if (r.warn !== undefined || r.crit !== undefined) { p.push((r.warn === undefined ? '…' : fmtNum(lim(r.warn))) + ' / ' + (r.crit === undefined ? '…' : fmtNum(lim(r.crit)))); }
+		else if (r.warn !== undefined || r.crit !== undefined) { p.push((r.warn === undefined ? '…' : n(r.warn)) + ' / ' + (r.crit === undefined ? '…' : n(r.crit))); }
 		if (r.severity) { p.push(sevLabel(r.severity)); }
 		if (r['for'] !== undefined) { p.push(durLabel(r['for'])); }
 		if (r.report === 'show') { p.push(L('rl.show')); }
@@ -1232,8 +1450,8 @@ function pageRules() {
 			if (first) {
 				var f = meta.factor || 1, free = u.value === 'free';
 				var w = free ? r.warn_free : r.warn, c = free ? r.crit_free : r.crit;
-				$('#m64-nf-w').value = w === undefined || lim(w) === null ? '' : fmtNum(free ? w : w / f);
-				$('#m64-nf-c').value = c === undefined || lim(c) === null ? '' : fmtNum(free ? c : c / f);
+				$('#m64-nf-w').value = w === undefined || lim(w) === null ? '' : numIn(free ? w : w / f);
+				$('#m64-nf-c').value = c === undefined || lim(c) === null ? '' : numIn(free ? c : c / f);
 			}
 		}
 		function cur() {
@@ -1271,7 +1489,7 @@ function pageRules() {
 						'<div>' + esc(L('rl.affects', { s: e.services, h: e.hosts.length })) + (e.hosts.length ? ' (' + esc(e.hosts.join(', ')) + ')' : '') + '.</div>' +
 						(meta.state ? '' : '<div>' + esc(L('rl.after')) + ' <span class="st-badge warn">' + esc(L('rl.n_warn', { n: e.after.warn })) + '</span> <span class="st-badge crit">' + esc(L('rl.n_crit', { n: e.after.crit })) + '</span> <span class="text-body-secondary small">' + esc(L('rl.before', { w: e.before.warn, c: e.before.crit })) + '</span></div>') +
 						(shadowN || e.own.length ? '<div class="small text-body-secondary mt-1">' + esc(L('rl.not_affected', { s: shadowN, o: e.own.length })) + '</div>' : '');
-				}).catch(function (err) { p.textContent = err.message; });
+				}).catch(function (err) { p.textContent = tx(err.message); });
 			}, 250);
 		}
 		units(true);
@@ -1282,20 +1500,21 @@ function pageRules() {
 		$('#m64-nf-save').onclick = function () {
 			var c = cur();
 			if (!c) { toast(L('err_number'), true); return; }
-			api(o ? 'PUT' : 'POST', '/api/monitor64/rules/overrides' + (o ? '/' + encodeURIComponent(o.uid) : ''), c).then(function () { box.innerHTML = ''; toast(L('rl.saved_toast')); loadOvr(); }).catch(fail);
+			lock(this, function () { return api(o ? 'PUT' : 'POST', '/api/monitor64/rules/overrides' + (o ? '/' + encodeURIComponent(o.uid) : ''), c).then(function () { box.innerHTML = ''; toast(L('rl.saved_toast')); loadOvr(); }); }).catch(fail);
 		};
 		box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 	root.addEventListener('click', function (ev) {
 		var mv = ev.target.closest('[data-mv]');
-		if (mv) { api('POST', '/api/monitor64/rules/overrides/' + encodeURIComponent(mv.dataset.mv) + '/move', { dir: parseInt(mv.dataset.dir, 10) }).then(function () { toast(L('rl.moved_toast')); loadOvr(); }).catch(fail); return; }
+		if (mv) { lock(mv, function () { return api('POST', '/api/monitor64/rules/overrides/' + encodeURIComponent(mv.dataset.mv) + '/move', { dir: parseInt(mv.dataset.dir, 10) }).then(function () { toast(L('rl.moved_toast')); loadOvr(); }); }).catch(fail); return; }
 		var ed = ev.target.closest('[data-ed]');
 		if (ed) { R.overrides.forEach(function (o) { if (o.uid === ed.dataset.ed) { ovrForm(o); } }); return; }
 		var rm = ev.target.closest('[data-rm]');
-		if (rm) { confirmBox(L('rl.delete'), L('rl.delete_confirm'), L('rl.delete'), function () { api('DELETE', '/api/monitor64/rules/overrides/' + encodeURIComponent(rm.dataset.rm)).then(function () { toast(L('rl.deleted_toast')); loadOvr(); }).catch(fail); }); return; }
+		if (rm) { confirmBox(L('rl.delete'), L('rl.delete_confirm'), L('rl.delete'), function () { return api('DELETE', '/api/monitor64/rules/overrides/' + encodeURIComponent(rm.dataset.rm)).then(function () { toast(L('rl.deleted_toast')); loadOvr(); }).catch(fail); }); return; }
 		var g = ev.target.closest('[data-goto]');
 		if (g) { location.href = g.dataset.goto; }
 	});
+	root.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('[data-goto]')) { ev.preventDefault(); ev.target.click(); } });
 	if (location.hash === '#overrides') { var t = document.getElementById('m64-tab-ovr'); if (t && window.bootstrap) { window.bootstrap.Tab.getOrCreateInstance(t).show(); } }
 	loadOvr();
 }
@@ -1378,7 +1597,7 @@ function pageNotify() {
 			if (cq !== null) { body.crit_in_quiet = cq; }
 			if (rc !== null) { body.remind_crit = rc; }
 			if (rw !== null) { body.remind_warn = rw; }
-			api(o ? 'PUT' : 'POST', '/api/monitor64/notify/overrides' + (o ? '/' + encodeURIComponent(o.uid) : ''), body).then(function () { box.innerHTML = ''; toast(L('rl.saved_toast')); load(); }).catch(fail);
+			lock(this, function () { return api(o ? 'PUT' : 'POST', '/api/monitor64/notify/overrides' + (o ? '/' + encodeURIComponent(o.uid) : ''), body).then(function () { box.innerHTML = ''; toast(L('rl.saved_toast')); load(); }); }).catch(fail);
 		};
 	}
 	function load() { api('GET', '/api/monitor64/notify').then(function (d) { N.config = d.config || N.config; N.channels = d.channels || []; N.overrides = d.overrides || []; N.quiet = d.quiet; N.targets = d.targets || N.targets; render(); }).catch(fail); }
@@ -1388,9 +1607,9 @@ function pageNotify() {
 			var w = $('[name=warn]', tr).checked, c = $('[name=crit]', tr).checked;
 			if (w || c) { body.channels.push({ id: tr.dataset.ch, warn: w, crit: c }); }
 		});
-		api('PUT', '/api/monitor64/notify', body).then(function () { toast(L('nf.saved_toast')); load(); }).catch(fail);
+		lock(this, function () { return api('PUT', '/api/monitor64/notify', body).then(function () { toast(L('nf.saved_toast')); load(); }); }).catch(fail);
 	};
-	$('#m64-nf-test').onclick = function () { api('POST', '/api/monitor64/notify/test').then(function (r) { toast(L('nf.test_toast', { n: r.channels })); }).catch(fail); };
+	$('#m64-nf-test').onclick = function () { lock(this, function () { return api('POST', '/api/monitor64/notify/test').then(function (r) { toast(L('nf.test_toast', { n: r.channels })); }); }).catch(fail); };
 	$('#m64-nf-add').onclick = function () { ovrForm(null); };
 	$$('#m64-pv-tabs [data-pv]').forEach(function (a) {
 		a.onclick = function (e) {
@@ -1401,11 +1620,11 @@ function pageNotify() {
 	});
 	root.addEventListener('click', function (ev) {
 		var mv = ev.target.closest('[data-mv]');
-		if (mv) { api('POST', '/api/monitor64/notify/overrides/' + encodeURIComponent(mv.dataset.mv) + '/move', { dir: parseInt(mv.dataset.dir, 10) }).then(function () { toast(L('rl.moved_toast')); load(); }).catch(fail); return; }
+		if (mv) { lock(mv, function () { return api('POST', '/api/monitor64/notify/overrides/' + encodeURIComponent(mv.dataset.mv) + '/move', { dir: parseInt(mv.dataset.dir, 10) }).then(function () { toast(L('rl.moved_toast')); load(); }); }).catch(fail); return; }
 		var ed = ev.target.closest('[data-ed]');
 		if (ed) { N.overrides.forEach(function (o) { if (o.uid === ed.dataset.ed) { ovrForm(o); } }); return; }
 		var rm = ev.target.closest('[data-rm]');
-		if (rm) { confirmBox(L('rl.delete'), L('rl.delete_confirm'), L('rl.delete'), function () { api('DELETE', '/api/monitor64/notify/overrides/' + encodeURIComponent(rm.dataset.rm)).then(function () { toast(L('rl.deleted_toast')); load(); }).catch(fail); }); }
+		if (rm) { confirmBox(L('rl.delete'), L('rl.delete_confirm'), L('rl.delete'), function () { return api('DELETE', '/api/monitor64/notify/overrides/' + encodeURIComponent(rm.dataset.rm)).then(function () { toast(L('rl.deleted_toast')); load(); }).catch(fail); }); }
 	});
 	load();
 }
@@ -1414,14 +1633,17 @@ function pageNotify() {
 function pageSettings() {
 	$('#m64-settings-form').onsubmit = function (ev) {
 		ev.preventDefault();
-		api('PUT', '/api/monitor64/settings', { interval: parseInt($('#m64-interval').value, 10), workers: parseInt($('#m64-workers').value, 10) }).then(function () { toast(L('st.saved_toast')); }).catch(fail);
+		var sb = $('#m64-settings-form [type=submit]');
+		lock(sb, function () { return api('PUT', '/api/monitor64/settings', { interval: parseInt($('#m64-interval').value, 10), workers: parseInt($('#m64-workers').value, 10) }).then(function () { toast(L('st.saved_toast')); }); }).catch(fail);
 	};
 }
 
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
-	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '',
-		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {} };
+	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
+		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {} };
+	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
+	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart'];
 	var key = D.public_key || L('new.no_key');
 	function kind() { var k = null; (D.host_kinds || []).forEach(function (x) { if (x.kind === WZ.kind) { k = x; } }); return k; }
 	function kl(k) { return ((D.host_kind_labels || {})[k] || [k, ''])[0]; }
@@ -1439,11 +1661,18 @@ function pageNew() {
 		if (t === 'ssh') { cfg.user = WZ.user; cfg.smart = WZ.smart; if (WZ.port) { cfg.port = parseInt(WZ.port, 10) || 0; } if (WZ.usePw) { out.secret = WZ.password; } }
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = WZ.url; cfg.pin = WZ.pin; }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = WZ.token_id; out.secret = WZ.token_secret; }
+		if (t === 'docker') { out.secret = WZ.docker_secret; }
 		if (t === 'pve') { cfg.node = WZ.node; }
 		return out;
 	}
 	function collect() {
 		$$('#m64-wizard [data-w]').forEach(function (el) { WZ[el.dataset.w] = el.type === 'checkbox' ? el.checked : el.value.trim(); });
+	}
+	// weitere Nodes eines Proxmox-Clusters (Vorschlag "als eigene Hosts anlegen")
+	function otherNodes() {
+		var r = WZ.test;
+		if (!r || !r.nodes || r.nodes.length < 2) { return []; }
+		return r.nodes.filter(function (n) { return !n.local && n.name !== r.node; });
 	}
 	function render() {
 		steps();
@@ -1451,23 +1680,25 @@ function pageNew() {
 		if (WZ.step === 1) {
 			html = '<p class="text-body-secondary">' + esc(L('new.intro')) + '</p><div class="row g-3">' + (D.host_kinds || []).map(function (x) {
 				var lb = (D.host_kind_labels || {})[x.kind] || [x.kind, ''];
-				return '<div class="col-6 col-md-3"><div class="card kind-tile' + (WZ.kind === x.kind ? ' sel' : '') + (x.soon ? ' disabled' : '') + '" data-kind="' + esc(x.kind) + '" role="button" tabindex="0" aria-pressed="' + (WZ.kind === x.kind) + '"><div class="card-body"><i class="bi ' + esc(x.icon) + '"></i><div class="fw-semibold mt-1">' + esc(lb[0]) + '</div><div class="small">' + esc(lb[1]) + '</div>' + (x.soon ? '<span class="badge text-bg-light mt-1">' + esc(L('new.soon')) + '</span>' : '') + '</div></div></div>';
+				return '<div class="col-6 col-md-3"><div class="card kind-tile' + (WZ.kind === x.kind ? ' sel' : '') + (x.soon ? ' disabled' : '') + '" data-kind="' + esc(x.kind) + '" role="button" tabindex="' + (x.soon ? '-1' : '0') + '" aria-disabled="' + !!x.soon + '" aria-pressed="' + (WZ.kind === x.kind) + '"><div class="card-body"><i class="bi ' + esc(x.icon) + '"></i><div class="fw-semibold mt-1">' + esc(lb[0]) + '</div><div class="small">' + esc(lb[1]) + '</div>' + (x.soon ? '<span class="badge text-bg-light mt-1">' + esc(L('new.soon')) + '</span>' : '') + '</div></div></div>';
 			}).join('') + '</div>';
 		} else if (WZ.step === 2) {
 			html = '<div class="row g-3"><div class="col-md-6">' + field('name', L('f.name'), WZ.name, ' data-w="name" maxlength="100" placeholder="nas02"') + '</div><div class="col-md-6">' + field('addr', L('f.address'), WZ.address, ' data-w="address" maxlength="253" placeholder="10.0.0.21"') + '</div>';
 			if (k.access === 'agent') {
-				var cmd = WZ.kind === 'windows' ? 'irm https://node64.de/agent/install.ps1 | iex; monitor64-agent install `\n  --key "' + key + '"' : 'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"';
+				var cmd = 'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"';
 				html += '<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(cmd) + '</div>' +
-					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(L('new.agent_safe', { p: D.port || 6465 })) + '</div>' +
-					'<div class="small text-body-secondary"><i class="bi bi-wifi-off"></i> ' + esc(L('new.agent_offline')) + ' <code>' + esc(location.origin + '/monitor64/agent/') + '</code></div></div>' +
+					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(L('new.agent_safe', { p: D.port || 6465 })) + '</div></div>' +
 					'<div class="col-12"><div class="form-label">' + esc(L('new.agent_step2')) + '</div><div class="small">' + esc(L('new.agent_fp')) + '</div></div>' +
 					'<div class="col-12"><details><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2" style="max-width:12rem">' + field('port', L('acc.port'), WZ.port, ' data-w="port" type="number" min="1" max="65535" placeholder="' + (D.port || 6465) + '"') + '</div></details></div>';
 			} else if (k.access === 'ssh') {
-				var line = 'restrict,from="' + (WZ.nodeAddr || L('new.node_ip')) + '" ' + key;
+				var line = 'restrict,from="' + (WZ.nodeAddr || L('new.node_ip')) + '" ' + key, u = WZ.user || 'monitor64';
 				html += '<div class="col-md-6">' + field('user', L('acc.user'), WZ.user, ' data-w="user" maxlength="32"') + '</div>' +
-					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.ssh_key')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc("echo '" + line + "' >> ~" + (WZ.user || 'monitor64') + '/.ssh/authorized_keys') + '</div>' +
+					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.ssh_key')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc("echo '" + line + "' >> ~" + u + '/.ssh/authorized_keys') + '</div>' +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(L('new.ssh_safe')) + '</div>' +
-					'<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="m64-w-smart" data-w="smart"' + (WZ.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-w-smart">' + esc(L('new.smart')) + ' <code>' + esc((WZ.user || 'monitor64') + ' ALL=(root) NOPASSWD: /usr/sbin/smartctl') + '</code></label></div>' +
+					// sudoers nur fuer die beiden Aufrufe des Skripts (Platten suchen, Werte lesen ohne Aufwecken)
+					'<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="m64-w-smart" data-w="smart"' + (WZ.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-w-smart">' + esc(L('new.smart')) + '</label></div>' +
+					'<div class="cmd small mt-1" id="m64-w-sudo">' + esc(u + ' ALL=(root) NOPASSWD: /usr/sbin/smartctl -V, /usr/sbin/smartctl --scan-open, /usr/sbin/smartctl -j -a -n standby /dev/*, /usr/sbin/smartctl -j -a -n standby -d * /dev/*') + '</div>' +
+					'<div class="small text-body-secondary">' + esc(L('new.smart_hint')) + '</div>' +
 					'<details class="mt-2"' + (WZ.usePw ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2"><div class="col-md-4">' + field('port', L('acc.port'), WZ.port, ' data-w="port" type="number" min="1" max="65535" placeholder="22"') + '</div>' +
 					'<div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-w-pw" data-w="usePw"' + (WZ.usePw ? ' checked' : '') + '><label class="form-check-label small" for="m64-w-pw">' + esc(L('new.pw_auth')) + '</label></div>' +
 					'<input class="form-control form-control-sm mt-1' + (WZ.usePw ? '' : ' d-none') + '" type="password" id="m64-w-pass" data-w="password" autocomplete="new-password" aria-label="' + esc(L('acc.secret')) + '" value="' + esc(WZ.password) + '"></div></div></details></div>';
@@ -1480,10 +1711,11 @@ function pageNew() {
 						'pveum user add monitor@pve\npveum aclmod / -user monitor@pve -role PVEAuditor\npveum user token add monitor@pve node64 --privsep 0' :
 						'proxmox-backup-manager user create monitor@pbs\nproxmox-backup-manager user generate-token monitor@pbs node64\nproxmox-backup-manager acl update / Audit --auth-id \'monitor@pbs!node64\'') + '</div>' +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.api_hint')) + '</div></div>' +
-					'<div class="col-12"><details><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
+					'<div class="col-12"><details' + (WZ.pin || WZ.node ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (k.access === 'docker') {
 				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="unix:///var/run/docker.sock"') + '<div class="form-text">' + esc(L('new.docker_hint')) + '</div></div>' +
-					'<div class="col-12"><details><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></details></div>';
+					'<div class="col-12"><details' + (WZ.pin || WZ.docker_secret ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2"><div class="col-12">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div>' +
+					'<div class="col-12"><label class="form-label" for="m64-w-dsec">' + esc(L('acc.docker_secret')) + '</label><textarea class="form-control font-monospace small" id="m64-w-dsec" data-w="docker_secret" rows="4" spellcheck="false" autocomplete="off" placeholder="-----BEGIN …">' + esc(WZ.docker_secret) + '</textarea><div class="form-text">' + esc(L('acc.docker_secret_hint')) + '</div></div></div></details></div>';
 			}
 			html += '<div class="col-12"><button class="btn btn-outline-primary btn-sm" type="button" id="m64-w-test"><i class="bi bi-plug"></i> ' + esc(L('new.test')) + '</button> <span class="small ms-2" id="m64-w-res">' + (WZ.test ? testHTML(WZ.test) : '') + '</span></div></div>';
 		} else if (WZ.step === 3) {
@@ -1498,16 +1730,21 @@ function pageNew() {
 					if (!cats[c]) { return; }
 					html += '<div class="fw-semibold small mt-2">' + esc((D.cats || {})[c] || c) + '</div><div class="row g-1">' + cats[c].map(function (s) {
 						var id = 'm64-wa-' + btoa(unescape(encodeURIComponent(s.key))).replace(/[^a-z0-9]/gi, '');
-						return '<div class="col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input" type="checkbox" data-adopt="' + esc(s.key) + '" id="' + id + '"' + (WZ.adopt[s.key] ? ' checked' : '') + '><label class="form-check-label small" for="' + id + '">' + esc(s.name || s.key) + '</label></div></div>';
+						return '<div class="col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input" type="checkbox" data-adopt="' + esc(s.key) + '" id="' + id + '"' + (WZ.adopt[s.key] ? ' checked' : '') + '><label class="form-check-label small" for="' + id + '">' + esc(tx(s.name) || s.key) + '</label></div></div>';
 					}).join('') + '</div>';
 				});
 			}
+			var others = otherNodes();
+			if (others.length) {
+				html += '<div class="card mt-3"><div class="card-body py-2"><div class="fw-semibold small mb-1"><i class="bi bi-diagram-3"></i> ' + esc(L('new.cluster_nodes', { c: WZ.test.cluster || '' })) + '</div><div class="small text-body-secondary mb-2">' + esc(L('new.cluster_hint')) + '</div>' +
+					others.map(function (n, i) { return '<div class="form-check"><input class="form-check-input" type="checkbox" data-wnode="' + esc(n.name) + '" id="m64-wn' + i + '"' + (WZ.nodes[n.name] ? ' checked' : '') + '><label class="form-check-label small" for="m64-wn' + i + '">' + esc(n.name) + (n.ip ? ' <span class="text-body-tertiary">' + esc(n.ip) + '</span>' : '') + (n.online ? '' : ' <span class="badge text-bg-secondary">' + esc(L('new.node_offline')) + '</span>') + '</label></div>'; }).join('') + '</div></div>';
+			}
 		} else {
-			var groups = (D.targets && D.targets.groups) || [];
+			var groups = (D.targets && D.targets.groups) || [], extra = selectedNodes().length;
 			html = '<div class="row g-3"><div class="col-md-6"><label class="form-label" for="m64-w-group">' + esc(L('f.group')) + '</label><input class="form-control" id="m64-w-group" data-w="group" list="m64-w-groups" maxlength="64" value="' + esc(WZ.group) + '"><datalist id="m64-w-groups">' + groups.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist></div>' +
 				'<div class="col-md-6"><label class="form-label" for="m64-w-tags">' + esc(L('f.tags')) + '</label><input class="form-control" id="m64-w-tags" data-w="tags" value="' + esc(WZ.tags) + '"><div class="form-text">' + esc(L('new.tags_hint')) + '</div></div>' +
 				'<div class="col-md-6"><label class="form-label" for="m64-w-iv">' + esc(L('f.interval')) + '</label><select class="form-select" id="m64-w-iv" data-w="interval">' + [30, 60, 120, 300, 600, 900].map(function (s) { return '<option value="' + s + '"' + (String(s) === String(WZ.interval) ? ' selected' : '') + '>' + esc(s < 60 ? L('iv.sec', { n: s }) : fmtDur(s)) + '</option>'; }).join('') + '</select></div>' +
-				'<div class="col-12 small text-body-secondary">' + esc(L('new.summary', { n: WZ.name, a: WZ.address, k: kl(WZ.kind), s: Object.keys(WZ.adopt).filter(function (x) { return WZ.adopt[x]; }).length })) + '</div></div>';
+				'<div class="col-12 small text-body-secondary">' + esc(L('new.summary', { n: WZ.name, a: WZ.address, k: kl(WZ.kind), s: Object.keys(WZ.adopt).filter(function (x) { return WZ.adopt[x]; }).length })) + (extra ? ' ' + esc(L('new.summary_nodes', { n: extra })) : '') + '</div></div>';
 		}
 		$('#m64-wizard').innerHTML = html;
 		var back = $('#m64-back');
@@ -1522,37 +1759,58 @@ function pageNew() {
 		var us = $('#m64-w-user');
 		if (us) { us.onchange = function () { collect(); render(); }; }
 		var t = $('#m64-w-test');
-		if (t) { t.onclick = testConn; }
+		if (t) { t.onclick = function () { lock(t, testConn); }; }
 	}
+	function selectedNodes() { return otherNodes().filter(function (n) { return WZ.nodes[n.name]; }); }
 	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
-	function testHTML(r) {
-		if (r.ok && !r.error) { return '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + esc(L('new.test_ok', { n: r.services.length, ms: r.ms })) + '</span>' + (r.fingerprint ? '<div class="small mt-1">' + esc(L('new.fp')) + ' <code>' + esc(r.fingerprint) + '</code></div>' : ''); }
-		if (r.ok) { return '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('new.test_partial', { n: r.services.length, e: r.error })) + '</span>'; }
-		return '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> ' + esc(r.error || L('new.test_fail')) + '</span>';
-	}
 	function nodeAddr() {
 		if (!WZ.address) { return; }
-		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { WZ.nodeAddr = r.addr; render(); } }).catch(function () {});
+		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { WZ.nodeAddr = r.addr; render(); } }).catch(failQuiet);
 	}
 	function testConn() {
 		collect();
-		if (!WZ.address) { toast(L('new.need_address'), true); return; }
+		if (!WZ.address) { toast(L('new.need_address'), true); return null; }
 		var res = $('#m64-w-res');
 		res.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + esc(L('new.testing'));
-		api('POST', '/api/monitor64/test', { address: WZ.address, access: access() }).then(function (r) {
+		return api('POST', '/api/monitor64/test', { address: WZ.address, access: access() }).then(function (r) {
 			WZ.test = r;
 			WZ.adopt = {};
+			WZ.nodes = {};
 			(r.services || []).forEach(function (s) { WZ.adopt[s.key] = !!s['default']; });
-			res.innerHTML = testHTML(r);
-		}).catch(function (e) { res.innerHTML = '<span class="text-danger">' + esc(e.message) + '</span>'; });
+			var cur = $('#m64-w-res');
+			if (cur) { cur.innerHTML = testHTML(r); }
+		}).catch(function (e) { var cur = $('#m64-w-res'); if (cur) { cur.innerHTML = '<span class="text-danger">' + esc(tx(e.message)) + '</span>'; } });
 	}
 	$('#m64-wizard').addEventListener('click', function (ev) {
 		var t = ev.target.closest('[data-kind]');
 		if (t && !t.classList.contains('disabled')) { WZ.kind = t.dataset.kind; WZ.test = null; render(); return; }
+		var fp = ev.target.closest('[data-fp-confirm]');
+		if (fp) { // Fingerabdruck bestaetigt: als Pin uebernehmen und erneut testen
+			collect();
+			WZ.pin = fp.dataset.fpConfirm;
+			WZ.test = null;
+			render();
+			var tb = $('#m64-w-test');
+			lock(tb, testConn);
+			return;
+		}
 		var a = ev.target.closest('[data-all]');
 		if (a) { $$('[data-adopt]').forEach(function (c) { c.checked = a.dataset.all === '1'; WZ.adopt[c.dataset.adopt] = c.checked; }); }
 	});
-	$('#m64-wizard').addEventListener('change', function (ev) { if (ev.target.dataset.adopt !== undefined) { WZ.adopt[ev.target.dataset.adopt] = ev.target.checked; } });
+	$('#m64-wizard').addEventListener('change', function (ev) {
+		if (ev.target.dataset.adopt !== undefined) { WZ.adopt[ev.target.dataset.adopt] = ev.target.checked; }
+		if (ev.target.dataset.wnode !== undefined) { WZ.nodes[ev.target.dataset.wnode] = ev.target.checked; }
+	});
+	// Adresse, Port oder Zugangsdaten geaendert: altes Testergebnis (Dienste, Fingerabdruck) verwerfen
+	$('#m64-wizard').addEventListener('input', function (ev) {
+		var w = ev.target.dataset && ev.target.dataset.w;
+		if (WZ.step !== 2 || !w || CONN.indexOf(w) < 0 || !WZ.test) { return; }
+		WZ.test = null;
+		WZ.adopt = {};
+		WZ.nodes = {};
+		var res = $('#m64-w-res');
+		if (res) { res.innerHTML = '<span class="text-body-secondary">' + esc(L('new.test_stale')) + '</span>'; }
+	});
 	$('#m64-wizard').addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.dataset.kind) { ev.preventDefault(); ev.target.click(); } });
 	$('#m64-back').addEventListener('click', function (ev) { if (WZ.step > 1) { ev.preventDefault(); collect(); WZ.step--; render(); } });
 	$('#m64-next').onclick = function () {
@@ -1561,12 +1819,30 @@ function pageNew() {
 			if (!WZ.name || !WZ.address) { toast(L('new.need_name'), true); return; }
 		}
 		if (WZ.step < 4) { WZ.step++; render(); if (WZ.step === 2 && kind() && kind().access === 'ssh') { nodeAddr(); } return; }
-		var acc = access();
-		if (WZ.test && WZ.test.fingerprint) { acc.hostkey = WZ.test.fingerprint; }
-		var body = { name: WZ.name, address: WZ.address, kind: WZ.kind, group: WZ.group, tags: WZ.tags.split(/[,\s]+/).filter(Boolean), interval_sec: parseInt(WZ.interval, 10) || 0, notes: '', paused: false,
+		var acc = access(), nodes = selectedNodes();
+		if (WZ.test && WZ.test.fingerprint && (acc.type === 'agent' || acc.type === 'ssh')) { acc.hostkey = WZ.test.fingerprint; }
+		if (acc.type === 'pve' && nodes.length && !acc.config.node && WZ.test.node) { acc.config.node = WZ.test.node; } // weitere Nodes bekommen eigene Hosts
+		var tags = WZ.tags.split(/[,\s]+/).filter(Boolean), iv = parseInt(WZ.interval, 10) || 0;
+		var body = { name: WZ.name, address: WZ.address, kind: WZ.kind, group: WZ.group, tags: tags, interval_sec: iv, notes: '', paused: false,
 			agent_autoupdate: true, accesses: [acc], services: (WZ.test && WZ.test.services) || [], adopt: Object.keys(WZ.adopt).filter(function (x) { return WZ.adopt[x]; }) };
-		$('#m64-next').disabled = true;
-		api('POST', '/api/monitor64/hosts', body).then(function (r) { location.href = '/monitor64/host/' + encodeURIComponent(r.uid); }).catch(function (e) { $('#m64-next').disabled = false; fail(e); });
+		var next = $('#m64-next');
+		lock(next, function () {
+			return api('POST', '/api/monitor64/hosts', body).then(function (r) {
+				// je weitere Cluster-Node ein Host mit gleichem Token und Pin, Abfrage ueber dieselbe Adresse (Node gesetzt)
+				var chain = Promise.resolve(), failed = [];
+				nodes.forEach(function (n) {
+					var na = { type: 'pve', config: { url: acc.config.url || ('https://' + (WZ.address.indexOf(':') >= 0 ? '[' + WZ.address + ']' : WZ.address) + ':8006'), token_id: acc.config.token_id, pin: acc.config.pin, node: n.name }, secret: acc.secret };
+					chain = chain.then(function () {
+						return api('POST', '/api/monitor64/hosts', { name: n.name, address: n.ip || n.name, kind: 'pve', group: WZ.group, tags: tags, interval_sec: iv, notes: '', paused: false, agent_autoupdate: true, accesses: [na] })
+							.catch(function () { failed.push(n.name); });
+					});
+				});
+				return chain.then(function () {
+					if (failed.length) { toast(L('new.nodes_failed', { n: failed.join(', ') }), true); }
+					setTimeout(function () { location.href = '/monitor64/host/' + encodeURIComponent(r.uid); }, failed.length ? 2500 : 0);
+				});
+			});
+		}).catch(fail);
 	};
 	render();
 }

@@ -198,3 +198,79 @@ func TestPBSTest(t *testing.T) {
 		t.Errorf("Test = %+v", res)
 	}
 }
+
+// F6-K2: datastore-usage scheitert -> Gruppen (Backups) bleiben, Teilfehler nennt die betroffenen Praefixe.
+func TestPBSUsageFailureKeepsGroups(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	f, cfg := pbsFake(t, now)
+	p, err := NewPBS(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.now = func() time.Time { return now }
+	if _, err := p.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.set("/status/datastore-usage", http.StatusInternalServerError, "got timeout")
+	now = now.Add(11 * time.Minute) // Gruppen waeren faellig
+	svcs, err := p.Collect(context.Background())
+	pe := partialOf(t, err)
+	if !hasPrefix(pe, "ds:") || !pe.Affects("ds:backup") || !pe.Affects("job:gc:backup") || pe.Affects("backup:backup/vm/101") {
+		t.Errorf("Prefixes = %v", pe.Prefixes)
+	}
+	if hasSvc(svcs, "ds:backup") || !hasSvc(svcs, "backup:backup/vm/101") || !hasSvc(svcs, "backup:backup/prod/host/nas01") {
+		t.Error("Backups bei fehlender Datastore-Liste verloren")
+	}
+	if n := f.count("/admin/datastore/backup/groups"); n != 1 {
+		t.Errorf("Gruppen ohne Datastore-Liste abgefragt (%d)", n)
+	}
+	// wieder lesbar: Gruppen sofort neu (Stand war faellig)
+	f.ok("/status/datastore-usage", "@pbs/datastore_usage.json")
+	now = now.Add(time.Minute)
+	if svcs, _ = p.Collect(context.Background()); !hasSvc(svcs, "ds:backup") || f.count("/admin/datastore/backup/groups") != 2 {
+		t.Errorf("nach Erholung: Gruppen %d-mal abgefragt", f.count("/admin/datastore/backup/groups"))
+	}
+}
+
+// F6-K7: laufender Job haelt den letzten Zustand; "unknown" (abgebrochen) warnt.
+func TestPBSJobRunning(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	f, cfg := pbsFake(t, now)
+	p, err := NewPBS(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.now = func() time.Time { return now }
+	svcs, _ := p.Collect(context.Background())
+	if !hasFact(svcByKey(t, svcs, "job:prune:s-9c8d7e6f-a1b2"), "job_failed") {
+		t.Fatal("prune nicht fehlgeschlagen")
+	}
+	f.ok("/admin/prune", `[{"id":"s-9c8d7e6f-a1b2","store":"backup","schedule":"daily","last-run-upid":"UPID:pbs:000012AB:0034CD56:00000003:672F5E00:prunejob:s\\x2d9c8d7e6f\\x2da1b2:root@pam:"}]`)
+	f.ok("/admin/verify", fmt.Sprintf(`[
+  {"id":"v-new","store":"backup","schedule":"daily","last-run-upid":"UPID:pbs:1"},
+  {"id":"v-abort","store":"backup","schedule":"daily","last-run-state":"unknown","last-run-upid":"UPID:pbs:2","last-run-endtime":%d}
+]`, now.Add(-time.Hour).Unix()))
+	now = now.Add(time.Minute)
+	svcs, err = p.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr := svcByKey(t, svcs, "job:prune:s-9c8d7e6f-a1b2")
+	if !hasFact(pr, "job_failed") || mustMetric(t, pr, "failed").Value != 1 || !strings.Contains(pr.Text, "läuft gerade") {
+		t.Errorf("prune laeuft (voriger Lauf fehlgeschlagen) = %+v", pr)
+	}
+	nw := svcByKey(t, svcs, "job:verify:v-new")
+	if _, ok := metric(nw, "failed"); ok || len(nw.Facts) != 0 || !strings.Contains(nw.Text, "läuft gerade") || strings.Contains(nw.Text, "noch nicht gelaufen") {
+		t.Errorf("erster Lauf laeuft = %+v", nw)
+	}
+	if ab := svcByKey(t, svcs, "job:verify:v-abort"); !hasFact(ab, "job_failed") || !strings.Contains(ab.Text, "abgebrochen") {
+		t.Errorf("unknown (abgebrochen) = %+v", ab)
+	}
+	// fertig mit OK
+	f.ok("/admin/prune", fmt.Sprintf(`[{"id":"s-9c8d7e6f-a1b2","store":"backup","last-run-state":"OK","last-run-upid":"UPID:pbs:3","last-run-endtime":%d}]`, now.Unix()))
+	now = now.Add(time.Minute)
+	svcs, _ = p.Collect(context.Background())
+	if pr := svcByKey(t, svcs, "job:prune:s-9c8d7e6f-a1b2"); hasFact(pr, "job_failed") {
+		t.Errorf("prune nach OK = %+v", pr)
+	}
+}

@@ -1,6 +1,6 @@
 [
   {"devpath":"/dev/nvme0n1","type":"nvme","model":"Samsung SSD 980 PRO 1TB","serial":"S5GXNX0T512345A","size":1000204886016,"health":"PASSED","wearout":97,"used":"ZFS","gpt":1,"rpm":0,"vendor":"unknown","wwn":"eui.002538b911b2c3d4","by_id_link":"/dev/disk/by-id/nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T512345A","osdid":-1,"osdid-list":null,"mounted":0},
   {"devpath":"/dev/sda","type":"hdd","model":"WDC_WD40EFRX-68N32N0","serial":"WD-WCC7K1ABCDEF","size":4000787030016,"health":"PASSED","wearout":"N/A","used":"ZFS","gpt":1,"rpm":5400,"vendor":"ATA     ","wwn":"0x50014ee2b1234567","by_id_link":"/dev/disk/by-id/ata-WDC_WD40EFRX-68N32N0_WD-WCC7K1ABCDEF","osdid":-1,"osdid-list":null,"mounted":0},
-  {"devpath":"/dev/sdb","type":"hdd","model":"ST4000VN008-2DR166","serial":"ZDH1XYZ9","size":4000787030016,"health":"FAILED","wearout":"N/A","used":"ZFS","gpt":1,"rpm":5980,"vendor":"ATA     ","wwn":"0x5000c500c1234567","osdid":-1,"osdid-list":null,"mounted":0},
+  {"devpath":"/dev/sdb","type":"hdd","model":"ST4000VN008-2DR166","serial":"ZDH1XYZ9","size":4000787030016,"health":"FAILED!","wearout":"N/A","used":"ZFS","gpt":1,"rpm":5980,"vendor":"ATA     ","wwn":"0x5000c500c1234567","osdid":-1,"osdid-list":null,"mounted":0},
   {"devpath":"/dev/sdc","type":"usb","model":"Cruzer_Blade","serial":"4C530001230101115453","size":16008609792,"health":"UNKNOWN","wearout":"N/A","used":"partitions","gpt":0,"rpm":-1,"vendor":"SanDisk ","osdid":-1,"mounted":0}
 ]

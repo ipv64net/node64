@@ -15,11 +15,22 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
 const maxUpdateHeader = 4 << 10
+
+// Dateien neben der Programmdatei fuer den Rueckfall nach einem Update.
+const (
+	oldSuffix    = ".old"    // vorherige Version
+	markerSuffix = ".update" // Merker: neue Version noch nicht bestaetigt
+	failedSuffix = ".failed" // Version, die nicht gestartet ist (wird nicht erneut angenommen)
+)
+
+// HealthyAfter: so lange muss die neue Version nach einem Update laufen, bis sie als gesund gilt (ConfirmUpdate).
+const HealthyAfter = 60 * time.Second
 
 // ParseReleaseKeys liest die eingebauten Release-Schluessel: base64 (32 Byte ed25519), durch Komma oder
 // Leerzeichen getrennt (gesetzt per -ldflags "-X main.ReleaseKeys=...").
@@ -100,8 +111,11 @@ func checkUpdateHeader(h m64proto.UpdateHeader, current string, keys []ed25519.P
 }
 
 // applyUpdate liest genau h.Size Byte, prueft SHA256 und ersetzt exe atomar (neue Datei daneben, dann umbenennen).
-// Bei jedem Fehler bleibt die alte Datei unveraendert.
+// Die bisherige Datei bleibt als <exe>.old fuer den Rueckfall. Bei jedem Fehler bleibt die alte Datei unveraendert.
 func applyUpdate(r io.Reader, h m64proto.UpdateHeader, exe string) error {
+	if b, err := os.ReadFile(exe + failedSuffix); err == nil && strings.TrimSpace(string(b)) == h.Version {
+		return fmt.Errorf("version %s did not start on this host before - refused", h.Version)
+	}
 	dir := filepath.Dir(exe)
 	f, err := os.CreateTemp(dir, "."+filepath.Base(exe)+".new-*")
 	if err != nil {
@@ -135,12 +149,100 @@ func applyUpdate(r io.Reader, h m64proto.UpdateHeader, exe string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
+	if err := keepOld(exe); err != nil {
+		return fmt.Errorf("keep previous version: %w", err)
+	}
 	if err := os.Rename(tmp, exe); err != nil {
 		return fmt.Errorf("replace: %w", err)
 	}
 	ok = true
 	syncDir(dir)
 	return nil
+}
+
+// keepOld legt die laufende Datei als <exe>.old ab (harter Verweis, sonst Kopie).
+func keepOld(exe string) error {
+	old := exe + oldSuffix
+	if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if os.Link(exe, old) == nil {
+		return nil
+	}
+	in, err := os.Open(exe)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	data, err := io.ReadAll(in)
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(old, data, 0o755)
+}
+
+// restoreOld setzt <exe>.old wieder als Programmdatei ein.
+func restoreOld(exe string) error {
+	if err := os.Rename(exe+oldSuffix, exe); err != nil {
+		return err
+	}
+	syncDir(filepath.Dir(exe))
+	return nil
+}
+
+// updateMarker steht nach einem Update neben der Programmdatei, bis die neue Version HealthyAfter gelaufen ist.
+type updateMarker struct {
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Starts int    `json:"starts"` // Starts der neuen Version ohne Bestaetigung
+}
+
+// WriteUpdateMarker merkt ein Update von from nach to (vor dem Neustart).
+func WriteUpdateMarker(exe, from, to string) error {
+	b, _ := json.Marshal(updateMarker{From: from, To: to})
+	return writeFileAtomic(exe+markerSuffix, b, 0o600)
+}
+
+// UpdateStart wertet beim Start den Merker aus. Erster Start der neuen Version: zaehlt den Start und liefert
+// pending (der Aufrufer ruft nach HealthyAfter ConfirmUpdate). Weiterer Start ohne Bestaetigung (die neue Version ist
+// abgestuerzt oder kam nicht hoch): alte Datei zurueck, die Version wird kuenftig abgelehnt, rolledBack (der Aufrufer
+// startet die alte Datei).
+func UpdateStart(exe, version string) (pending, rolledBack bool, err error) {
+	mp := exe + markerSuffix
+	b, err := os.ReadFile(mp)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	var m updateMarker
+	if json.Unmarshal(b, &m) != nil || m.To != version {
+		// kaputt oder fremd (z. B. Datei von Hand ersetzt): nichts tun
+		_ = os.Remove(mp)
+		return false, false, nil
+	}
+	if m.Starts == 0 {
+		m.Starts++
+		b, _ = json.Marshal(m)
+		return true, false, writeFileAtomic(mp, b, 0o600)
+	}
+	return false, true, RollbackUpdate(exe, version)
+}
+
+// RollbackUpdate setzt die vorherige Version wieder ein und merkt die fehlgeschlagene (wird nicht erneut angenommen).
+func RollbackUpdate(exe, failed string) error {
+	_ = os.Remove(exe + markerSuffix)
+	if err := restoreOld(exe); err != nil {
+		return fmt.Errorf("restore previous version: %w", err)
+	}
+	_ = writeFileAtomic(exe+failedSuffix, []byte(failed+"\n"), 0o600)
+	return nil
+}
+
+// ConfirmUpdate: die neue Version laeuft (Merker weg, <exe>.old bleibt fuer den Notfall).
+func ConfirmUpdate(exe string) {
+	_ = os.Remove(exe + markerSuffix)
 }
 
 // semver ist eine Version MAJOR.MINOR.PATCH[-pre] (Build-Angaben nach "+" zaehlen nicht).

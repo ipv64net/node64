@@ -53,7 +53,21 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindSystemdFailed, Group: "fixed", State: true},
 	{Kind: eval.KindServiceGone, Group: "fixed", State: true},
 	{Kind: eval.KindAccessFailed, Group: "fixed", State: true},
+	{Kind: eval.KindCtrUnhealthy, Group: "fixed", State: true},
+	{Kind: eval.KindBackupOld, Group: "fixed", State: true},
+	{Kind: eval.KindJobFailed, Group: "fixed", State: true},
+	{Kind: eval.KindStoreInactive, Group: "fixed", State: true},
+	{Kind: eval.KindClusterQuorum, Group: "fixed", State: true},
+	{Kind: eval.KindClusterNodeDown, Group: "fixed", State: true},
+	{Kind: eval.KindHAError, Group: "fixed", State: true},
+	{Kind: eval.KindCephWarn, Group: "fixed", State: true},
+	{Kind: eval.KindCephErr, Group: "fixed", State: true},
 }
+
+// coreTexts sind Texte, die der Kern als "i18n:<schluessel>?..." liefert (Ursache, Zugangsfehler, Ablauf eines
+// Problems); das Skript uebersetzt sie mit diesen Schluesseln (unter monitor64.).
+var coreTexts = []string{"detail.vanished", "detail.not_running", "detail.access", "detail.threshold", "detail.maint_silent", "detail.unack",
+	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "err.not_running"}
 
 // ruleGroups ist die Reihenfolge der Abschnitte auf der Seite Schwellen.
 var ruleGroups = []string{"system", "storage", "disks", "network", "devices"}
@@ -104,7 +118,7 @@ var svcCategories = []string{"system", "fs", "storage", "disks", "network", "gue
 func guestKind(kind string) bool { return kind == "vm" || kind == "ct" || kind == "ctr" }
 
 // hostKinds sind die Arten im Assistenten "Host hinzufuegen" (Reihenfolge wie im Entwurf). Access ist der Zugang,
-// den der Assistent anlegt; Soon = Zugang gibt es noch nicht (SNMP folgt in Phase 2).
+// den der Assistent anlegt; Soon = noch nicht waehlbar (Windows-Agent und SNMP folgen in Phase 2).
 type hostKind struct {
 	Kind   string `json:"kind"`
 	Icon   string `json:"icon"`
@@ -114,7 +128,7 @@ type hostKind struct {
 
 var hostKinds = []hostKind{
 	{Kind: "linux-agent", Icon: "bi-ubuntu", Access: "agent"},
-	{Kind: "windows", Icon: "bi-windows", Access: "agent"},
+	{Kind: "windows", Icon: "bi-windows", Access: "agent", Soon: true},
 	{Kind: "ssh", Icon: "bi-terminal", Access: "ssh"},
 	{Kind: "pve", Icon: "bi-hdd-rack", Access: "pve"},
 	{Kind: "pbs", Icon: "bi-archive", Access: "pbs"},

@@ -18,6 +18,10 @@ var smartTypeRE = regexp.MustCompile(`^[a-z0-9][a-z0-9,_+-]{0,31}$`)
 // Die Node behaelt dann den letzten Stand.
 const SmartErrStandby = "standby"
 
+// smartStandbyRE erkennt die Meldung von "smartctl -n standby" fuer eine schlafende Platte: "Device is in STANDBY
+// mode", "SLEEP mode" und die EPC-Zustaende "STANDBY_Y"/"STANDBY_Z" (smartmontools >= 7.3).
+var smartStandbyRE = regexp.MustCompile(`(?i)\b(standby|sleep)(_[a-z])?\s+mode\b`)
+
 // maxSmartDevices begrenzt die Zahl der abgefragten Platten.
 const maxSmartDevices = 64
 
@@ -180,8 +184,7 @@ func ParseSmartctl(dev string, b []byte) m64proto.SMART {
 	// Meldungen: Standby, Fehler
 	var firstErr string
 	for _, m := range j.Smartctl.Messages {
-		low := strings.ToLower(m.String)
-		if strings.Contains(low, "standby mode") || strings.Contains(low, "sleep mode") {
+		if smartStandbyRE.MatchString(m.String) {
 			s.Error = SmartErrStandby
 			return s
 		}

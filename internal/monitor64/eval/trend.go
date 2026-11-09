@@ -88,3 +88,11 @@ func Trend(points []Point, now time.Time, limit float64) TrendResult {
 	}
 	return res
 }
+
+// TrendDays ist die Kurzform fuer den Kern: Tage bis zur Grenze (limit 100 fuer Prozent belegt, 0 fuer freie
+// Bytes). ok = false, wenn zu wenig Daten vorliegen oder der Wert nicht auf die Grenze zulaeuft; dann ist days
+// NoForecast (passt direkt als Messwert fuer KindFSTrendDays).
+func TrendDays(points []Point, now time.Time, limit float64) (days float64, ok bool) {
+	r := Trend(points, now, limit)
+	return r.Value(), r.Enough && r.Full
+}

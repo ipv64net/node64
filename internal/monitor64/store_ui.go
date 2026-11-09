@@ -22,7 +22,8 @@ type svcPatch struct {
 	HostRule *string
 }
 
-// UpdateService aendert Anzeigename, Soll-Zustand, Melden/Nur anzeigen bzw. die Schwelle "nur dieser Dienst".
+// UpdateService aendert Anzeigename, Soll-Zustand, Melden/Nur anzeigen bzw. die Schwellen "nur dieser Dienst"
+// (host_rule: JSON Regel-Art -> Regel).
 func (s *Store) UpdateService(ctx context.Context, hostUID, key string, p svcPatch, by Actor) error {
 	var sets []string
 	var args []any
@@ -45,7 +46,26 @@ func (s *Store) UpdateService(ctx context.Context, hostUID, key string, p svcPat
 	return affected(res, err)
 }
 
-// hostRuleRow ist eine Schwelle der Stufe "dieser Host" fuer alle Dienste einer Art.
+// encodeHostRules schreibt die Schwellen "nur dieser Dienst" (Regel-Art -> Regel) fuer m64_services.host_rule;
+// leere Regeln entfallen, ohne Regel "" (Gegenstueck: parseHostRules im Kern).
+func encodeHostRules(rules map[string]eval.Rule) string {
+	out := map[string]eval.Rule{}
+	for k, r := range rules {
+		if !r.Empty() {
+			out[k] = r
+		}
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(out) // Schluessel sortiert
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// hostRuleRow ist eine Schwelle der Stufe "dieser Host" fuer alle Dienste einer Regel-Art (z. B. fs.used).
 type hostRuleRow struct {
 	HostUID string    `json:"host_uid"`
 	Kind    string    `json:"kind"`
@@ -54,7 +74,7 @@ type hostRuleRow struct {
 	At      time.Time `json:"at"`
 }
 
-// HostRules liefert die Schwellen "alle Dienste dieser Art" (leer = alle Hosts).
+// HostRules liefert die Schwellen "alle Dienste dieses Hosts mit dieser Regel-Art" (leer = alle Hosts).
 func (s *Store) HostRules(ctx context.Context, hostUID string) ([]hostRuleRow, error) {
 	q := `SELECT host_uid, kind, rule, updated_by, updated_at FROM m64_host_rules WHERE deleted = 0`
 	var args []any
@@ -83,7 +103,8 @@ func (s *Store) HostRules(ctx context.Context, hostUID string) ([]hostRuleRow, e
 	return out, rows.Err()
 }
 
-// SaveHostRule setzt (rule != nil) oder entfernt (nil) die Schwelle fuer alle Dienste einer Art eines Hosts.
+// SaveHostRule setzt (rule != nil) oder entfernt (nil) die Schwelle fuer alle Dienste eines Hosts mit der
+// Regel-Art kind.
 func (s *Store) SaveHostRule(ctx context.Context, hostUID, kind string, rule *eval.Rule, by Actor) error {
 	now := tsNow()
 	if rule == nil || rule.Empty() {

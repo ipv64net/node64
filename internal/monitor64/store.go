@@ -396,6 +396,13 @@ func (s *Store) MarkVanished(ctx context.Context, hostUID string, keys []string,
 	return nil
 }
 
+// ClearVanished: Dienst wird wieder geliefert ("verschwunden" endet sofort).
+func (s *Store) ClearVanished(ctx context.Context, hostUID, key string) error {
+	_, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_services SET vanished_at = '', updated_at = ? WHERE host_uid = ? AND key = ? AND vanished_at != '' AND deleted = 0`,
+		tsNow(), hostUID, key)
+	return err
+}
+
 // SetAdopted uebernimmt (1), ignoriert (-1) oder entfernt (deleted) einen Dienst.
 func (s *Store) SetAdopted(ctx context.Context, hostUID, key string, state int, by Actor) error {
 	res, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_services SET adopted = ?, updated_at = ?, updated_by = ? WHERE host_uid = ? AND key = ? AND deleted = 0`,

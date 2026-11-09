@@ -146,6 +146,9 @@ shfs           1562387840  358023 1562029817    1% /mnt/user
 /sys/block/sdc/queue/rotational	1
 /sys/block/sdd/device/model	Elements 25A2
 /sys/block/sdd/queue/rotational	1
+/sys/block/sdd/device/vpd_pg80.hex	0080000c575836314131323334353637
+/dev/disk/by-id/ata-ST8000VN004-3CP101_WWZ1ABCD	../../sdb
+/dev/disk/by-id/ata-ST8000VN004-3CP101_WWZ1ABCD-part1	../../sdb1
 /sys/class/net/bond0/operstate	up
 /sys/class/net/bond0/carrier	1
 /sys/class/net/bond0/speed	2500

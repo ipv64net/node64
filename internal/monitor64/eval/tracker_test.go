@@ -127,9 +127,17 @@ func TestTrackerGapsAndClock(t *testing.T) {
 	var tr Tracker
 	runSteps(t, e, &tr, []step{{0, 99, OK, "", false}, {10, 99, OK, "", false}, {13, 99, OK, "Luecke 3 min = genau 3 Intervalle", true}, {15, 99, Crit, "", false}})
 
-	// Lange Luecke (mehr als 3 Intervalle) setzt die Dauer neu an.
+	// Luecke ueber 3 Intervalle, aber kuerzer als die Dauer: Dauer laeuft weiter (keine Messung darunter).
 	tr = Tracker{}
-	runSteps(t, e, &tr, []step{{0, 99, OK, "", false}, {10, 99, OK, "", false}, {14, 99, OK, "Luecke", true}, {28, 99, OK, "", false}, {29, 99, Crit, "15 min nach der Luecke", false}})
+	runSteps(t, e, &tr, []step{{0, 99, OK, "", false}, {10, 99, OK, "", false}, {14, 99, OK, "Luecke 4 min", true}, {15, 99, Crit, "15 min seit Beginn", false}})
+
+	// Luecke laenger als die Dauer setzt sie neu an.
+	tr = Tracker{}
+	runSteps(t, e, &tr, []step{{0, 99, OK, "", false}, {10, 99, OK, "", false}, {26, 99, OK, "Luecke 16 min", true}, {40, 99, OK, "", false}, {41, 99, Crit, "15 min nach der Luecke", false}})
+
+	// Messung unter der Schwelle vor der Luecke unterbricht die Dauer weiterhin.
+	tr = Tracker{}
+	runSteps(t, e, &tr, []step{{0, 99, OK, "", false}, {10, 50, OK, "darunter", false}, {14, 99, OK, "Luecke", true}, {28, 99, OK, "", false}, {29, 99, Crit, "15 min nach Wiederanstieg", false}})
 
 	// Uhr springt vor: wirkt wie eine Luecke, kein sofortiges Kritisch.
 	tr = Tracker{}
@@ -143,6 +151,31 @@ func TestTrackerGapsAndClock(t *testing.T) {
 	tr = Tracker{}
 	ef := eff(KindFSUsed, nil)
 	runSteps(t, ef, &tr, []step{{0, 91, Crit, "", false}, {30, 89, Crit, "nach Luecke im Hysteresebereich", true}})
+}
+
+// F5-K5: lange Dauer (Sicherheitsupdates, 24 h) mit taeglichen kurzen Luecken meldet trotzdem.
+func TestTrackerLongDurationWithGaps(t *testing.T) {
+	e := eff(KindUpdatesSecurity, nil)
+	tr := Tracker{Interval: Dur(time.Minute)}
+	var first time.Time
+	for m := 0; m < 3*24*60; m++ {
+		if m%(23*60) >= 23*60-4 { // 4 min ohne Daten je 23 h (Neustart Node oder Host)
+			continue
+		}
+		at := t0.Add(time.Duration(m) * time.Minute)
+		if st := tr.Observe(e, Sample{At: at, Value: Bool(true)}); st.State == Warn && first.IsZero() {
+			first = at
+		}
+	}
+	if !first.Equal(t0.Add(24 * time.Hour)) {
+		t.Fatalf("Warnung ab %v, erwartet nach 24 h (%v)", first, t0.Add(24*time.Hour))
+	}
+	// Ausfall laenger als die Dauer: neu ansetzen.
+	tr = Tracker{Interval: Dur(time.Minute)}
+	tr.Observe(e, Sample{At: t0, Value: 1})
+	if st := tr.Observe(e, Sample{At: t0.Add(25 * time.Hour), Value: 1}); st.State != OK || st.PendingSince != t0.Add(25*time.Hour) {
+		t.Fatalf("nach 25 h Ausfall: %+v", st)
+	}
 }
 
 func TestTrackerUnknown(t *testing.T) {

@@ -1,6 +1,7 @@
 package monitor64
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/tsdb"
@@ -39,11 +41,19 @@ func errBad(code string, args ...any) *apiError {
 
 var errNotRunning = &apiError{status: http.StatusServiceUnavailable, code: "not_running"}
 
+// writeJSON kodiert erst in einen Puffer: schlaegt das fehl (z. B. NaN von einem Host), gibt es 500 mit Fehlercode
+// statt 200 mit leerem bzw. abgebrochenem Koerper (die Oberflaeche zeigt dann "Interner Fehler").
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		buf.Reset()
+		buf.WriteString(`{"error":"internal","message":""}` + "\n")
+		status = http.StatusInternalServerError
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(buf.Bytes())
 }
 
 // fail schreibt einen Fehler als JSON {"error": code, "message": text}.
@@ -183,8 +193,15 @@ var (
 	reUser  = regexp.MustCompile(`^[A-Za-z0-9._-]{0,32}$`)
 	reToken = regexp.MustCompile(`^[A-Za-z0-9@!._:-]{0,128}$`)
 	reNode  = regexp.MustCompile(`^[A-Za-z0-9._-]{0,64}$`)
-	rePin   = regexp.MustCompile(`^[A-Fa-f0-9:]{0,128}$`)
+	rePin   = regexp.MustCompile(`^([A-Fa-f0-9:]{0,128}|SHA256:[A-Za-z0-9+/]{43}=?)$`) // Zertifikat (hex) bzw. SSH-Host-Key (Docker ssh://)
 	reFP    = regexp.MustCompile(`^(SHA256:[A-Za-z0-9+/=]{20,64})?$`)
+)
+
+// Grenzen fuer Geheimnisse: Token/Passwort; Docker-Zugangsdaten (TLS-Schluessel, Zertifikat und CA als PEM bzw.
+// privater SSH-Schluessel) sind laenger.
+const (
+	maxSecret       = 4096
+	maxSecretDocker = 64 << 10
 )
 
 // cleanAccessConfig prueft die Konfiguration eines Zugangs (streng, ohne Geheimnisse) und gibt sie normiert zurueck.
@@ -215,7 +232,7 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	if c.URL != "" {
 		ok := strings.HasPrefix(c.URL, "https://") || strings.HasPrefix(c.URL, "http://")
 		if typ == "docker" {
-			ok = ok || strings.HasPrefix(c.URL, "unix://") || strings.HasPrefix(c.URL, "tcp://")
+			ok = ok || strings.HasPrefix(c.URL, "unix://") || strings.HasPrefix(c.URL, "tcp://") || strings.HasPrefix(c.URL, "ssh://")
 		}
 		if !ok {
 			return nil, errBad("url")
@@ -251,23 +268,34 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 		}
 		a.Type = in.Type
 	}
-	cfg, err := cleanAccessConfig(a.Type, in.Config)
+	raw := in.Config
+	if !isNew && (len(raw) == 0 || string(raw) == "null") {
+		raw = a.Config // Aenderung ohne config: vorhandene Felder bleiben (werden nur neu geprueft)
+	}
+	cfg, err := cleanAccessConfig(a.Type, raw)
 	if err != nil {
 		return false, err
 	}
 	a.Config = cfg
-	if !reFP.MatchString(strings.TrimSpace(in.HostKey)) {
+	hk := strings.TrimSpace(in.HostKey)
+	switch {
+	case hk == "reset" && !isNew:
+		a.HostKey = "" // naechster Kontakt merkt den neuen Schluessel (wie hostkey-reset)
+	case !reFP.MatchString(hk):
 		return false, errBad("hostkey")
-	}
-	if isNew {
-		a.HostKey = strings.TrimSpace(in.HostKey)
+	case isNew:
+		a.HostKey = hk
 	}
 	if in.Enabled != nil {
 		a.Enabled = *in.Enabled
 	} else if isNew {
 		a.Enabled = true
 	}
-	if len(in.Secret) > 4096 {
+	limit := maxSecret
+	if a.Type == "docker" {
+		limit = maxSecretDocker
+	}
+	if len(in.Secret) > limit {
 		return false, errBad("secret")
 	}
 	switch {
@@ -417,11 +445,16 @@ func (m *Module) apiHostDelete(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	if err := m.store.DeleteHost(ctx, h.UID, m.actor(r)); err != nil {
+	by := m.actor(r)
+	if err := m.store.DeleteHost(ctx, h.UID, by); err != nil {
 		m.fail(w, r, err)
 		return
 	}
 	m.ReloadHost(ctx, h.UID)
+	// offene Probleme schliessen (sonst blieben sie ohne Host offen und zaehlten weiter am Reiter Probleme)
+	if err := m.CloseHostProblems(ctx, h.UID, by); err != nil {
+		m.log.Warn("monitor64: close problems of removed host", "host", h.Name, "err", err)
+	}
 	m.notifyMu.Lock()
 	if m.notifier != nil {
 		m.notifier.Forget(h.UID)
@@ -501,14 +534,11 @@ func (m *Module) apiAccessUpdate(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	if strings.TrimSpace(in.HostKey) == "reset" {
-		a.HostKey = ""
-	}
 	if err := m.store.SaveAccess(ctx, a, keep, m.actor(r)); err != nil {
 		m.fail(w, r, err)
 		return
 	}
-	m.audit(r, "access.update", a.HostUID, fmt.Sprintf("type=%s uid=%s secret_changed=%t", a.Type, a.UID, !keep))
+	m.audit(r, "access.update", a.HostUID, fmt.Sprintf("type=%s uid=%s secret_changed=%t hostkey_reset=%t", a.Type, a.UID, !keep, strings.TrimSpace(in.HostKey) == "reset"))
 	m.ReloadHost(ctx, a.HostUID)
 	writeJSON(w, http.StatusOK, accessOuts([]*Access{a})[0])
 }
@@ -557,6 +587,16 @@ type testResult struct {
 	Ms          int64       `json:"ms"`
 	Fingerprint string      `json:"fingerprint,omitempty"`
 	Services    []serviceIn `json:"services"`
+	// nur API-Zugaenge (Proxmox VE, PBS, Docker)
+	NeedConfirm bool               `json:"need_confirm,omitempty"` // Fingerabdruck bestaetigen (als Pin speichern), dann erneut testen
+	Trusted     bool               `json:"trusted,omitempty"`      // Zertifikat von einer bekannten CA bzw. Pin passt
+	CertSubject string             `json:"cert_subject,omitempty"`
+	Version     string             `json:"version,omitempty"`
+	Node        string             `json:"node,omitempty"`
+	Cluster     string             `json:"cluster,omitempty"`
+	Nodes       []apis.ClusterNode `json:"nodes,omitempty"`
+	Summary     string             `json:"summary,omitempty"`
+	Warning     string             `json:"warning,omitempty"`
 }
 
 const testTimeout = 20 * time.Second
@@ -566,7 +606,7 @@ const testTimeout = 20 * time.Second
 func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 	res := testResult{Services: []serviceIn{}}
 	if m.scheduler() == nil || m.pool == nil {
-		res.Error = "not running"
+		res.Error = i18nText("monitor64.err.not_running")
 		return res
 	}
 	a.UID = "test:" + newUID()
@@ -574,6 +614,11 @@ func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 	start := time.Now()
+	if isAPIAccess(a.Type) {
+		m.testAPIAccess(ctx, h, a, &res)
+		res.Ms = time.Since(start).Milliseconds()
+		return res
+	}
 	col, err := m.newCollector(ctx, h, &a)
 	if err != nil {
 		res.Error = err.Error()
@@ -592,6 +637,44 @@ func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 	}
 	slices.SortStableFunc(res.Services, func(x, y serviceIn) int { return kindOrder(x.Kind) - kindOrder(y.Kind) })
 	return res
+}
+
+// testAPIAccess testet einen API-Zugang (apis.*.Test: Fingerabdruck, Bestaetigung, Cluster-Nodes). Nur wenn die
+// Verbindung steht und bestaetigt ist, folgt eine Abfragerunde fuer die Dienste (sonst wuerde das Token an ein
+// unbestaetigtes Zertifikat gesendet).
+func (m *Module) testAPIAccess(ctx context.Context, h *Host, a Access, res *testResult) {
+	var cfg accessConfig
+	_ = json.Unmarshal(a.Config, &cfg)
+	secret := ""
+	if a.Secret != "" {
+		s, err := m.box.Decrypt(a.Secret)
+		if err != nil {
+			res.Error = i18nText("monitor64.detail.secret_unreadable")
+			return
+		}
+		secret = s
+	}
+	t, done, err := newAPITester(a.Type, h, cfg, secret)
+	if err != nil {
+		res.Error = err.Error()
+		return
+	}
+	defer done()
+	tr := t.Test(ctx)
+	res.OK, res.Error, res.Fingerprint, res.NeedConfirm, res.Trusted = tr.OK, tr.Error, tr.Fingerprint, tr.NeedConfirm, tr.Trusted
+	res.CertSubject, res.Version, res.Node, res.Cluster, res.Nodes, res.Summary, res.Warning = tr.CertSubject, tr.Version, tr.Node, tr.Cluster, tr.Nodes, tr.Summary, tr.Warning
+	if !tr.OK || tr.NeedConfirm {
+		res.OK = false
+		return
+	}
+	svcs, err := t.Collect(ctx)
+	if err != nil {
+		res.Error = err.Error() // Teilfehler: die uebrigen Dienste kommen trotzdem
+	}
+	for _, s := range svcs {
+		res.Services = append(res.Services, serviceIn{Key: s.Key, Name: s.Name, Kind: s.Kind, Default: s.Default})
+	}
+	slices.SortStableFunc(res.Services, func(x, y serviceIn) int { return kindOrder(x.Kind) - kindOrder(y.Kind) })
 }
 
 type testIn struct {
@@ -720,16 +803,25 @@ func (m *Module) servicesBulk(w http.ResponseWriter, r *http.Request, remove boo
 	writeJSON(w, http.StatusOK, map[string]any{"changed": n})
 }
 
-// svcUpdateIn aendert einen Dienst: Anzeigename, Soll-Zustand, Melden/Nur anzeigen, Schwelle "dieser Host".
+// svcUpdateIn aendert einen Dienst: Anzeigename, Soll-Zustand, Melden/Nur anzeigen und die Schwellen der Stufe
+// "dieser Host" je Regel-Art (eine Messgroesse bzw. Zustandsregel des Dienstes).
 type svcUpdateIn struct {
-	Key    string     `json:"key"`
-	Name   *string    `json:"name"`
-	Soll   *string    `json:"soll"`   // "", run, off
-	Report *string    `json:"report"` // "", show
-	Rule   *eval.Rule `json:"rule"`   // Schwelle; leer/null mit reset = entfernen
-	Scope  string     `json:"scope"`  // service (nur dieser Dienst) oder kind (alle dieser Art auf dem Host)
-	Reset  bool       `json:"reset"`  // Schwelle der Stufe "dieser Host" entfernen ("auf Standard zurueck")
+	Key    string                  `json:"key"`
+	Name   *string                 `json:"name"`
+	Soll   *string                 `json:"soll"`   // "", run, off
+	Report *string                 `json:"report"` // "", show
+	Rules  map[string]ruleChangeIn `json:"rules"`  // Regel-Art -> Aenderung (fehlende Arten bleiben unveraendert)
+	Reset  bool                    `json:"reset"`  // alle Schwellen "dieser Host" der Arten dieses Dienstes entfernen
 }
+
+// ruleChangeIn ist die Aenderung der Stufe "dieser Host" fuer eine Regel-Art.
+type ruleChangeIn struct {
+	Rule  *eval.Rule `json:"rule"`  // null bzw. leer = entfernen
+	Scope string     `json:"scope"` // service (nur dieser Dienst, Standard) oder kind (alle Dienste dieses Hosts mit dieser Art)
+	Reset bool       `json:"reset"` // beide Einstellungen am Host fuer diese Art entfernen ("auf Standard zurueck")
+}
+
+const maxRuleChanges = 32
 
 // apiServiceUpdate: PUT einen Dienst aendern.
 func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -782,62 +874,103 @@ func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
 		p.Report = in.Report
 		details = append(details, "report="+*in.Report)
 	}
-	scope := in.Scope
-	if scope == "" {
-		scope = "service"
-	}
-	if scope != "service" && scope != "kind" {
-		m.fail(w, r, errBad("scope"))
+	if len(in.Rules) > maxRuleChanges {
+		m.fail(w, r, errBad("too_many"))
 		return
 	}
-	ruleChanged := false
-	var kindRule *eval.Rule
-	if in.Rule != nil || in.Reset {
+	cfg := m.config()
+	svcRules := parseHostRules(row.HostRule)
+	if svcRules == nil {
+		svcRules = map[string]eval.Rule{}
+	}
+	kindRules := map[string]*eval.Rule{} // Regel-Art -> neue Einstellung "alle Dienste dieser Art" (nil = entfernen)
+	svcChanged := false
+	if in.Reset {
+		for _, k := range m.ruleKindsOfService(h.UID, row) {
+			if _, ok := svcRules[k]; ok {
+				delete(svcRules, k)
+				svcChanged = true
+			}
+			if cfg.hostKind[h.UID+"|"+k] != nil {
+				kindRules[k] = nil
+			}
+		}
+	}
+	kinds := make([]string, 0, len(in.Rules))
+	for k := range in.Rules {
+		kinds = append(kinds, k)
+	}
+	slices.Sort(kinds)
+	for _, kind := range kinds {
+		ch := in.Rules[kind]
+		if _, ok := cfg.std[kind]; !ok {
+			m.fail(w, r, errBad("rule_kind", "kind", kind, "error", "unknown"))
+			return
+		}
+		scope := ch.Scope
+		if scope == "" {
+			scope = "service"
+		}
+		if scope != "service" && scope != "kind" {
+			m.fail(w, r, errBad("scope"))
+			return
+		}
 		var rule *eval.Rule
-		if in.Rule != nil && !in.Reset {
-			if err := in.Rule.Validate(); err != nil {
-				m.fail(w, r, errBad("rule", "error", err.Error()))
+		if ch.Rule != nil && !ch.Reset {
+			if err := ch.Rule.Validate(); err != nil {
+				m.fail(w, r, errBad("rule_kind", "kind", kind, "error", err.Error()))
 				return
 			}
-			if !in.Rule.Empty() {
-				rule = in.Rule
+			if !ch.Rule.Empty() {
+				rule = ch.Rule
 			}
 		}
-		if rule != nil {
-			if err := m.checkRuleOrder(h, row, rule, scope); err != nil {
-				m.fail(w, r, err)
-				return
-			}
+		_, hadSvc := svcRules[kind]
+		switch {
+		case ch.Reset: // beide Einstellungen am Host fuer diese Art
+			delete(svcRules, kind)
+			svcChanged = svcChanged || hadSvc
+			kindRules[kind] = nil
+		case scope == "kind": // gilt fuer alle Dienste der Art; die Einstellung nur dieses Dienstes weicht
+			delete(svcRules, kind)
+			svcChanged = svcChanged || hadSvc
+			kindRules[kind] = rule
+		case rule != nil:
+			svcRules[kind] = *rule
+			svcChanged = true
+		default:
+			delete(svcRules, kind)
+			svcChanged = svcChanged || hadSvc
 		}
-		if scope == "kind" {
-			kindRule, ruleChanged = rule, true
-		} else {
-			s := ""
-			if rule != nil {
-				b, _ := json.Marshal(rule)
-				s = string(b)
-			}
-			p.HostRule = &s
-			details = append(details, "rule="+s)
+		if err := m.checkRuleOrder(h, svcRules, kindRules, kind); err != nil {
+			m.fail(w, r, err)
+			return
 		}
-		if in.Reset { // auf Standard zurueck: beide Einstellungen am Host
-			empty := ""
-			p.HostRule = &empty
-			kindRule, ruleChanged = nil, true
-		}
+	}
+	if svcChanged {
+		s := encodeHostRules(svcRules)
+		p.HostRule = &s
+		details = append(details, "rules="+s)
 	}
 	by := m.actor(r)
 	if err := m.store.UpdateService(ctx, h.UID, row.Key, p, by); err != nil {
 		m.fail(w, r, err)
 		return
 	}
-	if ruleChanged {
-		if err := m.store.SaveHostRule(ctx, h.UID, row.Kind, kindRule, by); err != nil {
-			m.fail(w, r, err)
-			return
+	if len(kindRules) > 0 {
+		ks := make([]string, 0, len(kindRules))
+		for k := range kindRules {
+			ks = append(ks, k)
 		}
-		b, _ := json.Marshal(kindRule)
-		details = append(details, "kind_rule["+row.Kind+"]="+string(b))
+		slices.Sort(ks)
+		for _, k := range ks {
+			if err := m.store.SaveHostRule(ctx, h.UID, k, kindRules[k], by); err != nil {
+				m.fail(w, r, err)
+				return
+			}
+			b, _ := json.Marshal(kindRules[k])
+			details = append(details, "kind_rule["+k+"]="+string(b))
+		}
 		m.reloadConfig(ctx)
 	}
 	m.audit(r, "service.update", h.Name+" · "+row.Key, strings.Join(details, " "))
@@ -845,45 +978,50 @@ func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// checkRuleOrder prueft eine Schwelle der Stufe "dieser Host" mit den geerbten Feldern (Warnung vor Kritisch).
-func (m *Module) checkRuleOrder(h *Host, row *ServiceRow, rule *eval.Rule, scope string) error {
+// checkRuleOrder prueft die wirksame Schwelle einer Regel-Art mit den geaenderten Einstellungen am Host und den
+// geerbten Feldern (Warnung vor Kritisch).
+func (m *Module) checkRuleOrder(h *Host, svcRules map[string]eval.Rule, kindRules map[string]*eval.Rule, kind string) error {
 	cfg := m.config()
-	hl := m.hostLevel(row)
-	if scope == "kind" {
-		hl.Kind = rule
-	} else {
-		hl.Service = rule
+	hl := m.hostLevel(h.UID, svcRules, kind)
+	if kr, ok := kindRules[kind]; ok {
+		hl.Kind = kr
 	}
-	for _, kind := range m.ruleKindsOfService(h.UID, row) {
-		e := eval.Resolve(cfg.std, cfg.overrides, hostRef(h), hl, kind)
-		if err := e.Validate(); err != nil {
-			return errBad("rule", "error", err.Error())
-		}
+	if r, ok := svcRules[kind]; ok {
+		hl.Service = &r
+	} else {
+		hl.Service = nil
+	}
+	e := eval.Resolve(cfg.std, cfg.overrides, hostRef(h), hl, kind)
+	if err := e.Validate(); err != nil {
+		return errBad("rule_kind", "kind", kind, "error", err.Error())
 	}
 	return nil
 }
 
-// ruleKindsOfService: Arten der Schwellen eines Dienstes (aus dem aktuellen Stand, sonst aus der Dienst-Art).
+// ruleKindsOfService: Regel-Arten eines Dienstes – Messgroessen mit Schwelle aus dem letzten Stand, dazu die
+// Zustandsregeln seiner Art; ohne Stand die Arten, fuer die schon etwas am Dienst eingestellt ist.
 func (m *Module) ruleKindsOfService(hostUID string, row *ServiceRow) []string {
 	var kinds []string
+	add := func(k string) {
+		if k != "" && !slices.Contains(kinds, k) {
+			kinds = append(kinds, k)
+		}
+	}
 	if v := m.viewOf(hostUID); v != nil {
 		for _, s := range v.Services {
 			if s.Key != row.Key {
 				continue
 			}
 			for _, mt := range s.Metrics {
-				if mt.Metric.Rule != "" && !slices.Contains(kinds, mt.Metric.Rule) {
-					kinds = append(kinds, mt.Metric.Rule)
-				}
+				add(firstNonEmpty(mt.RuleKind, mt.Metric.Rule))
 			}
 		}
 	}
-	if len(kinds) == 0 {
-		for _, n := range []string{"util", "per_core", "used", "temp", "wear", "errrate"} {
-			if k := m.ruleKindOf(row, n); k != "" && !slices.Contains(kinds, k) {
-				kinds = append(kinds, k)
-			}
-		}
+	for _, k := range factKinds[row.Kind] {
+		add(k)
+	}
+	for k := range parseHostRules(row.HostRule) {
+		add(k)
 	}
 	return kinds
 }

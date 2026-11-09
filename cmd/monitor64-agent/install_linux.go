@@ -26,10 +26,15 @@ const (
 	binLink  = "/usr/local/bin/monitor64-agent"
 	unitName = "monitor64-agent.service"
 	unitPath = "/etc/systemd/system/" + unitName
+	stateDir = "/var/lib/monitor64-agent" // HOME der eigenen Skripte (StateDirectory)
 )
 
 // unitFile ist der systemd-Dienst. Root ist noetig (SMART, alle Dateisysteme); die Haertung beschraenkt Schreibzugriffe
-// auf Einstellungen (keys) und den eigenen Programmordner (update). Paket-Caches nur fuer die Update-Pruefung.
+// auf Einstellungen (keys), den eigenen Programmordner (update, <datei>.old) und /var/lib/monitor64-agent (HOME der
+// eigenen Skripte). Paket-Caches nur fuer die Update-Pruefung; zypper braucht dazu noch /run (Sperrdatei
+// /run/zypp.pid, siehe zypperPaths). /home und /root sind nur lesbar: eigene Skripte koennen Zugangsdateien wie
+// /root/.my.cnf lesen (mit vollem Pfad, z. B. mysql --defaults-extra-file=/root/.my.cnf), aber nichts dort aendern.
+// Restart=always startet den Agent nach einem Absturz neu; nach einem Update startet er sich selbst neu (exec).
 const unitFile = `[Unit]
 Description=Monitor64-Agent (Node64)
 Documentation=https://node64.de/
@@ -44,11 +49,13 @@ RestartSec=5
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
+ProtectHome=read-only
 PrivateTmp=yes
+StateDirectory=monitor64-agent
+StateDirectoryMode=0700
 ReadWritePaths=` + defaultDir + ` ` + libDir + `
 ReadWritePaths=-/var/cache/dnf -/var/cache/libdnf5 -/var/cache/yum -/var/cache/zypp
-ProtectKernelModules=yes
+%sProtectKernelModules=yes
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
@@ -60,6 +67,19 @@ SystemCallArchitectures=native
 [Install]
 WantedBy=multi-user.target
 `
+
+// zypperPaths: zypper legt bei jeder Abfrage /run/zypp.pid an (Sperre) und schreibt /var/log/zypper.log. Eine
+// einzelne, noch nicht vorhandene Datei laesst sich nicht freigeben, deshalb /run - nur, wenn zypper da ist.
+const zypperPaths = "ReadWritePaths=/run -/var/log/zypper.log\n"
+
+// unitText baut den Dienst fuer den Port (zypper-Pfade nur, wenn zypper installiert ist).
+func unitText(port int, zypper bool) string {
+	extra := ""
+	if zypper {
+		extra = zypperPaths
+	}
+	return fmt.Sprintf(unitFile, port, extra)
+}
 
 func install(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
@@ -97,7 +117,7 @@ func doInstall(key string, port int) error {
 	systemd := haveSystemd()
 
 	// Ordner und Schluessel
-	for _, d := range []string{defaultDir, filepath.Join(defaultDir, "local.d"), libDir} {
+	for _, d := range []string{defaultDir, filepath.Join(defaultDir, "local.d"), libDir, stateDir} {
 		mode := os.FileMode(0o700)
 		if d == libDir {
 			mode = 0o755
@@ -149,7 +169,8 @@ func doInstall(key string, port int) error {
 
 	// Dienst
 	if systemd {
-		if err := os.WriteFile(unitPath, []byte(fmt.Sprintf(unitFile, port)), 0o644); err != nil {
+		_, zerr := exec.LookPath("zypper")
+		if err := os.WriteFile(unitPath, []byte(unitText(port, zerr == nil)), 0o644); err != nil {
 			return err
 		}
 		for _, a := range [][]string{{"daemon-reload"}, {"enable", unitName}, {"restart", unitName}} {
@@ -261,6 +282,7 @@ func uninstall(args []string) int {
 		_ = os.Remove(binLink)
 	}
 	_ = os.RemoveAll(libDir)
+	_ = os.RemoveAll(stateDir)
 	for _, f := range []string{"keys", "hostkey"} {
 		_ = os.Remove(filepath.Join(defaultDir, f))
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 // Problem-Historie (Plan "Probleme und Verlauf"): ein Problem je Host und Dienst, solange der Dienst nicht OK ist;
-// der Ablauf steht in m64_events. Gelöst wird automatisch (System), von Hand (Person/API-Key) oder in der Wartung.
+// der Ablauf steht in m64_events. Geloest wird automatisch (System), von Hand (Person/API-Key) oder in der Wartung.
 
 // openProblem ist ein offenes Problem im Speicher.
 type openProblem struct {
@@ -27,6 +27,7 @@ func (m *Module) loadOpen(ctx context.Context, hostUID string) map[string]*openP
 	out := map[string]*openProblem{}
 	rows, err := m.st.Reader().QueryContext(ctx, `SELECT uid, service_key, state, worst, ack FROM m64_problems WHERE host_uid = ? AND closed_at = '' AND deleted = 0`, hostUID)
 	if err != nil {
+		m.log.Warn("monitor64: load problems", "err", err)
 		return out
 	}
 	defer rows.Close()
@@ -37,6 +38,9 @@ func (m *Module) loadOpen(ctx context.Context, hostUID string) map[string]*openP
 			p.Acked = ack != ""
 			out[key] = &p
 		}
+	}
+	if err := rows.Err(); err != nil {
+		m.log.Warn("monitor64: load problems", "err", err)
 	}
 	return out
 }
@@ -60,9 +64,9 @@ func (m *Module) event(ctx context.Context, problemUID, hostUID, svcKey, kind, t
 	}
 }
 
-// syncProblems gleicht die offenen Probleme mit dem Zustand der Runde ab.
-func (m *Module) syncProblems(ctx context.Context, h *Host, svcs []eval.ServiceInput, hres eval.HostResult, unreachDetail string, at time.Time) {
-	open := m.loadOpen(ctx, h.UID)
+// syncProblems gleicht die offenen Probleme mit dem Zustand der Runde ab (open: zu Beginn der Runde gelesen,
+// wird hier fortgeschrieben).
+func (m *Module) syncProblems(ctx context.Context, h *Host, open map[string]*openProblem, svcs []eval.ServiceInput, hres eval.HostResult, unreachDetail string, at time.Time) {
 	cur := map[string]struct {
 		state, detail string
 	}{}
@@ -89,11 +93,11 @@ func (m *Module) syncProblems(ctx context.Context, h *Host, svcs []eval.ServiceI
 				m.log.Warn("monitor64: open problem", "err", err)
 				continue
 			}
-			text := c.detail
+			open[key] = &openProblem{UID: uid, State: c.state, Worst: c.state}
+			m.event(ctx, uid, h.UID, key, c.state, c.detail, SystemActor, at)
 			if hres.Maintenance {
-				text = strings.TrimSpace(text + " (in Wartung – nicht gemeldet)")
+				m.event(ctx, uid, h.UID, key, "maint", i18nText("monitor64.detail.maint_silent"), SystemActor, at)
 			}
-			m.event(ctx, uid, h.UID, key, c.state, text, SystemActor, at)
 			continue
 		}
 		if p.State != c.state {
@@ -101,7 +105,8 @@ func (m *Module) syncProblems(ctx context.Context, h *Host, svcs []eval.ServiceI
 			if stateRank[c.state] > stateRank[worst] {
 				worst = c.state
 			}
-			_, _ = m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = ?, worst = ?, updated_at = ? WHERE uid = ?`, c.state, worst, tsNow(), p.UID)
+			_, _ = m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = ?, worst = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`, c.state, worst, tsNow(), p.UID)
+			p.State, p.Worst = c.state, worst
 			m.event(ctx, p.UID, h.UID, key, c.state, c.detail, SystemActor, at)
 		}
 	}
@@ -113,9 +118,12 @@ func (m *Module) syncProblems(ctx context.Context, h *Host, svcs []eval.ServiceI
 		if hres.Unreachable && key != "" {
 			continue
 		}
-		_, _ = m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = 'ok', closed_at = ?, closed_how = ?, closed_by = ?, updated_at = ? WHERE uid = ?`,
+		res, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = 'ok', closed_at = ?, closed_how = ?, closed_by = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`,
 			ts(at), how, SystemActor.json(), tsNow(), p.UID)
-		m.event(ctx, p.UID, h.UID, key, "ok", "", SystemActor, at)
+		delete(open, key)
+		if n, _ := res.RowsAffected(); err == nil && n > 0 {
+			m.event(ctx, p.UID, h.UID, key, "ok", "", SystemActor, at)
+		}
 	}
 }
 
@@ -147,7 +155,7 @@ func (m *Module) clearAck(ctx context.Context, hostUID, svcKey string) {
 		return
 	}
 	_, _ = m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET ack = '', updated_at = ? WHERE uid = ?`, tsNow(), p.UID)
-	m.event(ctx, p.UID, hostUID, svcKey, "unack", "Quittierung aufgehoben (verschlechtert)", SystemActor, time.Now())
+	m.event(ctx, p.UID, hostUID, svcKey, "unack", i18nText("monitor64.detail.unack"), SystemActor, time.Now())
 }
 
 // Ack quittiert ein offenes Problem (Kommentar optional).
@@ -174,7 +182,7 @@ func (m *Module) Resolve(ctx context.Context, hostUID, svcKey, comment string, b
 	if by.Kind == "api" {
 		how = "api"
 	}
-	if _, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET closed_at = ?, closed_how = ?, closed_by = ?, updated_at = ? WHERE uid = ?`,
+	if _, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET closed_at = ?, closed_how = ?, closed_by = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`,
 		tsNow(), how, by.json(), tsNow(), p.UID); err != nil {
 		return err
 	}
@@ -184,3 +192,30 @@ func (m *Module) Resolve(ctx context.Context, hostUID, svcKey, comment string, b
 
 // nodeID ist die Kennung dieser Node (Einstellung des Kerns).
 func (m *Module) nodeID() string { return m.st.SettingOr(context.Background(), "node.id", "") }
+
+// CloseHostProblems schliesst alle offenen Probleme eines Hosts (Host entfernt), mit Akteur.
+func (m *Module) CloseHostProblems(ctx context.Context, hostUID string, by Actor) error {
+	open := m.loadOpen(ctx, hostUID)
+	for key, p := range open {
+		if _, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET closed_at = ?, closed_how = 'removed', closed_by = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`,
+			tsNow(), by.json(), tsNow(), p.UID); err != nil {
+			return err
+		}
+		m.event(ctx, p.UID, hostUID, key, "resolved", i18nText("monitor64.detail.host_removed"), by, time.Now())
+	}
+	return nil
+}
+
+// purgeProblems loescht geschlossene Probleme und ihre Ereignisse nach der Aufbewahrung (wie die Stundenwerte).
+func (m *Module) purgeProblems(ctx context.Context, now time.Time) {
+	cut := ts(now.Add(-keepProblems))
+	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_events WHERE ts < ? AND problem_uid IN (SELECT uid FROM m64_problems WHERE closed_at != '' AND closed_at < ?)`, cut, cut); err != nil {
+		m.log.Warn("monitor64: purge events", "err", err)
+	}
+	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_problems WHERE closed_at != '' AND closed_at < ?`, cut); err != nil {
+		m.log.Warn("monitor64: purge problems", "err", err)
+	}
+	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_runtime WHERE host_uid NOT IN (SELECT uid FROM m64_hosts WHERE deleted = 0)`); err != nil {
+		m.log.Warn("monitor64: purge runtime", "err", err)
+	}
+}

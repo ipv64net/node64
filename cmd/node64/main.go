@@ -302,6 +302,7 @@ func run() error {
 	if monitor64.Enabled() { // Monitor64 bis zur Freigabe nur mit NODE64_MONITOR64=1 (Plan: Veroeffentlichung)
 		m64Module := monitor64.New(st, logger.Slog(), box, cfg.DataDir, Version)
 		m64Module.SetNotifier(dispatcher.Dispatch)
+		m64Module.SetQuiet(dispatcher.InQuietHours)
 		modules.Register(m64Module)
 	}
 	modules.StartEnabled(ctx)

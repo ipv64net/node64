@@ -99,3 +99,28 @@ func TestTrend(t *testing.T) {
 		}
 	})
 }
+
+// F5-K8: TrendDays fuer den Kern (Prozent belegt bis 100, freie Bytes bis 0), minuetliche Punkte.
+func TestTrendDays(t *testing.T) {
+	now := t0
+	var pct, free []Point
+	for m := 7 * 24 * 60; m >= 0; m-- {
+		at := now.Add(-time.Duration(m) * time.Minute)
+		d := float64(7*24*60-m) / (24 * 60)                     // Tage ab Beginn
+		pct = append(pct, Point{At: at, V: 60 + 2*d})           // 2 %/Tag, endet bei 74 %
+		free = append(free, Point{At: at, V: 4e12 - 0.25e12*d}) // 250 GB/Tag weniger, endet bei 2,25 TB
+	}
+	if d, ok := TrendDays(pct, now, 100); !ok || math.Abs(d-13) > 1e-6 {
+		t.Fatalf("Prozent: %v %v", d, ok)
+	}
+	if d, ok := TrendDays(free, now, 0); !ok || math.Abs(d-9) > 1e-6 {
+		t.Fatalf("frei: %v %v", d, ok)
+	}
+	// sinkender Fuellstand bzw. zu wenig Daten: keine Vorhersage, Wert passt als Messwert (keine Schwelle greift)
+	if d, ok := TrendDays(free, now, 100e12); ok || d != NoForecast {
+		t.Fatalf("keine Vorhersage: %v %v", d, ok)
+	}
+	if d, ok := TrendDays(pct[len(pct)-60:], now, 100); ok || d != NoForecast {
+		t.Fatalf("zu wenig Daten: %v %v", d, ok)
+	}
+}

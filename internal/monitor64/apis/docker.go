@@ -66,6 +66,7 @@ type dockerSeen struct {
 	id       string
 	restarts int
 	running  bool
+	stats    bool // stats lagen vor (sonst keine Raten in der naechsten Runde)
 }
 
 // NewDocker baut den Sammler. Close gibt die Verbindung frei (ssh://).
@@ -84,6 +85,8 @@ func NewDocker(cfg DockerConfig) (*Docker, error) {
 		// Einrichtung fehlerhaft (Schluessel, Pin): Poll liefert den Fehler bei jeder Runde
 		hc, base = &http.Client{}, "http://docker"
 	}
+	// keine Weiterleitungen (Plan): der Client gehoert nur diesem Poller, gilt also fuer seine Abfragen und inspect
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return newDocker(cfg, p, hc, base), nil
 }
 
@@ -273,11 +276,15 @@ func (d *Docker) containerService(r *proxmox.Resource) model.Service {
 	if (same && r.Restarts > prev.restarts) || r.Restarted {
 		parts = append(parts, fmt.Sprintf("neu gestartet (%d Neustarts)", r.Restarts))
 	}
-	d.restarts[r.Name] = dockerSeen{id: r.ContainerID, restarts: r.Restarts, running: running}
-	// CPU und Raten rechnet der DockerPoller aus zwei Runden: erst gueltig, wenn der Container schon lief
-	rates := running && same && prev.running && !r.Restarted
+	// stats nicht abrufbar: der Poller laesst CPU, RAM und Raten auf 0 (MaxCPU 0) – dann keine Messgroessen statt
+	// falscher Nullwerte
+	hasStats := running && r.MaxCPU > 0
+	d.restarts[r.Name] = dockerSeen{id: r.ContainerID, restarts: r.Restarts, running: running, stats: hasStats}
+	// CPU und Raten rechnet der DockerPoller aus zwei Runden: erst gueltig, wenn der Container schon lief und beide
+	// Runden stats hatten
+	rates := hasStats && same && prev.running && prev.stats && !r.Restarted
 	if running {
-		if r.MaxCPU > 0 && rates {
+		if rates {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "cpu", Value: round2(r.CPU * 100), Unit: "%", Rule: model.RuleCPU})
 			parts = append(parts, fmt.Sprintf("CPU %.0f %%", r.CPU*100))
 		}

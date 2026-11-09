@@ -181,6 +181,7 @@ func (db *DB) DeleteSeriesPrefix(ctx context.Context, prefix string) (int, error
 		if strings.HasPrefix(key, prefix) {
 			s.mu.Lock()
 			s.gone = true
+			db.unqueue(s, s.seq) // ungesicherte Stunden verwerfen (Zaehler backlog)
 			s.mu.Unlock()
 			delete(db.series, key)
 			n++

@@ -13,7 +13,7 @@
 		<input class="form-control form-control-sm ms-auto m64-search" id="m64-q" placeholder="{{.T "monitor64.pb.search"}}" aria-label="{{.T "monitor64.pb.search"}}">
 	</div>
 	<div class="card">
-		<div class="table-responsive"><table class="table table-hover mb-0 align-middle pb-table">
+		<div class="table-responsive"><table class="table table-hover mb-0 align-middle pb-table" data-nosort>
 			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.host_service"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.start"}}</th><th class="d-none d-sm-table-cell">{{.T "monitor64.col.duration"}}</th><th>{{.T "monitor64.col.resolved"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.notified"}}</th></tr></thead>
 			<tbody id="m64-pb"></tbody>
 		</table></div>

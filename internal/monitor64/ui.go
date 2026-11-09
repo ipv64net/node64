@@ -316,6 +316,9 @@ func (m *Module) basePage(r *http.Request, page, active string) *pageData {
 	for _, k := range textKeys() {
 		texts[k] = m.t(r, "monitor64."+k)
 	}
+	for _, k := range coreTexts {
+		texts[k] = m.t(r, "monitor64."+k)
+	}
 	kinds := map[string]string{}
 	for _, k := range ruleKinds {
 		kinds[k.Kind] = m.t(r, "monitor64.kind."+kindKey(k.Kind))

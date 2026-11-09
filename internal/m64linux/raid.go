@@ -14,15 +14,21 @@ var (
 	mdSyncRE   = regexp.MustCompile(`\b(resync|recovery|reshape|check|repair)\s*=\s*([0-9.]+)%`)
 	mdDelayRE  = regexp.MustCompile(`\b(resync|recovery|reshape|check|repair)\s*=\s*(DELAYED|PENDING)`)
 	mdMemberRE = regexp.MustCompile(`^([^\[\s]+)\[\d+\]((?:\([A-Z]\))*)$`)
+	// Container mit externen Metadaten (Intel IMSM, DDF): "super external:imsm"; Teil-Arrays haben
+	// "super external:/md127/0" bzw. "external:-md127/0"
+	mdContainerRE = regexp.MustCompile(`(^| )super external:[A-Za-z]`)
 )
 
 // ParseMdstat liest /proc/mdstat.
 //
 // State: active, degraded (weniger aktive als Soll), recovering (Wiederaufbau), resyncing (resync/reshape),
 // failed (inactive). Pruefung (check/repair) laesst den Zustand stehen und setzt nur SyncPercent.
+// Container mit externen Metadaten (IMSM/DDF, immer "inactive" mit Mitgliedern "(S)") sind kein RAID und fehlen;
+// ihre Teil-Arrays (md126 ...) erscheinen normal.
 func ParseMdstat(b []byte) []m64proto.RAID {
 	var out []m64proto.RAID
 	var cur *m64proto.RAID
+	container := map[int]bool{}
 	for _, ln := range lines(b) {
 		if m := mdHeadRE.FindStringSubmatch(ln); m != nil {
 			if len(out) >= 64 {
@@ -40,6 +46,9 @@ func ParseMdstat(b []byte) []m64proto.RAID {
 		if t == "" {
 			cur = nil
 			continue
+		}
+		if mdContainerRE.MatchString(t) {
+			container[len(out)-1] = true
 		}
 		if m := mdCountRE.FindStringSubmatch(t); m != nil {
 			cur.Devices, _ = strconv.Atoi(m[1])
@@ -66,6 +75,15 @@ func ParseMdstat(b []byte) []m64proto.RAID {
 				r.State = "failed"
 			}
 		}
+	}
+	if len(container) > 0 {
+		keep := out[:0]
+		for i, r := range out {
+			if !container[i] {
+				keep = append(keep, r)
+			}
+		}
+		out = keep
 	}
 	return out
 }

@@ -1,4 +1,4 @@
-{"health":"FAILED","type":"ata","attributes":[
+{"health":"FAILED!","type":"ata","attributes":[
   {"id":"  5","name":"Reallocated_Sector_Ct","value":"098","worst":"098","threshold":"010","fail":"-","flags":"PO--CU","raw":"24","normalized":98},
   {"id":"190","name":"Airflow_Temperature_Cel","value":"062","worst":"051","threshold":"040","fail":"-","flags":"-O---K","raw":"38 (Min/Max 21/49)","normalized":62},
   {"id":"194","name":"Temperature_Celsius","value":"038","worst":"049","threshold":"000","fail":"-","flags":"-O---K","raw":"38 (0 18 0 0 0)","normalized":38},
