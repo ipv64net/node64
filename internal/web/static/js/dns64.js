@@ -763,7 +763,7 @@
 	}
 
 	// Weiterleitungen, Umschreiben und lokale Zonen: Bearbeiten im Formular der Karte, Testabfrage je Weiterleitung
-	if (kind === "forwards" || kind === "records") {
+	if (kind === "forwards" || kind === "records" || kind === "dhcp") {
 		var reset = function (form) {
 			var title = form.closest(".card").querySelector(".card-header [data-edit]"), btn = form.querySelector("button[type=submit] span");
 			form.reset();
@@ -790,6 +790,15 @@
 		document.querySelectorAll("form [data-cancel]").forEach(function (c) {
 			c.addEventListener("click", function () { reset(c.form); });
 		});
+		// DHCP: Schnittstelle gewaehlt -> Netz, Bereich und Router aus dem Vorschlag (nur beim Anlegen)
+		var iface = $("d-iface");
+		if (iface) {
+			iface.addEventListener("change", function () {
+				var form = iface.form, o = document.querySelector('#dhcp-ifaces option[value="' + iface.value.replace(/"/g, "") + '"]');
+				if (!o || form.action.indexOf("/edit") >= 0) { return; }
+				["subnet", "start", "end", "router"].forEach(function (k) { form.elements[k].value = o.getAttribute("data-" + k) || ""; });
+			});
+		}
 		document.querySelectorAll("[data-fwd-test]").forEach(function (b) {
 			b.addEventListener("click", function () {
 				var id = b.getAttribute("data-fwd-test"), out = document.querySelector('[data-fwd-result="' + id + '"]');

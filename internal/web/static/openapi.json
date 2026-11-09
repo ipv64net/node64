@@ -5886,6 +5886,130 @@
           "target"
         ]
       },
+      "DNS64DHCPScope": {
+        "type": "object",
+        "description": "DHCP-Netz (je Schnittstelle eins). Neue Netze sind eingeschaltet.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "example": "Heimnetz"
+          },
+          "interface": {
+            "type": "string",
+            "example": "eth0",
+            "description": "Schnittstelle des Hosts, auch VLAN (eth0.20)"
+          },
+          "subnet": {
+            "type": "string",
+            "example": "192.168.1.0/24"
+          },
+          "range_start": {
+            "type": "string",
+            "example": "192.168.1.100"
+          },
+          "range_end": {
+            "type": "string",
+            "example": "192.168.1.199"
+          },
+          "router": {
+            "type": "string",
+            "example": "192.168.1.1",
+            "description": "leer = keiner"
+          },
+          "dns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "leer = diese Node (empfohlen), höchstens 4"
+          },
+          "domain": {
+            "type": "string",
+            "example": "home.lan"
+          },
+          "lease_hours": {
+            "type": "integer",
+            "example": 24,
+            "description": "1–8760, 0 = 24"
+          },
+          "ntp": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "authoritative": {
+            "type": "boolean",
+            "description": "Anfragen nach Adressen, die hier nicht passen: NAK (Umstieg vom Router)"
+          },
+          "boot_server": {
+            "type": "string",
+            "description": "PXE: TFTP-Server (Option 66)"
+          },
+          "boot_bios": {
+            "type": "string",
+            "example": "netboot.xyz.kpxe"
+          },
+          "boot_uefi": {
+            "type": "string",
+            "example": "netboot.xyz.efi"
+          },
+          "boot_ipxe": {
+            "type": "string",
+            "description": "Boot-Datei, wenn der Client schon iPXE ist"
+          },
+          "enabled": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "interface",
+          "subnet",
+          "range_start",
+          "range_end"
+        ]
+      },
+      "DNS64DHCPReservation": {
+        "type": "object",
+        "description": "Feste Adresse (MAC und IP je Netz eindeutig)",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "scope_id": {
+            "type": "integer"
+          },
+          "mac": {
+            "type": "string",
+            "example": "aa:bb:cc:dd:ee:ff"
+          },
+          "ip": {
+            "type": "string",
+            "example": "192.168.1.20"
+          },
+          "name": {
+            "type": "string",
+            "example": "nas"
+          },
+          "comment": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_id",
+          "mac",
+          "ip"
+        ]
+      },
       "DNS64Zone": {
         "type": "object",
         "properties": {
@@ -24578,6 +24702,391 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Server: Schalter und Zustand",
+        "description": "mode (off, observe = Probelauf, on), running, docker_bridge und state mit Netzen (Belegung, Fehler, Leases), letzten Anfragen, fremden DHCP-Servern und Zählern.",
+        "responses": {
+          "200": {
+            "description": "Zustand"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/mode": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Server schalten (je Node, nie im Cluster)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "observe",
+                      "on"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Geschaltet"
+          },
+          "400": {
+            "description": "Ungültig bzw. Docker-Bridge-Netz"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/scopes": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Netze auflisten",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64DHCPScope"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Netz anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64DHCPScope"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64DHCPScope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/scopes/{id}": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Netz ändern (an/aus bleibt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64DHCPScope"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64DHCPScope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Netz mit festen Adressen und Leases löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/scopes/{id}/enable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Netz einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Eingeschaltet"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/scopes/{id}/disable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "DHCP-Netz ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Ausgeschaltet"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/reservations": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Feste DHCP-Adressen auflisten",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64DHCPReservation"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Feste DHCP-Adresse anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64DHCPReservation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64DHCPReservation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/reservations/{id}": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Feste DHCP-Adresse ändern",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64DHCPReservation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64DHCPReservation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Feste DHCP-Adresse löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/leases/{scope}/{mac}": {
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Vergebene Adresse freigeben",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "mac",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "aa:bb:cc:dd:ee:ff"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Freigegeben"
           },
           "404": {
             "description": "Nicht gefunden"

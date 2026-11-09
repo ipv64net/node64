@@ -1,6 +1,6 @@
-# Plan: DHCP-Server in DNS64 (unter „Lokaler DNS“)
+# Plan: DHCP-Server in DNS64
 
-Stand 2026-11-09, **nur Plan, nichts umgesetzt.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
+Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, aus D4 schon mehrere Netze je Schnittstelle und Relay (giaddr); offen: D3, D5, D6.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
 (Pi-hole und AdGuard Home haben ihn). Ziel: ein leichter DHCP-Server für Homelab und kleine bis mittlere Firmen, der
 Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md),
 [PLAN-NODE64-DNS64-GRUPPEN.md](PLAN-NODE64-DNS64-GRUPPEN.md), [CLUSTER.md](CLUSTER.md).
@@ -9,8 +9,12 @@ Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.
 
 - **Leicht:** nur IPv4-DHCP (RFC 2131/2132), keine DHCPv6, kein ISC-Failover-Protokoll und keine freien
   Boot-Skripte. Was ein Router-DHCP kann, plus die Verbindung zum DNS. Mehr kommt nicht hinein.
-- **Standard aus.** Ein zweiter DHCP-Server im Netz macht Ärger. Deshalb erst einschalten, wenn kein fremder Server
-  mehr antwortet, oder bewusst bestätigen.
+- **Teil von DNS64, kein eigenes Modul** (wie der lokale DNS-Server), aber **opt-in:** Standard aus, und solange
+  DHCP aus ist, belegt DNS64 **keinen Port** (kein Socket auf 67/udp, kein DISCOVER ins Netz). Ein zweiter
+  DHCP-Server im Netz macht Ärger. Deshalb erst einschalten, wenn kein fremder Server mehr antwortet, oder bewusst
+  bestätigen.
+- **Einfach für Heimanwender:** Beim Einschalten reichen Schnittstelle und Adressbereich. Router, DNS, Maske und
+  Domain schlägt die Node vor. Alles Weitere (PXE, NTP, Lease-Zeit, autoritativ) steht unter „Erweitert“.
 - **Mehrere Netze von Anfang an im Datenmodell** (ein „Netz“ = Schnittstelle + Subnetz + Adressbereich), damit eine
   Node mit zwei, drei Schnittstellen bzw. VLANs (z. B. LAN, Gäste-WLAN, IoT) mehrere DHCP-Netze bedient. In der
   Oberfläche zuerst ein Netz, mehrere ab D4.
@@ -38,13 +42,13 @@ mit `SO_BINDTODEVICE` und `SO_BROADCAST` über `x/sys/unix`. Antworten gehen per
 sonst per Unicast. So braucht es keinen Raw-Socket für Ethernet-Frames. Alternative: eigener Parser (~400 Zeilen),
 das bedeutet aber mehr Pflege. Siehe offene Entscheidung 1.
 
-**Datenbank** (Migration `0016_dhcp.sql`, DNS64-SQLite):
+**Datenbank** (Migration `0016_dhcp.sql`, node64.db):
 
 | Tabelle | Inhalt |
 |---|---|
-| `dhcp_scopes` | id, Name, Schnittstelle, Subnetz, Bereich von–bis, Router, DNS-Server (leer = diese Node), Domain, Lease-Zeit, NTP, autoritativ, an/aus, nur diese Node |
-| `dhcp_reservations` | scope_id, MAC, IP, Name, Kommentar, Gerätegruppe (optional), an/aus |
-| `dhcp_leases` | scope_id, MAC, IP, Hostname (vom Client), Name (bereinigt), Beginn, Ablauf, Zustand (angeboten/vergeben/abgelehnt/frei) |
+| `dns64_dhcp_scopes` | id, Name, Schnittstelle, Subnetz, Bereich von–bis, Router, DNS-Server (leer = diese Node), Domain, Lease-Zeit, NTP, autoritativ, an/aus, nur diese Node |
+| `dns64_dhcp_reservations` | scope_id, MAC, IP, Name, Kommentar, Gerätegruppe (optional), an/aus |
+| `dns64_dhcp_leases` | scope_id, MAC, IP, Hostname (vom Client), Name (bereinigt), Beginn, Ablauf, Zustand (angeboten/vergeben/abgelehnt/frei) |
 
 Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DECLINE. Abgelaufene Leases bleiben
 24 h sichtbar: Kommt der Client wieder, bekommt er dieselbe IP.
@@ -65,11 +69,13 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
 - **Probelauf** (nur beobachten): Die Node hört mit und zeigt, welche Geräte DHCP anfragen und was sie bekommen
   würden, antwortet aber nicht. Für den sicheren Umstieg vom Router.
 
-**D2 Oberfläche: Reiter „DHCP“ unter Lokaler DNS** (neben Zonen und Weiterleitungen in `localTabs`)
+**D2 Oberfläche: eigener Menüpunkt „DHCP“ in der linken Navigation** (Unterpunkt von DNS64 wie „Lokaler DNS“, Pfad `/dns64/dhcp`)
 - Karte je Netz: Schnittstelle, Subnetz, Bereich, Auslastung als Balken (vergeben/reserviert/frei), Schalter,
   Probelauf, Hinweise (Bridge-Netz, fremder Server, Pool fast voll).
 - Lease-Tabelle: Name, IP, MAC, läuft ab, Herkunft (Lease/Reservierung). Suche wie bei den Einträgen. „Reservieren“
   per Klick aus einem Lease, „Freigeben“.
+- **PXE/Netboot** je Netz unter „Erweitert“: Boot-Server (Option 66/`siaddr`) und Boot-Datei (Option 67), getrennt
+  für BIOS und UEFI (Option 93 des Clients), z. B. netboot.xyz. Keine freien Optionen.
 - Reservierungen: MAC → IP, Name, Kommentar, Gerätegruppe. Import aus dnsmasq/Pi-hole (`dhcp-host=…`) und CSV,
   Export als CSV.
 - API v1 der Node (`/api/v1/dns64/dhcp/…`) wie bei Einträgen und Zonen, im Backup/Export enthalten.
@@ -113,19 +119,29 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
 - Schutz vor zwei aktiven Servern: Sind zwei Nodes im Cluster für dasselbe Subnetz aktiv (ohne Reserve aus D6),
   zeigt die Cluster-Seite einen Fehler, und die zweite Node bleibt im Probelauf.
 
-**D6 Reserve-Node (später, eigener Schritt)**
+**D6 Reserve-Node (beschlossen, nach D5)**
 - Eine zweite Node mit demselben Netz läuft als „Reserve“. Jede Vergabe geht sofort über den Cluster an die Reserve
   (Leases als eigener Kanal, nicht als Bereich).
-- Die Reserve antwortet nur, wenn die Haupt-Node im Cluster nicht erreichbar ist **oder** der Client laut
-  `secs`-Feld schon ≥ 10 s wartet. Das ist der bekannte Kniff aus ISC dhcpd und kommt ohne Failover-Protokoll aus.
-  Doppelte Vergaben fangen ARP-Probe und DECLINE ab.
-- Erst bauen, wenn D1–D5 im Einsatz sind und danach gefragt wird.
+- Die Reserve antwortet nur, wenn die Haupt-Node wirklich weg ist: im Cluster nicht erreichbar **und** der Client
+  wartet laut `secs`-Feld schon ≥ 10 s (der Kniff aus ISC dhcpd, ohne Failover-Protokoll). Ist die Haupt-Node
+  erreichbar, bleibt die Reserve still, auch bei hohem `secs`. Doppelte Vergaben fangen ARP-Probe und DECLINE ab.
+
+## Stand der Umsetzung (1.36.0)
+
+- Paket `internal/dns64/dhcp` (Vergabe, Sockets mit `SO_BINDTODEVICE`, ARP-Probe per `AF_PACKET`, Suche nach fremden
+  Servern über Port 68 mit 6 s Wartezeit, weil dnsmasq/ISC vor dem Angebot bis 3 s pingen), DNS64-Teil in
+  `dhcp.go`/`dhcp_ui.go`, Seite `templates/pages/dhcp.html`, Menüpunkt in `internal/web/view.go`.
+- Schalter `dns64.dhcp` (off/observe/on) je Node; DHCP läuft neben dem DNS-Dienst und startet nur bei Änderungen an
+  Netzen/festen Adressen neu (Anfragen, Sperren und Funde bleiben dabei erhalten).
+- Benachrichtigung `dns64_dhcp`: fremder DHCP-Server, Netz zu 90 % belegt.
+- Getestet: Einheitstests, echte Sockets im Test-Container (veth + Namensraum, Client udhcpc, fremder Server dnsmasq),
+  Oberfläche lokal (Desktop und Handy).
 
 ## Bewusst nicht dabei (vorerst)
 
 - DHCPv6 und Router Advertisements: IPv6 läuft im Heimnetz über SLAAC des Routers. Den DNS-Server dafür verteilt
   der Router (RDNSS). Kann später als „RA mit RDNSS“ kommen, falls gefragt.
-- PXE/Netboot (Optionen 66/67) und freie Optionen. Siehe offene Entscheidung 3.
+- Freie DHCP-Optionen (nur die festen Felder inkl. PXE).
 - Option 82 (Relay-Agent-Info), Klassen/Vendor-Regeln, DDNS an fremde DNS-Server (dafür gibt es RFC 2136 an DNS64),
   MAC-Herstellerliste.
 - Online-Teil: Leases bleiben lokal. ipv64.net bekommt höchstens Zähler (Netze, Leases), falls gewünscht.
@@ -137,10 +153,10 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
   (node64.de: Docs DNS64 → DHCP, API).
 - Doku muss die Docker-Vorgabe deutlich zeigen: DHCP geht nur mit `network_mode: host` (oder macvlan).
 
-## Offene Entscheidungen (Dennis)
+## Entscheidungen (Dennis, 2026-11-09)
 
-1. Paket `insomniacslk/dhcp/dhcpv4` für das Paketformat oder eigener Parser? Empfehlung: das Paket.
-2. Reserve-Node (D6) gleich mitplanen oder erst nach Rückmeldungen? Empfehlung: erst später. D5 (Abgleich + alle
-   DNS-Nodes in Option 6) deckt das Meiste ab.
-3. PXE/Netboot (Optionen 66/67, z. B. netboot.xyz) schon in D2 als einfache Felder je Netz? Im Homelab gern
-   gefragt, kostet wenig. Empfehlung: ja, als zwei optionale Felder, aber keine freien Optionen.
+1. Paket `insomniacslk/dhcp/dhcpv4` für das Paketformat: ja.
+2. DHCP bekommt einen eigenen Menüpunkt in der linken Navigation (kein Reiter unter Lokaler DNS).
+3. Reserve-Node (D6): ja, sie antwortet nur, wenn die andere Node wirklich weg ist.
+4. PXE/Netboot gleich in D2.
+5. Kein eigenes Modul, sondern Teil von DNS64; opt-in, Standard aus, ohne Einschalten kein Port.

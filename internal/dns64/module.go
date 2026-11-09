@@ -26,6 +26,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/dns64/cache"
+	"github.com/ipv64net/node64/internal/dns64/dhcp"
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/groups"
@@ -51,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.35.1"
+	version   = "1.36.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -115,6 +116,8 @@ type Module struct {
 	clGen     map[string]uint64            // Zaehler je Bereich: Stand getauscht (clChanged, clSetSnap)
 	clRestart *time.Timer                  // Neustart nach uebernommenen Einstellungen
 	recReload *time.Timer                  // Momentaufnahme nach Uebernahmen neu (records.go)
+	dh        dhcpState                    // DHCP-Server (dhcp.go), opt-in
+	dhcpSrv   atomic.Pointer[dhcp.Server]  // laufender DHCP-Server, nil = aus
 }
 
 const retryEvery = time.Minute
@@ -159,6 +162,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.groupRoutes(mux, g)
 	m.forwardRoutes(mux, g)
 	m.zoneRoutes(mux, g)
+	m.dhcpRoutes(mux, g)
 	m.apiRoutes(mux, g)
 	m.apiMoreRoutes(mux, g)
 }
@@ -213,7 +217,9 @@ func (m *Module) routerAddr(ctx context.Context) string {
 func (m *Module) Start(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
-	return m.startLocked()
+	err := m.startLocked()
+	m.dhcpApply(ctx) // DHCP nur, wenn eingeschaltet (dns64.dhcp)
+	return err
 }
 
 // startLocked: Start ohne m.ctl (Aufrufer haelt ihn).
@@ -365,6 +371,7 @@ func (m *Module) start(ctx context.Context) error {
 func (m *Module) Stop(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
+	m.dhcpHalt()
 	return m.stopLocked(ctx)
 }
 

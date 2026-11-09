@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- DNS64: DHCP server as its own menu item (opt-in, off by default, no port until turned on) – networks per interface/VLAN, fixed addresses, dry run, detection of other DHCP servers, ARP check, PXE/netboot; host network or macvlan only (#59).
 - PROXY64: redirect on denied access per location – visitors turned away by the access list are sent to a configurable address with 302 instead of the error page (e.g. Vaultwarden `/admin` only from the LAN); logins stay unchanged (#55).
 - DNS64: block and allow lists understand AdGuard rules with a single bar – `@@|name^` exempts exactly this name, `|name^` blocks exactly it (previously ignored silently).
 - Certificates: wildcards like `*.lab.domain.tld` at Cloudflare and other DNS providers now also work when a wildcard CNAME points all subdomains home (e.g. to a DynDNS domain).

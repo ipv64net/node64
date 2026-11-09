@@ -299,8 +299,9 @@ func (s *Server) nav(r *http.Request) []NavItem {
 				NavItem{Key: "nav.docker", Path: "/healthchecks/docker", Icon: "bi-box-seam", Available: true, Enabled: m.Running, Sub: true})
 			items = append(items, link)
 		}
-		if m.Info.Path == "/dns64" && m.Enabled { // lokaler DNS-Server (Zonen, Weiterleitungen) unter DNS64
-			items = append(items, NavItem{Key: "nav.local_dns", Path: "/dns64/local", Icon: "bi-diagram-3", Available: true, Enabled: m.Running, Sub: true})
+		if m.Info.Path == "/dns64" && m.Enabled { // lokaler DNS-Server (Zonen, Weiterleitungen) und DHCP-Server unter DNS64
+			items = append(items, NavItem{Key: "nav.local_dns", Path: "/dns64/local", Icon: "bi-diagram-3", Available: true, Enabled: m.Running, Sub: true},
+				NavItem{Key: "nav.dhcp", Path: "/dns64/dhcp", Icon: "bi-router", Available: true, Enabled: m.Running, Sub: true})
 		}
 	}
 	if s.Certs != nil {

@@ -52,6 +52,7 @@ const (
 	KindDNS64Up    Kind = "dns64_upstream_ok" // Upstream-Server antwortet wieder
 	KindDNS64Lists Kind = "dns64_lists"       // Blockliste laesst sich nicht aktualisieren
 	KindDNS64Cert  Kind = "dns64_cert"        // Zertifikat (Let's Encrypt) laesst sich nicht holen/verlaengern
+	KindDNS64DHCP  Kind = "dns64_dhcp"        // DHCP: fremder DHCP-Server im Netz bzw. Adressbereich fast voll
 	// Zertifikatsverwaltung des Kerns (ebenfalls nur lokal)
 	KindCertFail   Kind = "cert_fail"   // Zertifikat laesst sich nicht holen bzw. verlaengern
 	KindCertExpiry Kind = "cert_expiry" // Zertifikat laeuft bald ab

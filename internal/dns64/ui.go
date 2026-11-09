@@ -102,6 +102,7 @@ type pageData struct {
 	Enc     encView
 	Pause   pauseView
 	Refused dnsserver.Refused // Anfragen von fremden Adressen seit dem Start
+	DHCP    dhcpPage          // Seite DHCP
 }
 
 var tabs = []tab{{"overview", "/dns64", "dns64.tab.overview", "bi-speedometer2", false}, {"log", "/dns64/log", "dns64.tab.log", "bi-list-ul", false},
@@ -119,6 +120,8 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		set := tabs
 		if key == "local" || key == "forwards" {
 			set = localTabs
+		} else if key == "dhcp" { // eigener Menuepunkt ohne Reiter
+			set = nil
 		}
 		for _, t := range set {
 			t.Active = t.Key == key || (key == "top" && t.Key == "overview")
@@ -166,6 +169,11 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		}
 		if key == "local" {
 			if err := m.localView(r, &d); err != nil {
+				m.g.Flash(w, r, "danger", err.Error())
+			}
+		}
+		if key == "dhcp" {
+			if err := m.dhcpView(ctx, &d); err != nil {
 				m.g.Flash(w, r, "danger", err.Error())
 			}
 		}

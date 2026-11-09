@@ -422,7 +422,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
 	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindUnchecked || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
-		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindCertFail || k == KindCertExpiry || k == KindCDNOnlineDown ||
+		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindDNS64DHCP || k == KindCertFail || k == KindCertExpiry || k == KindCDNOnlineDown ||
 		k == KindCDNOnlineBlocked || k == KindClusterDown || k == KindHoneypotWatch || k == KindHoneypotLogin || k == KindProxmoxDown || k == KindProxmoxThreshold ||
 		k == KindUpdateFailed || k == KindMonitorProblem || k == KindMonitorUnreachable || k == KindMonitorFlapping || k == KindMonitorReminder
 }

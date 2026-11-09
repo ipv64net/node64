@@ -35,7 +35,7 @@ func mailStatus(k Kind, lang string) (color, label string) {
 		l = mailLabels["de"]
 	}
 	switch k { // Balken passend zum Betreff (auch Modul-Meldungen: Proxmox/Docker, DynDNS, DNS64, Zertifikate, CDN64, Cluster)
-	case KindDown, KindReminder, KindSummary, KindProxmoxDown, KindDynFail, KindDNS64Down, KindDNS64Lists, KindDNS64Cert, KindCertFail,
+	case KindDown, KindReminder, KindSummary, KindProxmoxDown, KindDynFail, KindDNS64Down, KindDNS64Lists, KindDNS64Cert, KindDNS64DHCP, KindCertFail,
 		KindCDNOnlineDown, KindCDNOnlineBlocked, KindClusterDown, KindHoneypotWatch, KindHoneypotLogin, KindUpdateFailed,
 		KindMonitorProblem, KindMonitorUnreachable, KindMonitorReminder:
 		return "#d63939", l["down"]

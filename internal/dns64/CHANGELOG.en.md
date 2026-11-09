@@ -1,5 +1,16 @@
 # Changes – DNS64
 
+## 1.36.0 – 2026-11-09
+
+### New
+- DHCP server, its own menu item under DNS64 (#59). Off by default – without turning it on, DNS64 uses no port. Hands out IPv4 addresses per network and interface (VLANs and several networks too), with router, domain, NTP and this node as DNS server.
+- Dry run: only listens and shows which devices ask and which address they would get; other DHCP servers on the network are detected and reported (also as a notification).
+- Fixed addresses (also with one click from a leased address), list of leased addresses with release, recent requests, usage per network with a notification at 90 %.
+- Before every new lease an ARP request checks whether the address is already in use; “authoritative” makes devices get a new address right away when switching from the router.
+- PXE/netboot per network (boot server, files for BIOS, UEFI and iPXE, e.g. netboot.xyz) and DHCP relay (giaddr) for networks behind a router.
+- API `/api/dns64/dhcp` (mode, networks, fixed addresses, leases). Port 67/UDP shows up in the port overview as soon as DHCP is on.
+- Requirement: host network (`network_mode: host`) or macvlan; in the Docker bridge network DHCP is blocked.
+
 ## 1.35.1 – 2026-11-09
 
 ### Fixed

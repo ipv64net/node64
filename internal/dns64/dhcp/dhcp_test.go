@@ -1,0 +1,283 @@
+package dhcp
+
+import (
+	"net"
+	"net/netip"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/insomniacslk/dhcp/iana"
+)
+
+type memStore struct {
+	mu     sync.Mutex
+	leases map[string]Lease
+}
+
+func (m *memStore) SaveLease(l Lease) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.leases[l.MAC] = l
+	return nil
+}
+
+// all liefert eine Kopie (der Server schreibt aus eigenen Goroutinen).
+func (m *memStore) all() map[string]Lease {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]Lease{}
+	for k, v := range m.leases {
+		out[k] = v
+	}
+	return out
+}
+
+func (m *memStore) DeleteLease(_ int64, mac string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.leases, mac)
+	return nil
+}
+
+var (
+	macA = net.HardwareAddr{0x02, 0, 0, 0, 0, 0x0a}
+	macB = net.HardwareAddr{0x02, 0, 0, 0, 0, 0x0b}
+)
+
+func testScope() Scope {
+	return Scope{ID: 1, Name: "LAN", Iface: "eth0", Subnet: netip.MustParsePrefix("192.168.1.0/24"),
+		Start: netip.MustParseAddr("192.168.1.1"), End: netip.MustParseAddr("192.168.1.5"), Router: netip.MustParseAddr("192.168.1.1"),
+		Domain: "home.lan", Lease: time.Hour, Authoritative: true}
+}
+
+func newTest(t *testing.T, cfg Config) (*Server, *memStore, *time.Time) {
+	t.Helper()
+	if cfg.Scopes == nil {
+		cfg.Scopes = []Scope{testScope()}
+	}
+	st := &memStore{leases: map[string]Lease{}}
+	s := New(cfg, st, nil)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	s.Now = func() time.Time { return now }
+	s.Addrs = func(string) []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")} }
+	s.bind()
+	return s, st, &now
+}
+
+func discover(t *testing.T, mac net.HardwareAddr, mods ...dhcpv4.Modifier) *dhcpv4.DHCPv4 {
+	t.Helper()
+	d, err := dhcpv4.NewDiscovery(mac, mods...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func offerAndAck(t *testing.T, s *Server, mac net.HardwareAddr) netip.Addr {
+	t.Helper()
+	off := s.Handle("eth0", discover(t, mac))
+	if off == nil || off.msg.MessageType() != dhcpv4.MessageTypeOffer {
+		t.Fatalf("no offer: %v", off)
+	}
+	req, err := dhcpv4.NewRequestFromOffer(off.msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ack := s.Handle("eth0", req)
+	if ack == nil || ack.msg.MessageType() != dhcpv4.MessageTypeAck {
+		t.Fatalf("no ack: %v", ack)
+	}
+	return ip4(ack.msg.YourIPAddr)
+}
+
+func TestDiscoverRequestAck(t *testing.T) {
+	s, st, _ := newTest(t, Config{})
+	off := s.Handle("eth0", discover(t, macA))
+	if off == nil {
+		t.Fatal("no offer")
+	}
+	m := off.msg
+	// .1 ist der Router, .2 die Node: erste freie Adresse .3
+	if got := ip4(m.YourIPAddr); got != netip.MustParseAddr("192.168.1.3") {
+		t.Fatalf("offer %v", got)
+	}
+	if ip4(m.ServerIdentifier()) != netip.MustParseAddr("192.168.1.2") || len(m.DNS()) != 1 || !m.DNS()[0].Equal(net.ParseIP("192.168.1.2")) {
+		t.Errorf("server id %v dns %v", m.ServerIdentifier(), m.DNS())
+	}
+	if m.DomainName() != "home.lan" || m.IPAddressLeaseTime(0) != time.Hour || off.to.Addr() != netip.MustParseAddr("255.255.255.255") || off.to.Port() != 68 {
+		t.Errorf("domain %q lease %v to %v", m.DomainName(), m.IPAddressLeaseTime(0), off.to)
+	}
+	req, _ := dhcpv4.NewRequestFromOffer(m)
+	ack := s.Handle("eth0", req)
+	if ack == nil || ack.msg.MessageType() != dhcpv4.MessageTypeAck || ip4(ack.msg.YourIPAddr) != netip.MustParseAddr("192.168.1.3") {
+		t.Fatalf("ack %v", ack)
+	}
+	if l := st.leases[macA.String()]; l.State != StateBound || l.IP != netip.MustParseAddr("192.168.1.3") {
+		t.Errorf("stored %+v", l)
+	}
+	// derselbe Client bekommt dieselbe Adresse, ein anderer die naechste
+	if got := ip4(s.Handle("eth0", discover(t, macA)).msg.YourIPAddr); got != netip.MustParseAddr("192.168.1.3") {
+		t.Errorf("again %v", got)
+	}
+	if got := offerAndAck(t, s, macB); got != netip.MustParseAddr("192.168.1.4") {
+		t.Errorf("second client %v", got)
+	}
+}
+
+func TestRenewUnicastAndRelay(t *testing.T) {
+	s, _, _ := newTest(t, Config{})
+	ip := offerAndAck(t, s, macA)
+	renew, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest), dhcpv4.WithClientIP(ip.AsSlice()))
+	r := s.Handle("eth0", renew)
+	if r == nil || r.msg.MessageType() != dhcpv4.MessageTypeAck || r.to != netip.AddrPortFrom(ip, 68) {
+		t.Fatalf("renew %v", r)
+	}
+	// Relay: Netz ueber giaddr, Antwort an das Relay
+	d := discover(t, macB, dhcpv4.WithGatewayIP(net.ParseIP("192.168.1.254")))
+	r = s.Handle("other0", d)
+	if r == nil || r.to != netip.MustParseAddrPort("192.168.1.254:67") {
+		t.Fatalf("relay %v", r)
+	}
+}
+
+func TestReservationAndNAK(t *testing.T) {
+	res := netip.MustParseAddr("192.168.1.50") // ausserhalb des Bereichs, aber im Netz
+	s, _, _ := newTest(t, Config{Reservations: []Reservation{{Scope: 1, MAC: macA.String(), IP: res, Name: "nas"}}})
+	if got := offerAndAck(t, s, macA); got != res {
+		t.Fatalf("reserved %v", got)
+	}
+	// Neustart mit alter Adresse (INIT-REBOOT): andere IP als die feste -> NAK
+	reboot, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest),
+		dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("192.168.1.3"))))
+	if r := s.Handle("eth0", reboot); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak || r.to.Addr() != netip.MustParseAddr("255.255.255.255") {
+		t.Fatalf("expected nak, got %v", r)
+	}
+	// ein anderer Client darf die feste Adresse nicht bekommen
+	other, _ := dhcpv4.New(dhcpv4.WithHwAddr(macB), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest),
+		dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(res.AsSlice())))
+	if r := s.Handle("eth0", other); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak {
+		t.Fatalf("reserved for other: %v", r)
+	}
+}
+
+func TestInitRebootForeign(t *testing.T) {
+	reboot := func(ip string) *dhcpv4.DHCPv4 {
+		r, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest),
+			dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP(ip))))
+		return r
+	}
+	s, _, _ := newTest(t, Config{})
+	// unbekannter Client mit freier Adresse aus dem Bereich (vom alten Router): uebernehmen
+	if r := s.Handle("eth0", reboot("192.168.1.4")); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeAck {
+		t.Fatalf("adopt %v", r)
+	}
+	// fremdes Netz: autoritativ NAK
+	s, _, _ = newTest(t, Config{})
+	if r := s.Handle("eth0", reboot("10.0.0.7")); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak {
+		t.Fatalf("foreign net %v", r)
+	}
+	// nicht autoritativ: schweigen
+	sc := testScope()
+	sc.Authoritative = false
+	s, _, _ = newTest(t, Config{Scopes: []Scope{sc}})
+	if r := s.Handle("eth0", reboot("10.0.0.7")); r != nil {
+		t.Fatalf("non-authoritative answered %v", r.msg.MessageType())
+	}
+	if r := s.Handle("eth0", reboot("192.168.1.4")); r != nil {
+		t.Fatalf("non-authoritative adopted %v", r.msg.MessageType())
+	}
+}
+
+func TestOtherServerChosen(t *testing.T) {
+	s, _, _ := newTest(t, Config{})
+	off := s.Handle("eth0", discover(t, macA))
+	req, _ := dhcpv4.NewRequestFromOffer(off.msg)
+	req.UpdateOption(dhcpv4.OptServerIdentifier(net.ParseIP("192.168.1.1")))
+	if r := s.Handle("eth0", req); r != nil {
+		t.Fatal("answered request for other server")
+	}
+	if len(s.Snapshot().Scopes[0].Leases) != 0 {
+		t.Error("offer not dropped")
+	}
+}
+
+func TestARPConflict(t *testing.T) {
+	s, _, _ := newTest(t, Config{})
+	s.Probe = func(_ string, _, ip netip.Addr) bool { return ip == netip.MustParseAddr("192.168.1.3") }
+	if got := ip4(s.Handle("eth0", discover(t, macA)).msg.YourIPAddr); got != netip.MustParseAddr("192.168.1.4") {
+		t.Fatalf("after conflict %v", got)
+	}
+}
+
+func TestPoolFullAndRelease(t *testing.T) {
+	sc := testScope()
+	sc.End = netip.MustParseAddr("192.168.1.3") // nur eine Adresse frei
+	s, st, now := newTest(t, Config{Scopes: []Scope{sc}})
+	ip := offerAndAck(t, s, macA)
+	if r := s.Handle("eth0", discover(t, macB)); r != nil {
+		t.Fatal("offer from full pool")
+	}
+	rel, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeRelease), dhcpv4.WithClientIP(ip.AsSlice()),
+		dhcpv4.WithOption(dhcpv4.OptServerIdentifier(net.ParseIP("192.168.1.2"))))
+	s.Handle("eth0", rel)
+	if st.leases[macA.String()].State != StateFree {
+		t.Fatal("not released")
+	}
+	*now = now.Add(time.Second)
+	if got := offerAndAck(t, s, macB); got != ip {
+		t.Fatalf("after release %v", got)
+	}
+	// Leases laufen ab: Adresse wieder frei
+	*now = now.Add(2 * time.Hour)
+	if got := ip4(s.Handle("eth0", discover(t, macA)).msg.YourIPAddr); got != ip {
+		t.Fatalf("after expiry %v", got)
+	}
+}
+
+func TestObserve(t *testing.T) {
+	s, st, _ := newTest(t, Config{Observe: true})
+	if r := s.Handle("eth0", discover(t, macA)); r != nil {
+		t.Fatal("observe answered")
+	}
+	v := s.Snapshot()
+	if len(v.Events) != 1 || v.Events[0].Result != "observe" || v.Events[0].IP != netip.MustParseAddr("192.168.1.3") || len(st.leases) != 0 || len(v.Scopes[0].Leases) != 0 {
+		t.Fatalf("observe state %+v", v)
+	}
+}
+
+func TestPXE(t *testing.T) {
+	sc := testScope()
+	sc.BootServer, sc.BootBIOS, sc.BootUEFI, sc.BootIPXE = "192.168.1.9", "netboot.xyz.kpxe", "netboot.xyz.efi", "http://192.168.1.9/menu.ipxe"
+	s, _, _ := newTest(t, Config{Scopes: []Scope{sc}})
+	for _, c := range []struct {
+		mods []dhcpv4.Modifier
+		want string
+	}{
+		{nil, ""},
+		{[]dhcpv4.Modifier{dhcpv4.WithOption(dhcpv4.OptClientArch(iana.INTEL_X86PC))}, "netboot.xyz.kpxe"},
+		{[]dhcpv4.Modifier{dhcpv4.WithOption(dhcpv4.OptClientArch(iana.EFI_X86_64))}, "netboot.xyz.efi"},
+		{[]dhcpv4.Modifier{dhcpv4.WithOption(dhcpv4.OptClientArch(iana.EFI_X86_64)), dhcpv4.WithOption(dhcpv4.OptUserClass("iPXE"))}, "http://192.168.1.9/menu.ipxe"},
+	} {
+		r := s.Handle("eth0", discover(t, macA, c.mods...))
+		if r == nil || r.msg.BootFileName != c.want || (c.want != "" && !r.msg.ServerIPAddr.Equal(net.ParseIP("192.168.1.9"))) {
+			t.Errorf("pxe %q: got %+v", c.want, r)
+		}
+	}
+}
+
+func TestSnapshotCounts(t *testing.T) {
+	s, _, _ := newTest(t, Config{Reservations: []Reservation{{Scope: 1, MAC: macB.String(), IP: netip.MustParseAddr("192.168.1.5")}}})
+	offerAndAck(t, s, macA)
+	v := s.Snapshot().Scopes[0]
+	if v.Size != 5 || v.Used != 1 || v.Reserved != 1 || len(v.Leases) != 1 {
+		t.Fatalf("view %+v", v)
+	}
+}
+
+func TestBroadcast(t *testing.T) {
+	if b := Broadcast(netip.MustParsePrefix("10.1.2.0/23")); b != netip.MustParseAddr("10.1.3.255") {
+		t.Fatal(b)
+	}
+}
