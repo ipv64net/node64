@@ -62,6 +62,9 @@ type dockerSpec struct {
 	// wird zugewiesen; gibt es keine, kommt ein neuer Host ausgeschaltet (Schutz koennte fehlen).
 	Middlewares []string
 	Ignored     []string // harmlose Middlewares, die PROXY64 uebergeht (Hinweis in der Liste)
+	// Antwort-Kopfzeilen aus Traefik-headers-Middlewares in den Labels (traefikHeaders) fuer Erweitert
+	RespHeaders []Header
+	RespRemove  []string
 }
 
 // dockerAccess: Zugriffsliste aus den Labels (node64.proxy.access bzw. Traefik-Middleware mit forwardAuth).

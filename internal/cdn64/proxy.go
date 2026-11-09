@@ -397,6 +397,7 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 		},
 	}
 	rp.ModifyResponse = func(resp *http.Response) error {
+		markTarget(resp.Request)
 		if host && t.forward != "" {
 			unpath(resp, t)
 		}
@@ -847,6 +848,24 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		ctx := context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject)
 		r = r.WithContext(context.WithValue(context.WithValue(ctx, ctxAuthFailKey{}, authFail), ctxDecoyKey{}, decoyed))
 		sw := &statusWriter{ResponseWriter: w, bw: bw, ctx: r.Context()}
+		// Kopfzeilen des Hosts (Erweitert, HSTS) auf jede Antwort, auch auf die der Node selbst (Sperre, Anmeldung,
+		// Wartung, Fehlerseite, Weiterleitung). Antworten des Ziels haben die aus Erweitert schon (ModifyResponse, mit
+		// denen der Location); HSTS ersetzt einen eigenen Kopf des Ziels statt ihn zu verdoppeln.
+		fromTarget := new(bool)
+		r = r.WithContext(context.WithValue(r.Context(), ctxTargetKey{}, fromTarget))
+		sw.sec = func(hd http.Header) {
+			if !*fromTarget {
+				for _, n := range h.Advanced.ResponseRemove {
+					hd.Del(n)
+				}
+				for _, x := range h.Advanced.ResponseHeaders {
+					hd.Set(x.Name, x.Value)
+				}
+			}
+			if hsts != "" && r.TLS != nil {
+				hd.Set("Strict-Transport-Security", hsts)
+			}
+		}
 		defer func() {
 			m.hpReport(r, client, true, sw.code(), *authFail)
 			if sdb := m.stats2.Load(); sdb != nil {
@@ -934,9 +953,6 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			r.Body = http.MaxBytesReader(sw, r.Body, maxBody)
 		}
-		if hsts != "" && r.TLS != nil {
-			sw.Header().Set("Strict-Transport-Security", hsts)
-		}
 		// WebSockets (nur, wo erlaubt) und gRPC-Streams (NetBird: je Peer zwei dauerhaft) laufen lange und zaehlen nicht;
 		// Wartung braucht kein Ziel
 		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) && !grpcReq(r) {
@@ -1009,6 +1025,30 @@ type statusWriter struct {
 
 	bw  *bwPair         // Bandbreite des Hosts (nil = unbegrenzt)
 	ctx context.Context // der Anfrage: Warten auf Bandbreite endet mit ihr
+
+	sec     func(http.Header) // Kopfzeilen des Hosts, einmal vor der ersten Antwort (nicht bei 1xx)
+	secDone bool
+}
+
+// secure: Kopfzeilen des Hosts setzen, bevor die (endgueltige) Antwort beginnt.
+func (w *statusWriter) secure(code int) {
+	if w.sec != nil && !w.secDone && code >= 200 {
+		w.secDone = true
+		w.sec(w.Header())
+	}
+}
+
+// ctxTargetKey: *bool, gesetzt, wenn die Antwort vom Ziel bzw. aus dessen Cache kommt (Kopfzeilen aus Erweitert sind
+// dann schon gesetzt, ggf. die der Location).
+type ctxTargetKey struct{}
+
+func markTarget(r *http.Request) {
+	if r == nil {
+		return
+	}
+	if p, _ := r.Context().Value(ctxTargetKey{}).(*bool); p != nil {
+		*p = true
+	}
 }
 
 // code: Status der Antwort (0 = abgebrochen; ein uebernommener WebSocket hat 101).
@@ -1023,6 +1063,7 @@ func (w *statusWriter) WriteHeader(code int) {
 	if w.status == 0 {
 		w.status = code
 	}
+	w.secure(code)
 	w.ResponseWriter.WriteHeader(code)
 }
 
@@ -1030,6 +1071,7 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+	w.secure(http.StatusOK) // ohne WriteHeader (bzw. nach 1xx): implizit 200
 	var n int
 	var err error
 	if w.bw != nil {
@@ -1042,6 +1084,7 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 }
 
 func (w *statusWriter) Flush() {
+	w.secure(http.StatusOK) // Flush vor WriteHeader sendet 200
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Sicherheits-Header aus „Erweitert“ und HSTS gelten für jede Antwort des Hosts, auch Sperr-, Fehler- und Anmeldeseiten; headers-Middlewares aus Traefik-Labels werden übernommen.
 - DNS64: DHCP-Server als eigener Menüpunkt (opt-in, Standard aus, ohne Einschalten kein Port) – Netze je Schnittstelle/VLAN, feste Adressen, Probelauf, Erkennung fremder DHCP-Server, ARP-Prüfung, PXE/Netboot; nur mit Host-Netz oder macvlan (#59).
 - DNS64 DHCP: Geräte bekommen Namen wie `laptop.home.lan`, feste Adressen gleich in eine Gerätegruppe, Netze hinter einem DHCP-Relay, Abgleich im Cluster (Netze, feste Adressen, Vergaben) und Reserve-Node, die nur einspringt, wenn die Haupt-Node wirklich weg ist (#59).
 - PROXY64: Weiterleitung bei verweigertem Zugriff je Location – wer von der Zugriffsliste abgewiesen wird, landet mit 302 auf einer einstellbaren Adresse statt auf der Fehlerseite (z. B. Vaultwarden `/admin` nur aus dem LAN); Anmeldungen bleiben unverändert (#55).

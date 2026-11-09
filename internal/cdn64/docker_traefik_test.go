@@ -203,3 +203,31 @@ func TestTraefikMiddlewares(t *testing.T) {
 		t.Fatalf("file/shared: %+v %v %v", a, rest, ign)
 	}
 }
+
+// Header-Middlewares aus den Labels werden Antwort-Kopfzeilen fuer Erweitert (Forum 5083), Datei-Middlewares nicht.
+func TestTraefikHeaders(t *testing.T) {
+	l := map[string]string{
+		"traefik.http.routers.app.middlewares":                                      "sec, more@docker, secure-headers@file, gz",
+		"traefik.http.middlewares.sec.headers.stsseconds":                           "31536000",
+		"traefik.http.middlewares.sec.headers.stsincludesubdomains":                 "true",
+		"traefik.http.middlewares.sec.headers.framedeny":                            "true",
+		"traefik.http.middlewares.sec.headers.contenttypenosniff":                   "true",
+		"traefik.http.middlewares.sec.headers.referrerpolicy":                       "strict-origin-when-cross-origin",
+		"traefik.http.middlewares.sec.headers.customresponseheaders.x-powered-by":   "",
+		"traefik.http.middlewares.sec.headers.customresponseheaders.content-length": "1",
+		"traefik.http.middlewares.more.headers.customframeoptionsvalue":             "SAMEORIGIN",
+		"traefik.http.middlewares.more.headers.accesscontrolallowmethods":           "GET",
+		"traefik.http.middlewares.gz.compress":                                      "true",
+	}
+	set, del, used := traefikHeaders(l, nil, "app")
+	want := []Header{{"Strict-Transport-Security", "max-age=31536000; includeSubDomains"}, {"X-Content-Type-Options", "nosniff"},
+		{"Referrer-Policy", "strict-origin-when-cross-origin"}, {"X-Frame-Options", "SAMEORIGIN"}}
+	if !reflect.DeepEqual(set, want) || !slices.Equal(del, []string{"X-Powered-By"}) || !slices.Equal(used, []string{"sec", "more@docker"}) {
+		t.Fatalf("set %v del %v used %v", set, del, used)
+	}
+	specs, _ := traefikSpecs(map[string]string{"traefik.http.routers.app.rule": "Host(`app.test`)", "traefik.http.routers.app.middlewares": "sec, gz, secure-headers@file",
+		"traefik.http.middlewares.sec.headers.framedeny": "true", "traefik.http.middlewares.gz.compress": "true"}, nil)
+	if len(specs) != 1 || !slices.Equal(specs[0].Ignored, []string{"gz", "secure-headers@file"}) || len(specs[0].RespHeaders) != 1 {
+		t.Fatalf("specs: %+v", specs)
+	}
+}

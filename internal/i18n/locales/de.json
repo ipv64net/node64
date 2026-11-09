@@ -396,7 +396,7 @@
       "form_hint": "Kommt aus den Docker-Labels von Container {name}.",
       "form_router": "(Traefik-Router {name})",
       "form_access": "Kommt aus dem Docker-Label (Zugriffsliste „{name}“).",
-      "ignored": "Übergangen (ändert den Zugang nicht): {name}",
+      "ignored": "Übergangen (ändert den Zugang nicht): {name}. Setzt eine davon Sicherheits-Header (z. B. aus einer Datei), diese am Host unter „Erweitert“ eintragen.",
       "form_locked": "Namen, Schema und Ziel sind deshalb gesperrt; alles andere lässt sich hier einstellen und bleibt erhalten.",
       "form_link": "Docker-Einstellungen",
       "help_title": "So geht's",

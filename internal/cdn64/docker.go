@@ -603,6 +603,7 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 		if acl > 0 {
 			nh.AccessListID = acl
 		}
+		nh.Advanced.ResponseHeaders, nh.Advanced.ResponseRemove = s.RespHeaders, s.RespRemove
 		if missing != "" {
 			nh.Enabled = false
 		}
@@ -618,11 +619,17 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 	if acl == 0 {
 		acl = h.AccessListID // ohne Label: wie in der Oberflaeche eingestellt
 	}
-	if slices.Equal(h.Names, names) && h.Scheme == s.Scheme && h.TargetHost == addr && h.TargetPort == tport && h.AccessListID == acl {
+	// Kopfzeilen aus Traefik-headers-Middlewares nur, solange der Host keine eigenen Antwort-Kopfzeilen hat (in der
+	// Oberflaeche eingestellte bleiben)
+	hdrs := (len(s.RespHeaders) > 0 || len(s.RespRemove) > 0) && len(h.Advanced.ResponseHeaders) == 0 && len(h.Advanced.ResponseRemove) == 0
+	if !hdrs && slices.Equal(h.Names, names) && h.Scheme == s.Scheme && h.TargetHost == addr && h.TargetPort == tport && h.AccessListID == acl {
 		return v, nil
 	}
-	nh := *h // nur Namen, Schema, Ziel und Zugriffsliste aus den Labels; alles andere bleibt
+	nh := *h // nur Namen, Schema, Ziel, Zugriffsliste (und ggf. Kopfzeilen) aus den Labels; alles andere bleibt
 	nh.Names, nh.Scheme, nh.TargetHost, nh.TargetPort, nh.AccessListID = names, s.Scheme, addr, tport, acl
+	if hdrs {
+		nh.Advanced.ResponseHeaders, nh.Advanced.ResponseRemove = s.RespHeaders, s.RespRemove
+	}
 	if err := m.saveHost(ctx, &nh); err != nil {
 		return saveErr(err)
 	}

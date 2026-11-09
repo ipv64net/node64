@@ -264,6 +264,7 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			}
 			w.Header().Set("X-Cache-Status", "HIT")
 			w.Header().Set("Age", strconv.Itoa(int(time.Since(e.stored).Seconds())))
+			markTarget(r) // Kopfzeilen aus Erweitert sind mit abgelegt (ggf. die der Location)
 			w.WriteHeader(e.status)
 			if r.Method != http.MethodHead {
 				_, _ = w.Write(e.body)

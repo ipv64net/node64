@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: security headers from “Advanced” and HSTS apply to every response of the host, including block, error and sign-in pages; headers middlewares from Traefik labels are taken over.
 - DNS64: DHCP server as its own menu item (opt-in, off by default, no port until turned on) – networks per interface/VLAN, fixed addresses, dry run, detection of other DHCP servers, ARP check, PXE/netboot; host network or macvlan only (#59).
 - DNS64 DHCP: devices get names like `laptop.home.lan`, fixed addresses straight into a device group, networks behind a DHCP relay, cluster sync (networks, fixed addresses, leases) and a standby node that only steps in when the primary node is really gone (#59).
 - PROXY64: redirect on denied access per location – visitors turned away by the access list are sent to a configurable address with 302 instead of the error page (e.g. Vaultwarden `/admin` only from the LAN); logins stay unchanged (#55).

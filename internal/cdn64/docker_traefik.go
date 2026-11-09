@@ -1,6 +1,7 @@
 package cdn64
 
 import (
+	"net/http"
 	"net/url"
 	"slices"
 	"sort"
@@ -72,6 +73,9 @@ func traefikSpecs(labels, shared map[string]string) ([]dockerSpec, []dockerProbl
 		}
 		s := dockerSpec{Source: dockerSrcTraefik, Router: r, Names: names, Scheme: "http", Network: network}
 		s.Access, s.Middlewares, s.Ignored = traefikMiddlewares(l, shared, r)
+		var used []string
+		s.RespHeaders, s.RespRemove, used = traefikHeaders(l, shared, r)
+		s.Ignored = slices.DeleteFunc(s.Ignored, func(mw string) bool { return slices.Contains(used, mw) })
 		if svc != "" {
 			p := traefikServicePrefix + svc + ".loadbalancer.server."
 			if v := l[p+"port"]; v != "" {
@@ -96,6 +100,7 @@ func traefikSpecs(labels, shared map[string]string) ([]dockerSpec, []dockerProbl
 			// nicht uebernommenen Middlewares - Traefik liefert den Dienst ueber diesen Router ja auch so aus
 			if o := specs[i]; len(s.Middlewares) < len(o.Middlewares) || len(s.Middlewares) == len(o.Middlewares) && len(s.Ignored) < len(o.Ignored) {
 				specs[i].Access, specs[i].Middlewares, specs[i].Ignored = s.Access, s.Middlewares, s.Ignored
+				specs[i].RespHeaders, specs[i].RespRemove = s.RespHeaders, s.RespRemove
 			}
 			continue
 		}
@@ -195,6 +200,88 @@ func allHarmless(kinds []string) bool {
 		}
 	}
 	return true
+}
+
+// traefikHeaderFields: Felder der headers-Middleware, die eine Antwort-Kopfzeile ergeben (Wert wie angegeben).
+var traefikHeaderFields = map[string]string{"referrerpolicy": "Referrer-Policy", "contentsecuritypolicy": "Content-Security-Policy",
+	"contentsecuritypolicyreportonly": "Content-Security-Policy-Report-Only", "permissionspolicy": "Permissions-Policy",
+	"featurepolicy": "Feature-Policy", "customframeoptionsvalue": "X-Frame-Options", "custombrowserxssvalue": "X-XSS-Protection"}
+
+// traefikHeaders: Antwort-Kopfzeilen aus den headers-Middlewares des Routers, die in den Labels stehen (wie
+// Traefik: customResponseHeaders, leerer Wert = entfernen; STS, frameDeny, contentTypeNosniff, browserXssFilter,
+// referrerPolicy, CSP, permissionsPolicy ...). used = Middlewares, aus denen etwas uebernommen wurde (nicht mehr
+// "uebergangen"). Middlewares aus Dateien sieht PROXY64 nicht; CORS, Hosts-Pruefung u. Ae. bleiben unbeachtet.
+func traefikHeaders(l, shared map[string]string, router string) (set []Header, del, used []string) {
+	took := false // aus der aktuellen Middleware etwas uebernommen
+	put := func(name, val string) {
+		name = http.CanonicalHeaderKey(name)
+		if !validHeaderName(name) || fixedHeaders[strings.ToLower(name)] || strings.ContainsAny(val, "\r\n") || len(val) > 1000 {
+			return
+		}
+		took = true
+		del = slices.DeleteFunc(del, func(n string) bool { return strings.EqualFold(n, name) })
+		set = slices.DeleteFunc(set, func(x Header) bool { return strings.EqualFold(x.Name, name) })
+		if val == "" {
+			del = append(del, name)
+		} else {
+			set = append(set, Header{Name: name, Value: val})
+		}
+	}
+	for _, mw := range strings.Split(l[traefikRouterPrefix+router+".middlewares"], ",") {
+		name, provider, _ := strings.Cut(strings.ToLower(strings.TrimSpace(mw)), "@")
+		if name == "" || (provider != "" && provider != "docker") {
+			continue
+		}
+		p := "traefik.http.middlewares." + name + ".headers."
+		f := map[string]string{} // Feld -> Wert (Labels des Containers vor denen anderer Container)
+		for _, src := range []map[string]string{l, shared} {
+			for k, v := range src {
+				if r, ok := strings.CutPrefix(k, p); ok {
+					f[r] = v
+				}
+			}
+			if len(f) > 0 {
+				break
+			}
+		}
+		took = false
+		on := func(k string) bool { b, _ := strconv.ParseBool(f[k]); return b }
+		if s, _ := strconv.Atoi(f["stsseconds"]); s > 0 {
+			v := "max-age=" + strconv.Itoa(s)
+			if on("stsincludesubdomains") {
+				v += "; includeSubDomains"
+			}
+			if on("stspreload") {
+				v += "; preload"
+			}
+			put("Strict-Transport-Security", v)
+		}
+		if on("framedeny") {
+			put("X-Frame-Options", "DENY")
+		}
+		if on("contenttypenosniff") {
+			put("X-Content-Type-Options", "nosniff")
+		}
+		if on("browserxssfilter") {
+			put("X-XSS-Protection", "1; mode=block")
+		}
+		keys := make([]string, 0, len(f))
+		for k := range f {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if hn, ok := traefikHeaderFields[k]; ok && f[k] != "" {
+				put(hn, f[k])
+			} else if hn, ok := strings.CutPrefix(k, "customresponseheaders."); ok && hn != "" {
+				put(hn, f[k])
+			}
+		}
+		if took {
+			used = append(used, strings.TrimSpace(mw))
+		}
+	}
+	return set, del, used
 }
 
 // fwdKindOf: Vorlage nach der Adresse des Dienstes.
