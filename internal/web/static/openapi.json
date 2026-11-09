@@ -5961,6 +5961,10 @@
             "type": "string",
             "description": "Boot-Datei, wenn der Client schon iPXE ist"
           },
+          "relay": {
+            "type": "boolean",
+            "description": "Netz hinter einem DHCP-Relay (Anfragen nur mit giaddr, mehrere Netze je Schnittstelle möglich)"
+          },
           "enabled": {
             "type": "boolean",
             "readOnly": true
@@ -6002,6 +6006,10 @@
           },
           "comment": {
             "type": "string"
+          },
+          "group_id": {
+            "type": "integer",
+            "description": "nur beim Anlegen: MAC zusätzlich in diese Gerätegruppe aufnehmen"
           }
         },
         "required": [
@@ -24715,7 +24723,7 @@
           "DNS64"
         ],
         "summary": "DHCP-Server: Schalter und Zustand",
-        "description": "mode (off, observe = Probelauf, on), running, docker_bridge und state mit Netzen (Belegung, Fehler, Leases), letzten Anfragen, fremden DHCP-Servern und Zählern.",
+        "description": "mode (off, observe = Probelauf, on), role (primary, reserve), standby (Reserve bleibt still, weil die Haupt-Node lebt), running, docker_bridge und state mit Netzen (Belegung, Fehler, Leases), letzten Anfragen, fremden DHCP-Servern und Zählern.",
         "responses": {
           "200": {
             "description": "Zustand"
@@ -24755,6 +24763,42 @@
           },
           "400": {
             "description": "Ungültig bzw. Docker-Bridge-Netz"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/role": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Rolle dieser Node im Cluster (je Node)",
+        "description": "primary vergibt Adressen; reserve antwortet nur, wenn keine Node mit dem Cluster-Bereich „DHCP-Vergaben“ erreichbar ist und keine in den letzten 3 Minuten als DHCP-Server geantwortet hat.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "primary",
+                      "reserve"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gesetzt"
+          },
+          "400": {
+            "description": "Ungültig"
           }
         }
       }

@@ -14,6 +14,9 @@
 		<div class="me-auto" style="max-width: 48rem">
 			{{if eq $h.Mode "on"}}{{.T "dns64.dhcp.hint_on"}}{{else if eq $h.Mode "observe"}}{{.T "dns64.dhcp.hint_observe"}}{{else}}{{.T "dns64.dhcp.hint_off"}}{{end}}
 			{{if and (ne $h.Mode "off") (not $h.Running) (not $h.Bridge)}}<div class="small text-warning-emphasis mt-1"><i class="bi bi-info-circle"></i> {{.T "dns64.dhcp.no_scope"}}</div>{{end}}
+			{{if eq $h.Reserve.Role "reserve"}}<div class="small mt-1">{{if not $h.Reserve.Peers}}<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.dhcp.reserve_alone"}}</span>
+				{{else if $h.Reserve.Standby}}<span class="text-info-emphasis"><i class="bi bi-pause-circle"></i> {{.T "dns64.dhcp.reserve_standby" "nodes" $h.Reserve.Names}}</span>
+				{{else}}<span class="text-warning-emphasis"><i class="bi bi-lightning"></i> {{.T "dns64.dhcp.reserve_active" "nodes" $h.Reserve.Names}}</span>{{end}}</div>{{end}}
 		</div>
 		<form method="post" action="/dns64/dhcp/mode" class="btn-group" role="group">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -21,6 +24,15 @@
 			<button type="submit" name="mode" value="observe" class="btn btn-sm {{if eq $h.Mode "observe"}}btn-info{{else}}btn-outline-info{{end}}"{{if $h.Bridge}} disabled{{end}}><i class="bi bi-eye"></i> {{.T "dns64.dhcp.mode_observe"}}</button>
 			<button type="submit" name="mode" value="on" class="btn btn-sm {{if eq $h.Mode "on"}}btn-success{{else}}btn-outline-success{{end}}"{{if $h.Bridge}} disabled{{end}}{{if ne $h.Mode "on"}} data-confirm="{{.T "dns64.dhcp.on_confirm"}}"{{end}}><i class="bi bi-play"></i> {{.T "dns64.dhcp.mode_on"}}</button>
 		</form>
+		{{if $h.Reserve.Cluster}}<form method="post" action="/dns64/dhcp/role" class="d-flex align-items-center gap-2" title="{{.T "dns64.dhcp.role_hint"}}">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<label class="small text-body-secondary text-nowrap" for="d-role"><i class="bi bi-hdd-network"></i> {{.T "dns64.dhcp.role"}}</label>
+			<select class="form-select form-select-sm w-auto" id="d-role" name="role">
+				<option value="primary"{{if eq $h.Reserve.Role "primary"}} selected{{end}}>{{.T "dns64.dhcp.role_primary"}}</option>
+				<option value="reserve"{{if eq $h.Reserve.Role "reserve"}} selected{{end}}>{{.T "dns64.dhcp.role_reserve"}}</option>
+			</select>
+			<button class="btn btn-sm btn-outline-secondary" type="submit">{{.T "common.save"}}</button>
+		</form>{{end}}
 	</div>
 </div>
 <div class="row g-3" data-dns64-page="dhcp">
@@ -56,13 +68,16 @@
 						<input type="text" class="form-control font-monospace mb-1" id="d-dns" name="dns" data-field="dns" placeholder="{{if $h.Self}}{{$h.Self}}{{else}}192.168.1.2{{end}}">
 						<div class="form-text mb-2">{{.T "dns64.dhcp.dns_hint"}}</div>
 						<label class="form-label" for="d-domain">{{.T "dns64.dhcp.domain"}}</label>
-						<input type="text" class="form-control font-monospace mb-2" id="d-domain" name="domain" data-field="domain" maxlength="253" placeholder="home.lan">
+						<input type="text" class="form-control font-monospace mb-1" id="d-domain" name="domain" data-field="domain" maxlength="253" placeholder="home.lan">
+						<div class="form-text mb-2">{{.T "dns64.dhcp.domain_hint"}}</div>
 						<label class="form-label" for="d-lease">{{.T "dns64.dhcp.lease"}}</label>
 						<input type="number" class="form-control mb-2" id="d-lease" name="lease_hours" data-field="lease" min="1" max="8760" value="24">
 						<label class="form-label" for="d-ntp">{{.T "dns64.dhcp.ntp"}}</label>
 						<input type="text" class="form-control font-monospace mb-2" id="d-ntp" name="ntp" data-field="ntp" placeholder="192.168.1.1">
 						<div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="d-auth" name="authoritative" value="1" data-field="auth" checked><label class="form-check-label" for="d-auth">{{.T "dns64.dhcp.authoritative"}}</label></div>
-						<div class="form-text mb-3">{{.T "dns64.dhcp.authoritative_hint"}}</div>
+						<div class="form-text mb-2">{{.T "dns64.dhcp.authoritative_hint"}}</div>
+						<div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="d-relay" name="relay" value="1" data-field="relay"><label class="form-check-label" for="d-relay">{{.T "dns64.dhcp.relay"}}</label></div>
+						<div class="form-text mb-3">{{.T "dns64.dhcp.relay_hint"}}</div>
 						<div class="fw-semibold small mb-1"><i class="bi bi-hdd-network"></i> {{.T "dns64.dhcp.pxe"}}</div>
 						<div class="form-text mb-2">{{.T "dns64.dhcp.pxe_hint"}}</div>
 						<label class="form-label" for="d-boot">{{.T "dns64.dhcp.boot_server"}}</label>
@@ -94,6 +109,9 @@
 					<div class="form-text mb-2">{{.T "dns64.dhcp.res_ip_hint"}}</div>
 					<label class="form-label" for="r-name">{{.T "dns64.dhcp.res_name"}}</label>
 					<input type="text" class="form-control mb-2" id="r-name" name="name" data-field="name" maxlength="63" placeholder="nas">
+					{{if $h.Groups}}<label class="form-label" for="r-group">{{.T "dns64.dhcp.group"}}</label>
+					<select class="form-select mb-1" id="r-group" name="group"><option value="0">{{.T "dns64.dhcp.group_none"}}</option>{{range $h.Groups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+					<div class="form-text mb-2">{{.T "dns64.dhcp.group_hint"}}</div>{{end}}
 					<label class="form-label" for="r-comment">{{.T "dns64.records.comment"}}</label>
 					<input type="text" class="form-control mb-3" id="r-comment" name="comment" data-field="comment" maxlength="200">
 					<button class="btn btn-primary" type="submit" data-edit="{{.T "common.save"}}"><i class="bi bi-plus"></i> <span>{{.T "dns64.records.add_btn"}}</span></button>
@@ -112,7 +130,9 @@
 						<thead><tr><th class="ps-3" data-nolabel>{{.T "dns64.dhcp.scope"}}</th><th>{{.T "dns64.dhcp.range"}}</th><th>{{.T "dns64.dhcp.usage"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $h.Scopes}}<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
-							<td class="ps-3"><span class="font-monospace">{{.DHCPScope.Iface}}</span> · <span class="font-monospace">{{.Subnet}}</span>{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
+							<td class="ps-3">{{if .DHCPScope.Iface}}<span class="font-monospace">{{.DHCPScope.Iface}}</span>{{else}}<span class="text-warning-emphasis" title="{{$.T "dns64.dhcp.no_iface"}}"><i class="bi bi-exclamation-triangle"></i></span>{{end}} · <span class="font-monospace">{{.Subnet}}</span>{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
+								{{if not .DHCPScope.Iface}}<div class="text-warning-emphasis">{{$.T "dns64.dhcp.no_iface"}}</div>{{end}}
+								{{if .Relay}}<span class="badge text-bg-light" title="{{$.T "dns64.dhcp.relay"}}"><i class="bi bi-signpost-split"></i> Relay</span>{{end}}
 								{{if or .BootBIOS .BootUEFI .BootIPXE}}<span class="badge text-bg-light" title="{{$.T "dns64.dhcp.pxe"}}"><i class="bi bi-hdd-network"></i> PXE</span>{{end}}</td>
 							<td class="font-monospace">{{.Start}} – {{.End}}{{if .Router}}<div class="text-body-secondary">{{$.T "dns64.dhcp.router"}}: {{.Router}}</div>{{end}}</td>
 							<td style="min-width: 8rem">{{if .State.Size}}<div class="progress" role="progressbar" style="height: .5rem" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar{{if ge .Pct 90}} bg-danger{{else if ge .Pct 75}} bg-warning{{end}}" style="width: {{.Pct}}%"></div></div>
@@ -124,7 +144,7 @@
 							<td class="text-end pe-3 text-nowrap">
 								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-edit-form="dhcp-scope-form" data-id="{{.ID}}" data-iface="{{.DHCPScope.Iface}}" data-subnet="{{.Subnet}}" data-start="{{.Start}}" data-end="{{.End}}" data-router="{{.Router}}" data-name="{{.Name}}"
 									data-dns="{{range $i, $x := .DNS}}{{if $i}}, {{end}}{{$x}}{{end}}" data-domain="{{.Domain}}" data-lease="{{.LeaseHours}}" data-ntp="{{range $i, $x := .NTP}}{{if $i}}, {{end}}{{$x}}{{end}}" data-auth="{{if .Authoritative}}1{{end}}"
-									data-boot="{{.BootServer}}" data-bios="{{.BootBIOS}}" data-uefi="{{.BootUEFI}}" data-ipxe="{{.BootIPXE}}" title="{{$.T "dns64.dhcp.scope_edit"}}"><i class="bi bi-pencil"></i></button>
+									data-boot="{{.BootServer}}" data-bios="{{.BootBIOS}}" data-uefi="{{.BootUEFI}}" data-ipxe="{{.BootIPXE}}" data-relay="{{if .Relay}}1{{end}}" title="{{$.T "dns64.dhcp.scope_edit"}}"><i class="bi bi-pencil"></i></button>
 								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/dhcp/scopes/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
 								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/dhcp/scopes/{{.ID}}/delete" data-confirm="{{$.T "dns64.dhcp.scope_delete_confirm" "name" .DHCPScope.Iface}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
 							</td>
@@ -141,7 +161,7 @@
 					<thead><tr><th class="ps-3" data-nolabel>{{.T "dns64.dhcp.device"}}</th><th>{{.T "dns64.dhcp.ip"}}</th><th>{{.T "dns64.dhcp.mac"}}</th><th>{{.T "dns64.dhcp.expires"}}</th><th></th></tr></thead>
 					<tbody>
 					{{range $h.Leases}}<tr{{if not .Active}} class="text-body-tertiary"{{end}}>
-						<td class="ps-3 text-break">{{if .ResName}}{{.ResName}}{{else if .Hostname}}{{.Hostname}}{{else}}<span class="text-body-secondary">–</span>{{end}}{{if .Fixed}} <span class="badge text-bg-light" title="{{$.T "dns64.dhcp.fixed"}}"><i class="bi bi-pin-angle"></i></span>{{end}}{{if gt (len $h.Scopes) 1}}<div class="text-body-secondary">{{.ScopeName}}</div>{{end}}</td>
+						<td class="ps-3 text-break">{{if .ResName}}{{.ResName}}{{else if .Hostname}}{{.Hostname}}{{else}}<span class="text-body-secondary">–</span>{{end}}{{if .Fixed}} <span class="badge text-bg-light" title="{{$.T "dns64.dhcp.fixed"}}"><i class="bi bi-pin-angle"></i></span>{{end}}{{if .DNSName}}<div class="text-body-secondary font-monospace">{{.DNSName}}</div>{{end}}{{if gt (len $h.Scopes) 1}}<div class="text-body-secondary">{{.ScopeName}}</div>{{end}}</td>
 						<td class="font-monospace">{{.IP}}</td>
 						<td class="font-monospace">{{.MAC}}</td>
 						<td>{{if .Active}}{{if eq .State "offered"}}<span class="badge text-bg-light">{{$.T "dns64.dhcp.offered"}}</span>{{else}}{{$.Time .Expires}}{{end}}{{else}}{{$.T "dns64.dhcp.expired"}}{{end}}</td>
@@ -166,7 +186,7 @@
 						<thead><tr><th class="ps-3" data-nolabel>{{.T "dns64.dhcp.res_name"}}</th><th>{{.T "dns64.dhcp.ip"}}</th><th>{{.T "dns64.dhcp.mac"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $h.Res}}<tr>
-							<td class="ps-3 text-break">{{if .Name}}{{.Name}}{{else}}<span class="text-body-secondary">–</span>{{end}}{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}{{if gt (len $h.Scopes) 1}}<div class="text-body-secondary">{{index $h.ResScope .ScopeID}}</div>{{end}}</td>
+							<td class="ps-3 text-break">{{if .Name}}{{.Name}}{{else}}<span class="text-body-secondary">–</span>{{end}}{{if .DNSName}}<div class="text-body-secondary font-monospace">{{.DNSName}}</div>{{end}}{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}{{if gt (len $h.Scopes) 1}}<div class="text-body-secondary">{{index $h.ResScope .ScopeID}}</div>{{end}}</td>
 							<td class="font-monospace">{{.IP}}</td>
 							<td class="font-monospace">{{.MAC}}</td>
 							<td class="text-end pe-3 text-nowrap">

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/notify"
 )
@@ -22,7 +23,10 @@ import (
 // endet aber mit dem Modul. Nach jeder Aenderung an Netzen oder festen Adressen startet nur der DHCP-Server neu.
 
 const (
-	setDHCP     = "dns64.dhcp" // off | observe | on
+	setDHCP     = "dns64.dhcp"      // off | observe | on
+	setDHCPRole = "dns64.dhcp_role" // primary | reserve (je Node, nie im Cluster)
+	dhcpPrimary = "primary"
+	dhcpReserve = "reserve"
 	dhcpOff     = "off"
 	dhcpObserve = "observe"
 	dhcpOn      = "on"
@@ -52,6 +56,7 @@ type DHCPScope struct {
 	BootBIOS      string    `json:"boot_bios"`
 	BootUEFI      string    `json:"boot_uefi"`
 	BootIPXE      string    `json:"boot_ipxe"`
+	Relay         bool      `json:"relay"` // Netz hinter einem DHCP-Relay (Router leitet weiter)
 	Enabled       bool      `json:"enabled"`
 	CreatedAt     time.Time `json:"created_at"`
 }
@@ -64,6 +69,7 @@ type DHCPReservation struct {
 	IP      string `json:"ip"`
 	Name    string `json:"name"`
 	Comment string `json:"comment,omitempty"`
+	GroupID int64  `json:"group_id,omitempty"` // nur beim Anlegen: MAC zusaetzlich in diese Geraetegruppe aufnehmen
 }
 
 // dhcpState: laufender DHCP-Server (dhcpMu).
@@ -73,6 +79,12 @@ type dhcpState struct {
 	done     chan struct{}
 	poolMu   sync.Mutex
 	poolSent map[int64]bool // Netz fast voll: gemeldet
+
+	soonMu    sync.Mutex
+	namesT    *time.Timer // Namen neu bauen (gebuendelt)
+	leasesT   *time.Timer // Vergaben an den Cluster melden (gebuendelt)
+	standbyAt time.Time   // Reserve: zuletzt geprueft
+	standby   bool
 }
 
 func (m *Module) dhcpMode(ctx context.Context) string {
@@ -122,7 +134,10 @@ func (m *Module) dhcpApply(ctx context.Context) {
 	s := dhcp.New(cfg, dhcpStore{m}, m.log.With("part", "dhcp"))
 	s.Probe = dhcp.ARPProbe
 	s.OnForeign = m.dhcpForeign
-	s.OnChange = m.dhcpPoolCheck
+	s.OnChange = m.dhcpChanged
+	if m.dhcpRole(ctx) == dhcpReserve { // Reserve: still, solange die Haupt-Node lebt; oefter nach ihr sehen
+		s.Standby, s.CheckEvery = m.dhcpStandby, time.Minute
+	}
 	s.Carry(old)
 	rctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -155,8 +170,10 @@ func (m *Module) dhcpConfig(ctx context.Context) (dhcp.Config, error) {
 		return cfg, err
 	}
 	for _, s := range scopes {
-		if s.Enabled {
-			cfg.Scopes = append(cfg.Scopes, s.toDHCP())
+		if s.Enabled && s.Iface != "" { // aus dem Cluster ohne passende Schnittstelle: aus
+			sc := s.toDHCP()
+			sc.ExtraDNS = m.dhcpPeerDNS(ctx, sc.Subnet)
+			cfg.Scopes = append(cfg.Scopes, sc)
 		}
 	}
 	res, err := m.DHCPReservations(ctx)
@@ -167,22 +184,8 @@ func (m *Module) dhcpConfig(ctx context.Context) (dhcp.Config, error) {
 		ip, _ := netip.ParseAddr(r.IP)
 		cfg.Reservations = append(cfg.Reservations, dhcp.Reservation{Scope: r.ScopeID, MAC: r.MAC, IP: ip, Name: r.Name})
 	}
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT scope_id, mac, ip, hostname, expires, state FROM dns64_dhcp_leases`)
-	if err != nil {
-		return cfg, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var l dhcp.Lease
-		var ip, exp string
-		if err := rows.Scan(&l.Scope, &l.MAC, &ip, &l.Hostname, &exp, &l.State); err != nil {
-			return cfg, err
-		}
-		l.IP, _ = netip.ParseAddr(ip)
-		l.Expires, _ = time.Parse(time.RFC3339, exp)
-		cfg.Leases = append(cfg.Leases, l)
-	}
-	return cfg, rows.Err()
+	cfg.Leases, err = m.dhcpLeaseRows(ctx)
+	return cfg, err
 }
 
 func (s DHCPScope) toDHCP() dhcp.Scope {
@@ -192,7 +195,7 @@ func (s DHCPScope) toDHCP() dhcp.Scope {
 	r, _ := netip.ParseAddr(s.Router)
 	return dhcp.Scope{ID: s.ID, Name: s.Name, Iface: s.Iface, Subnet: p, Start: a, End: b, Router: r, DNS: dhcpAddrs(s.DNS), Domain: s.Domain,
 		Lease: time.Duration(s.LeaseHours) * time.Hour, NTP: dhcpAddrs(s.NTP), Authoritative: s.Authoritative,
-		BootServer: s.BootServer, BootBIOS: s.BootBIOS, BootUEFI: s.BootUEFI, BootIPXE: s.BootIPXE}
+		BootServer: s.BootServer, BootBIOS: s.BootBIOS, BootUEFI: s.BootUEFI, BootIPXE: s.BootIPXE, Relay: s.Relay}
 }
 
 func dhcpAddrs(list []string) []netip.Addr {
@@ -242,7 +245,17 @@ func (m *Module) dhcpNotify(scope int64, reason string) {
 }
 
 func (m *Module) dhcpForeign(scope int64, server netip.Addr) {
+	if m.dhcpIsPeer(server) { // Node des Clusters (Haupt-/Reserve-Node), kein fremder Server
+		return
+	}
 	m.dhcpNotify(scope, "other DHCP server "+server.String())
+}
+
+// dhcpChanged: Vergaben geaendert (vom Server, ohne gehaltene Sperre) - Belegung pruefen, Namen und Cluster nachziehen.
+func (m *Module) dhcpChanged() {
+	m.dhcpPoolCheck()
+	m.dhcpNamesSoon()
+	m.dhcpLeasesSoon()
 }
 
 // dhcpPoolCheck meldet ein Netz, das zu 90 % belegt ist (einmal, wieder erst unter 80 %).
@@ -280,7 +293,7 @@ func (s DHCPScope) label() string {
 	return s.Iface + " " + s.Subnet
 }
 
-const dhcpScopeCols = `id, name, iface, subnet, range_start, range_end, router, dns, domain, lease_hours, ntp, authoritative, boot_server, boot_bios, boot_uefi, boot_ipxe, enabled, created_at`
+const dhcpScopeCols = `id, name, iface, subnet, range_start, range_end, router, dns, domain, lease_hours, ntp, authoritative, boot_server, boot_bios, boot_uefi, boot_ipxe, relay, enabled, created_at`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -288,7 +301,7 @@ func scanDHCPScope(r rowScanner) (DHCPScope, error) {
 	var s DHCPScope
 	var dns, ntp, created string
 	err := r.Scan(&s.ID, &s.Name, &s.Iface, &s.Subnet, &s.Start, &s.End, &s.Router, &dns, &s.Domain, &s.LeaseHours, &ntp, &s.Authoritative,
-		&s.BootServer, &s.BootBIOS, &s.BootUEFI, &s.BootIPXE, &s.Enabled, &created)
+		&s.BootServer, &s.BootBIOS, &s.BootUEFI, &s.BootIPXE, &s.Relay, &s.Enabled, &created)
 	s.DNS, s.NTP = dhcpList(dns), dhcpList(ntp)
 	s.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	return s, err
@@ -425,9 +438,20 @@ func normalizeDHCPScope(s *DHCPScope) error {
 	return nil
 }
 
-func (m *Module) dhcpIfaceTaken(ctx context.Context, iface string, id int64) bool {
+// dhcpIfaceTaken: je Schnittstelle ein Netz (Relay-Netze teilen sich die Schnittstelle mit anderen).
+func (m *Module) dhcpIfaceTaken(ctx context.Context, s DHCPScope, id int64) bool {
+	if s.Relay {
+		return false
+	}
 	var n int
-	_ = m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_dhcp_scopes WHERE iface = ? AND id <> ?`, iface, id).Scan(&n)
+	_ = m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_dhcp_scopes WHERE iface = ? AND relay = 0 AND id <> ?`, s.Iface, id).Scan(&n)
+	return n > 0
+}
+
+// dhcpSubnetTaken: jedes Netz nur einmal (Kennung im Cluster).
+func (m *Module) dhcpSubnetTaken(ctx context.Context, subnet string, id int64) bool {
+	var n int
+	_ = m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_dhcp_scopes WHERE subnet = ? AND id <> ?`, subnet, id).Scan(&n)
 	return n > 0
 }
 
@@ -436,18 +460,22 @@ func (m *Module) AddDHCPScope(ctx context.Context, s DHCPScope) (DHCPScope, erro
 	if err := normalizeDHCPScope(&s); err != nil {
 		return s, err
 	}
-	if m.dhcpIfaceTaken(ctx, s.Iface, 0) {
+	if m.dhcpIfaceTaken(ctx, s, 0) {
 		return s, errCfg("err_dhcp_iface_dup")
 	}
+	if m.dhcpSubnetTaken(ctx, s.Subnet, 0) {
+		return s, errCfg("err_dhcp_subnet_dup")
+	}
 	s.Enabled, s.CreatedAt = true, time.Now().UTC()
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_dhcp_scopes (name, iface, subnet, range_start, range_end, router, dns, domain, lease_hours, ntp, authoritative, boot_server, boot_bios, boot_uefi, boot_ipxe, enabled, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`, s.Name, s.Iface, s.Subnet, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain, s.LeaseHours,
-		strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.CreatedAt.Format(time.RFC3339))
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_dhcp_scopes (name, iface, subnet, range_start, range_end, router, dns, domain, lease_hours, ntp, authoritative, boot_server, boot_bios, boot_uefi, boot_ipxe, relay, enabled, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`, s.Name, s.Iface, s.Subnet, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain, s.LeaseHours,
+		strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.Relay, s.CreatedAt.Format(time.RFC3339))
 	if err != nil {
 		return s, err
 	}
 	s.ID, _ = res.LastInsertId()
 	m.dhcpApply(ctx)
+	m.dhcpSynced(ctx)
 	return s, nil
 }
 
@@ -456,12 +484,15 @@ func (m *Module) UpdateDHCPScope(ctx context.Context, id int64, s DHCPScope) (DH
 	if err := normalizeDHCPScope(&s); err != nil {
 		return s, err
 	}
-	if m.dhcpIfaceTaken(ctx, s.Iface, id) {
+	if m.dhcpIfaceTaken(ctx, s, id) {
 		return s, errCfg("err_dhcp_iface_dup")
 	}
+	if m.dhcpSubnetTaken(ctx, s.Subnet, id) {
+		return s, errCfg("err_dhcp_subnet_dup")
+	}
 	err := m.dhcpExec(ctx, `UPDATE dns64_dhcp_scopes SET name = ?, iface = ?, subnet = ?, range_start = ?, range_end = ?, router = ?, dns = ?, domain = ?, lease_hours = ?, ntp = ?, authoritative = ?,
-		boot_server = ?, boot_bios = ?, boot_uefi = ?, boot_ipxe = ? WHERE id = ?`, s.Name, s.Iface, s.Subnet, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain,
-		s.LeaseHours, strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, id)
+		boot_server = ?, boot_bios = ?, boot_uefi = ?, boot_ipxe = ?, relay = ? WHERE id = ?`, s.Name, s.Iface, s.Subnet, s.Start, s.End, s.Router, strings.Join(s.DNS, ","), s.Domain,
+		s.LeaseHours, strings.Join(s.NTP, ","), s.Authoritative, s.BootServer, s.BootBIOS, s.BootUEFI, s.BootIPXE, s.Relay, id)
 	s.ID = id
 	return s, err
 }
@@ -488,6 +519,7 @@ func (m *Module) dhcpExec(ctx context.Context, q string, args ...any) error {
 		return errNotFound
 	}
 	m.dhcpApply(ctx)
+	m.dhcpSynced(ctx)
 	return nil
 }
 
@@ -548,6 +580,12 @@ func (m *Module) AddDHCPReservation(ctx context.Context, r DHCPReservation) (DHC
 	}
 	r.ID, _ = res.LastInsertId()
 	m.dhcpApply(ctx)
+	m.dhcpSynced(ctx)
+	if r.GroupID > 0 { // MAC in die Geraetegruppe aufnehmen (Regeln gelten auch bei neuer IP)
+		if _, err := m.AddMember(ctx, groups.Member{GroupID: r.GroupID, Kind: groups.KindMAC, Value: r.MAC, Label: r.Name}); err != nil {
+			return r, err
+		}
+	}
 	return r, nil
 }
 
@@ -568,8 +606,9 @@ func (m *Module) DeleteDHCPReservation(ctx context.Context, id int64) error {
 // ReleaseDHCPLease gibt ein Lease von Hand frei.
 func (m *Module) ReleaseDHCPLease(ctx context.Context, scope int64, mac string) error {
 	if s := m.dhcpSrv.Load(); s != nil && s.Release(scope, mac) {
-		return nil
+		return nil // der Server loescht in der Datenbank, OnChange zieht Namen und Cluster nach
 	}
+	defer m.dhcpChanged()
 	res, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_dhcp_leases WHERE scope_id = ? AND mac = ?`, scope, mac)
 	if err != nil {
 		return err

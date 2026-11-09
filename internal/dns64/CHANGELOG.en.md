@@ -1,5 +1,14 @@
 # Changes – DNS64
 
+## 1.37.0 – 2026-11-09
+
+### New
+- DHCP and DNS hand in hand: every device with an address from the DHCP server gets a name like `laptop.home.lan` including reverse lookup – from the fixed address or from the device itself (domain of the network). Own records take precedence; if a name is taken, the second device gets none. Query log and top clients show the names even in networks without a domain.
+- Fixed address with device group: when adding it, DNS64 can put the MAC into a device group right away. MAC rules of the groups work thanks to the DHCP leases even when the neighbour table does not know the device.
+- Networks behind a DHCP relay (e.g. VLANs behind the router) without an interface of the node in that network.
+- Cluster: new areas “DHCP networks”, “DHCP: fixed addresses” and “DHCP leases” (off by default). A network taken over arrives switched off; interface, switch and role stay per node. If DNS is empty, devices also get the other nodes in the network as DNS servers after this node. The names from the leases work on all nodes with the area.
+- Standby node: a second node with the role “standby” only hands out addresses when the primary node is really gone (not reachable in the cluster and no answer as DHCP server for 3 minutes); it knows all leases and gives every device its address again. Cluster nodes do not count as other DHCP servers.
+
 ## 1.36.0 – 2026-11-09
 
 ### New

@@ -50,5 +50,5 @@ func (m *Module) ownClientName(s string) string {
 			}
 		}
 	}
-	return ""
+	return m.dhcpLabel(ip) // Name aus dem DHCP-Server, auch in Netzen ohne Domain
 }

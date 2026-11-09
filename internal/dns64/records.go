@@ -45,10 +45,13 @@ type recordTable struct {
 func (m *Module) Lookup(name string, qtype uint16) ([]dns.RR, bool) {
 	t := m.recs.Load()
 	if t == nil {
-		return nil, false
+		t = &recordTable{} // noch keine eigenen Eintraege geladen: DHCP-Namen gelten trotzdem
 	}
 	recs, ok := t.exact[name]
 	if !ok {
+		if rrs, isDHCP := m.dhcpA(name, qtype); isDHCP { // Namen aus dem DHCP-Server vor Platzhaltern (dhcp_names.go)
+			return rrs, true
+		}
 		for s := name; !ok; {
 			i := strings.IndexByte(s, '.')
 			if i < 0 {
@@ -61,6 +64,9 @@ func (m *Module) Lookup(name string, qtype uint16) ([]dns.RR, bool) {
 	if !ok {
 		if r, isPtr := t.ptr[name]; isPtr && qtype == dns.TypePTR {
 			return []dns.RR{&dns.PTR{Hdr: hdr(name, dns.TypePTR, r.TTL), Ptr: dns.Fqdn(r.Name)}}, true
+		}
+		if qtype == dns.TypePTR {
+			return m.dhcpPTR(name)
 		}
 		return nil, false
 	}

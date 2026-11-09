@@ -281,3 +281,55 @@ func TestBroadcast(t *testing.T) {
 		t.Fatal(b)
 	}
 }
+
+// Reserve-Node: solange die Haupt-Node lebt, nur zuhoeren; danach normal antworten.
+func TestStandby(t *testing.T) {
+	s, st, _ := newTest(t, Config{})
+	alive := true
+	s.Standby = func() bool { return alive }
+	if r := s.Handle("eth0", discover(t, macA)); r != nil {
+		t.Fatal("standby answered")
+	}
+	if v := s.Snapshot(); v.Events[0].Result != "standby" || len(st.all()) != 0 {
+		t.Fatalf("standby state %+v", v.Events)
+	}
+	alive = false
+	if got := offerAndAck(t, s, macA); got != netip.MustParseAddr("192.168.1.3") {
+		t.Fatalf("after failover %v", got)
+	}
+}
+
+// Vergaben aus dem Cluster: die Reserve kennt sie und gibt dieselbe Adresse wieder.
+func TestImport(t *testing.T) {
+	s, _, now := newTest(t, Config{})
+	s.Import(Lease{Scope: 1, MAC: macA.String(), IP: netip.MustParseAddr("192.168.1.5"), Hostname: "tv", Expires: now.Add(time.Hour), State: StateBound})
+	if got := ip4(s.Handle("eth0", discover(t, macA)).msg.YourIPAddr); got != netip.MustParseAddr("192.168.1.5") {
+		t.Fatalf("imported lease not used: %v", got)
+	}
+	if got := ip4(s.Handle("eth0", discover(t, macB)).msg.YourIPAddr); got == netip.MustParseAddr("192.168.1.5") {
+		t.Fatal("imported address offered to other client")
+	}
+	s.Import(Lease{Scope: 1, MAC: macA.String()}) // geloescht
+	if len(s.Snapshot().Scopes[0].Leases) != 2 {  // macA hat noch sein Angebot, macB seins
+		t.Fatalf("leases %+v", s.Snapshot().Scopes[0].Leases)
+	}
+}
+
+// Relay-Netz: nur ueber giaddr, Server-ID = Adresse der Node auf der Schnittstelle, keine ARP-Pruefung.
+func TestRelayScope(t *testing.T) {
+	lan, far := testScope(), testScope()
+	far.ID, far.Relay, far.Subnet = 2, true, netip.MustParsePrefix("10.20.0.0/24")
+	far.Start, far.End, far.Router = netip.MustParseAddr("10.20.0.100"), netip.MustParseAddr("10.20.0.110"), netip.MustParseAddr("10.20.0.1")
+	s, _, _ := newTest(t, Config{Scopes: []Scope{lan, far}})
+	probed := false
+	s.Probe = func(string, netip.Addr, netip.Addr) bool { probed = true; return false }
+	r := s.Handle("eth0", discover(t, macA, dhcpv4.WithGatewayIP(net.ParseIP("10.20.0.1"))))
+	if r == nil || ip4(r.msg.YourIPAddr) != netip.MustParseAddr("10.20.0.100") || ip4(r.msg.ServerIdentifier()) != netip.MustParseAddr("192.168.1.2") ||
+		r.to != netip.MustParseAddrPort("10.20.0.1:67") || probed {
+		t.Fatalf("relay offer %+v probed=%v", r, probed)
+	}
+	// ohne giaddr gehoert die Anfrage zum Netz der Schnittstelle
+	if r := s.Handle("eth0", discover(t, macB)); r == nil || ip4(r.msg.YourIPAddr) != netip.MustParseAddr("192.168.1.3") {
+		t.Fatalf("lan offer %+v", r)
+	}
+}

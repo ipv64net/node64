@@ -4,6 +4,8 @@ package dns64cluster
 
 import (
 	"context"
+	"net/netip"
+	"net/url"
 
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/peer"
@@ -26,6 +28,23 @@ func Module() peer.ModuleInfo {
 // Register meldet DNS64 beim Cluster an (vor peer.Run) und leitet seine Aenderungen dorthin.
 func Register(pm *peer.Manager, m *dns64.Module) {
 	pm.RegisterProvider(provider{m})
+	m.SetDHCPPeers(func(ctx context.Context, item string) []dns64.DHCPPeer { // DHCP: Haupt-/Reserve-Node, DNS-Server
+		var out []dns64.DHCPPeer
+		list := pm.AreaMembers(ctx, dns64.ClusterModuleID, item)
+		if item == "" { // alle Mitglieder (gibt es ueberhaupt einen Cluster?)
+			list, _ = pm.Members(ctx)
+		}
+		for _, x := range list {
+			p := dns64.DHCPPeer{Name: x.Name, Online: x.Online()}
+			if u, err := url.Parse(x.URL); err == nil {
+				if a, err := netip.ParseAddr(u.Hostname()); err == nil {
+					p.Addr = a.Unmap()
+				}
+			}
+			out = append(out, p)
+		}
+		return out
+	})
 	m.SetCluster(func(ctx context.Context, item, id string, deleted bool) {
 		pm.ClusterChange(ctx, dns64.ClusterModuleID, item, id, deleted)
 	})

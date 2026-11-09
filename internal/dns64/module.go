@@ -52,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.36.0"
+	version   = "1.37.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -106,18 +106,21 @@ type Module struct {
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
 
-	updMu     sync.Mutex                   // dynamische Updates nacheinander (update.go)
-	pub       atomic.Pointer[pubState]     // Docker-Bridge: Ports auf dem Host veroeffentlicht? (published.go)
-	dkd       dockerDNS                    // Eintraege aus Docker-Labels (docker.go)
-	hcOn      func() bool                  // Healthchecks laeuft (Knopf "Als Check" bei den Geraeten), nil = nie
-	clMu      sync.Mutex                   // Cluster (cluster.go)
-	clHook    ClusterHook                  // nil = kein Cluster
-	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
-	clGen     map[string]uint64            // Zaehler je Bereich: Stand getauscht (clChanged, clSetSnap)
-	clRestart *time.Timer                  // Neustart nach uebernommenen Einstellungen
-	recReload *time.Timer                  // Momentaufnahme nach Uebernahmen neu (records.go)
-	dh        dhcpState                    // DHCP-Server (dhcp.go), opt-in
-	dhcpSrv   atomic.Pointer[dhcp.Server]  // laufender DHCP-Server, nil = aus
+	updMu     sync.Mutex                    // dynamische Updates nacheinander (update.go)
+	pub       atomic.Pointer[pubState]      // Docker-Bridge: Ports auf dem Host veroeffentlicht? (published.go)
+	dkd       dockerDNS                     // Eintraege aus Docker-Labels (docker.go)
+	hcOn      func() bool                   // Healthchecks laeuft (Knopf "Als Check" bei den Geraeten), nil = nie
+	clMu      sync.Mutex                    // Cluster (cluster.go)
+	clHook    ClusterHook                   // nil = kein Cluster
+	clSnap    map[string]map[string]string  // zuletzt gemeldeter Stand je Bereich
+	clGen     map[string]uint64             // Zaehler je Bereich: Stand getauscht (clChanged, clSetSnap)
+	clRestart *time.Timer                   // Neustart nach uebernommenen Einstellungen
+	recReload *time.Timer                   // Momentaufnahme nach Uebernahmen neu (records.go)
+	dh        dhcpState                     // DHCP-Server (dhcp.go), opt-in
+	dhcpSrv   atomic.Pointer[dhcp.Server]   // laufender DHCP-Server, nil = aus
+	dhcpNames atomic.Pointer[dhcpNameTable] // Namen aus Vergaben und festen Adressen (dhcp_names.go)
+	// dhcpPeersFn: andere Nodes, mit denen ein DHCP-Bereich abgeglichen wird (dns64cluster), nil = kein Cluster
+	dhcpPeersFn func(ctx context.Context, item string) []DHCPPeer
 }
 
 const retryEvery = time.Minute
@@ -289,6 +292,9 @@ func (m *Module) start(ctx context.Context) error {
 	}
 	if err := m.loadZones(ctx); err != nil {
 		return fmt.Errorf("load zones: %w", err)
+	}
+	if err := m.dhcpNamesBuild(ctx); err != nil && !m.noTable(err) { // Namen aus DHCP, auch ohne eigenen DHCP-Server
+		return fmt.Errorf("load dhcp names: %w", err)
 	}
 	cfg := m.loadConfig(ctx)
 	m.migrateCentral(ctx, &cfg)

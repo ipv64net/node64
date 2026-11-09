@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -18,6 +19,7 @@ func (m *Module) dhcpRoutes(mux *http.ServeMux, g module.Guards) {
 	h := func(f http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(f)) }
 	mux.Handle("GET /dns64/dhcp", h(m.pageTab("dhcp", "dns64.dhcp.title")))
 	mux.Handle("POST /dns64/dhcp/mode", h(m.pageDHCPMode))
+	mux.Handle("POST /dns64/dhcp/role", h(m.pageDHCPRole))
 	mux.Handle("POST /dns64/dhcp/scopes", h(m.pageDHCPScopeSave))
 	mux.Handle("POST /dns64/dhcp/scopes/{id}/edit", h(m.pageDHCPScopeSave))
 	mux.Handle("POST /dns64/dhcp/scopes/{id}/delete", h(m.pageDHCPScopeDelete))
@@ -29,6 +31,7 @@ func (m *Module) dhcpRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/dhcp/leases/release", h(m.pageDHCPRelease))
 	mux.Handle("GET /api/dns64/dhcp", h(m.apiDHCP))
 	mux.Handle("PUT /api/dns64/dhcp/mode", h(m.apiDHCPMode))
+	mux.Handle("PUT /api/dns64/dhcp/role", h(m.apiDHCPRole))
 	mux.Handle("GET /api/dns64/dhcp/scopes", h(m.apiDHCPScopes))
 	mux.Handle("POST /api/dns64/dhcp/scopes", h(m.apiDHCPScopeSave))
 	mux.Handle("PUT /api/dns64/dhcp/scopes/{id}", h(m.apiDHCPScopeSave))
@@ -56,8 +59,24 @@ type dhcpLeaseView struct {
 	dhcp.Lease
 	ScopeName string
 	ResName   string // Name der festen Adresse ("" = keine)
+	DNSName   string // Name im DNS (<name>.<Domain>), "" = keiner
 	Fixed     bool
 	Active    bool
+}
+
+// dhcpResView: feste Adresse mit DNS-Namen.
+type dhcpResView struct {
+	DHCPReservation
+	DNSName string
+}
+
+// dhcpReserveView: Rolle dieser Node im Cluster (D6).
+type dhcpReserveView struct {
+	Cluster bool       // es gibt andere Nodes im Cluster (bzw. Rolle Reserve gesetzt)
+	Role    string     // primary | reserve
+	Peers   []DHCPPeer // Nodes mit dem Bereich "Vergaben"
+	Names   string     // ihre Namen fuer den Text
+	Standby bool       // Reserve bleibt gerade still
 }
 
 type dhcpPage struct {
@@ -65,8 +84,10 @@ type dhcpPage struct {
 	Bridge   bool
 	Running  bool // Server laeuft (Schalter an/Probelauf und mindestens ein Netz)
 	Scopes   []dhcpScopeView
-	Res      []DHCPReservation
+	Res      []dhcpResView
 	ResScope map[int64]string // Kennung -> Name des Netzes
+	Groups   []groups.Group   // Auswahl "in Geraetegruppe aufnehmen"
+	Reserve  dhcpReserveView
 	Leases   []dhcpLeaseView
 	Events   []dhcp.Event
 	Foreign  []dhcp.Foreign
@@ -85,7 +106,26 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 	if err != nil && !m.noTable(err) {
 		return err
 	}
-	v.Res = res
+	for _, x := range res {
+		ip, _ := netip.ParseAddr(x.IP)
+		v.Res = append(v.Res, dhcpResView{x, m.dhcpDNSName(ip)})
+	}
+	if gl, err := m.Groups(ctx); err == nil {
+		v.Groups = gl
+	}
+	v.Reserve.Role = m.dhcpRole(ctx)
+	v.Reserve.Cluster = len(m.dhcpPeers(ctx, "")) > 0 || v.Reserve.Role == dhcpReserve // Rolle nur mit anderen Nodes
+	if v.Reserve.Cluster {
+		v.Reserve.Peers = m.dhcpPeers(ctx, ItemDHCPLeases)
+		var names []string
+		for _, p := range v.Reserve.Peers {
+			names = append(names, p.Name)
+		}
+		v.Reserve.Names = strings.Join(names, ", ")
+	}
+	if v.Reserve.Role == dhcpReserve {
+		v.Reserve.Standby = m.dhcpPrimaryAlive(ctx)
+	}
 	var snap dhcp.View
 	if s := m.dhcpSrv.Load(); s != nil {
 		v.Running, snap = true, s.Snapshot()
@@ -108,10 +148,15 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 		v.ResScope[s.ID] = s.label()
 		for _, l := range sv.State.Leases {
 			r, ok := fixed[strconv.FormatInt(s.ID, 10)+"/"+l.MAC]
-			v.Leases = append(v.Leases, dhcpLeaseView{Lease: l, ScopeName: s.label(), ResName: r.Name, Fixed: ok, Active: l.Active(now)})
+			v.Leases = append(v.Leases, dhcpLeaseView{Lease: l, ScopeName: s.label(), ResName: r.Name, DNSName: m.dhcpDNSName(l.IP), Fixed: ok, Active: l.Active(now)})
 		}
 	}
-	v.Events, v.Foreign = snap.Events, snap.Foreign
+	v.Events = snap.Events
+	for _, f := range snap.Foreign { // Nodes des Clusters (Haupt-/Reserve-Node) sind keine fremden Server
+		if !m.dhcpIsPeer(f.Server) {
+			v.Foreign = append(v.Foreign, f)
+		}
+	}
 	if len(v.Ifaces) > 0 {
 		v.Suggest = v.Ifaces[0].Suggest
 		for _, i := range v.Ifaces { // erste Schnittstelle mit privater Adresse
@@ -155,11 +200,22 @@ func (m *Module) pageDHCPMode(w http.ResponseWriter, r *http.Request) {
 	m.dhcpBack(w, r, err, "common.saved")
 }
 
+func (m *Module) pageDHCPRole(w http.ResponseWriter, r *http.Request) {
+	role := r.PostFormValue("role")
+	err := m.SetDHCPRole(r.Context(), role)
+	if err == nil {
+		m.log.Info("dhcp role", "role", role, "by", m.g.Actor(r))
+		m.audit(r, "dns64.dhcp.role", role, "")
+	}
+	m.dhcpBack(w, r, err, "common.saved")
+}
+
 func dhcpScopeForm(r *http.Request) DHCPScope {
 	return DHCPScope{Name: r.PostFormValue("name"), Iface: r.PostFormValue("iface"), Subnet: r.PostFormValue("subnet"), Start: r.PostFormValue("start"),
 		End: r.PostFormValue("end"), Router: r.PostFormValue("router"), DNS: dhcpList(r.PostFormValue("dns")), Domain: r.PostFormValue("domain"),
 		LeaseHours: max(0, formInt(r, "lease_hours")), NTP: dhcpList(r.PostFormValue("ntp")), Authoritative: r.PostFormValue("authoritative") == "1",
-		BootServer: r.PostFormValue("boot_server"), BootBIOS: r.PostFormValue("boot_bios"), BootUEFI: r.PostFormValue("boot_uefi"), BootIPXE: r.PostFormValue("boot_ipxe")}
+		BootServer: r.PostFormValue("boot_server"), BootBIOS: r.PostFormValue("boot_bios"), BootUEFI: r.PostFormValue("boot_uefi"), BootIPXE: r.PostFormValue("boot_ipxe"),
+		Relay: r.PostFormValue("relay") == "1"}
 }
 
 func (m *Module) pageDHCPScopeSave(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +252,8 @@ func (m *Module) pageDHCPScopeToggle(w http.ResponseWriter, r *http.Request) {
 
 func dhcpResForm(r *http.Request) DHCPReservation {
 	sid, _ := strconv.ParseInt(r.PostFormValue("scope"), 10, 64)
-	return DHCPReservation{ScopeID: sid, MAC: r.PostFormValue("mac"), IP: r.PostFormValue("ip"), Name: r.PostFormValue("name"), Comment: r.PostFormValue("comment")}
+	gid, _ := strconv.ParseInt(r.PostFormValue("group"), 10, 64)
+	return DHCPReservation{ScopeID: sid, MAC: r.PostFormValue("mac"), IP: r.PostFormValue("ip"), Name: r.PostFormValue("name"), Comment: r.PostFormValue("comment"), GroupID: gid}
 }
 
 func (m *Module) pageDHCPResSave(w http.ResponseWriter, r *http.Request) {
@@ -248,13 +305,16 @@ func (m *Module) pageDHCPRelease(w http.ResponseWriter, r *http.Request) {
 func (m *Module) apiDHCP(w http.ResponseWriter, r *http.Request) {
 	out := struct {
 		Mode    string    `json:"mode"`
+		Role    string    `json:"role"`
+		Standby bool      `json:"standby"` // Reserve-Node bleibt gerade still (Haupt-Node erreichbar)
 		Running bool      `json:"running"`
 		Bridge  bool      `json:"docker_bridge"`
 		View    dhcp.View `json:"state"`
-	}{Mode: m.dhcpMode(r.Context()), Bridge: dhcpBridge(), View: dhcp.View{Scopes: []dhcp.ScopeView{}, Events: []dhcp.Event{}, Foreign: []dhcp.Foreign{}}}
+	}{Mode: m.dhcpMode(r.Context()), Role: m.dhcpRole(r.Context()), Bridge: dhcpBridge(), View: dhcp.View{Scopes: []dhcp.ScopeView{}, Events: []dhcp.Event{}, Foreign: []dhcp.Foreign{}}}
 	if s := m.dhcpSrv.Load(); s != nil {
 		out.Running, out.View = true, s.Snapshot()
 	}
+	out.Standby = out.Role == dhcpReserve && m.dhcpPrimaryAlive(r.Context())
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -268,6 +328,20 @@ func (m *Module) apiDHCPMode(w http.ResponseWriter, r *http.Request) {
 	err := m.SetDHCPMode(r.Context(), in.Mode)
 	if err == nil {
 		m.audit(r, "dns64.dhcp.mode", in.Mode, "")
+	}
+	m.apiResult(w, r, err, http.StatusOK, in)
+}
+
+func (m *Module) apiDHCPRole(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Role string `json:"role"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	err := m.SetDHCPRole(r.Context(), in.Role)
+	if err == nil {
+		m.audit(r, "dns64.dhcp.role", in.Role, "")
 	}
 	m.apiResult(w, r, err, http.StatusOK, in)
 }

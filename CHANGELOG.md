@@ -5,6 +5,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - DNS64: DHCP-Server als eigener Menüpunkt (opt-in, Standard aus, ohne Einschalten kein Port) – Netze je Schnittstelle/VLAN, feste Adressen, Probelauf, Erkennung fremder DHCP-Server, ARP-Prüfung, PXE/Netboot; nur mit Host-Netz oder macvlan (#59).
+- DNS64 DHCP: Geräte bekommen Namen wie `laptop.home.lan`, feste Adressen gleich in eine Gerätegruppe, Netze hinter einem DHCP-Relay, Abgleich im Cluster (Netze, feste Adressen, Vergaben) und Reserve-Node, die nur einspringt, wenn die Haupt-Node wirklich weg ist (#59).
 - PROXY64: Weiterleitung bei verweigertem Zugriff je Location – wer von der Zugriffsliste abgewiesen wird, landet mit 302 auf einer einstellbaren Adresse statt auf der Fehlerseite (z. B. Vaultwarden `/admin` nur aus dem LAN); Anmeldungen bleiben unverändert (#55).
 - DNS64: Block- und Freigabe-Listen verstehen AdGuard-Regeln mit einem Strich – `@@|name^` nimmt genau diesen Namen aus, `|name^` sperrt genau ihn (bisher still ignoriert).
 - Zertifikate: Wildcards wie `*.lab.domain.tld` bei Cloudflare und anderen DNS-Anbietern klappen auch, wenn ein Wildcard-CNAME alle Subdomains nach Hause zeigt (z. B. auf eine DynDNS-Domain).

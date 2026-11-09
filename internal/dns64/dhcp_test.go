@@ -12,7 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/miekg/dns"
+
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -155,7 +158,9 @@ func TestDHCPPageRenders(t *testing.T) {
 	for _, mode := range []string{dhcpOff, dhcpObserve, dhcpOn} {
 		v := tview{CSRF: "c", Data: pageData{DHCP: dhcpPage{Mode: mode, Running: mode != dhcpOff, ResScope: map[int64]string{1: "LAN (eth0)"},
 			Scopes:  []dhcpScopeView{{DHCPScope: sc, State: dhcp.ScopeView{ID: 1, Self: netip.MustParseAddr("192.168.1.2"), Size: 100, Used: 1, Leases: []dhcp.Lease{lease}}, Pct: 1}},
-			Res:     []DHCPReservation{{ID: 1, ScopeID: 1, MAC: "02:00:00:00:00:0b", IP: "192.168.1.20", Name: "nas"}},
+			Res:     []dhcpResView{{DHCPReservation{ID: 1, ScopeID: 1, MAC: "02:00:00:00:00:0b", IP: "192.168.1.20", Name: "nas"}, "nas.home.lan"}},
+			Groups:  []groups.Group{{ID: 3, Name: "Kinder"}},
+			Reserve: dhcpReserveView{Cluster: true, Role: dhcpReserve, Peers: []DHCPPeer{{Name: "node-a", Online: true}}, Names: "node-a", Standby: mode == dhcpOn},
 			Leases:  []dhcpLeaseView{{Lease: lease, ScopeName: "LAN (eth0)", Active: true}},
 			Events:  []dhcp.Event{{Time: now, Scope: 1, Type: "discover", MAC: lease.MAC, IP: lease.IP, Result: "offer"}},
 			Foreign: []dhcp.Foreign{{Scope: 1, Server: netip.MustParseAddr("192.168.1.1"), LastSeen: now}},
@@ -172,5 +177,154 @@ func TestDHCPPageRenders(t *testing.T) {
 	}
 	if err := tpl.ExecuteTemplate(io.Discard, "content", tview{Data: pageData{DHCP: dhcpPage{Mode: dhcpOff, Bridge: true}}}); err != nil {
 		t.Fatalf("empty: %v", err)
+	}
+}
+
+// D3: Namen aus festen Adressen und Vergaben (A, PTR, NODATA fuer AAAA), eigene Eintraege gehen vor, ein Name je MAC,
+// abgelaufene Vergaben verschwinden, MAC/IP gehen an die Gruppen.
+func TestDHCPNames(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	s, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: "192.168.50.0/24", Start: "192.168.50.100", End: "192.168.50.150", Domain: "home.lan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.AddDHCPReservation(ctx, DHCPReservation{ScopeID: s.ID, MAC: "02:00:00:00:00:01", IP: "192.168.50.20", Name: "NAS Keller"}); err != nil {
+		t.Fatal(err)
+	}
+	st := dhcpStore{m}
+	exp := time.Now().Add(time.Hour)
+	for _, l := range []dhcp.Lease{
+		{Scope: s.ID, MAC: "02:00:00:00:00:0a", IP: netip.MustParseAddr("192.168.50.100"), Hostname: "Laptop-Lea", Expires: exp, State: dhcp.StateBound},
+		{Scope: s.ID, MAC: "02:00:00:00:00:0b", IP: netip.MustParseAddr("192.168.50.101"), Hostname: "laptop-lea", Expires: exp, State: dhcp.StateBound}, // gleicher Name
+		{Scope: s.ID, MAC: "02:00:00:00:00:0c", IP: netip.MustParseAddr("192.168.50.102"), Hostname: "alt", Expires: time.Now().Add(-time.Minute), State: dhcp.StateBound},
+		{Scope: s.ID, MAC: "02:00:00:00:00:0d", IP: netip.MustParseAddr("192.168.50.103"), Hostname: "drucker", Expires: exp, State: dhcp.StateBound},
+	} {
+		if err := st.SaveLease(l); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.AddRecord(ctx, Record{Name: "drucker.home.lan", Type: "A", Value: "192.168.50.9"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.dhcpNamesBuild(ctx); err != nil {
+		t.Fatal(err)
+	}
+	a := func(name string) string {
+		rrs, ok := m.Lookup(name, dns.TypeA)
+		if !ok || len(rrs) != 1 {
+			return ""
+		}
+		return rrs[0].(*dns.A).A.String()
+	}
+	if a("nas-keller.home.lan") != "192.168.50.20" || a("laptop-lea.home.lan") != "192.168.50.100" || a("alt.home.lan") != "" || a("drucker.home.lan") != "192.168.50.9" {
+		t.Fatalf("names: nas=%q laptop=%q alt=%q drucker=%q", a("nas-keller.home.lan"), a("laptop-lea.home.lan"), a("alt.home.lan"), a("drucker.home.lan"))
+	}
+	if rrs, ok := m.Lookup("laptop-lea.home.lan", dns.TypeAAAA); !ok || len(rrs) != 0 {
+		t.Fatalf("AAAA: %v %v", rrs, ok)
+	}
+	if rrs, ok := m.Lookup("100.50.168.192.in-addr.arpa", dns.TypePTR); !ok || rrs[0].(*dns.PTR).Ptr != "laptop-lea.home.lan." {
+		t.Fatalf("PTR: %v %v", rrs, ok)
+	}
+	if n := m.ownClientName("192.168.50.101"); n != "laptop-lea" { // ohne DNS-Namen (belegt): Name vom Geraet
+		t.Fatalf("client name %q", n)
+	}
+	if mac := m.grp.MAC(netip.MustParseAddr("192.168.50.103")); mac != "02:00:00:00:00:0d" {
+		t.Fatalf("groups mac %q", mac)
+	}
+}
+
+// D5/D6: Netze, feste Adressen und Vergaben gehen von Node A nach B; das Netz kommt dort ausgeschaltet an, die Namen
+// gelten auch auf B, und die Uebernahme meldet nichts zurueck (kein Echo).
+func TestDHCPCluster(t *testing.T) {
+	a, _ := testModule(t)
+	b, _ := testModule(t)
+	ctx := context.Background()
+	var echo []string
+	b.SetCluster(func(_ context.Context, item, id string, _ bool) { echo = append(echo, item+" "+id) })
+	s, err := a.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: "192.168.50.0/24", Start: "192.168.50.100", End: "192.168.50.150", Domain: "home.lan", BootUEFI: "x.efi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.AddDHCPReservation(ctx, DHCPReservation{ScopeID: s.ID, MAC: "02:00:00:00:00:01", IP: "192.168.50.20", Name: "nas"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = dhcpStore{a}.SaveLease(dhcp.Lease{Scope: s.ID, MAC: "02:00:00:00:00:0a", IP: netip.MustParseAddr("192.168.50.100"), Hostname: "tv", Expires: time.Now().Add(time.Hour).Truncate(time.Second), State: dhcp.StateBound})
+	sync := func(item string) {
+		cur, err := a.clDHCPCurrent(ctx, item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for id, v := range cur {
+			if err := b.ClusterApply(ctx, item, id, json.RawMessage(v), false); err != nil {
+				t.Fatalf("%s %s: %v", item, id, err)
+			}
+		}
+	}
+	for _, it := range []string{ItemDHCPScopes, ItemDHCPRes, ItemDHCPLeases} {
+		sync(it)
+	}
+	bs, _ := b.DHCPScopes(ctx)
+	if len(bs) != 1 || bs[0].Enabled || bs[0].BootUEFI != "x.efi" || bs[0].Domain != "home.lan" {
+		t.Fatalf("scope on b: %+v", bs)
+	}
+	for _, it := range []string{ItemDHCPScopes, ItemDHCPRes, ItemDHCPLeases} {
+		b.clChanged(ctx, it)
+	}
+	if len(echo) != 0 {
+		t.Fatalf("echo: %v", echo)
+	}
+	if err := b.dhcpNamesBuild(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rrs, ok := b.Lookup("tv.home.lan", dns.TypeA); !ok || len(rrs) != 1 {
+		t.Fatalf("name on b: %v %v", rrs, ok)
+	}
+	if rrs, ok := b.Lookup("nas.home.lan", dns.TypeA); !ok || len(rrs) != 1 {
+		t.Fatalf("fixed name on b: %v %v", rrs, ok)
+	}
+	// Vergabe geloescht -> auf B weg
+	if err := b.ClusterApply(ctx, ItemDHCPLeases, "l:192.168.50.0/24|02:00:00:00:00:0a", nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if rows, _ := b.dhcpLeaseRows(ctx); len(rows) != 0 {
+		t.Fatalf("lease left: %+v", rows)
+	}
+	// Netz geloescht -> mit festen Adressen weg
+	if err := b.ClusterApply(ctx, ItemDHCPScopes, "s:192.168.50.0/24", nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := b.DHCPReservations(ctx); len(res) != 0 {
+		t.Fatalf("reservations left: %+v", res)
+	}
+}
+
+// D6: Reserve bleibt still ohne Partner und solange einer erreichbar ist; DNS-Server im Netz aus dem Cluster.
+func TestDHCPReserve(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	if !m.dhcpPrimaryAlive(ctx) {
+		t.Fatal("reserve without peers must stay silent")
+	}
+	peers := []DHCPPeer{{Name: "a", Addr: netip.MustParseAddr("192.168.50.2"), Online: true}, {Name: "far", Addr: netip.MustParseAddr("10.0.0.2")}}
+	m.SetDHCPPeers(func(context.Context, string) []DHCPPeer { return peers })
+	if !m.dhcpPrimaryAlive(ctx) {
+		t.Fatal("primary online")
+	}
+	peers[0].Online = false
+	if m.dhcpPrimaryAlive(ctx) {
+		t.Fatal("primary gone, reserve must answer")
+	}
+	if dns := m.dhcpPeerDNS(ctx, netip.MustParsePrefix("192.168.50.0/24")); len(dns) != 1 || dns[0] != peers[0].Addr {
+		t.Fatalf("peer dns %v", dns)
+	}
+	if !m.dhcpIsPeer(netip.MustParseAddr("10.0.0.2")) || m.dhcpIsPeer(netip.MustParseAddr("10.0.0.3")) {
+		t.Fatal("peer detection")
+	}
+	if err := m.SetDHCPRole(ctx, "boss"); err == nil {
+		t.Fatal("bad role accepted")
+	}
+	if err := m.SetDHCPRole(ctx, dhcpReserve); err != nil || m.dhcpRole(ctx) != dhcpReserve {
+		t.Fatalf("role: %v", err)
 	}
 }

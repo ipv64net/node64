@@ -1,6 +1,6 @@
 # Plan: DHCP-Server in DNS64
 
-Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, aus D4 schon mehrere Netze je Schnittstelle und Relay (giaddr); offen: D3, D5, D6.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
+Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0.** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
 (Pi-hole und AdGuard Home haben ihn). Ziel: ein leichter DHCP-Server für Homelab und kleine bis mittlere Firmen, der
 Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md),
 [PLAN-NODE64-DNS64-GRUPPEN.md](PLAN-NODE64-DNS64-GRUPPEN.md), [CLUSTER.md](CLUSTER.md).
@@ -122,9 +122,11 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
 **D6 Reserve-Node (beschlossen, nach D5)**
 - Eine zweite Node mit demselben Netz läuft als „Reserve“. Jede Vergabe geht sofort über den Cluster an die Reserve
   (Leases als eigener Kanal, nicht als Bereich).
-- Die Reserve antwortet nur, wenn die Haupt-Node wirklich weg ist: im Cluster nicht erreichbar **und** der Client
-  wartet laut `secs`-Feld schon ≥ 10 s (der Kniff aus ISC dhcpd, ohne Failover-Protokoll). Ist die Haupt-Node
-  erreichbar, bleibt die Reserve still, auch bei hohem `secs`. Doppelte Vergaben fangen ARP-Probe und DECLINE ab.
+- Die Reserve antwortet nur, wenn die Haupt-Node wirklich weg ist: kein Mitglied mit dem Bereich „DHCP-Vergaben“
+  im Cluster erreichbar (2 Minuten) **und** keines hat in den letzten 3 Minuten als DHCP-Server geantwortet (die
+  Reserve sucht jede Minute). Ohne Mitglied mit diesem Bereich bleibt sie still. Das `secs`-Feld zählt bei der
+  Umsetzung nicht mit: Viele Geräte senden dort immer 0, die Reserve spränge dann nie ein. Doppelte Vergaben fangen
+  ARP-Probe und DECLINE ab.
 
 ## Stand der Umsetzung (1.36.0)
 
@@ -136,6 +138,20 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
 - Benachrichtigung `dns64_dhcp`: fremder DHCP-Server, Netz zu 90 % belegt.
 - Getestet: Einheitstests, echte Sockets im Test-Container (veth + Namensraum, Client udhcpc, fremder Server dnsmasq),
   Oberfläche lokal (Desktop und Handy).
+
+## Stand D3–D6 (1.37.0)
+
+- D3: Namen aus Vergaben und festen Adressen nur im Speicher (`dhcp_names.go`), gebaut aus node64.db – also auch auf
+  Nodes ohne eigenen DHCP-Server. Reihenfolge in `Lookup`: eigene Einträge, DHCP-Namen, Platzhalter, dann Zonen.
+  Client-Namen: Gruppe, PTR (auch DHCP), sonst Name vom Gerät. MAC/IP der Vergaben gehen an `groups.Resolver`
+  (`SetLeases`). Gerätegruppe beim Anlegen einer festen Adresse = normales Gruppen-Mitglied (MAC).
+- D4: Relay-Netze ohne eigene Adresse im Netz (Schalter „Netz hinter einem DHCP-Relay“, Spalte `relay`, Migration
+  0017): Server-ID = Adresse der Node auf der Schnittstelle, keine ARP-Prüfung, mehrere je Schnittstelle.
+- D5: Bereiche `dhcp_scopes` (s:<Netz>), `dhcp_reservations` (r:<Netz>|<MAC>), `dhcp_leases` (l:<Netz>|<MAC>) in
+  `dhcp_cluster.go`; neue Netze aus dem Cluster kommen aus und mit erratener Schnittstelle an. Netz je Node nur einmal.
+  DNS leer: nach dieser Node die anderen Nodes mit dem Bereich „DHCP-Netze“ in diesem Netz (Adresse aus der URL).
+- D6: Rolle `dns64.dhcp_role` (primary/reserve) je Node; `Server.Standby` (10 s zwischengespeichert), Suche nach
+  fremden Servern jede Minute, Vergaben aus dem Cluster per `Server.Import`.
 
 ## Bewusst nicht dabei (vorerst)
 

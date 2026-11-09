@@ -90,7 +90,7 @@ liefernde prüft ihre); neue Bereiche der anderen Nodes erfährt eine Node beim 
 | `notifications` | `settings` (Ruhezeiten, Drossel, Bündeln) | an | `/peer/v1/changes` |
 | `notifications` | `channels` (eigene Kanäle der Node samt Zugangsdaten) | aus | `/peer/v2/sync`, Zuordnung Check → Kanal mit den Checks |
 | `certs` | `certificates`, `acme`, `dns_accounts`, `cas` | aus | `/peer/v2/sync` |
-| `dns64` | `settings`, `lists`, `allowlist`, `records` (mit Zonen), `forwards` (mit Umschreiben), `groups`, `group_members` | aus | `/peer/v2/sync` |
+| `dns64` | `settings`, `lists`, `allowlist`, `records` (mit Zonen), `forwards` (mit Umschreiben), `groups`, `group_members`, `dhcp_scopes`, `dhcp_reservations`, `dhcp_leases` (DHCP, [PLAN-NODE64-DNS64-DHCP.md](PLAN-NODE64-DNS64-DHCP.md)) | aus | `/peer/v2/sync` |
 | `node` | `apikey` (zentraler ipv64-API-Key), `settings` (allgemeine Einstellungen der Node) | aus | `/peer/v2/sync` |
 
 | `users` | `accounts` (Benutzer samt Passwort-Hash, App-2FA, SSO-Verknüpfungen), `sso` (OIDC-Einrichtung samt Client-Secret) | aus | `/peer/v2/sync` |

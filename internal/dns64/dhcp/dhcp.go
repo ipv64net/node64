@@ -37,6 +37,8 @@ type Scope struct {
 	BootBIOS      string        // PXE: Boot-Datei fuer BIOS (Option 67)
 	BootUEFI      string        // PXE: Boot-Datei fuer UEFI
 	BootIPXE      string        // PXE: Boot-Datei, wenn der Client schon iPXE ist (Option 77 "iPXE")
+	Relay         bool          // Netz hinter einem DHCP-Relay: Anfragen nur mit giaddr, Server-ID = Adresse auf Iface
+	ExtraDNS      []netip.Addr  // DNS leer: nach der Node diese weiteren DNS64-Nodes des Clusters im Netz
 }
 
 // Reservation ist eine feste Adresse fuer eine MAC.
@@ -83,7 +85,7 @@ type Event struct {
 	MAC      string     `json:"mac"`
 	Hostname string     `json:"hostname,omitempty"`
 	IP       netip.Addr `json:"ip"`
-	Result   string     `json:"result"` // offer, ack, nak, ignored, observe, full, conflict, decline, release
+	Result   string     `json:"result"` // offer, ack, nak, ignored, observe, standby, full, conflict, decline, release
 }
 
 // Foreign ist ein fremder DHCP-Server im Netz eines Scopes.
@@ -118,6 +120,9 @@ type Server struct {
 	Now       func() time.Time
 	Addrs     func(iface string) []netip.Prefix    // IPv4-Adressen einer Schnittstelle (Tests), nil = vom System
 	OnForeign func(scope int64, server netip.Addr) // neuer fremder DHCP-Server im Netz (Benachrichtigung)
+	// Standby: Reserve-Node, deren Haupt-Node lebt – dann nur zuhoeren wie im Probelauf (nil = nie)
+	Standby    func() bool
+	CheckEvery time.Duration // Abstand der Suche nach fremden Servern (0 = 10 min)
 
 	mu        sync.Mutex
 	observe   bool
@@ -188,8 +193,10 @@ func (s *Server) bind() {
 			continue
 		}
 		for _, p := range addrs {
-			if sc.Subnet.Contains(p.Addr()) {
+			if sc.Subnet.Contains(p.Addr()) || (sc.Relay && !sc.self.IsValid()) {
 				sc.self = p.Addr()
+			}
+			if sc.Subnet.Contains(p.Addr()) {
 				break
 			}
 		}
@@ -324,7 +331,7 @@ func (s *Server) scopeFor(iface string, req *dhcpv4.DHCPv4) *scope {
 		return nil
 	}
 	for _, sc := range s.scopes {
-		if sc.Iface == iface {
+		if sc.Iface == iface && !sc.Relay { // Relay-Netze nur ueber giaddr
 			return sc
 		}
 	}
@@ -354,18 +361,29 @@ func (s *Server) Handle(iface string, req *dhcpv4.DHCPv4) *reply {
 		return nil
 	}
 	s.stats[strings.ToLower(req.MessageType().String())]++
+	quiet := ""
+	if s.observe {
+		quiet = "observe"
+	}
 	s.mu.Unlock()
+	if quiet == "" && s.Standby != nil && s.Standby() {
+		quiet = "standby"
+	}
 	switch req.MessageType() {
 	case dhcpv4.MessageTypeDiscover:
-		return s.discover(sc, req, mac)
+		return s.discover(sc, req, mac, quiet)
 	case dhcpv4.MessageTypeRequest:
-		return s.request(sc, req, mac)
+		return s.request(sc, req, mac, quiet)
 	case dhcpv4.MessageTypeDecline:
-		s.decline(sc, req, mac)
+		if quiet == "" {
+			s.decline(sc, req, mac)
+		}
 	case dhcpv4.MessageTypeRelease:
-		s.release(sc, req, mac)
+		if quiet == "" {
+			s.release(sc, req, mac)
+		}
 	case dhcpv4.MessageTypeInform:
-		return s.inform(sc, req, mac)
+		return s.inform(sc, req, mac, quiet)
 	}
 	return nil
 }
@@ -378,7 +396,7 @@ func ip4(ip net.IP) netip.Addr {
 	return a
 }
 
-func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac string) *reply {
+func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *reply {
 	host := hostname(req)
 	for range 3 {
 		now := s.now()
@@ -389,11 +407,12 @@ func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac string) *reply {
 			s.mu.Unlock()
 			return nil
 		}
-		if s.observe {
-			s.event(sc, "discover", mac, host, ip, "observe")
+		if quiet != "" {
+			s.event(sc, "discover", mac, host, ip, quiet)
 			s.mu.Unlock()
 			return nil
 		}
+		fresh = fresh && !sc.Relay // hinter einem Relay erreicht die ARP-Pruefung das Netz nicht
 		hold := fresh
 		if hold { // Adresse waehrend der ARP-Pruefung festhalten
 			sc.setLease(Lease{Scope: sc.ID, MAC: mac, IP: ip, Hostname: host, Expires: now.Add(offerHold), State: StateOffered})
@@ -421,7 +440,7 @@ func (s *Server) discover(sc *scope, req *dhcpv4.DHCPv4, mac string) *reply {
 	return nil
 }
 
-func (s *Server) request(sc *scope, req *dhcpv4.DHCPv4, mac string) *reply {
+func (s *Server) request(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *reply {
 	host := hostname(req)
 	now := s.now()
 	sid, want, ci := ip4(req.ServerIdentifier()), ip4(req.RequestedIPAddress()), ip4(req.ClientIPAddr)
@@ -441,8 +460,8 @@ func (s *Server) request(sc *scope, req *dhcpv4.DHCPv4, mac string) *reply {
 	if !ip.IsValid() {
 		return nil
 	}
-	if s.observe {
-		s.event(sc, "request", mac, host, ip, "observe")
+	if quiet != "" {
+		s.event(sc, "request", mac, host, ip, quiet)
 		return nil
 	}
 	ok, known := s.mayAck(sc, mac, ip, now, sid.IsValid())
@@ -512,7 +531,7 @@ func (s *Server) release(sc *scope, req *dhcpv4.DHCPv4, mac string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	l := sc.byMAC[mac]
-	if l == nil || l.IP != ci || ip4(req.ServerIdentifier()) != sc.self || s.observe {
+	if l == nil || l.IP != ci || ip4(req.ServerIdentifier()) != sc.self {
 		return
 	}
 	nl := *l
@@ -522,11 +541,11 @@ func (s *Server) release(sc *scope, req *dhcpv4.DHCPv4, mac string) {
 	s.event(sc, "release", mac, nl.Hostname, ci, "release")
 }
 
-func (s *Server) inform(sc *scope, req *dhcpv4.DHCPv4, mac string) *reply {
+func (s *Server) inform(sc *scope, req *dhcpv4.DHCPv4, mac, quiet string) *reply {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.observe {
-		s.event(sc, "inform", mac, hostname(req), ip4(req.ClientIPAddr), "observe")
+	if quiet != "" {
+		s.event(sc, "inform", mac, hostname(req), ip4(req.ClientIPAddr), quiet)
 		return nil
 	}
 	s.event(sc, "inform", mac, hostname(req), ip4(req.ClientIPAddr), "ack")
@@ -554,7 +573,7 @@ func (s *Server) build(sc *scope, req *dhcpv4.DHCPv4, mt dhcpv4.MessageType, yi 
 	}
 	dns := sc.DNS
 	if len(dns) == 0 {
-		dns = []netip.Addr{sc.self}
+		dns = append([]netip.Addr{sc.self}, sc.ExtraDNS...)
 	}
 	resp.UpdateOption(dhcpv4.OptDNS(ips(dns)...))
 	if sc.Domain != "" {
@@ -799,6 +818,37 @@ func (s *Server) Carry(old *Server) {
 	for id, f := range old.foreign {
 		s.foreign[id] = maps.Clone(f)
 	}
+}
+
+// Import uebernimmt ein Lease aus dem Cluster (ohne Speichern: es steht schon in der Datenbank).
+func (s *Server) Import(l Lease) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sc := range s.scopes {
+		if sc.ID != l.Scope || !sc.Subnet.Contains(l.IP) {
+			continue
+		}
+		if l.State == "" { // geloescht
+			sc.dropLease(l.MAC)
+			return
+		}
+		if cur := sc.byMAC[l.MAC]; cur != nil && cur.State == StateOffered && cur.Active(s.now()) && cur.IP != l.IP {
+			return // eigenes laufendes Angebot nicht ueberschreiben
+		}
+		sc.setLease(l)
+	}
+}
+
+// SawServer meldet, ob ip in den letzten within als DHCP-Server geantwortet hat (Suche nach fremden Servern).
+func (s *Server) SawServer(ip netip.Addr, within time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, f := range s.foreign {
+		if t, ok := f[ip]; ok && s.now().Sub(t) < within {
+			return true
+		}
+	}
+	return false
 }
 
 // Release gibt ein Lease von Hand frei (Seite "Freigeben"): die Adresse ist sofort wieder vergebbar.

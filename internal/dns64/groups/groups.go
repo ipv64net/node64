@@ -220,6 +220,7 @@ type Resolver struct {
 	log   *slog.Logger
 	cur   atomic.Pointer[compiled]
 	neigh atomic.Pointer[map[netip.Addr]string] // IP -> MAC aus der Nachbartabelle
+	lease atomic.Pointer[map[netip.Addr]string] // IP -> MAC aus dem DHCP-Server von DNS64 (nil = keiner)
 
 	mu        sync.Mutex
 	refreshed time.Time
@@ -277,10 +278,10 @@ func (r *Resolver) For(ip netip.Addr) Match {
 	c := r.cur.Load()
 	var mac string
 	if c.macs {
-		mac = (*r.neigh.Load())[ip]
+		mac = r.mac(ip)
 		if mac == "" && ip.IsValid() && !ip.IsLoopback() {
 			r.refresh(true) // neues Geraet: Tabelle neu lesen (hoechstens alle 5 s)
-			mac = (*r.neigh.Load())[ip]
+			mac = r.mac(ip)
 		}
 	}
 	for _, g := range c.groups {
@@ -296,10 +297,24 @@ func (r *Resolver) For(ip netip.Addr) Match {
 	return Match{MAC: mac}
 }
 
-// MAC liefert die MAC einer IP aus der Nachbartabelle ("" = unbekannt), ohne die Tabelle neu zu lesen.
+// MAC liefert die MAC einer IP aus der Nachbartabelle bzw. den DHCP-Vergaben ("" = unbekannt), ohne die Tabelle
+// neu zu lesen.
 func (r *Resolver) MAC(ip netip.Addr) string {
-	return (*r.neigh.Load())[ip.Unmap().WithZone("")]
+	return r.mac(ip.Unmap().WithZone(""))
 }
+
+func (r *Resolver) mac(ip netip.Addr) string {
+	if m := (*r.neigh.Load())[ip]; m != "" {
+		return m
+	}
+	if l := r.lease.Load(); l != nil {
+		return (*l)[ip]
+	}
+	return ""
+}
+
+// SetLeases uebernimmt die aktiven DHCP-Vergaben (IP -> MAC); die Nachbartabelle geht vor.
+func (r *Resolver) SetLeases(m map[netip.Addr]string) { r.lease.Store(&m) }
 
 // IPs liefert die Adressen einer MAC aus der Nachbartabelle (ohne Link-Local), sortiert.
 func (r *Resolver) IPs(mac string) []netip.Addr {
@@ -307,6 +322,13 @@ func (r *Resolver) IPs(mac string) []netip.Addr {
 	for ip, m := range *r.neigh.Load() {
 		if m == mac && !ip.IsLinkLocalUnicast() {
 			out = append(out, ip)
+		}
+	}
+	if l := r.lease.Load(); l != nil {
+		for ip, m := range *l {
+			if m == mac && !slices.Contains(out, ip) {
+				out = append(out, ip)
+			}
 		}
 	}
 	slices.SortFunc(out, func(a, b netip.Addr) int { return a.Compare(b) })

@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.37.0 – 2026-11-09
+
+### Neu
+- DHCP und DNS Hand in Hand: Jedes Gerät mit Adresse vom DHCP-Server bekommt einen Namen wie `laptop.home.lan` samt Rückwärtssuche – aus der festen Adresse oder vom Gerät selbst (Domain des Netzes). Eigene Einträge gehen vor; ist ein Name schon vergeben, bekommt das zweite Gerät keinen. Abfrage-Log und Top-Clients zeigen die Namen auch in Netzen ohne Domain.
+- Feste Adresse mit Gerätegruppe: Beim Anlegen nimmt DNS64 die MAC auf Wunsch gleich in eine Gerätegruppe auf. MAC-Regeln der Gruppen greifen dank der DHCP-Vergaben auch, wenn die Nachbartabelle das Gerät nicht kennt.
+- Netze hinter einem DHCP-Relay (z. B. VLANs hinter dem Router) ohne eigene Schnittstelle der Node in diesem Netz.
+- Cluster: neue Bereiche „DHCP-Netze“, „DHCP: feste Adressen“ und „DHCP-Vergaben“ (Standard aus). Ein übernommenes Netz kommt ausgeschaltet an; Schnittstelle, Schalter und Rolle bleiben je Node. Ist DNS leer, bekommen die Geräte nach dieser Node auch die anderen Nodes im Netz als DNS-Server. Die Namen aus den Vergaben gelten auf allen Nodes mit dem Bereich.
+- Reserve-Node: Eine zweite Node mit der Rolle „Reserve“ vergibt nur Adressen, wenn die Haupt-Node wirklich weg ist (im Cluster nicht erreichbar und seit 3 Minuten keine Antwort als DHCP-Server); sie kennt alle Vergaben und gibt jedem Gerät seine Adresse wieder. Nodes des Clusters gelten nicht als fremde DHCP-Server.
+
 ## 1.36.0 – 2026-11-09
 
 ### Neu

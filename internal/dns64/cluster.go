@@ -46,7 +46,7 @@ type ClusterItem struct{ ID, TitleKey string }
 // ClusterItems: Bereiche von DNS64 (alle ohne Einstellung aus).
 func ClusterItems() []ClusterItem {
 	out := []ClusterItem{}
-	for _, id := range []string{ItemSettings, ItemLists, ItemAllow, ItemDeny, ItemRecords, ItemForwards, ItemGroups, ItemMembers} {
+	for _, id := range []string{ItemSettings, ItemLists, ItemAllow, ItemDeny, ItemRecords, ItemForwards, ItemGroups, ItemMembers, ItemDHCPScopes, ItemDHCPRes, ItemDHCPLeases} {
 		out = append(out, ClusterItem{id, "cluster.item.dns64_" + id})
 	}
 	return out
@@ -285,6 +285,8 @@ func (m *Module) clCurrent(ctx context.Context, item string) (map[string]string,
 			}
 			out[g.UID] = jsonString(clGroupOf(g))
 		}
+	case ItemDHCPScopes, ItemDHCPRes, ItemDHCPLeases:
+		return m.clDHCPCurrent(ctx, item)
 	default:
 		return nil, errUnknownItem
 	}
@@ -397,6 +399,8 @@ func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.Ra
 		return m.clApplyGroup(ctx, id, data, deleted)
 	case ItemMembers:
 		return m.clApplyMembers(ctx, id, data, deleted)
+	case ItemDHCPScopes, ItemDHCPRes, ItemDHCPLeases:
+		return m.clDHCPApply(ctx, item, id, data, deleted)
 	}
 	return errUnknownItem
 }

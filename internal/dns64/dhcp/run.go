@@ -52,7 +52,11 @@ func (s *Server) Run(ctx context.Context) {
 			}
 			s.cleanup()
 			s.checkForeign(ctx)
-			t.Reset(checkEvery)
+			every := checkEvery
+			if s.CheckEvery > 0 {
+				every = s.CheckEvery
+			}
+			t.Reset(every)
 		}
 	}()
 	<-ctx.Done()
@@ -123,7 +127,7 @@ func (s *Server) checkForeign(ctx context.Context) {
 	s.mu.Lock()
 	var ts []target
 	for _, sc := range s.scopes {
-		if sc.self.IsValid() && len(sc.mac) == 6 {
+		if sc.self.IsValid() && len(sc.mac) == 6 && !sc.Relay {
 			ts = append(ts, target{sc.ID, sc.Iface, sc.mac, sc.self})
 		}
 	}
