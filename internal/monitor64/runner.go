@@ -569,6 +569,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			switch {
 			case k == eval.KindServiceGone:
 				st = tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(cond)})
+			case isSmart && smartUnreadable && !cond && tr.Level == eval.OK:
+				continue // SMART nicht lesbar (z. B. virtuelle Platte) und vorher kein Problem: nicht bewerten
 			case !ok || (isSmart && smartUnreadable && !cond):
 				st = tr.Status(e, now) // keine (lesbaren) Daten: letzter Stand, dann Unbekannt
 			default:

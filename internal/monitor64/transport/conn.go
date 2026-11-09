@@ -68,8 +68,9 @@ var (
 // HostKeyError meldet einen geaenderten Hostschluessel. Es wird nie nachgefragt; die Oberflaeche bietet
 // "neuen uebernehmen" mit Got an.
 type HostKeyError struct {
-	Want string // gemerkter Fingerabdruck
-	Got  string // angebotener Fingerabdruck
+	Want    string // gemerkter Fingerabdruck
+	Got     string // angebotener Fingerabdruck
+	GotType string // Art des angebotenen Schluessels (ssh-ed25519, ecdsa-sha2-nistp256, ssh-rsa)
 }
 
 func (e *HostKeyError) Error() string {
@@ -118,6 +119,10 @@ type connConfig struct {
 	onHostKey   func(fingerprint string)
 	dialTimeout time.Duration
 	idleTimeout time.Duration
+	// multiKey: der Host kann mehrere Schluesselarten haben (normaler sshd); bei abweichendem Schluessel die
+	// uebrigen Arten versuchen. Der Agent hat genau einen ed25519-Schluessel (keine Wiederholung, sie zaehlt dort
+	// als Fehlversuch).
+	multiKey bool
 }
 
 // conn haelt eine SSH-Verbindung offen und baut sie bei Bedarf neu auf. Der Aufbau laeuft ohne c.mu (eigene
@@ -132,6 +137,7 @@ type conn struct {
 	mu      sync.Mutex
 	client  *ssh.Client
 	fp      string // gemerkter Fingerabdruck (bekannt oder beim ersten Kontakt uebernommen)
+	hkTried string // fuer diesen gemerkten Fingerabdruck schon alle Schluesselarten versucht
 	active  int
 	lastUse time.Time
 	idle    *time.Timer
@@ -279,6 +285,49 @@ func (c *conn) closeIdle() {
 // dial baut die Verbindung auf (ohne c.mu, unter c.dialing) und prueft den Hostschluessel. learned ist der beim
 // ersten Kontakt uebernommene Fingerabdruck (TOFU), sonst "".
 func (c *conn) dial(ctx context.Context) (cl *ssh.Client, learned string, err error) {
+	cl, learned, err = c.dialOnce(ctx, hostKeyAlgos)
+	var hk *HostKeyError
+	if err == nil || !errors.As(err, &hk) || !c.cfg.multiKey {
+		return cl, learned, err
+	}
+	// Der Host zeigt je nach Algorithmus einen anderen Schluessel (ed25519, ecdsa, rsa). Gemerkt ist der vom ersten
+	// Kontakt: die uebrigen Schluesselarten je einmal versuchen; "geaendert" nur, wenn keine zum gemerkten passt.
+	// Nach einem erfolglosen Durchgang nicht jede Runde erneut (der Agent zaehlt abgebrochene Handshakes).
+	c.mu.Lock()
+	tried := c.hkTried == hk.Want
+	c.hkTried = hk.Want
+	c.mu.Unlock()
+	if tried {
+		return nil, "", err
+	}
+	for _, fam := range hostKeyFamilies {
+		if fam.typ == hk.GotType || ctx.Err() != nil || c.life.Err() != nil {
+			continue
+		}
+		if cl2, l2, err2 := c.dialOnce(ctx, fam.algos); err2 == nil {
+			c.mu.Lock()
+			c.hkTried = ""
+			c.mu.Unlock()
+			return cl2, l2, nil
+		}
+	}
+	return nil, "", err
+}
+
+// hostKeyFamilies: je Schluesselart die erlaubten Algorithmen (fuer den Abgleich mit dem gemerkten Schluessel).
+var hostKeyFamilies = []struct {
+	typ   string
+	algos []string
+}{
+	{ssh.KeyAlgoED25519, []string{ssh.KeyAlgoED25519}},
+	{ssh.KeyAlgoECDSA256, []string{ssh.KeyAlgoECDSA256}},
+	{ssh.KeyAlgoECDSA384, []string{ssh.KeyAlgoECDSA384}},
+	{ssh.KeyAlgoECDSA521, []string{ssh.KeyAlgoECDSA521}},
+	{ssh.KeyAlgoRSA, []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}},
+}
+
+// dialOnce baut eine Verbindung mit den angegebenen Hostschluessel-Algorithmen auf.
+func (c *conn) dialOnce(ctx context.Context, algos []string) (cl *ssh.Client, learned string, err error) {
 	deadline := time.Now().Add(c.cfg.dialTimeout)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
@@ -309,12 +358,12 @@ func (c *conn) dial(ctx context.Context) (cl *ssh.Client, learned string, err er
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			seen = Fingerprint(key)
 			if want != "" && seen != want {
-				hkErr = &HostKeyError{Want: want, Got: seen}
+				hkErr = &HostKeyError{Want: want, Got: seen, GotType: key.Type()}
 				return hkErr
 			}
 			return nil
 		},
-		HostKeyAlgorithms: hostKeyAlgos,
+		HostKeyAlgorithms: algos,
 		ClientVersion:     "SSH-2.0-node64-monitor64",
 		Timeout:           c.cfg.dialTimeout,
 	}

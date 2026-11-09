@@ -2,6 +2,8 @@ package transport
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
@@ -453,5 +455,34 @@ func TestHostPort(t *testing.T) {
 		if got := SplitHost(tc.in); got != tc.host {
 			t.Errorf("SplitHost(%q) = %q, want %q", tc.in, got, tc.host)
 		}
+	}
+}
+
+// Der Host hat mehrere Hostschluessel; gemerkt ist einer, den die bevorzugte Reihenfolge nicht zuerst waehlt:
+// kein falsches "Schluessel geaendert" (Fund beim Ausrollen nach dem Review).
+func TestPinnedKeyOtherAlgorithm(t *testing.T) {
+	node := newSigner(t)
+	ed := newSigner(t) // ed25519 (bevorzugt)
+	ek, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ec, err := ssh.NewSignerFromKey(ek)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := startHostKeySSH(t, node.PublicKey(), ed, ec)
+	// gemerkt ist der ecdsa-Schluessel (z. B. von einem frueheren Client mit anderer Reihenfolge)
+	c, _ := NewSSHClient(SSHConfig{Addr: addr, User: "u", Signer: node, HostKey: Fingerprint(ec.PublicKey())})
+	defer c.Close()
+	if _, err := c.Run(ctx(t), "x"); err != nil {
+		t.Fatalf("pinned ecdsa key must be accepted: %v", err)
+	}
+	// wirklich fremder Schluessel bleibt "geaendert"
+	other := newSigner(t)
+	c2, _ := NewSSHClient(SSHConfig{Addr: addr, User: "u", Signer: node, HostKey: Fingerprint(other.PublicKey())})
+	defer c2.Close()
+	if _, err := c2.Run(ctx(t), "x"); !errors.Is(err, ErrHostKeyChanged) {
+		t.Fatalf("want host key changed, got %v", err)
 	}
 }
