@@ -7,6 +7,7 @@
 
 ### Fixed
 - Apple device profiles (`.mobileconfig`, DoH/DoT under “For devices”) install on macOS and iOS – so far installation failed with “The VPN Service payload could not be installed” because the system-wide scope was missing (#60).
+- Blocklists over 64 MB are no longer cut off silently: the list is shortened at the last complete line (so far possibly in the middle of a name) and shows the hint “list larger than 64 MB”. Split larger lists into several (forum 5057).
 
 ## 1.37.1 – 2026-11-09
 

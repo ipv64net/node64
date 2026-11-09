@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -103,10 +104,9 @@ var Retired = map[string]bool{
 // Category of a preset list ("" = own list).
 func Category(url string) string { return categories[url] }
 
-const (
-	defaultInterval = 24 * time.Hour
-	maxListSize     = 64 << 20
-)
+const defaultInterval = 24 * time.Hour
+
+var maxListSize int64 = 64 << 20 // je Liste; groessere werden an der letzten ganzen Zeile gekuerzt (Variable fuer Tests)
 
 type ListStatus struct {
 	List
@@ -336,14 +336,18 @@ func (m *Manager) refresh(ctx context.Context) (failed bool) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := m.download(ctx, l.URL, m.path(i))
+			cut, err := m.download(ctx, l.URL, m.path(i))
 			m.mu.Lock()
-			if err != nil {
+			switch {
+			case err != nil:
 				failed = true
 				m.status[i].Error = err.Error()
 				m.status[i].Failures++
 				m.log.Warn("blocklist download failed", "list", l.Name, "err", err)
-			} else {
+			case cut: // Hinweis an der Liste, kein Fehlversuch (keine Meldung, kein schnelleres Wiederholen)
+				m.status[i].Error, m.status[i].Failures = fmt.Sprintf("list larger than %d MB: only the first %d MB are used", maxListSize>>20, maxListSize>>20), 0
+				m.log.Warn("blocklist truncated", "list", l.Name, "max_mb", maxListSize>>20)
+			default:
 				m.status[i].Error, m.status[i].Failures = "", 0
 			}
 			m.mu.Unlock()
@@ -356,28 +360,34 @@ func (m *Manager) refresh(ctx context.Context) (failed bool) {
 	return failed
 }
 
-func (m *Manager) download(ctx context.Context, url, dst string) error {
+// download laedt eine Liste nach dst. Groesser als maxListSize: die ersten maxListSize Bytes bis zur letzten ganzen
+// Zeile bleiben, cut = true (bisher still abgeschnitten, ggf. mitten in einem Namen; Forum 5057).
+func (m *Manager) download(ctx context.Context, url, dst string) (cut bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	req.Header.Set("User-Agent", "Node64-DNS64/1.0")
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %s", resp.Status)
+		return false, fmt.Errorf("HTTP %s", resp.Status)
 	}
 	tmp := dst + ".tmp"
 	f, err := os.Create(tmp)
 	if err != nil {
-		return err
+		return false, err
 	}
-	n, err := io.Copy(f, io.LimitReader(resp.Body, maxListSize))
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxListSize+1))
+	if err == nil && n > maxListSize {
+		cut = true
+		err = truncateToLine(f, maxListSize)
+	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -386,9 +396,23 @@ func (m *Manager) download(ctx context.Context, url, dst string) error {
 	}
 	if err != nil {
 		os.Remove(tmp)
+		return false, err
+	}
+	return cut, os.Rename(tmp, dst)
+}
+
+// truncateToLine kuerzt f auf hoechstens limit Bytes, endend nach dem letzten Zeilenumbruch davor.
+func truncateToLine(f *os.File, limit int64) error {
+	off := max(0, limit-64<<10)
+	buf := make([]byte, limit-off)
+	if _, err := f.ReadAt(buf, off); err != nil {
 		return err
 	}
-	return os.Rename(tmp, dst)
+	end := off
+	if i := bytes.LastIndexByte(buf, '\n'); i >= 0 {
+		end = off + int64(i) + 1
+	}
+	return f.Truncate(end)
 }
 
 func (m *Manager) rebuild() {

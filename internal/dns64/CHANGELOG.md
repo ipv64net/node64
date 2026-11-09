@@ -7,6 +7,7 @@
 
 ### Behoben
 - Geräteprofile für Apple (`.mobileconfig`, DoH/DoT unter „Für Geräte“) lassen sich auf macOS und iOS installieren – bisher brach die Installation mit „Das VPN-Dienst-Payload konnte nicht installiert werden“ ab, weil die systemweite Gültigkeit fehlte (#60).
+- Blocklisten über 64 MB werden nicht mehr still abgeschnitten: Die Liste wird an der letzten ganzen Zeile gekürzt (bisher ggf. mitten in einem Namen) und zeigt den Hinweis „list larger than 64 MB“. Größere Listen auf mehrere aufteilen (Forum 5057).
 
 ## 1.37.1 – 2026-11-09
 
