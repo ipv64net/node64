@@ -6653,6 +6653,21 @@
       "zfs_errors": "Datenfehler: {text}",
       "traps": "{n} Trap(s) offen, zuletzt {name} ({at})",
       "trap_last": "Letzter Trap: {name} ({at})"
+    },
+    "push": {
+      "mode_label": "Verbindung",
+      "mode_pull": "Node fragt den Agent ab (Port 6465 am Host)",
+      "mode_push": "Agent verbindet sich mit der Node (Host hinter NAT, VPS)",
+      "node_addr": "Adresse der Node, wie der Host sie erreicht",
+      "hint": "Der Agent baut die Verbindung zu Port {port}/TCP der Node auf. Dieser Port muss vom Host erreichbar sein (Docker: Port veröffentlichen, Firewall freigeben). Der Agent selbst braucht keinen offenen Port.",
+      "test_after": "Erst den Host anlegen, dann den Befehl ausführen: Der Agent meldet sich innerhalb einer Minute. Die erkannten Dienste übernimmst du danach auf der Host-Seite.",
+      "bsd_cmd": "echo '{t}' > /usr/local/etc/monitor64-agent/connect && chmod 600 /usr/local/etc/monitor64-agent/connect && sysrc -f /etc/rc.conf.d/monitor64_agent monitor64_agent_args=\"--no-listen\" && service monitor64_agent restart",
+      "token": "Token für den Push-Betrieb",
+      "token_hint": "Der Token ordnet die Verbindung diesem Host zu; geprüft wird über den Hostschlüssel. Nach einem neuen Token den Installationsbefehl auf dem Host erneut ausführen.",
+      "token_new": "Token neu erzeugen",
+      "setting_port": "Port für Agents im Push-Betrieb (TCP)",
+      "setting_hint": "Nur offen, wenn ein Host den Push-Betrieb nutzt. Docker: Port veröffentlichen.",
+      "listening": "Offen: {n} Zugänge, {w} Agents warten."
     }
   }
 }

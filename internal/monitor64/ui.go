@@ -102,6 +102,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("PUT /api/monitor64/settings", api(m.apiSettingsSave))
 	mux.Handle("GET /api/monitor64/traps", api(m.apiTraps))
 	mux.Handle("DELETE /api/monitor64/traps/unknown", api(m.apiTrapsUnknownClear))
+	mux.Handle("GET /api/monitor64/push/token", api(m.apiPushToken))
 	mux.Handle("GET /api/monitor64/hosts/{uid}/traps", api(m.apiHostTraps))
 	mux.Handle("POST /api/monitor64/hosts/{uid}/traps/reset", api(m.apiHostTrapsReset))
 }

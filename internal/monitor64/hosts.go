@@ -35,7 +35,8 @@ func (m *Module) startHosts(ctx context.Context) error {
 func (m *Module) ReloadHost(ctx context.Context, uid string) {
 	m.reloadMu.Lock() // gleichzeitige Aenderungen nacheinander (sonst laufen Planer und Laufzeitstand auseinander)
 	defer m.reloadMu.Unlock()
-	defer m.kickTraps() // Absender des Trap-Empfaengers abgleichen
+	defer m.kickTraps()                          // Absender des Trap-Empfaengers abgleichen
+	defer m.syncPush(context.WithoutCancel(ctx)) // Lauscher fuer Agents im Push-Betrieb nur bei Bedarf
 	h, err := m.store.Host(ctx, uid)
 	if errors.Is(err, ErrNotFound) {
 		m.removeHost(uid)

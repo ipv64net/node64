@@ -100,6 +100,8 @@ type accessConfig struct {
 	TLS     string `json:"tls,omitempty"`     // NUT: "" (STARTTLS wenn angeboten), "off", "require"
 	API     string `json:"api,omitempty"`     // TrueNAS: "" (automatisch), "jsonrpc", "rest"
 	Session bool   `json:"session,omitempty"` // Redfish: Sitzung statt Basic-Auth
+	Mode    string `json:"mode,omitempty"`    // Agent: "" = Node fragt ab, "push" = Agent verbindet sich (NAT/VPS)
+	Token   string `json:"token,omitempty"`   // Push: Wegweiser zum Zugang (serverseitig erzeugt, kein Geheimnis)
 	// Prometheus: eigene Metriken (beliebige Exporter)
 	Metrics []promscrape.CustomMetric `json:"metrics,omitempty"`
 	// SNMP (Port und User = v3-Benutzer wie oben; Community bzw. v3-Passwoerter im Secret als snmp.Secret-JSON)
@@ -149,6 +151,15 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 	}
 	if a.Type == "agent" {
 		ac := transport.AgentConfig{Addr: accessAddr(h.Address, cfg.Port, m64proto.DefaultPort), Signer: signer, OnHostKey: onKey}
+		if cfg.Mode == "push" { // Agent verbindet sich selbst (Host hinter NAT/VPS); Adresse nur zur Anzeige
+			m.mu.Lock()
+			pl := m.push
+			m.mu.Unlock()
+			if pl == nil {
+				return nil, transport.ErrClosed
+			}
+			ac = transport.AgentConfig{Addr: h.Address, Signer: signer, OnHostKey: onKey, Push: pl, PushToken: cfg.Token}
+		}
 		if _, err := ref.agent(ac); err != nil {
 			return nil, err
 		}

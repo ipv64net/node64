@@ -92,7 +92,10 @@ type Module struct {
 	pveSeen  *apis.ClusterSeen // Proxmox: welche Nodes hier erfolgreich abgefragt werden (Zustaendigkeit Cluster)
 	rts      map[string]*hostRT
 	pool     *transport.Pool
-	traps    *trapMgr // SNMP-Trap-Empfaenger
+	traps    *trapMgr                // SNMP-Trap-Empfaenger
+	push     *transport.PushListener // Agents im Push-Betrieb (Port nur offen, wenn ein Zugang ihn nutzt)
+	pushMu   sync.Mutex
+	pushAddr string
 	locMu    sync.Mutex
 	loc      *time.Location
 	locAt    time.Time
@@ -166,6 +169,9 @@ func (m *Module) Start(ctx context.Context) error {
 	m.notifier = &eval.Notifier{Hosts: map[string]*eval.HostMemory{}}
 	m.notifyMu.Unlock()
 	m.pool = transport.NewPool(0)
+	m.mu.Lock()
+	m.push = transport.NewPushListener(transport.PushConfig{Logger: m.log})
+	m.mu.Unlock()
 	m.cfg.Store(nil)
 	m.reloadConfig(ctx)
 	if line, err := m.PublicKeyLine(ctx); err == nil { // oeffentlich, fuer Installationsbefehle (kein Geheimnis)
@@ -176,6 +182,7 @@ func (m *Module) Start(ctx context.Context) error {
 	if err := m.startHosts(ctx); err != nil {
 		m.log.Warn("monitor64: load hosts", "err", err)
 	}
+	m.syncPush(ctx)
 	m.traps.start()
 	m.wg.Add(3)
 	go func() { defer m.wg.Done(); sched.Run(life) }()
@@ -215,6 +222,13 @@ func (m *Module) Stop(ctx context.Context) error {
 		m.log.Warn("monitor64: stop timeout, jobs still running")
 	}
 	m.traps.stop()
+	m.mu.Lock()
+	pl := m.push
+	m.push = nil
+	m.mu.Unlock()
+	if pl != nil {
+		_ = pl.Close()
+	}
 	m.rtMu.Lock()
 	rts := m.rts
 	m.rts = nil

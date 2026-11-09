@@ -20,6 +20,8 @@
 - Zugang SNMP (v1/v2c/v3, Geräteprofile, eigene OIDs) mit Kacheln „SNMP-Gerät“ und „NAS“; SNMP-Traps (Port einstellbar,
   sofortige Abfrage bei bekannten Traps, Dienst „Traps“ bis quittiert, unbekannte Absender als Host anlegen); neue
   Regeln für Neustart, Ports, USV-Alarm, Drucker, Hardware und PoE.
+- Agent im Push-Betrieb für Hosts hinter NAT bzw. VPS (Agent verbindet sich zur Node, Port 6466/TCP, nur offen
+  bei Bedarf); Auswahl „Verbindung“ im Assistenten mit Installationsbefehl.
 - Nachbesserungen aus dem Code-Review: gewollt fehlende Messwerte (gestoppte VM, schlafende Platte) bleiben OK,
   Erinnerungen gehen nach der Ruhezeit nicht verloren, keine doppelten Meldungen an Standardkanäle,
   ZFS-Gerätefehler an ONLINE-Pools, Proxmox-Cluster-Dienste von einer überwachten Node, hängende VMs auch bei

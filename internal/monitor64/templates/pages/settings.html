@@ -20,6 +20,8 @@
 						<input class="form-control form-control-sm" id="m64-workers" name="workers" type="number" min="1" max="512" value="{{$s.Workers}}"><div class="form-text">{{.T "monitor64.st.workers_hint"}}</div></div>
 					<div class="col-sm-6"><label class="form-label" for="m64-trap-port">{{.T "monitor64.st.trap_port"}}</label>
 						<input class="form-control form-control-sm" id="m64-trap-port" name="trap_port" type="number" min="1" max="65535" value="{{$s.TrapPort}}"><div class="form-text">{{.T "monitor64.st.trap_port_hint"}}</div></div>
+					<div class="col-sm-6"><label class="form-label" for="m64-push-port">{{.T "monitor64.push.setting_port"}}</label>
+						<input class="form-control form-control-sm" id="m64-push-port" name="push_port" type="number" min="1" max="65535" value="{{$s.PushPort}}"><div class="form-text">{{.T "monitor64.push.setting_hint"}}{{with $s.PushStats}}{{if .Listening}} {{$.T "monitor64.push.listening" "n" .Stats.Tokens "w" .Stats.Parked}}{{end}}{{end}}</div></div>
 					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_raw"}}</div><div class="fw-semibold" id="m64-ret-raw">{{.T "monitor64.st.hours" "n" $s.RetRawH}}</div></div>
 					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_5m"}}</div><div class="fw-semibold">{{.T "monitor64.st.days" "n" $s.Ret5mD}}</div></div>
 					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_1h"}}</div><div class="fw-semibold">{{.T "monitor64.st.days" "n" $s.Ret1hD}}</div></div>

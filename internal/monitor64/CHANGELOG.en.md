@@ -20,6 +20,8 @@
 - SNMP access (v1/v2c/v3, device profiles, custom OIDs) with wizard tiles "SNMP device" and "NAS"; SNMP traps
   (configurable port, immediate poll on known traps, "Traps" service until acknowledged, add unknown senders as host);
   new rules for restarts, ports, UPS alarm, printers, hardware and PoE.
+- Agent push mode for hosts behind NAT or VPS (agent connects to the node, port 6466/TCP, only open when needed);
+  "Connection" choice in the wizard with install command.
 - Code review fixes: intentionally missing values (stopped VM, sleeping disk) stay OK, reminders are not lost after
   quiet hours, no duplicate messages to default channels, ZFS device errors on ONLINE pools, Proxmox cluster services
   evaluated by a monitored node, hung VMs even when allowed to be off, thousands separator and hysteresis in the shown unit.

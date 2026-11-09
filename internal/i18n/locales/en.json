@@ -6653,6 +6653,21 @@
       "zfs_errors": "data errors: {text}",
       "traps": "{n} trap(s) open, last {name} ({at})",
       "trap_last": "Last trap: {name} ({at})"
+    },
+    "push": {
+      "mode_label": "Connection",
+      "mode_pull": "Node queries the agent (port 6465 on the host)",
+      "mode_push": "Agent connects to the node (host behind NAT, VPS)",
+      "node_addr": "Node address as seen from the host",
+      "hint": "The agent connects to port {port}/TCP of the node. This port must be reachable from the host (Docker: publish it, open the firewall). The agent itself needs no open port.",
+      "test_after": "Create the host first, then run the command: the agent checks in within a minute. Adopt the detected services on the host page afterwards.",
+      "bsd_cmd": "echo '{t}' > /usr/local/etc/monitor64-agent/connect && chmod 600 /usr/local/etc/monitor64-agent/connect && sysrc -f /etc/rc.conf.d/monitor64_agent monitor64_agent_args=\"--no-listen\" && service monitor64_agent restart",
+      "token": "Token for push mode",
+      "token_hint": "The token routes the connection to this host; the host key does the actual check. After a new token, run the install command on the host again.",
+      "token_new": "Generate new token",
+      "setting_port": "Port for agents in push mode (TCP)",
+      "setting_hint": "Only open when a host uses push mode. Docker: publish the port.",
+      "listening": "Open: {n} accesses, {w} agents waiting."
     }
   }
 }

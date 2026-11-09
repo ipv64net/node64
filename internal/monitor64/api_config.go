@@ -890,13 +890,31 @@ type settingsOut struct {
 	Fingerprint string     `json:"fingerprint,omitempty"`
 	TrapPort    int        `json:"trap_port"`
 	Traps       trapStatus `json:"traps"`
+	PushPort    int        `json:"push_port"`
+	PushStats   *pushStats `json:"push,omitempty"`
+}
+
+// pushStats: Stand des Lauschers fuer Agents im Push-Betrieb.
+type pushStats struct {
+	Listening []string            `json:"listening"`
+	Stats     transport.PushStats `json:"stats"`
 }
 
 func (m *Module) settings(ctx context.Context) settingsOut {
 	o := tsdb.DefaultOptions()
 	s := settingsOut{Interval: m.defaultInterval(ctx), Workers: m.workers(ctx), RetRawH: int(o.RetentionRaw.Hours()), Ret5mD: int(o.Retention5m.Hours() / 24),
 		Ret1hD: int(o.Retention1h.Hours() / 24), Status: m.status(), Port: m64proto.DefaultPort, Services: m.store.ServiceCount(ctx),
-		TrapPort: m.trapPort(ctx), Traps: m.trapStatus(ctx)}
+		TrapPort: m.trapPort(ctx), Traps: m.trapStatus(ctx), PushPort: m.pushPort(ctx)}
+	m.mu.Lock()
+	pl := m.push
+	m.mu.Unlock()
+	if pl != nil {
+		ps := &pushStats{Stats: pl.Stats(), Listening: []string{}}
+		for _, a := range pl.Listening() {
+			ps.Listening = append(ps.Listening, a.String())
+		}
+		s.PushStats = ps
+	}
 	if hl, err := m.store.Hosts(ctx); err == nil {
 		s.Hosts = len(hl)
 	}
@@ -922,6 +940,7 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 		Interval int  `json:"interval"`
 		Workers  int  `json:"workers"`
 		TrapPort *int `json:"trap_port"`
+		PushPort *int `json:"push_port"`
 	}
 	if err := decode(r, &in); err != nil {
 		m.fail(w, r, err)
@@ -935,6 +954,10 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, errBad("workers"))
 		return
 	}
+	if in.PushPort != nil && (*in.PushPort < 1 || *in.PushPort > 65535) {
+		m.fail(w, r, errBad("push_port"))
+		return
+	}
 	if in.TrapPort != nil && !validTrapPort(*in.TrapPort) {
 		m.fail(w, r, errBad("trap_port"))
 		return
@@ -945,6 +968,10 @@ func (m *Module) apiSettingsSave(w http.ResponseWriter, r *http.Request) {
 		trapPort = *in.TrapPort
 		err = m.st.SetSetting(ctx, setTrapPort, strconv.Itoa(trapPort))
 		m.kickTraps() // Empfaenger auf dem neuen Port
+	}
+	if err == nil && in.PushPort != nil && *in.PushPort != m.pushPort(ctx) {
+		err = m.st.SetSetting(ctx, setPushPort, strconv.Itoa(*in.PushPort))
+		m.syncPush(context.WithoutCancel(ctx)) // Lauscher auf dem neuen Port
 	}
 	if err != nil {
 		m.fail(w, r, err)

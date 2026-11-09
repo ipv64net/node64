@@ -187,6 +187,7 @@ type accessIn struct {
 	Config      json.RawMessage `json:"config"`
 	Secret      string          `json:"secret"`
 	ClearSecret bool            `json:"clear_secret"`
+	NewToken    bool            `json:"new_token"` // Push: neuen Token erzeugen
 	HostKey     string          `json:"hostkey"`
 	Enabled     *bool           `json:"enabled"`
 }
@@ -254,6 +255,13 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	case c.Session && typ != "redfish":
 		return nil, errBad("session")
 	}
+	c.Mode, c.Token = strings.TrimSpace(c.Mode), strings.TrimSpace(c.Token)
+	switch {
+	case c.Mode != "" && (typ != "agent" || c.Mode != "push"):
+		return nil, errBad("mode")
+	case c.Token != "" && (c.Mode != "push" || len(c.Token) > 64):
+		return nil, errBad("token")
+	}
 	if err := cleanSNMPConfig(typ, &c); err != nil {
 		return nil, err
 	}
@@ -311,6 +319,13 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 	cfg, err := cleanAccessConfig(a.Type, raw)
 	if err != nil {
 		return false, err
+	}
+	if a.Type == "agent" { // Token des Push-Betriebs: nur gueltige uebernehmen, sonst behalten bzw. neu
+		var nc, oc accessConfig
+		_ = json.Unmarshal(cfg, &nc)
+		_ = json.Unmarshal(a.Config, &oc)
+		nc.Token = pushToken(nc.Mode, nc.Token, oc.Token, in.NewToken)
+		cfg, _ = json.Marshal(nc)
 	}
 	a.Config = cfg
 	hk := strings.TrimSpace(in.HostKey)

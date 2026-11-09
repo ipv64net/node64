@@ -76,7 +76,7 @@ function devText(k) {
 // p = "w": Assistent, nur die Felder der Art t (Werte aus dem Zustand c, data-w).
 function devFields(c, p, t) {
 	c = c || {};
-	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics'];
+	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics', 'mode', 'pushNode'];
 	var owner = { ups: 'nut', tls: 'nut', api: 'truenas', session: 'redfish', metrics: 'prom' };
 	var val = function (id) { return id === 'metrics' && p === 'af' ? (c.metrics ? JSON.stringify(c.metrics, null, 1) : '') : c[id] || ''; };
 	var attr = function (id) { return ' id="m64-' + p + '-' + id + '"' + (p === 'w' ? ' data-w="' + id + '"' : ''); };
@@ -1095,6 +1095,9 @@ function pageHost() {
 		var types = ['agent', 'ssh', 'pve', 'pbs', 'docker'].concat(DEVAPI, ['snmp']);
 		return '<div class="row g-3"><div class="col-md-6"><label class="form-label" for="m64-af-type">' + esc(L('acc.type')) + '</label><select class="form-select" id="m64-af-type"' + (a ? ' disabled' : '') + '>' + types.map(function (x) { return '<option value="' + x + '"' + (x === t ? ' selected' : '') + '>' + esc(accLabel(x)) + '</option>'; }).join('') + '</select></div>' +
 			'<div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-af-en"' + (!a || a.enabled ? ' checked' : '') + '><label class="form-check-label" for="m64-af-en">' + esc(L('acc.enabled')) + '</label></div></div>' +
+			'<div class="col-md-8" data-af="agent"><label class="form-label" for="m64-af-mode">' + esc(L('push.mode_label')) + '</label><select class="form-select" id="m64-af-mode"><option value="">' + esc(L('push.mode_pull')) + '</option><option value="push"' + (c.mode === 'push' ? ' selected' : '') + '>' + esc(L('push.mode_push')) + '</option></select></div>' +
+			(c.mode === 'push' && c.token ? '<div class="col-12" data-af="agent"><div class="form-label">' + esc(L('push.token')) + '</div><code class="small">' + esc(c.token) + '</code><div class="form-text">' + esc(L('push.token_hint')) + '</div>' +
+				'<div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-newtok"><label class="form-check-label small" for="m64-af-newtok">' + esc(L('push.token_new')) + '</label></div></div>' : '') +
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + (c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
 			'<div class="col-md-8" data-af="ssh prom nut truenas redfish"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
@@ -1121,6 +1124,7 @@ function pageHost() {
 		var t = $('#m64-af-type', body).value, cfg = {};
 		var port = parseInt($('#m64-af-port', body).value, 10);
 		if ((t === 'agent' || t === 'ssh') && port) { cfg.port = port; }
+		if (t === 'agent' && $('#m64-af-mode', body).value === 'push') { cfg.mode = 'push'; delete cfg.port; }
 		if (t === 'ssh') { cfg.user = $('#m64-af-user', body).value.trim(); cfg.smart = $('#m64-af-smart', body).checked; }
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = $('#m64-af-url', body).value.trim(); cfg.pin = $('#m64-af-pin', body).value.trim(); }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = $('#m64-af-tid', body).value.trim(); }
@@ -1140,6 +1144,8 @@ function pageHost() {
 			secret = sr.secret;
 		}
 		var out = { type: t, config: cfg, secret: secret, enabled: $('#m64-af-en', body).checked };
+		var nt = $('#m64-af-newtok', body);
+		if (nt && nt.checked) { out.new_token = true; }
 		var cl = $('#m64-af-clear', body);
 		if (cl && cl.checked) { out.clear_secret = true; }
 		return out;
@@ -1176,7 +1182,8 @@ function pageHost() {
 	function cleanCfg(c, t) {
 		c = c || {};
 		var o = {};
-		if ((t === 'agent' || t === 'ssh') && c.port) { o.port = c.port; }
+		if ((t === 'agent' || t === 'ssh') && c.port && c.mode !== 'push') { o.port = c.port; }
+		if (t === 'agent' && c.mode === 'push') { o.mode = 'push'; }
 		if (t === 'ssh') { o.user = c.user || ''; o.smart = !!c.smart; }
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { o.url = c.url || ''; o.pin = c.pin || ''; }
 		if (t === 'pve' || t === 'pbs') { o.token_id = c.token_id || ''; }
@@ -1838,6 +1845,8 @@ function pageSettings() {
 		var sb = $('#m64-settings-form [type=submit]');
 		var body = { interval: parseInt($('#m64-interval').value, 10), workers: parseInt($('#m64-workers').value, 10) }, tp = $('#m64-trap-port');
 		if (tp) { body.trap_port = parseInt(tp.value, 10) || 0; }
+		var pp = $('#m64-push-port');
+		if (pp) { body.push_port = parseInt(pp.value, 10) || 0; }
 		lock(sb, function () { return api('PUT', '/api/monitor64/settings', body).then(function () { toast(L('st.saved_toast')); }); }).catch(fail);
 	};
 	// Traps unbekannter Absender: nie automatisch angelegt, Knopf oeffnet den Assistenten mit Adresse und Art SNMP
@@ -1861,7 +1870,7 @@ function pageSettings() {
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
 	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
-		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '',
+		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '', mode: '', pushNode: location.hostname, token: '', pushPort: 0,
 		s_version: '2c', s_port: '', s_community: '', s_user: '', s_level: 'authPriv', s_auth: 'SHA256', s_authpass: '', s_priv: 'AES', s_privpass: '', s_context: '', s_engine: '', s_custom: '', s_traps: false,
 		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {} };
 	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
@@ -1891,6 +1900,7 @@ function pageNew() {
 	function access() {
 		var k = kind(), t = k ? k.access : 'agent', cfg = {}, out = { type: t, config: cfg, secret: '' };
 		if (t === 'agent' && WZ.port) { cfg.port = parseInt(WZ.port, 10) || 0; }
+		if (t === 'agent' && WZ.mode === 'push') { cfg.mode = 'push'; cfg.token = WZ.token; delete cfg.port; }
 		if (t === 'ssh') { cfg.user = WZ.user; cfg.smart = WZ.smart; if (WZ.port) { cfg.port = parseInt(WZ.port, 10) || 0; } if (WZ.usePw) { out.secret = WZ.password; } }
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = WZ.url; cfg.pin = WZ.pin; }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = WZ.token_id; out.secret = WZ.token_secret; }
@@ -1932,13 +1942,17 @@ function pageNew() {
 		} else if (WZ.step === 2) {
 			html = '<div class="row g-3"><div class="col-md-6">' + field('name', L('f.name'), WZ.name, ' data-w="name" maxlength="100" placeholder="nas02"') + '</div><div class="col-md-6">' + field('addr', L('f.address'), WZ.address, ' data-w="address" maxlength="253" placeholder="10.0.0.21"') + '</div>';
 			if (k.access === 'agent') {
-				var cmd = WZ.kind === 'windows' ? '& ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "' + key + '"' :
-					WZ.kind === 'freebsd' ? L('new.bsd_cmd', { k: key }) :
-					'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"';
-				html += '<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(cmd) + '</div>' +
-					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(L('new.agent_safe', { p: D.port || 6465 })) + '</div></div>' +
+				var push = WZ.mode === 'push', tgt = WZ.token + '@' + (WZ.pushNode || location.hostname) + ':' + (WZ.pushPort || 6466);
+				var cmd = WZ.kind === 'windows' ? '& ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "' + key + '"' + (push ? ' -Connect "' + tgt + '" -NoListen' : '') :
+					WZ.kind === 'freebsd' ? L('new.bsd_cmd', { k: key }) + (push ? '\n' + L('push.bsd_cmd', { t: tgt }) : '') :
+					'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"' + (push ? ' \\\n  --connect ' + tgt + ' --no-listen' : '');
+				html += '<div class="col-md-6"><label class="form-label" for="m64-w-mode">' + esc(L('push.mode_label')) + '</label><select class="form-select" id="m64-w-mode" data-w="mode"><option value=""' + (push ? '' : ' selected') + '>' + esc(L('push.mode_pull')) + '</option><option value="push"' + (push ? ' selected' : '') + '>' + esc(L('push.mode_push')) + '</option></select></div>' +
+					(push ? '<div class="col-md-6">' + field('pnode', L('push.node_addr'), WZ.pushNode, ' data-w="pushNode" maxlength="253"') + '</div>' : '') +
+					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(push && !WZ.token ? '…' : cmd) + '</div>' +
+					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(push ? L('push.hint', { port: WZ.pushPort || 6466 }) : L('new.agent_safe', { p: D.port || 6465 })) + '</div></div>' +
+					(push ? '<div class="col-12 small">' + esc(L('push.test_after')) + '</div>' :
 					'<div class="col-12"><div class="form-label">' + esc(L('new.agent_step2')) + '</div><div class="small">' + esc(L('new.agent_fp')) + '</div></div>' +
-					'<div class="col-12"><details><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2" style="max-width:12rem">' + field('port', L('acc.port'), WZ.port, ' data-w="port" type="number" min="1" max="65535" placeholder="' + (D.port || 6465) + '"') + '</div></details></div>';
+					'<div class="col-12"><details><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2" style="max-width:12rem">' + field('port', L('acc.port'), WZ.port, ' data-w="port" type="number" min="1" max="65535" placeholder="' + (D.port || 6465) + '"') + '</div></details></div>');
 			} else if (k.access === 'ssh') {
 				var line = 'restrict,from="' + (WZ.nodeAddr || L('new.node_ip')) + '" ' + key, u = WZ.user || 'monitor64';
 				html += '<div class="col-md-6">' + field('user', L('acc.user'), WZ.user, ' data-w="user" maxlength="32"') + '</div>' +
@@ -1977,7 +1991,7 @@ function pageNew() {
 					'<div class="col-12"><details' + (WZ.pin || WZ.docker_secret ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2"><div class="col-12">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div>' +
 					'<div class="col-12"><label class="form-label" for="m64-w-dsec">' + esc(L('acc.docker_secret')) + '</label><textarea class="form-control font-monospace small" id="m64-w-dsec" data-w="docker_secret" rows="4" spellcheck="false" autocomplete="off" placeholder="-----BEGIN …">' + esc(WZ.docker_secret) + '</textarea><div class="form-text">' + esc(L('acc.docker_secret_hint')) + '</div></div></div></details></div>';
 			}
-			html += '<div class="col-12"><button class="btn btn-outline-primary btn-sm" type="button" id="m64-w-test"><i class="bi bi-plug"></i> ' + esc(L('new.test')) + '</button> <span class="small ms-2" id="m64-w-res">' + (WZ.test ? testHTML(WZ.test) : '') + '</span></div></div>';
+			if (!(k.access === 'agent' && WZ.mode === 'push')) html += '<div class="col-12"><button class="btn btn-outline-primary btn-sm" type="button" id="m64-w-test"><i class="bi bi-plug"></i> ' + esc(L('new.test')) + '</button> <span class="small ms-2" id="m64-w-res">' + (WZ.test ? testHTML(WZ.test) : '') + '</span></div></div>';
 		} else if (WZ.step === 3) {
 			var svcs = (WZ.test && WZ.test.services) || [];
 			if (!svcs.length) {
@@ -2018,10 +2032,18 @@ function pageNew() {
 		if (addr && k && k.access === 'ssh') { addr.onchange = function () { collect(); nodeAddr(); }; }
 		var us = $('#m64-w-user');
 		if (us) { us.onchange = function () { collect(); render(); }; }
+		var md = $('#m64-w-mode');
+		if (md) { md.onchange = function () { collect(); if (WZ.mode === 'push' && !WZ.token) { pushTok(); } render(); }; }
+		var pn = $('#m64-w-pnode');
+		if (pn) { pn.onchange = function () { collect(); render(); }; }
 		var t = $('#m64-w-test');
 		if (t) { t.onclick = function () { lock(t, testConn); }; }
 		snmpShow($('#m64-wizard'), 'w');
 		$$('#m64-w-sversion, #m64-w-slevel').forEach(function (x) { x.onchange = function () { snmpShow($('#m64-wizard'), 'w'); }; });
+	}
+	// pushTok holt einen Token fuer den Installationsbefehl (wird mit dem Zugang gespeichert).
+	function pushTok() {
+		api('GET', '/api/monitor64/push/token').then(function (r) { WZ.token = r.token; WZ.pushPort = r.port; render(); }).catch(fail);
 	}
 	function selectedNodes() { return otherNodes().filter(function (n) { return WZ.nodes[n.name]; }); }
 	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
