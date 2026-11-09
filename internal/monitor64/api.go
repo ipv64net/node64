@@ -1,0 +1,956 @@
+package monitor64
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/ipv64net/node64/internal/monitor64/eval"
+	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/tsdb"
+)
+
+// Lokale JSON-API von Monitor64 unter /api/monitor64/... (Sitzung mit X-CSRF-Token bei Aenderungen – prueft der
+// Kern – oder API-Key). Ist das Modul aus: 404 (g.Enabled). Geheimnisse der Zugaenge werden nur geschrieben, nie
+// zurueckgegeben ("secret_set"). Jede Aenderung speichert den Akteur in der Tabelle und im Audit-Log.
+
+const maxBody = 1 << 20
+
+// apiError ist eine Fehlerantwort: Code (stabil) und Text in der Sprache des Aufrufers.
+type apiError struct {
+	status int
+	code   string
+	args   []any
+}
+
+func (e *apiError) Error() string { return e.code }
+
+func errBad(code string, args ...any) *apiError {
+	return &apiError{status: http.StatusBadRequest, code: code, args: args}
+}
+
+var errNotRunning = &apiError{status: http.StatusServiceUnavailable, code: "not_running"}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// fail schreibt einen Fehler als JSON {"error": code, "message": text}.
+func (m *Module) fail(w http.ResponseWriter, r *http.Request, err error) {
+	var ae *apiError
+	switch {
+	case errors.As(err, &ae):
+	case errors.Is(err, ErrNotFound):
+		ae = &apiError{status: http.StatusNotFound, code: "not_found"}
+	default:
+		m.log.Warn("monitor64: api", "path", r.URL.Path, "err", err)
+		ae = &apiError{status: http.StatusInternalServerError, code: "internal"}
+	}
+	msg := ae.code
+	if m.g.T != nil {
+		msg = m.g.T(r, "monitor64.err."+ae.code, ae.args...)
+	}
+	writeJSON(w, ae.status, map[string]string{"error": ae.code, "message": msg})
+}
+
+// decode liest einen JSON-Koerper streng (unbekannte Felder sind ein Fehler).
+func decode(r *http.Request, v any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return errBad("json", "error", err.Error())
+	}
+	return nil
+}
+
+// actor ermittelt, wer die Anfrage stellt: Benutzer (UID clusterweit, Name, Anmeldeart) oder API-Key (Name).
+// Die Anmeldeart (SSO, LDAP) gibt der Kern den Modulen noch nicht weiter; bis dahin "local".
+func (m *Module) actor(r *http.Request) Actor {
+	a := Actor{Kind: "user", Method: "local"}
+	if m.g.Actor != nil {
+		a.Name = m.g.Actor(r)
+	}
+	if m.g.ClientIP != nil {
+		a.IP = m.g.ClientIP(r)
+	}
+	ctx := r.Context()
+	if a.Name != "" && a.Name != "-" {
+		if u, err := m.st.UserByName(ctx, a.Name); err == nil && u != nil {
+			a.UID = u.UID
+		}
+	}
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer node64_") {
+		a.Kind, a.Method = "api", ""
+		if k, err := m.st.APIKeyByValue(ctx, strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))); err == nil && k != nil {
+			a.Name = k.Name
+		}
+	}
+	return a
+}
+
+func (m *Module) audit(r *http.Request, action, target, details string) {
+	if m.g.Audit != nil {
+		m.g.Audit(r, "monitor64."+action, target, details)
+	}
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Hosts
+
+// hostIn sind die Felder eines Hosts aus Formular bzw. API.
+type hostIn struct {
+	Name         string   `json:"name"`
+	Address      string   `json:"address"`
+	Kind         string   `json:"kind"`
+	Group        string   `json:"group"`
+	Tags         []string `json:"tags"`
+	IntervalSec  int      `json:"interval_sec"`
+	Notes        string   `json:"notes"`
+	Paused       bool     `json:"paused"`
+	AgentAutoUpd *bool    `json:"agent_autoupdate"`
+}
+
+var reAddress = regexp.MustCompile(`^[A-Za-z0-9._:\-\[\]%]{1,253}$`)
+
+func cleanText(s string, max int) string {
+	s = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s))
+	if utf8.RuneCountInString(s) > max {
+		s = string([]rune(s)[:max])
+	}
+	return s
+}
+
+func (in *hostIn) apply(h *Host, defInterval int) error {
+	h.Name = cleanText(in.Name, 100)
+	if h.Name == "" {
+		return errBad("name")
+	}
+	addr := strings.TrimSpace(in.Address)
+	if !reAddress.MatchString(addr) {
+		return errBad("address")
+	}
+	h.Address = strings.Trim(addr, "[]")
+	if _, ok := hostKindOf(in.Kind); !ok && in.Kind != "" {
+		return errBad("kind")
+	}
+	if in.Kind != "" { // leer = unveraendert (Aenderung ueber die API ohne Art)
+		h.Kind = in.Kind
+	}
+	h.Group = cleanText(in.Group, 64)
+	if len(in.Tags) > 32 {
+		return errBad("tags")
+	}
+	h.Tags = in.Tags
+	h.IntervalSec = in.IntervalSec
+	if h.IntervalSec == 0 {
+		h.IntervalSec = defInterval
+	}
+	h.Notes = cleanText(in.Notes, 1000)
+	h.Paused = in.Paused
+	if in.AgentAutoUpd != nil {
+		h.AgentAutoUpd = *in.AgentAutoUpd
+	}
+	return nil
+}
+
+// accessIn ist ein Zugang aus Formular bzw. API. Secret leer = unveraendert (bei Aenderung).
+type accessIn struct {
+	Type        string          `json:"type"`
+	Config      json.RawMessage `json:"config"`
+	Secret      string          `json:"secret"`
+	ClearSecret bool            `json:"clear_secret"`
+	HostKey     string          `json:"hostkey"`
+	Enabled     *bool           `json:"enabled"`
+}
+
+var (
+	reUser  = regexp.MustCompile(`^[A-Za-z0-9._-]{0,32}$`)
+	reToken = regexp.MustCompile(`^[A-Za-z0-9@!._:-]{0,128}$`)
+	reNode  = regexp.MustCompile(`^[A-Za-z0-9._-]{0,64}$`)
+	rePin   = regexp.MustCompile(`^[A-Fa-f0-9:]{0,128}$`)
+	reFP    = regexp.MustCompile(`^(SHA256:[A-Za-z0-9+/=]{20,64})?$`)
+)
+
+// cleanAccessConfig prueft die Konfiguration eines Zugangs (streng, ohne Geheimnisse) und gibt sie normiert zurueck.
+func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error) {
+	var c accessConfig
+	if len(raw) > 0 && string(raw) != "null" {
+		dec := json.NewDecoder(strings.NewReader(string(raw)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&c); err != nil {
+			return nil, errBad("config", "error", err.Error())
+		}
+	}
+	c.User, c.URL, c.TokenID, c.Node, c.Pin = strings.TrimSpace(c.User), strings.TrimSpace(c.URL), strings.TrimSpace(c.TokenID), strings.TrimSpace(c.Node), strings.TrimSpace(c.Pin)
+	switch {
+	case c.Port < 0 || c.Port > 65535:
+		return nil, errBad("port")
+	case !reUser.MatchString(c.User):
+		return nil, errBad("user")
+	case !reToken.MatchString(c.TokenID):
+		return nil, errBad("token_id")
+	case !reNode.MatchString(c.Node):
+		return nil, errBad("node")
+	case !rePin.MatchString(c.Pin):
+		return nil, errBad("pin")
+	case len(c.URL) > 512:
+		return nil, errBad("url")
+	}
+	if c.URL != "" {
+		ok := strings.HasPrefix(c.URL, "https://") || strings.HasPrefix(c.URL, "http://")
+		if typ == "docker" {
+			ok = ok || strings.HasPrefix(c.URL, "unix://") || strings.HasPrefix(c.URL, "tcp://")
+		}
+		if !ok {
+			return nil, errBad("url")
+		}
+	}
+	b, _ := json.Marshal(c)
+	return b, nil
+}
+
+// accessOut ist ein Zugang in API-Antworten: nie das Geheimnis, nur ob eines gesetzt ist.
+type accessOut struct {
+	UID       string          `json:"uid"`
+	Type      string          `json:"type"`
+	Config    json.RawMessage `json:"config"`
+	HostKey   string          `json:"hostkey,omitempty"`
+	Enabled   bool            `json:"enabled"`
+	SecretSet bool            `json:"secret_set"`
+}
+
+func accessOuts(list []*Access) []accessOut {
+	out := make([]accessOut, 0, len(list))
+	for _, a := range list {
+		out = append(out, accessOut{UID: a.UID, Type: a.Type, Config: a.Config, HostKey: a.HostKey, Enabled: a.Enabled, SecretSet: a.Secret != ""})
+	}
+	return out
+}
+
+// buildAccess setzt die Felder eines Zugangs aus der Eingabe (Geheimnis verschluesselt).
+func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret bool, err error) {
+	if isNew || in.Type != "" {
+		if !validAccessType(in.Type) {
+			return false, errBad("access_type")
+		}
+		a.Type = in.Type
+	}
+	cfg, err := cleanAccessConfig(a.Type, in.Config)
+	if err != nil {
+		return false, err
+	}
+	a.Config = cfg
+	if !reFP.MatchString(strings.TrimSpace(in.HostKey)) {
+		return false, errBad("hostkey")
+	}
+	if isNew {
+		a.HostKey = strings.TrimSpace(in.HostKey)
+	}
+	if in.Enabled != nil {
+		a.Enabled = *in.Enabled
+	} else if isNew {
+		a.Enabled = true
+	}
+	if len(in.Secret) > 4096 {
+		return false, errBad("secret")
+	}
+	switch {
+	case in.Secret != "":
+		a.Secret = m.box.Encrypt(in.Secret)
+	case in.ClearSecret:
+		a.Secret = ""
+	default:
+		keepSecret = !isNew
+	}
+	return keepSecret, nil
+}
+
+// serviceIn ist ein erkannter Dienst aus "Verbindung testen", den der Assistent uebernimmt.
+type serviceIn struct {
+	Key     string `json:"key"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Default bool   `json:"default"`
+}
+
+type createIn struct {
+	hostIn
+	Accesses []accessIn  `json:"accesses"`
+	Services []serviceIn `json:"services"`
+	Adopt    []string    `json:"adopt"`
+}
+
+func (m *Module) defaultInterval(ctx context.Context) int {
+	var n int
+	if _, err := fmt.Sscanf(m.st.SettingOr(ctx, setInterval, "60"), "%d", &n); err != nil || n < 30 || n > 900 {
+		return 60
+	}
+	return n
+}
+
+// apiHosts: GET Liste der Hosts mit aktuellem Zustand.
+func (m *Module) apiHosts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, m.overview(r.Context()).Hosts)
+}
+
+// apiHostCreate: POST Host mit Zugaengen anlegen; erkannte Dienste (aus "Verbindung testen") werden eingetragen,
+// die bestaetigten uebernommen (Plan "Dienste erkennen": beim Anlegen im Assistenten bestaetigen).
+func (m *Module) apiHostCreate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var in createIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	h := &Host{AgentAutoUpd: true}
+	if err := in.apply(h, m.defaultInterval(ctx)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if len(in.Accesses) > 8 || len(in.Services) > 5000 {
+		m.fail(w, r, errBad("too_many"))
+		return
+	}
+	accs := make([]*Access, 0, len(in.Accesses))
+	for _, ai := range in.Accesses {
+		a := &Access{}
+		if _, err := m.buildAccess(a, ai, true); err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		accs = append(accs, a)
+	}
+	found := make([]model.Service, 0, len(in.Services))
+	for _, s := range in.Services {
+		key, name, kind := cleanText(s.Key, 200), cleanText(s.Name, 200), cleanText(s.Kind, 32)
+		if key == "" {
+			continue
+		}
+		found = append(found, model.Service{Key: key, Name: name, Kind: kind, Default: s.Default})
+	}
+	by := m.actor(r)
+	if err := m.store.SaveHost(ctx, h, by); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	for _, a := range accs {
+		a.HostUID = h.UID
+		if err := m.store.SaveAccess(ctx, a, false, by); err != nil {
+			m.fail(w, r, err)
+			return
+		}
+	}
+	if len(found) > 0 {
+		adopt := map[string]bool{}
+		for _, k := range in.Adopt {
+			adopt[k] = true
+		}
+		if _, err := m.store.UpsertDiscovered(ctx, h.UID, found, adopt, by); err != nil {
+			m.fail(w, r, err)
+			return
+		}
+	}
+	m.audit(r, "host.create", h.Name, fmt.Sprintf("uid=%s address=%s accesses=%d adopted=%d", h.UID, h.Address, len(accs), len(in.Adopt)))
+	m.ReloadHost(ctx, h.UID)
+	writeJSON(w, http.StatusCreated, map[string]any{"uid": h.UID})
+}
+
+// apiHostUpdate: PUT Host aendern.
+func (m *Module) apiHostUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var in hostIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if err := in.apply(h, h.IntervalSec); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if err := m.store.SaveHost(ctx, h, m.actor(r)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.audit(r, "host.update", h.Name, "uid="+h.UID)
+	m.ReloadHost(ctx, h.UID)
+	m.reloadConfig(ctx) // Gruppe/Tags aendern Abweichungen und Wartung
+	writeJSON(w, http.StatusOK, map[string]any{"uid": h.UID})
+}
+
+// historyStore ist, was die API vom Verlauf ausser Schreiben braucht (Paket tsdb).
+type historyStore interface {
+	QueryMulti(ctx context.Context, keys []string, from, to time.Time, maxPoints int) ([]tsdb.Series, error)
+	DeleteSeriesPrefix(ctx context.Context, prefix string) (int, error)
+}
+
+func (m *Module) history() historyStore {
+	h, _ := m.seriesStore().(historyStore)
+	return h
+}
+
+// apiHostDelete: DELETE Host entfernen; ?history=delete loescht auch den Verlauf (Problem-Historie bleibt).
+func (m *Module) apiHostDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if err := m.store.DeleteHost(ctx, h.UID, m.actor(r)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.ReloadHost(ctx, h.UID)
+	m.notifyMu.Lock()
+	if m.notifier != nil {
+		m.notifier.Forget(h.UID)
+	}
+	m.notifyMu.Unlock()
+	deleted := 0
+	hist := r.URL.Query().Get("history") == "delete"
+	if hist {
+		if hs := m.history(); hs != nil {
+			if deleted, err = hs.DeleteSeriesPrefix(ctx, h.UID+"|"); err != nil {
+				m.log.Warn("monitor64: delete history", "host", h.Name, "err", err)
+			}
+		}
+	}
+	m.audit(r, "host.delete", h.Name, fmt.Sprintf("uid=%s history_deleted=%t series=%d", h.UID, hist, deleted))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "series_deleted": deleted})
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Zugaenge
+
+func (m *Module) accessByUID(ctx context.Context, uid string) (*Access, error) {
+	list, err := m.store.Accesses(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range list {
+		if a.UID == uid {
+			return a, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+// apiAccessCreate: POST Zugang an einem Host anlegen.
+func (m *Module) apiAccessCreate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var in accessIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	a := &Access{HostUID: h.UID}
+	if _, err := m.buildAccess(a, in, true); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if err := m.store.SaveAccess(ctx, a, false, m.actor(r)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.audit(r, "access.create", h.Name, "type="+a.Type+" uid="+a.UID)
+	m.ReloadHost(ctx, h.UID)
+	writeJSON(w, http.StatusCreated, accessOuts([]*Access{a})[0])
+}
+
+// apiAccessUpdate: PUT Zugang aendern (Geheimnis leer = unveraendert, clear_secret = entfernen).
+func (m *Module) apiAccessUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, err := m.accessByUID(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var in accessIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	keep, err := m.buildAccess(a, in, false)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if strings.TrimSpace(in.HostKey) == "reset" {
+		a.HostKey = ""
+	}
+	if err := m.store.SaveAccess(ctx, a, keep, m.actor(r)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.audit(r, "access.update", a.HostUID, fmt.Sprintf("type=%s uid=%s secret_changed=%t", a.Type, a.UID, !keep))
+	m.ReloadHost(ctx, a.HostUID)
+	writeJSON(w, http.StatusOK, accessOuts([]*Access{a})[0])
+}
+
+// apiAccessHostKey: POST gemerkten Hostschluessel verwerfen; der naechste Kontakt merkt den neuen (Knopf
+// "neuen uebernehmen" nach "Schluessel geaendert").
+func (m *Module) apiAccessHostKey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, err := m.accessByUID(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	old := a.HostKey
+	a.HostKey = ""
+	if err := m.store.SaveAccess(ctx, a, true, m.actor(r)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.audit(r, "access.hostkey_reset", a.HostUID, "uid="+a.UID+" old="+old)
+	m.ReloadHost(ctx, a.HostUID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// apiAccessDelete: DELETE Zugang entfernen.
+func (m *Module) apiAccessDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, err := m.accessByUID(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if err := m.store.DeleteAccess(ctx, a.UID, m.actor(r)); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.audit(r, "access.delete", a.HostUID, "type="+a.Type+" uid="+a.UID)
+	m.ReloadHost(ctx, a.HostUID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// testResult ist das Ergebnis von "Verbindung testen" (eine Abfrage, nichts gespeichert).
+type testResult struct {
+	OK          bool        `json:"ok"`
+	Error       string      `json:"error,omitempty"`
+	Ms          int64       `json:"ms"`
+	Fingerprint string      `json:"fingerprint,omitempty"`
+	Services    []serviceIn `json:"services"`
+}
+
+const testTimeout = 20 * time.Second
+
+// testAccess fragt einen Zugang einmal ab, ohne etwas zu speichern (eigener Eintrag im Verbindungs-Pool, danach
+// verworfen; der Hostschluessel wird nur gemeldet).
+func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
+	res := testResult{Services: []serviceIn{}}
+	if m.scheduler() == nil || m.pool == nil {
+		res.Error = "not running"
+		return res
+	}
+	a.UID = "test:" + newUID()
+	defer m.pool.Remove(a.UID)
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+	start := time.Now()
+	col, err := m.newCollector(ctx, h, &a)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	defer col.close()
+	svcs, err := col.collect(ctx)
+	res.Ms = time.Since(start).Milliseconds()
+	res.Fingerprint = a.HostKey
+	if err != nil {
+		res.Error = err.Error()
+	}
+	res.OK = len(svcs) > 0 || err == nil
+	for _, s := range svcs {
+		res.Services = append(res.Services, serviceIn{Key: s.Key, Name: s.Name, Kind: s.Kind, Default: s.Default})
+	}
+	slices.SortStableFunc(res.Services, func(x, y serviceIn) int { return kindOrder(x.Kind) - kindOrder(y.Kind) })
+	return res
+}
+
+type testIn struct {
+	Address string   `json:"address"`
+	Access  accessIn `json:"access"`
+}
+
+// apiTest: POST Verbindung testen, bevor etwas gespeichert ist (Assistent).
+func (m *Module) apiTest(w http.ResponseWriter, r *http.Request) {
+	var in testIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	addr := strings.Trim(strings.TrimSpace(in.Address), "[]")
+	if !reAddress.MatchString(addr) {
+		m.fail(w, r, errBad("address"))
+		return
+	}
+	var a Access
+	if _, err := m.buildAccess(&a, in.Access, true); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	res := m.testAccess(r.Context(), &Host{Name: addr, Address: addr}, a)
+	m.audit(r, "access.test", addr, fmt.Sprintf("type=%s ok=%t", a.Type, res.OK))
+	writeJSON(w, http.StatusOK, res)
+}
+
+// apiAccessTest: POST gespeicherten Zugang testen (mit gespeichertem Geheimnis und Hostschluessel).
+func (m *Module) apiAccessTest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, err := m.accessByUID(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	h, err := m.store.Host(ctx, a.HostUID)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	res := m.testAccess(ctx, h, *a)
+	writeJSON(w, http.StatusOK, res)
+}
+
+// apiNodeAddr: GET Adresse dieser Node in Richtung eines Hosts (fuer from="..." in authorized_keys). Es wird kein
+// Paket gesendet (UDP-"Verbindung" waehlt nur die Quelladresse).
+func (m *Module) apiNodeAddr(w http.ResponseWriter, r *http.Request) {
+	target := strings.Trim(strings.TrimSpace(r.URL.Query().Get("target")), "[]")
+	out := map[string]string{"addr": ""}
+	if target != "" && reAddress.MatchString(target) {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		var d net.Dialer
+		if c, err := d.DialContext(ctx, "udp", net.JoinHostPort(target, "22")); err == nil {
+			if ua, ok := c.LocalAddr().(*net.UDPAddr); ok {
+				out["addr"] = ua.IP.String()
+			}
+			_ = c.Close()
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Dienste
+
+type svcKeysIn struct {
+	Keys  []string `json:"keys"`
+	State int      `json:"state"` // 1 uebernehmen, -1 ignorieren
+}
+
+// apiServicesAdopt: POST Dienste uebernehmen (1) oder ignorieren (-1).
+func (m *Module) apiServicesAdopt(w http.ResponseWriter, r *http.Request) {
+	m.servicesBulk(w, r, false)
+}
+
+// apiServicesRemove: POST Dienste entfernen (z. B. nach "verschwunden"; aktiver Klick mit Akteur).
+func (m *Module) apiServicesRemove(w http.ResponseWriter, r *http.Request) {
+	m.servicesBulk(w, r, true)
+}
+
+func (m *Module) servicesBulk(w http.ResponseWriter, r *http.Request, remove bool) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var in svcKeysIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if !remove && in.State != 1 && in.State != -1 && in.State != 0 {
+		m.fail(w, r, errBad("state"))
+		return
+	}
+	if len(in.Keys) == 0 || len(in.Keys) > 5000 {
+		m.fail(w, r, errBad("keys"))
+		return
+	}
+	by := m.actor(r)
+	n := 0
+	for _, k := range in.Keys {
+		var err error
+		if remove {
+			err = m.store.RemoveService(ctx, h.UID, k, by)
+		} else {
+			err = m.store.SetAdopted(ctx, h.UID, k, in.State, by)
+		}
+		if err == nil {
+			n++
+		} else if !errors.Is(err, ErrNotFound) {
+			m.fail(w, r, err)
+			return
+		}
+	}
+	action := "services.remove"
+	if !remove {
+		action = map[int]string{1: "services.adopt", -1: "services.ignore", 0: "services.offer"}[in.State]
+	}
+	m.audit(r, action, h.Name, fmt.Sprintf("uid=%s keys=%s", h.UID, strings.Join(limitList(in.Keys, 10), ",")))
+	m.repoll(h.UID)
+	writeJSON(w, http.StatusOK, map[string]any{"changed": n})
+}
+
+// svcUpdateIn aendert einen Dienst: Anzeigename, Soll-Zustand, Melden/Nur anzeigen, Schwelle "dieser Host".
+type svcUpdateIn struct {
+	Key    string     `json:"key"`
+	Name   *string    `json:"name"`
+	Soll   *string    `json:"soll"`   // "", run, off
+	Report *string    `json:"report"` // "", show
+	Rule   *eval.Rule `json:"rule"`   // Schwelle; leer/null mit reset = entfernen
+	Scope  string     `json:"scope"`  // service (nur dieser Dienst) oder kind (alle dieser Art auf dem Host)
+	Reset  bool       `json:"reset"`  // Schwelle der Stufe "dieser Host" entfernen ("auf Standard zurueck")
+}
+
+// apiServiceUpdate: PUT einen Dienst aendern.
+func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var in svcUpdateIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	rows, err := m.store.Services(ctx, h.UID)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var row *ServiceRow
+	for _, s := range rows {
+		if s.Key == in.Key {
+			row = s
+		}
+	}
+	if row == nil {
+		m.fail(w, r, ErrNotFound)
+		return
+	}
+	var p svcPatch
+	var details []string
+	if in.Name != nil {
+		n := cleanText(*in.Name, 200)
+		p.Name = &n
+		details = append(details, "name="+n)
+	}
+	if in.Soll != nil {
+		if *in.Soll != "" && *in.Soll != "run" && *in.Soll != "off" {
+			m.fail(w, r, errBad("soll"))
+			return
+		}
+		p.Soll = in.Soll
+		details = append(details, "soll="+*in.Soll)
+	}
+	if in.Report != nil {
+		if *in.Report != "" && *in.Report != "show" {
+			m.fail(w, r, errBad("report"))
+			return
+		}
+		p.Report = in.Report
+		details = append(details, "report="+*in.Report)
+	}
+	scope := in.Scope
+	if scope == "" {
+		scope = "service"
+	}
+	if scope != "service" && scope != "kind" {
+		m.fail(w, r, errBad("scope"))
+		return
+	}
+	ruleChanged := false
+	var kindRule *eval.Rule
+	if in.Rule != nil || in.Reset {
+		var rule *eval.Rule
+		if in.Rule != nil && !in.Reset {
+			if err := in.Rule.Validate(); err != nil {
+				m.fail(w, r, errBad("rule", "error", err.Error()))
+				return
+			}
+			if !in.Rule.Empty() {
+				rule = in.Rule
+			}
+		}
+		if rule != nil {
+			if err := m.checkRuleOrder(h, row, rule, scope); err != nil {
+				m.fail(w, r, err)
+				return
+			}
+		}
+		if scope == "kind" {
+			kindRule, ruleChanged = rule, true
+		} else {
+			s := ""
+			if rule != nil {
+				b, _ := json.Marshal(rule)
+				s = string(b)
+			}
+			p.HostRule = &s
+			details = append(details, "rule="+s)
+		}
+		if in.Reset { // auf Standard zurueck: beide Einstellungen am Host
+			empty := ""
+			p.HostRule = &empty
+			kindRule, ruleChanged = nil, true
+		}
+	}
+	by := m.actor(r)
+	if err := m.store.UpdateService(ctx, h.UID, row.Key, p, by); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if ruleChanged {
+		if err := m.store.SaveHostRule(ctx, h.UID, row.Kind, kindRule, by); err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		b, _ := json.Marshal(kindRule)
+		details = append(details, "kind_rule["+row.Kind+"]="+string(b))
+		m.reloadConfig(ctx)
+	}
+	m.audit(r, "service.update", h.Name+" · "+row.Key, strings.Join(details, " "))
+	m.repoll(h.UID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// checkRuleOrder prueft eine Schwelle der Stufe "dieser Host" mit den geerbten Feldern (Warnung vor Kritisch).
+func (m *Module) checkRuleOrder(h *Host, row *ServiceRow, rule *eval.Rule, scope string) error {
+	cfg := m.config()
+	hl := m.hostLevel(row)
+	if scope == "kind" {
+		hl.Kind = rule
+	} else {
+		hl.Service = rule
+	}
+	for _, kind := range m.ruleKindsOfService(h.UID, row) {
+		e := eval.Resolve(cfg.std, cfg.overrides, hostRef(h), hl, kind)
+		if err := e.Validate(); err != nil {
+			return errBad("rule", "error", err.Error())
+		}
+	}
+	return nil
+}
+
+// ruleKindsOfService: Arten der Schwellen eines Dienstes (aus dem aktuellen Stand, sonst aus der Dienst-Art).
+func (m *Module) ruleKindsOfService(hostUID string, row *ServiceRow) []string {
+	var kinds []string
+	if v := m.viewOf(hostUID); v != nil {
+		for _, s := range v.Services {
+			if s.Key != row.Key {
+				continue
+			}
+			for _, mt := range s.Metrics {
+				if mt.Metric.Rule != "" && !slices.Contains(kinds, mt.Metric.Rule) {
+					kinds = append(kinds, mt.Metric.Rule)
+				}
+			}
+		}
+	}
+	if len(kinds) == 0 {
+		for _, n := range []string{"util", "per_core", "used", "temp", "wear", "errrate"} {
+			if k := m.ruleKindOf(row, n); k != "" && !slices.Contains(kinds, k) {
+				kinds = append(kinds, k)
+			}
+		}
+	}
+	return kinds
+}
+
+// viewOf liefert den aktuellen Stand eines Hosts (nil = nicht eingeplant).
+func (m *Module) viewOf(uid string) *HostView {
+	m.rtMu.Lock()
+	rt := m.rts[uid]
+	m.rtMu.Unlock()
+	if rt == nil {
+		return nil
+	}
+	if v := rt.getView(); v != nil {
+		return v
+	}
+	return &HostView{Host: rt.host, View: eval.ViewUnknown, State: eval.Unknown}
+}
+
+// repoll stoesst eine sofortige Runde an (Neubewertung nach einer Aenderung).
+func (m *Module) repoll(uid string) {
+	if s := m.scheduler(); s != nil {
+		s.RunNow("host:" + uid)
+	}
+}
+
+// apiDiscover: POST Dienste jetzt erkennen (eine Runde sofort, mit Erkennung) und Ergebnis melden.
+func (m *Module) apiDiscover(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.rtMu.Lock()
+	rt := m.rts[h.UID]
+	m.rtMu.Unlock()
+	if rt == nil {
+		m.fail(w, r, errNotRunning)
+		return
+	}
+	before := map[string]bool{}
+	rows, _ := m.store.Services(ctx, h.UID)
+	for _, s := range rows {
+		before[s.Key] = true
+	}
+	rt.mu.Lock()
+	rt.LastDisc = time.Time{}
+	rt.mu.Unlock()
+	pctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+	m.poll(pctx, rt)
+	rows, _ = m.store.Services(ctx, h.UID)
+	added, gone := 0, 0
+	for _, s := range rows {
+		if !before[s.Key] {
+			added++
+		}
+		if !s.VanishedAt.IsZero() {
+			gone++
+		}
+	}
+	newCount := 0
+	for _, s := range rows {
+		if s.Adopted == 0 {
+			newCount++
+		}
+	}
+	m.audit(r, "services.discover", h.Name, fmt.Sprintf("uid=%s added=%d", h.UID, added))
+	writeJSON(w, http.StatusOK, map[string]any{"added": added, "new": newCount, "vanished": gone})
+}

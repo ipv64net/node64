@@ -1,0 +1,9 @@
+[
+  {"id":"node/pve1","type":"node","node":"pve1","status":"online","cpu":0.0734,"maxcpu":8,"mem":14123843584,"maxmem":33544937472,"disk":29308309504,"maxdisk":100861726720,"uptime":1296000,"level":""},
+  {"id":"node/pve2","type":"node","node":"pve2","status":"online","cpu":0.021,"maxcpu":8,"mem":9123843584,"maxmem":33544937472,"disk":19308309504,"maxdisk":100861726720,"uptime":1296000,"level":""},
+  {"id":"node/pve3","type":"node","node":"pve3","status":"offline","level":""},
+  {"id":"qemu/101","type":"qemu","vmid":101,"name":"web01","node":"pve1","status":"running","cpu":0.0412,"maxcpu":2,"mem":2147483648,"maxmem":4294967296,"disk":0,"maxdisk":34359738368,"netin":1000000000,"netout":500000000,"diskread":2000000000,"diskwrite":3000000000,"uptime":86400,"template":0,"tags":"prod;web"},
+  {"id":"qemu/102","type":"qemu","vmid":102,"name":"win11","node":"pve1","status":"stopped","maxcpu":4,"maxmem":8589934592,"maxdisk":68719476736,"template":0},
+  {"id":"lxc/200","type":"lxc","vmid":200,"name":"pihole","node":"pve1","status":"running","cpu":0.0051,"maxcpu":1,"mem":134217728,"maxmem":536870912,"disk":1073741824,"maxdisk":8589934592,"uptime":3600,"template":0},
+  {"id":"storage/pve1/local","type":"storage","storage":"local","node":"pve1","status":"available","plugintype":"dir","content":"iso,vztmpl,backup","shared":0,"disk":29308309504,"maxdisk":100861726720}
+]

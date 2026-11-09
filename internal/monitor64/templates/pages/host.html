@@ -1,0 +1,61 @@
+{{define "content"}}
+{{template "m64-top" .}}
+{{$h := .Data.Host}}
+<div id="m64" data-m64-page="host" data-host="{{$h.UID}}">
+	<div class="d-flex flex-wrap align-items-start gap-3 mb-3">
+		<div class="me-auto min-w-0" id="m64-host-head">
+			<div class="d-flex align-items-center gap-2"><h1 class="h3 mb-0">{{$h.Name}}</h1></div>
+			<div class="text-body-secondary small mt-1">{{$h.Address}}{{if $h.Group}} · {{.T "monitor64.host.group"}} {{$h.Group}}{{end}}</div>
+		</div>
+		<div class="d-flex flex-wrap gap-2">
+			<button class="btn btn-outline-secondary btn-sm" type="button" data-act="discover"><i class="bi bi-search"></i> {{.T "monitor64.host.discover"}}</button>
+			<div class="dropdown">
+				<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{.T "monitor64.host.more"}}"><i class="bi bi-three-dots"></i></button>
+				<ul class="dropdown-menu dropdown-menu-end">
+					<li><a class="dropdown-item" href="#" data-act="maint"><i class="bi bi-cone-striped"></i> {{.T "monitor64.host.maint"}}</a></li>
+					<li><a class="dropdown-item" href="#" data-act="edit"><i class="bi bi-pencil"></i> {{.T "monitor64.host.edit"}}</a></li>
+					<li><a class="dropdown-item" href="#" data-act="pause"><i class="bi bi-pause-circle"></i> <span data-pause-label>{{if $h.Paused}}{{.T "monitor64.host.resume"}}{{else}}{{.T "monitor64.host.pause"}}{{end}}</span></a></li>
+					<li><hr class="dropdown-divider"></li>
+					<li><a class="dropdown-item text-danger" href="#" data-act="delete"><i class="bi bi-trash"></i> {{.T "monitor64.host.delete"}}</a></li>
+				</ul>
+			</div>
+		</div>
+	</div>
+	<div id="m64-host-alerts"></div>
+	<div id="m64-new"></div>
+	<div id="m64-chart-bar" class="d-flex flex-wrap align-items-center gap-2 mb-2 d-none">
+		<div class="btn-group btn-group-sm" role="group" aria-label="{{.T "monitor64.chart.range"}}">
+			<button class="btn btn-outline-secondary" type="button" data-range="6h">{{.T "monitor64.chart.r6h"}}</button>
+			<button class="btn btn-outline-secondary active" type="button" data-range="24h">{{.T "monitor64.chart.r24h"}}</button>
+			<button class="btn btn-outline-secondary" type="button" data-range="7d">{{.T "monitor64.chart.r7d"}}</button>
+			<button class="btn btn-outline-secondary" type="button" data-range="30d">{{.T "monitor64.chart.r30d"}}</button>
+			<button class="btn btn-outline-secondary" type="button" data-range="1y">{{.T "monitor64.chart.r1y"}}</button>
+		</div>
+		<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" id="m64-older" title="{{.T "monitor64.chart.older"}}" aria-label="{{.T "monitor64.chart.older"}}"><i class="bi bi-chevron-left"></i></button><button class="btn btn-outline-secondary" type="button" id="m64-newer" title="{{.T "monitor64.chart.newer"}}" aria-label="{{.T "monitor64.chart.newer"}}" disabled><i class="bi bi-chevron-right"></i></button></div>
+		<span class="small text-body-secondary" id="m64-chart-span"></span>
+		<span class="ms-auto" id="m64-zoom"></span>
+	</div>
+	<div class="row g-3 mb-3" id="m64-charts"></div>
+	<div class="card mb-3">
+		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.services"}}</span><span class="badge text-bg-secondary ms-2" id="m64-svc-count">0</span><span class="ms-auto small text-body-secondary d-none d-sm-inline">{{.T "monitor64.host.click_hint"}}</span></div>
+		<div class="table-responsive"><table class="table table-hover mb-0 svc-table">
+			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.service"}}</th><th>{{.T "monitor64.col.value"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.h24"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.thresholds"}}</th><th class="d-none d-xl-table-cell">{{.T "monitor64.col.access"}}</th></tr></thead>
+			<tbody id="m64-svcs"></tbody>
+		</table></div>
+	</div>
+	<div class="card mb-3">
+		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.accesses"}}</span><button class="btn btn-outline-primary btn-sm ms-auto" type="button" data-act="access-add"><i class="bi bi-plus-lg"></i> {{.T "monitor64.host.access_add"}}</button></div>
+		<div class="list-group list-group-flush" id="m64-accesses"></div>
+	</div>
+	<div id="m64-ignored"></div>
+</div>
+<div class="offcanvas offcanvas-end m64-detail" tabindex="-1" id="m64-detail" aria-labelledby="m64-sd-title">
+	<div class="offcanvas-header border-bottom">
+		<div class="min-w-0"><div class="small text-body-secondary" id="m64-sd-host"></div><h5 class="offcanvas-title text-truncate" id="m64-sd-title"></h5></div>
+		<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="{{.T "monitor64.close"}}"></button>
+	</div>
+	<div class="offcanvas-body" id="m64-sd-body"></div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

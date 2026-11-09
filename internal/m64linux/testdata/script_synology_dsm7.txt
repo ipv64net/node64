@@ -1,0 +1,161 @@
+
+<<<m64:start>>>
+1
+
+<<<m64:file:/proc/uptime>>>
+3456789.12 12345678.90
+
+<<<m64:file:/proc/stat>>>
+cpu  2345678 12345 1234567 98765432 234567 0 34567 0 0 0
+cpu0 586419 3086 308641 24691358 58641 0 8641 0 0 0
+cpu1 586419 3086 308641 24691358 58641 0 8641 0 0 0
+cpu2 586420 3086 308642 24691358 58642 0 8642 0 0 0
+cpu3 586420 3087 308643 24691358 58643 0 8643 0 0 0
+intr 123456789 0 2 0 0
+ctxt 234567890
+btime 1790768000
+processes 1234567
+procs_running 1
+procs_blocked 0
+softirq 34567890 0 1 2 3 4 5 6 7 8 9
+
+<<<m64:file:/proc/meminfo>>>
+MemTotal:        3884588 kB
+MemFree:          167236 kB
+MemAvailable:    1823456 kB
+Buffers:           45678 kB
+Cached:          1734567 kB
+SwapCached:        12345 kB
+SwapTotal:       6918076 kB
+SwapFree:        6512345 kB
+
+<<<m64:file:/proc/loadavg>>>
+0.42 0.55 0.61 2/987 23456
+
+<<<m64:file:/proc/mounts>>>
+/dev/md0 / ext4 rw,relatime,data=ordered 0 0
+devtmpfs /dev devtmpfs rw,nosuid,noexec,relatime,size=1923456k,nr_inodes=480864,mode=755 0 0
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+tmpfs /dev/shm tmpfs rw,nosuid,nodev 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,mode=755 0 0
+tmpfs /sys/fs/cgroup tmpfs ro,nosuid,nodev,noexec,mode=755 0 0
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+devpts /dev/pts devpts rw,nosuid,noexec,relatime,gid=4,mode=620,ptmxmode=000 0 0
+securityfs /sys/kernel/security securityfs rw,nosuid,nodev,noexec,relatime 0 0
+debugfs /sys/kernel/debug debugfs rw,relatime 0 0
+configfs /sys/kernel/config configfs rw,relatime 0 0
+tmpfs /tmp tmpfs rw,nosuid,nodev,noexec 0 0
+/dev/mapper/cachedev_0 /volume1 btrfs rw,nodev,relatime,ssd,synoacl,space_cache=v2,auto_reclaim_space,metadata_ratio=50,block_group_cache_tree,syno_allocator,subvolid=256,subvol=/@syno 0 0
+/dev/mapper/cachedev_0 /volume1/@appstore btrfs rw,nodev,relatime,ssd,synoacl,space_cache=v2,subvolid=256,subvol=/@syno/@appstore 0 0
+/dev/mapper/cachedev_0 /volume1/@docker btrfs rw,nodev,relatime,ssd,synoacl,space_cache=v2,subvolid=256,subvol=/@syno/@docker 0 0
+/dev/usb1p1 /volumeUSB1/usbshare vfat rw,relatime,uid=1024,gid=100,fmask=0000,dmask=0000,allow_utime=0022,codepage=437,iocharset=utf8,shortname=mixed,errors=remount-ro 0 0
+nas2:/volume1/backup /volume1/net/nas2 nfs rw,relatime,vers=3 0 0
+
+<<<m64:file:/proc/diskstats>>>
+   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0
+ 135     240 synoboot 456 0 12345 678 0 0 0 0 0 456 678
+ 135     241 synoboot1 123 0 4567 234 0 0 0 0 0 123 234
+   8       0 sata1 2345678 12345 345678901 4567890 3456789 23456 456789012 5678901 0 3456789 10246791
+   8       1 sata1p1 123456 1234 2345678 34567 234567 2345 3456789 45678 0 56789 80245
+   8       2 sata1p2 1234 12 23456 345 2345 23 34567 456 0 567 801
+   8       5 sata1p5 2220988 11099 343309767 4532978 3219877 21088 453297656 5632767 0 3399433 10165745
+   8      16 sata2 2345000 12300 345600000 4567000 3456700 23400 456700000 5678000 0 3456700 10245000
+   8      17 sata2p1 123400 1230 2345600 34560 234560 2340 3456700 45670 0 56780 80230
+   8      21 sata2p5 2220000 11000 343200000 4532000 3219800 21000 453200000 5632000 0 3399000 10164000
+   9       0 md0 245678 0 4567890 0 456789 0 6789012 0 0 0 0
+   9       1 md1 2345 0 45678 0 4567 0 67890 0 0 0 0
+   9       2 md2 4440988 0 686509767 0 6439677 0 906497656 0 0 0 0
+ 252       0 zram0 12345 0 98760 123 23456 0 187648 234 0 345 357
+ 253       0 dm-0 4440900 0 686500000 4560000 6439600 0 906490000 5670000 0 3400000 10230000
+   8      32 usb1 3456 0 234567 3456 123 0 4567 234 0 2345 3690
+   8      33 usb1p1 3400 0 234500 3450 120 0 4560 230 0 2340 3680
+
+<<<m64:file:/proc/net/dev>>>
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 23456789  123456    0    0    0     0          0         0 23456789  123456    0    0    0     0       0          0
+  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  eth0: 234567890123 187654321    0    0    0     0          0    234567 123456789012 98765432    0    0    0     0       0          0
+  eth1:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+docker0: 12345678  234567    0    0    0     0          0         0 98765432  345678    0    0    0     0       0          0
+docker9b1c2d3: 1234567 23456    0    0    0     0          0         0 2345678 34567    0    0    0     0       0          0
+
+<<<m64:file:/proc/mdstat>>>
+Personalities : [raid1] [linear] [raid0] [raid10] [raid6] [raid5] [raid4]
+md2 : active raid1 sata1p5[0] sata2p5[1]
+      3902196544 blocks super 1.2 [2/2] [UU]
+
+md1 : active raid1 sata1p2[0] sata2p2[1]
+      2097088 blocks [2/2] [UU]
+
+md0 : active raid1 sata1p1[0] sata2p1[1]
+      8388544 blocks [2/2] [UU]
+
+unused devices: <none>
+
+<<<m64:df>>>
+Filesystem           1024-blocks    Used Available Capacity Mounted on
+/dev/md0               8191416   1567812   6504820  19% /
+devtmpfs               1923456         0   1923456   0% /dev
+tmpfs                  1942292       244   1942048   0% /dev/shm
+tmpfs                  1942292     21456   1920836   1% /run
+tmpfs                  1942292         0   1942292   0% /sys/fs/cgroup
+tmpfs                  1942292      1012   1941280   0% /tmp
+/dev/mapper/cachedev_0 3746314048 2134567890 1611746158  57% /volume1
+/dev/mapper/cachedev_0 3746314048 2134567890 1611746158  57% /volume1/@appstore
+/dev/mapper/cachedev_0 3746314048 2134567890 1611746158  57% /volume1/@docker
+/dev/usb1p1          122085376  45678912  76406464  37% /volumeUSB1/usbshare
+nas2:/volume1/backup 7811748864 3905874432 3905874432  50% /volume1/net/nas2
+
+<<<m64:attr>>>
+/proc/sys/kernel/osrelease	4.4.302+
+/run/systemd/system	1
+/sys/block/sata1/device/model	WD40EFZX-68AWUN0
+/sys/block/sata1/queue/rotational	1
+/sys/block/sata2/device/model	WD40EFZX-68AWUN0
+/sys/block/sata2/queue/rotational	1
+/sys/class/net/docker0/operstate	up
+/sys/class/net/docker0/carrier	1
+/sys/class/net/docker0/address	02:42:ac:11:00:01
+/sys/class/net/docker0/mtu	1500
+/sys/class/net/docker0/bridge	1
+/sys/class/net/docker9b1c2d3/operstate	up
+/sys/class/net/docker9b1c2d3/carrier	1
+/sys/class/net/docker9b1c2d3/speed	10000
+/sys/class/net/docker9b1c2d3/duplex	full
+/sys/class/net/docker9b1c2d3/address	ce:11:22:33:44:55
+/sys/class/net/docker9b1c2d3/mtu	1500
+/sys/class/net/docker9b1c2d3/master	../docker0
+/sys/class/net/eth0/operstate	up
+/sys/class/net/eth0/carrier	1
+/sys/class/net/eth0/speed	1000
+/sys/class/net/eth0/duplex	full
+/sys/class/net/eth0/address	00:11:32:aa:bb:cc
+/sys/class/net/eth0/mtu	1500
+/sys/class/net/eth0/statistics/rx_crc_errors	0
+/sys/class/net/eth0/device	1
+/sys/class/net/eth1/operstate	down
+/sys/class/net/eth1/carrier	0
+/sys/class/net/eth1/address	00:11:32:aa:bb:cd
+/sys/class/net/eth1/mtu	1500
+/sys/class/net/eth1/statistics/rx_crc_errors	0
+/sys/class/net/eth1/device	1
+/sys/class/net/sit0/operstate	down
+/sys/class/net/sit0/address	00:00:00:00
+/sys/class/net/sit0/mtu	1480
+/sys/class/hwmon/hwmon0/name	coretemp
+/sys/class/hwmon/hwmon0/temp1_input	45000
+/sys/class/hwmon/hwmon0/temp1_label	Package id 0
+/sys/class/hwmon/hwmon0/temp1_crit	105000
+/sys/class/hwmon/hwmon0/temp1_max	105000
+/sys/class/hwmon/hwmon0/device	../../../coretemp.0
+
+<<<m64:systemd_failed>>>
+
+<<<m64:systemd_state>>>
+running
+
+<<<m64:note>>>
+smart sudo -n smartctl nicht erlaubt
+
+<<<m64:end>>>

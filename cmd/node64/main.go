@@ -49,6 +49,7 @@ import (
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/monitor64"
 	"github.com/ipv64net/node64/internal/nodecfg"
 	"github.com/ipv64net/node64/internal/nodecfg/nodecluster"
 	"github.com/ipv64net/node64/internal/notify"
@@ -297,6 +298,11 @@ func run() error {
 		s64Module.SetPorts(portReg)                                            // UDP 6464 nur bei "auch gemessen"
 		portReg.Provide(sonar64.Name, s64Module.Claims)
 		modules.Register(s64Module)
+	}
+	if monitor64.Enabled() { // Monitor64 bis zur Freigabe nur mit NODE64_MONITOR64=1 (Plan: Veroeffentlichung)
+		m64Module := monitor64.New(st, logger.Slog(), box, cfg.DataDir, Version)
+		m64Module.SetNotifier(dispatcher.Dispatch)
+		modules.Register(m64Module)
 	}
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()

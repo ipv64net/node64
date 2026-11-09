@@ -1,0 +1,7 @@
+{"boot-info":{"mode":"efi","secureboot":false},"cpu":0.0215,"cpuinfo":{"cpus":4,"model":"AMD Ryzen 5 PRO 4650GE with Radeon Graphics","sockets":1},
+  "current-kernel":{"machine":"x86_64","release":"6.8.12-4-pve","sysname":"Linux","version":"#1 SMP PREEMPT_DYNAMIC PMX 6.8.12-4"},
+  "info":{"fingerprint":"9a:3b:44:1c:aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff:00:11:22:33:44:55"},
+  "kversion":"Linux 6.8.12-4-pve #1 SMP PREEMPT_DYNAMIC PMX 6.8.12-4","loadavg":[0.12,0.18,0.21],
+  "memory":{"free":12000000000,"total":16000000000,"used":4000000000},
+  "root":{"avail":50000000000,"total":60000000000,"used":10000000000},
+  "swap":{"free":4294967296,"total":4294967296,"used":0},"uptime":864000,"wait":0.0012}

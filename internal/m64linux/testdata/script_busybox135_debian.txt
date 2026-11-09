@@ -1,0 +1,310 @@
+
+<<<m64:start>>>
+1
+
+<<<m64:file:/proc/uptime>>>
+55259.42 656633.80
+
+<<<m64:file:/proc/stat>>>
+cpu  467472 7 80943 65663381 53592 0 19947 4131 0 0
+cpu0 38152 0 6763 5471658 4892 0 11630 306 0 0
+cpu1 39126 0 6789 5472615 4009 0 3732 320 0 0
+cpu2 38088 0 6696 5474162 3493 0 1483 268 0 0
+cpu3 39144 0 6696 5472568 3948 0 784 406 0 0
+cpu4 39947 0 6693 5472299 3327 0 490 344 0 0
+cpu5 39977 0 6796 5471911 3747 0 310 256 0 0
+cpu6 39732 0 6667 5471656 4350 0 225 378 0 0
+cpu7 38690 0 6680 5473008 4136 0 151 318 0 0
+cpu8 39050 0 6818 5472590 3969 0 136 361 0 0
+cpu9 38539 6 6712 5468513 8512 0 120 363 0 0
+cpu10 38121 0 6781 5470815 4386 0 643 350 0 0
+cpu11 38901 0 6845 5471580 4819 0 237 456 0 0
+intr 60420661 31 9 0 0 0 0 3 0 0 0 0 32 15 0 0 0 0 0 0 0 0 0 0 0 0 0 0 45458 56371 51548 52295 46634 52631 61416 52674 46811 52708 53720 61546 0 1388409 1011964 0 30959 0 4408 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ctxt 53441245
+btime 1794171014
+processes 248752
+procs_running 1
+procs_blocked 0
+softirq 13192444 1 1729446 389 3336357 0 0 32849 4577264 6171 3509967
+
+<<<m64:file:/proc/meminfo>>>
+MemTotal:        8129272 kB
+MemFree:          814428 kB
+MemAvailable:    7240268 kB
+Buffers:          464692 kB
+Cached:          5828444 kB
+SwapCached:          148 kB
+Active:          3545260 kB
+Inactive:        3136136 kB
+Active(anon):        668 kB
+Inactive(anon):   390820 kB
+Active(file):    3544592 kB
+Inactive(file):  2745316 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:        998396 kB
+SwapFree:         996860 kB
+Zswap:                 0 kB
+Zswapped:              0 kB
+Dirty:               820 kB
+Writeback:             0 kB
+AnonPages:        342400 kB
+Mapped:           209348 kB
+Shmem:              3228 kB
+KReclaimable:     441092 kB
+Slab:             528884 kB
+SReclaimable:     441092 kB
+SUnreclaim:        87792 kB
+KernelStack:        4796 kB
+PageTables:         3620 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     5063032 kB
+Committed_AS:    2034848 kB
+VmallocTotal:   34359738367 kB
+VmallocUsed:       24328 kB
+VmallocChunk:          0 kB
+Percpu:            10304 kB
+HardwareCorrupted:     0 kB
+AnonHugePages:    192512 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+DirectMap4k:      137064 kB
+DirectMap2M:     8251392 kB
+
+<<<m64:file:/proc/loadavg>>>
+0.14 0.28 0.18 1/293 248762
+
+<<<m64:file:/proc/mounts>>>
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+udev /dev devtmpfs rw,nosuid,relatime,size=4038008k,nr_inodes=1009502,mode=755,inode64 0 0
+devpts /dev/pts devpts rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,noexec,relatime,size=812928k,mode=755,inode64 0 0
+/dev/sda1 / ext4 rw,relatime,errors=remount-ro 0 0
+securityfs /sys/kernel/security securityfs rw,nosuid,nodev,noexec,relatime 0 0
+tmpfs /dev/shm tmpfs rw,nosuid,nodev,inode64 0 0
+tmpfs /run/lock tmpfs rw,nosuid,nodev,noexec,relatime,size=5120k,inode64 0 0
+cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0
+pstore /sys/fs/pstore pstore rw,nosuid,nodev,noexec,relatime 0 0
+bpf /sys/fs/bpf bpf rw,nosuid,nodev,noexec,relatime,mode=700 0 0
+systemd-1 /proc/sys/fs/binfmt_misc autofs rw,relatime,fd=30,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=297 0 0
+tracefs /sys/kernel/tracing tracefs rw,nosuid,nodev,noexec,relatime 0 0
+hugetlbfs /dev/hugepages hugetlbfs rw,relatime,pagesize=2M 0 0
+debugfs /sys/kernel/debug debugfs rw,nosuid,nodev,noexec,relatime 0 0
+mqueue /dev/mqueue mqueue rw,nosuid,nodev,noexec,relatime 0 0
+configfs /sys/kernel/config configfs rw,nosuid,nodev,noexec,relatime 0 0
+ramfs /run/credentials/systemd-sysctl.service ramfs ro,nosuid,nodev,noexec,relatime,mode=700 0 0
+fusectl /sys/fs/fuse/connections fusectl rw,nosuid,nodev,noexec,relatime 0 0
+ramfs /run/credentials/systemd-sysusers.service ramfs ro,nosuid,nodev,noexec,relatime,mode=700 0 0
+ramfs /run/credentials/systemd-tmpfiles-setup-dev.service ramfs ro,nosuid,nodev,noexec,relatime,mode=700 0 0
+ramfs /run/credentials/systemd-tmpfiles-setup.service ramfs ro,nosuid,nodev,noexec,relatime,mode=700 0 0
+binfmt_misc /proc/sys/fs/binfmt_misc binfmt_misc rw,nosuid,nodev,noexec,relatime 0 0
+sunrpc /run/rpc_pipefs rpc_pipefs rw,relatime 0 0
+nsfs /run/docker/netns/default nsfs rw 0 0
+overlay /var/lib/docker/overlay2/39792cea959e8ee041e15106bfba3dbcad244527938b6692ade8ea5a30fd19fa/merged overlay rw,relatime,lowerdir=/var/lib/docker/overlay2/l/LII5IFWC5BYVAXE2JZRVAPRN5T:/var/lib/docker/overlay2/l/GP3IRU4FM6QPSASIF4G5S3JHLZ:/var/lib/docker/overlay2/l/GWGO3UXFZUFNWVLCOGDWWTYLAM:/var/lib/docker/overlay2/l/YNZYPQVJ7NZWYY2G3RYHUJ5XL7:/var/lib/docker/overlay2/l/YJOEXHV7GLM2ICADLN57BWCTTT:/var/lib/docker/overlay2/l/NYUKU5RKQDZXKOI7BMWZISADQJ:/var/lib/docker/overlay2/l/QGDWN7WDS3G24VENQI7YKNLSGN:/var/lib/docker/overlay2/l/7PRYH3IQQU4UH2WJ6VMMSZJB7D:/var/lib/docker/overlay2/l/XJMW3FB6X6RUY254MEBYD7BFQ4,upperdir=/var/lib/docker/overlay2/39792cea959e8ee041e15106bfba3dbcad244527938b6692ade8ea5a30fd19fa/diff,workdir=/var/lib/docker/overlay2/39792cea959e8ee041e15106bfba3dbcad244527938b6692ade8ea5a30fd19fa/work 0 0
+nsfs /run/docker/netns/f1ee2b000c9c nsfs rw 0 0
+overlay /var/lib/docker/overlay2/5b8c672fee091853a9db362eb2442937b53a43447003042f93487c9018167300/merged overlay rw,relatime,lowerdir=/var/lib/docker/overlay2/l/X75NNWS7WJSXDB63C5PZIQNBYY:/var/lib/docker/overlay2/l/F7Q5ZY5DJ6FFGSGY5I2MDIHRQB:/var/lib/docker/overlay2/l/OGKHNTBL26PS5T6VTK5XMAYOYC:/var/lib/docker/overlay2/l/ND7UUJB6HWB4CKRL64QXDRYRCX:/var/lib/docker/overlay2/l/LDINY3PRFDQ4XN2IKTY3DCRCS7:/var/lib/docker/overlay2/l/THLYDTF2BBOZYNY6PHSADP5UTD:/var/lib/docker/overlay2/l/AD6QKOCUFCXREYP6QIXZSY7CBC:/var/lib/docker/overlay2/l/IAAATWLR353OR4257K3RWKVUIZ:/var/lib/docker/overlay2/l/3C2I6NPUG6WC4RVSTMM4D3CWFG:/var/lib/docker/overlay2/l/IQCWLEJ5OAVVMCRQAJW43EQWI4:/var/lib/docker/overlay2/l/RKWROCYYGOQ4VPEQ5P6SLYNZDM:/var/lib/docker/overlay2/l/5AWO2J2EJN6OFBTAOMVBFQRTLW,upperdir=/var/lib/docker/overlay2/5b8c672fee091853a9db362eb2442937b53a43447003042f93487c9018167300/diff,workdir=/var/lib/docker/overlay2/5b8c672fee091853a9db362eb2442937b53a43447003042f93487c9018167300/work 0 0
+nsfs /run/docker/netns/2da198eb3a89 nsfs rw 0 0
+overlay /var/lib/docker/overlay2/b5774c50bbdff02b7392a3a2d5b5f8687021ffbb6a71fefcae117404b05f3cd7/merged overlay rw,relatime,lowerdir=/var/lib/docker/overlay2/l/NXRFMQVCC5XMHSC2FTM6VGQYNN:/var/lib/docker/overlay2/l/6HCXCN7WFC2UDTYN24JHL3FKEI:/var/lib/docker/overlay2/l/FKHNGYJ7LGPCBV2NGXM7AVE32P:/var/lib/docker/overlay2/l/LJ5ZXTR2O3N3EUNU7LDGTDW2U6,upperdir=/var/lib/docker/overlay2/b5774c50bbdff02b7392a3a2d5b5f8687021ffbb6a71fefcae117404b05f3cd7/diff,workdir=/var/lib/docker/overlay2/b5774c50bbdff02b7392a3a2d5b5f8687021ffbb6a71fefcae117404b05f3cd7/work 0 0
+tmpfs /run/user/0 tmpfs rw,nosuid,nodev,relatime,size=812924k,nr_inodes=203231,mode=700,inode64 0 0
+
+<<<m64:file:/proc/diskstats>>>
+   8       0 sda 129689 20685 5843134 42111 500661 1129652 75368800 3474973 0 581240 3619698 27114 0 52054712 21743 67856 80870
+   8       1 sda1 129279 20626 5830250 41980 500625 1128575 75359904 3474293 0 661852 3538017 27114 0 52054712 21743 0 0
+   8       2 sda2 2 0 4 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   8       5 sda5 251 59 6512 98 35 1077 8896 679 0 320 778 0 0 0 0 0 0
+   7       0 loop0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       1 loop1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       2 loop2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       3 loop3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       4 loop4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       5 loop5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       6 loop6 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+   7       7 loop7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+<<<m64:file:/proc/net/dev>>>
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 2441147   18454    0    0    0     0          0         0  2441147   18454    0    0    0     0       0          0
+ ens18: 3450387646 1649819    0    0    0     0          0         0 237365114 1157844    0    0    0     0       0          0
+docker0: 20338990  292253    0    0    0     0          0         0 1219433268  456125    0    0    0     0       0          0
+br-3e1527799341:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+br-d28b5f971274:     168       6    0    0    0     0          0         0      526       5    0    0    0     0       0          0
+vethe24de3a:     126       3    0    0    0     0          0         0     2778      37    0    0    0     0       0          0
+veth978671e:     126       3    0    0    0     0          0         0     2626      35    0    0    0     0       0          0
+
+<<<m64:df>>>
+Filesystem           Type       1024-blocks    Used Available Capacity Mounted on
+udev                 devtmpfs     4038008         0   4038008   0% /dev
+tmpfs                tmpfs         812928       816    812112   0% /run
+/dev/sda1            ext4        50303512  26834988  20880776  56% /
+tmpfs                tmpfs        4064636         0   4064636   0% /dev/shm
+tmpfs                tmpfs           5120         0      5120   0% /run/lock
+overlay              overlay     50303512  26834988  20880776  56% /var/lib/docker/overlay2/39792cea959e8ee041e15106bfba3dbcad244527938b6692ade8ea5a30fd19fa/merged
+overlay              overlay     50303512  26834988  20880776  56% /var/lib/docker/overlay2/5b8c672fee091853a9db362eb2442937b53a43447003042f93487c9018167300/merged
+overlay              overlay     50303512  26834988  20880776  56% /var/lib/docker/overlay2/b5774c50bbdff02b7392a3a2d5b5f8687021ffbb6a71fefcae117404b05f3cd7/merged
+tmpfs                tmpfs         812924         0    812924   0% /run/user/0
+
+<<<m64:df_i>>>
+Filesystem              Inodes      Used Available Capacity Mounted on
+udev                   1009502       369   1009133   0% /dev
+tmpfs                  1016159       617   1015542   0% /run
+/dev/sda1              3219456    338235   2881221  11% /
+tmpfs                  1016159         1   1016158   0% /dev/shm
+tmpfs                  1016159         2   1016157   0% /run/lock
+overlay                3219456    338235   2881221  11% /var/lib/docker/overlay2/39792cea959e8ee041e15106bfba3dbcad244527938b6692ade8ea5a30fd19fa/merged
+overlay                3219456    338235   2881221  11% /var/lib/docker/overlay2/5b8c672fee091853a9db362eb2442937b53a43447003042f93487c9018167300/merged
+overlay                3219456    338235   2881221  11% /var/lib/docker/overlay2/b5774c50bbdff02b7392a3a2d5b5f8687021ffbb6a71fefcae117404b05f3cd7/merged
+tmpfs                   203231        20    203211   0% /run/user/0
+
+<<<m64:attr>>>
+/proc/sys/kernel/osrelease	6.1.0-53-amd64
+/run/systemd/system	1
+/lib/modules/6.1.0-29-amd64/modules.dep	1
+/lib/modules/6.1.0-32-amd64/modules.dep	1
+/lib/modules/6.1.0-40-amd64/modules.dep	1
+/lib/modules/6.1.0-53-amd64/modules.dep	1
+/sys/block/sda/device/model	QEMU HARDDISK   
+/sys/block/sda/queue/rotational	0
+/sys/class/net/br-3e1527799341/operstate	down
+/sys/class/net/br-3e1527799341/carrier	0
+/sys/class/net/br-3e1527799341/speed	-1
+/sys/class/net/br-3e1527799341/duplex	unknown
+/sys/class/net/br-3e1527799341/address	b2:bd:9b:0d:5f:e9
+/sys/class/net/br-3e1527799341/mtu	1500
+/sys/class/net/br-3e1527799341/statistics/rx_crc_errors	0
+/sys/class/net/br-3e1527799341/bridge	1
+/sys/class/net/br-3e1527799341/uevent	DEVTYPE=bridge
+/sys/class/net/br-d28b5f971274/operstate	up
+/sys/class/net/br-d28b5f971274/carrier	1
+/sys/class/net/br-d28b5f971274/speed	10000
+/sys/class/net/br-d28b5f971274/duplex	unknown
+/sys/class/net/br-d28b5f971274/address	36:e4:bf:8c:e1:c8
+/sys/class/net/br-d28b5f971274/mtu	1500
+/sys/class/net/br-d28b5f971274/statistics/rx_crc_errors	0
+/sys/class/net/br-d28b5f971274/bridge	1
+/sys/class/net/br-d28b5f971274/uevent	DEVTYPE=bridge
+/sys/class/net/docker0/operstate	down
+/sys/class/net/docker0/carrier	0
+/sys/class/net/docker0/speed	-1
+/sys/class/net/docker0/duplex	unknown
+/sys/class/net/docker0/address	9e:81:07:cc:2c:76
+/sys/class/net/docker0/mtu	1500
+/sys/class/net/docker0/statistics/rx_crc_errors	0
+/sys/class/net/docker0/bridge	1
+/sys/class/net/docker0/uevent	DEVTYPE=bridge
+/sys/class/net/ens18/operstate	up
+/sys/class/net/ens18/carrier	1
+/sys/class/net/ens18/speed	-1
+/sys/class/net/ens18/duplex	unknown
+/sys/class/net/ens18/address	bc:24:11:42:6c:6f
+/sys/class/net/ens18/mtu	1500
+/sys/class/net/ens18/statistics/rx_crc_errors	0
+/sys/class/net/ens18/device	1
+/sys/class/net/veth978671e/operstate	up
+/sys/class/net/veth978671e/carrier	1
+/sys/class/net/veth978671e/speed	10000
+/sys/class/net/veth978671e/duplex	full
+/sys/class/net/veth978671e/address	0a:eb:c4:96:43:5e
+/sys/class/net/veth978671e/mtu	1500
+/sys/class/net/veth978671e/statistics/rx_crc_errors	0
+/sys/class/net/veth978671e/master	../br-d28b5f971274
+/sys/class/net/vethe24de3a/operstate	up
+/sys/class/net/vethe24de3a/carrier	1
+/sys/class/net/vethe24de3a/speed	10000
+/sys/class/net/vethe24de3a/duplex	full
+/sys/class/net/vethe24de3a/address	d2:2e:c1:f0:1d:81
+/sys/class/net/vethe24de3a/mtu	1500
+/sys/class/net/vethe24de3a/statistics/rx_crc_errors	0
+/sys/class/net/vethe24de3a/master	../br-d28b5f971274
+
+<<<m64:note>>>
+updates kein Paketverwalter erkannt
+
+<<<m64:smart:/dev/sda>>>
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      3
+    ],
+    "svn_revision": "5338",
+    "platform_info": "x86_64-linux-6.1.0-53-amd64",
+    "build_info": "(local build)",
+    "argv": [
+      "smartctl",
+      "-j",
+      "-a",
+      "-n",
+      "standby",
+      "-d",
+      "scsi",
+      "/dev/sda"
+    ],
+    "exit_status": 4
+  },
+  "local_time": {
+    "time_t": 1794226274,
+    "asctime": "Mon Nov  9 13:11:14 2026 CET"
+  },
+  "device": {
+    "name": "/dev/sda",
+    "info_name": "/dev/sda",
+    "type": "scsi",
+    "protocol": "SCSI"
+  },
+  "scsi_vendor": "QEMU",
+  "scsi_product": "QEMU HARDDISK",
+  "scsi_model_name": "QEMU QEMU HARDDISK",
+  "scsi_revision": "2.5+",
+  "scsi_version": "SPC-3",
+  "user_capacity": {
+    "blocks": 104857600,
+    "bytes": 53687091200
+  },
+  "logical_block_size": 512,
+  "scsi_lb_provisioning": {
+    "name": "thin provisioned",
+    "value": 2,
+    "management_enabled": {
+      "name": "LBPME",
+      "value": -1
+    },
+    "read_zeros": {
+      "name": "LBPRZ",
+      "value": 0
+    }
+  },
+  "rotation_rate": 0,
+  "device_type": {
+    "scsi_terminology": "Peripheral Device Type [PDT]",
+    "scsi_value": 0,
+    "name": "disk"
+  },
+  "smart_support": {
+    "available": false
+  },
+  "temperature": {
+    "current": 0
+  },
+  "scsi_temperature": {
+    "drive_trip": 0
+  }
+}
+
+<<<m64:end>>>

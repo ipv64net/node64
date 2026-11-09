@@ -1,0 +1,8 @@
+{"uptime":1296000,"idle":0,"wait":0.00213,"cpu":0.0734,"loadavg":["0.84","0.67","0.59"],
+  "kversion":"Linux 6.8.12-4-pve #1 SMP PREEMPT_DYNAMIC PMX 6.8.12-4 (2024-11-06T15:04Z) x86_64","pveversion":"pve-manager/8.3.0/c1689ccb1065a83b",
+  "cpuinfo":{"user_hz":100,"mhz":"3400.000","cores":4,"sockets":1,"model":"Intel(R) Core(TM) i5-8500T CPU @ 2.10GHz","cpus":8,"hvm":"1","flags":"fpu vme de pse tsc msr pae mce"},
+  "memory":{"total":33544937472,"used":14123843584,"free":19421093888},
+  "swap":{"used":104857600,"total":8589930496,"free":8485072896},
+  "rootfs":{"free":71553417216,"total":100861726720,"avail":66392444928,"used":29308309504},
+  "ksm":{"shared":0},"current-kernel":{"sysname":"Linux","release":"6.8.12-4-pve","version":"#1 SMP PREEMPT_DYNAMIC PMX 6.8.12-4","machine":"x86_64"},
+  "boot-info":{"mode":"efi","secureboot":0}}

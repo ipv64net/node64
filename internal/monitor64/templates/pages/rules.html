@@ -1,0 +1,59 @@
+{{define "content"}}
+{{template "m64-top" .}}
+{{$d := .Data}}
+<div id="m64" data-m64-page="rules">
+	<h1 class="h3 mb-3">{{.T "monitor64.tab.rules"}}</h1>
+	<p class="text-body-secondary">{{.T "monitor64.rl.intro"}}</p>
+	<ul class="nav nav-tabs mb-3" role="tablist">
+		<li class="nav-item" role="presentation"><a class="nav-link active" data-bs-toggle="tab" href="#m64-t1" role="tab" id="m64-tab-std">{{.T "monitor64.rl.std"}}</a></li>
+		<li class="nav-item" role="presentation"><a class="nav-link" data-bs-toggle="tab" href="#m64-t2" role="tab" id="m64-tab-ovr">{{.T "monitor64.rl.overrides"}} <span class="badge text-bg-secondary" id="m64-ovr-count">0</span></a></li>
+	</ul>
+	<div class="tab-content">
+		<div class="tab-pane fade show active" id="m64-t1" role="tabpanel">
+			<form id="m64-std-form">
+			{{range $d.Std}}
+			<div class="card mb-3">
+				<div class="card-header fw-semibold">{{$.T (printf "monitor64.rgroup.%s" .Group)}}</div>
+				<div class="table-responsive"><table class="table mb-0 rules-table">
+					<thead><tr><th>{{$.T "monitor64.rl.value"}}</th><th>{{$.T "monitor64.rl.warn"}}</th><th>{{$.T "monitor64.rl.crit"}}</th><th class="d-none d-sm-table-cell">{{$.T "monitor64.rl.for"}}</th></tr></thead>
+					<tbody>
+					{{range .Rows}}
+					<tr data-kind="{{.Kind}}"{{if .Factor}} data-factor="{{.Factor}}"{{end}}>
+						<td>{{.Label}}</td>
+						<td><div class="input-group input-group-sm m64-num"><input class="form-control" name="warn" value="{{.Warn}}" inputmode="decimal" aria-label="{{$.T "monitor64.rl.warn"}}"><span class="input-group-text">{{.Unit}}</span></div></td>
+						<td><div class="input-group input-group-sm m64-num"><input class="form-control" name="crit" value="{{.Crit}}" inputmode="decimal" aria-label="{{$.T "monitor64.rl.crit"}}"><span class="input-group-text">{{.Unit}}</span></div></td>
+						<td class="d-none d-sm-table-cell">{{if .NoFor}}<span class="text-body-tertiary">–</span>{{else}}{{$f := .For}}<select class="form-select form-select-sm m64-dur" name="for" aria-label="{{$.T "monitor64.rl.for"}}">{{range .ForOpts}}<option value="{{.Sec}}"{{if eq .Sec $f}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{end}}</td>
+					</tr>
+					{{end}}
+					</tbody>
+				</table></div>
+				{{if eq .Group "storage"}}<div class="card-footer small text-body-secondary"><i class="bi bi-info-circle"></i> {{$.T "monitor64.rl.storage_hint"}}</div>{{end}}
+			</div>
+			{{end}}
+			<div class="card mb-3">
+				<div class="card-header fw-semibold">{{.T "monitor64.rl.fixed"}} <span class="small text-body-secondary fw-normal">– {{.T "monitor64.rl.fixed_sub"}}</span></div>
+				<ul class="list-group list-group-flush">
+				{{range $d.Fixed}}
+					<li class="list-group-item d-flex align-items-center gap-2" data-kind="{{.Kind}}"><span class="small me-auto">{{.Label}}</span>
+						<select class="form-select form-select-sm w-auto" name="severity" aria-label="{{.Label}}">
+							<option value="crit"{{if eq .Severity "crit"}} selected{{end}}>{{$.T "monitor64.state.crit"}}</option>
+							<option value="warn"{{if eq .Severity "warn"}} selected{{end}}>{{$.T "monitor64.state.warn"}}</option>
+							<option value="off"{{if eq .Severity "off"}} selected{{end}}>{{$.T "monitor64.rl.sev_off"}}</option>
+						</select></li>
+				{{end}}
+					<li class="list-group-item small text-body-secondary"><i class="bi bi-magic"></i> {{.T "monitor64.rl.soll_hint"}}</li>
+				</ul>
+			</div>
+			<button class="btn btn-primary" type="submit" id="m64-std-save">{{.T "monitor64.save"}}</button>
+			</form>
+		</div>
+		<div class="tab-pane fade" id="m64-t2" role="tabpanel">
+			<div id="m64-ovr"></div>
+			<div id="m64-ovr-form"></div>
+			<div id="m64-own"></div>
+		</div>
+	</div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

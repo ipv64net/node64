@@ -424,7 +424,7 @@ func isDownKind(k Kind) bool {
 	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindUnchecked || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
 		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindCertFail || k == KindCertExpiry || k == KindCDNOnlineDown ||
 		k == KindCDNOnlineBlocked || k == KindClusterDown || k == KindHoneypotWatch || k == KindHoneypotLogin || k == KindProxmoxDown || k == KindProxmoxThreshold ||
-		k == KindUpdateFailed
+		k == KindUpdateFailed || k == KindMonitorProblem || k == KindMonitorUnreachable || k == KindMonitorFlapping || k == KindMonitorReminder
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
@@ -534,6 +534,9 @@ func (d *Dispatcher) releaseHeld(ctx context.Context) {
 // heldKey: wofuer in der Sammelmeldung der letzte Stand zaehlt – je Check; bei Proxmox VE je System und Ressource,
 // getrennt nach Zustand, Schwelle (cpu, mem, disk) und Neustart.
 func heldKey(a Alert) string {
+	if IsMonitor(a.Kind) { // je Host und Dienst (Data["key"], leer = mehrere bzw. der Host selbst)
+		return "m64|" + a.Check.Token + "|" + a.Data["key"]
+	}
 	if !IsProxmox(a.Kind) {
 		return a.Check.Token
 	}
@@ -575,13 +578,17 @@ func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 		lang := ch.Lang
 		sort.Slice(items, func(i, j int) bool { return items[i].Check.Name < items[j].Check.Name })
 		var lines []string
-		stillDown, pve := 0, 0
+		stillDown, pve, mon := 0, 0, 0
 		for _, a := range items {
 			at := d.i18n.FormatDateTime(lang, first[heldKey(a)].Time, loc)
 			msg := a.Message
 			if IsProxmox(a.Kind) { // Text des Ereignisses (Art, Gast, Wert) in der Sprache des Kanals
 				pve++
 				msg = d.proxmoxEventText(lang, a)
+			}
+			if IsMonitor(a.Kind) {
+				mon++
+				msg = d.monitorSummary(lang, a)
 			}
 			switch {
 			case a.Kind == KindProxmoxRestarted: // Hinweis, keine Stoerung
@@ -598,6 +605,11 @@ func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 			kind, path = KindSummary, "/healthchecks?state=down"
 		}
 		link, subject := d.listURL(uid, path), "notify.subject.quiet_digest"
+		if mon > 0 && mon == len(items) { // nur Monitor64: Link auf dessen Probleme
+			subject, link = "notify.subject.quiet_digest_events", d.baseURL(uid, "/monitor64/problems")
+		} else if mon > 0 {
+			subject = "notify.subject.quiet_digest_events"
+		}
 		if pve > 0 { // Proxmox VE dabei: „Meldungen“ statt „Checks“; nur Proxmox: Link auf die Proxmox-Seite
 			subject = "notify.subject.quiet_digest_events"
 			if pve == len(items) {
@@ -819,6 +831,9 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	}
 	if IsProxmox(a.Kind) {
 		return d.composeProxmox(lang, a, m)
+	}
+	if IsMonitor(a.Kind) {
+		return d.composeMonitor(lang, a, m)
 	}
 	if IsModule(a.Kind) {
 		return d.composeDynDNS(lang, a, m)

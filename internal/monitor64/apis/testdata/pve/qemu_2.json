@@ -1,0 +1,7 @@
+[
+  {"vmid":101,"name":"web01","status":"running","cpu":0.1234,"cpus":2,"mem":2684354560,"maxmem":4294967296,"disk":0,"maxdisk":34359738368,"netin":1075000000,"netout":507500000,"diskread":2060000000,"diskwrite":3120000000,"uptime":86460,"pid":2345,"tags":"prod;web"},
+  {"vmid":102,"name":"win11","status":"stopped","cpu":0,"cpus":4,"mem":0,"maxmem":8589934592,"disk":0,"maxdisk":68719476736,"netin":0,"netout":0,"diskread":0,"diskwrite":0,"uptime":0},
+  {"vmid":103,"name":"test","status":"stopped","cpus":1,"maxmem":1073741824,"maxdisk":8589934592,"uptime":0,"tags":"nomonitor"},
+  {"vmid":104,"name":"db01","status":"stopped","lock":"backup","cpus":2,"maxmem":4294967296,"maxdisk":34359738368,"uptime":0},
+  {"vmid":9000,"name":"debian-tpl","status":"stopped","template":1,"cpus":1,"maxmem":2147483648,"maxdisk":4294967296,"uptime":0}
+]

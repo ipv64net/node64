@@ -1,0 +1,6 @@
+[
+  {"storage":"local","type":"dir","content":"iso,vztmpl,backup","active":1,"enabled":1,"shared":0,"total":100861726720,"used":29308309504,"avail":66392444928,"used_fraction":0.290580},
+  {"storage":"local-zfs","type":"zfspool","content":"images,rootdir","active":1,"enabled":1,"shared":0,"total":447028838400,"used":122045337600,"avail":324983500800,"used_fraction":0.273013},
+  {"storage":"nas-backup","type":"nfs","content":"backup","active":0,"enabled":1,"shared":1,"total":0,"used":0,"avail":0},
+  {"storage":"old-lvm","type":"lvmthin","content":"images,rootdir","active":0,"enabled":0,"shared":0}
+]

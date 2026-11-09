@@ -1,0 +1,7 @@
+[
+  {"id":"quorum","type":"quorum","node":"pve1","status":"OK","quorate":1},
+  {"id":"master","type":"master","node":"pve2","status":"pve2 (active, Mon Nov  9 10:00:00 2026)","timestamp":1794218400},
+  {"id":"lrm:pve1","type":"lrm","node":"pve1","status":"pve1 (active, Mon Nov  9 10:00:02 2026)","state":"active","timestamp":1794218402},
+  {"id":"service:vm:101","type":"service","sid":"vm:101","node":"pve1","state":"started","status":"vm:101 (pve1, started)","crm_state":"started","request_state":"started","max_restart":1,"max_relocate":1},
+  {"id":"service:ct:200","type":"service","sid":"ct:200","node":"pve1","state":"error","status":"ct:200 (pve1, error)","crm_state":"error","request_state":"started","max_restart":1,"max_relocate":1}
+]

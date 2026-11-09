@@ -1,0 +1,30 @@
+{{define "m64-top"}}
+<link rel="stylesheet" href="/monitor64/monitor64.css?v={{.Version}}">
+<ul class="nav nav-tabs mb-3 m64-tabs" id="m64-tabs">
+	{{range .Data.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> <span class="d-none d-sm-inline">{{$.T .TitleKey}}</span>{{if .Badge}} <span class="badge rounded-pill text-bg-danger ms-1" data-m64-badge>{{.Badge}}</span>{{end}}</a></li>{{end}}
+</ul>
+{{if not .Data.Running}}<div class="alert alert-warning small py-2" id="m64-not-running"><i class="bi bi-pause-circle"></i> {{.T "monitor64.not_running"}}</div>{{end}}
+{{end}}
+
+{{define "m64-bottom"}}
+<script type="application/json" id="m64-data">{{.Data.JS}}</script>
+<div class="modal fade" id="m64-modal" tabindex="-1" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-scrollable">
+		<div class="modal-content">
+			<div class="modal-header"><h5 class="modal-title" id="m64-modal-title"></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "monitor64.close"}}"></button></div>
+			<div class="modal-body" id="m64-modal-body"></div>
+			<div class="modal-footer" id="m64-modal-foot"></div>
+		</div>
+	</div>
+</div>
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+	<div class="toast align-items-center border-0" id="m64-toast" role="status" aria-live="polite">
+		<div class="d-flex"><div class="toast-body" id="m64-toast-text"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{.T "monitor64.close"}}"></button></div>
+	</div>
+</div>
+{{end}}
+
+{{define "m64-scripts"}}
+<script src="/static/js/chart.umd.js?v={{.Version}}"></script>
+<script src="/monitor64/monitor64.js?v={{.Version}}"></script>
+{{end}}

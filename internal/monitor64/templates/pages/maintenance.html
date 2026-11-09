@@ -1,0 +1,14 @@
+{{define "content"}}
+{{template "m64-top" .}}
+<div id="m64" data-m64-page="maint">
+	<div class="d-flex align-items-center mb-3"><h1 class="h3 mb-0 me-auto">{{.T "monitor64.tab.maint"}}</h1><button class="btn btn-primary btn-sm" type="button" id="m64-maint-new"><i class="bi bi-plus-lg"></i> {{.T "monitor64.mt.new"}}</button></div>
+	<p class="text-body-secondary small">{{.T "monitor64.mt.intro"}}</p>
+	<div id="m64-maint-form"></div>
+	<div class="card"><div class="table-responsive"><table class="table mb-0 align-middle">
+		<thead><tr><th>{{.T "monitor64.mt.reason"}}</th><th>{{.T "monitor64.mt.targets"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.mt.time"}}</th><th>{{.T "monitor64.col.status"}}</th><th></th></tr></thead>
+		<tbody id="m64-maint-list"></tbody>
+	</table></div></div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

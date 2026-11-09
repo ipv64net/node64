@@ -1,0 +1,29 @@
+Personalities : [raid1] [raid6] [raid5] [raid4] [linear] [multipath] [raid0] [raid10] 
+md0 : active raid5 sdd[3] sdc[2] sdb[1] sda[0]
+      11720661504 blocks super 1.2 level 5, 512k chunk, algorithm 2 [4/4] [UUUU]
+      [==>..................]  resync = 12.6% (493286144/3906887168) finish=380.5min speed=149302K/sec
+      bitmap: 22/30 pages [88KB], 65536KB chunk
+
+md1 : active raid1 sdf[2] sde[0] sdg[1](F)
+      3906886464 blocks super 1.2 [2/1] [U_]
+      [=======>.............]  recovery = 38.1% (1488583168/3906886464) finish=212.3min speed=189765K/sec
+      bitmap: 0/30 pages [0KB], 65536KB chunk
+
+md2 : active raid1 sdh1[1](S) sdi1[0]
+      976630464 blocks super 1.2 [2/1] [U_]
+
+md3 : active (auto-read-only) raid0 sdj[1] sdk[0]
+      1953260544 blocks super 1.2 512k chunks
+
+md4 : inactive sdl[0](S)
+      976631512 blocks super 1.2
+
+md5 : active raid6 sdm[0] sdn[1] sdo[2] sdp[3]
+      3906764800 blocks super 1.2 level 6, 512k chunk, algorithm 2 [4/4] [UUUU]
+      [>....................]  check =  2.5% (49024000/1953382400) finish=200.1min speed=158400K/sec
+
+md6 : active raid1 sdq1[0] sdr1[1]
+      976630464 blocks super 1.2 [2/2] [UU]
+        resync=DELAYED
+
+unused devices: <none>

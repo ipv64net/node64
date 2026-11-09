@@ -1,0 +1,9 @@
+{"health":"PASSED","type":"ata","attributes":[
+  {"id":"  1","name":"Raw_Read_Error_Rate","value":"200","worst":"200","threshold":"051","fail":"-","flags":"POSR-K","raw":"0","normalized":200},
+  {"id":"  5","name":"Reallocated_Sector_Ct","value":"200","worst":"200","threshold":"140","fail":"-","flags":"PO--CK","raw":"0","normalized":200},
+  {"id":"  9","name":"Power_On_Hours","value":"052","worst":"052","threshold":"000","fail":"-","flags":"-O--CK","raw":"35210","normalized":52},
+  {"id":"194","name":"Temperature_Celsius","value":"115","worst":"098","threshold":"000","fail":"-","flags":"-O---K","raw":"35","normalized":115},
+  {"id":"197","name":"Current_Pending_Sector","value":"200","worst":"200","threshold":"000","fail":"-","flags":"-O--CK","raw":"0","normalized":200},
+  {"id":"198","name":"Offline_Uncorrectable","value":"100","worst":"253","threshold":"000","fail":"-","flags":"----CK","raw":"0","normalized":100},
+  {"id":"199","name":"UDMA_CRC_Error_Count","value":"200","worst":"200","threshold":"000","fail":"-","flags":"-O--CK","raw":"0","normalized":200}
+]}

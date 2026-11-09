@@ -1,0 +1,26 @@
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 2],
+    "argv": ["smartctl", "-j", "-a", "/dev/sde"],
+    "messages": [{"string": "Warning: This result is based on an Attribute check.", "severity": "warning"}],
+    "exit_status": 24
+  },
+  "device": {"name": "/dev/sde", "info_name": "/dev/sde [SAT]", "type": "sat", "protocol": "ATA"},
+  "model_name": "Crucial_CT500MX200SSD1",
+  "serial_number": "1530ABCDEF12",
+  "user_capacity": {"blocks": 976773168, "bytes": 500107862016},
+  "rotation_rate": 0,
+  "smart_support": {"available": true, "enabled": true},
+  "ata_smart_attributes": {
+    "revision": 16,
+    "table": [
+      {"id": 5, "name": "Reallocate_NAND_Blk_Cnt", "value": 100, "worst": 100, "thresh": 10, "raw": {"value": 3, "string": "3"}},
+      {"id": 9, "name": "Power_On_Hours", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 40123, "string": "40123"}},
+      {"id": 197, "name": "Current_Pending_Sector", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+      {"id": 202, "name": "Percent_Lifetime_Remain", "value": 9, "worst": 9, "thresh": 1, "raw": {"value": 91, "string": "91"}}
+    ]
+  },
+  "power_on_time": {"hours": 40123},
+  "temperature": {"current": 31}
+}

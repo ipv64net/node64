@@ -1,0 +1,306 @@
+
+<<<m64:start>>>
+1
+
+<<<m64:file:/proc/uptime>>>
+864000.00 3200000.00
+
+<<<m64:file:/proc/stat>>>
+cpu  5678901 23456 1234567 123456789 345678 0 23456 0 0 0
+cpu0 1419725 5864 308641 30864197 86419 0 5864 0 0 0
+cpu1 1419725 5864 308642 30864197 86420 0 5864 0 0 0
+cpu2 1419725 5864 308642 30864197 86419 0 5864 0 0 0
+cpu3 1419726 5864 308642 30864198 86420 0 5864 0 0 0
+intr 234567890 0 9 0
+ctxt 345678901
+btime 1793361600
+processes 2345678
+procs_running 1
+procs_blocked 0
+
+<<<m64:file:/proc/meminfo>>>
+MemTotal:       32768000 kB
+MemFree:        12345678 kB
+MemAvailable:   24567890 kB
+Buffers:            1234 kB
+Cached:         10234567 kB
+SwapCached:            0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+
+<<<m64:file:/proc/loadavg>>>
+2.10 1.95 1.80 4/876 34567
+
+<<<m64:file:/proc/mounts>>>
+rootfs / rootfs rw,size=16249416k,nr_inodes=4062354,inode64 0 0
+proc /proc proc rw,relatime 0 0
+sysfs /sys sysfs rw,relatime 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,noexec,relatime,size=32768k,mode=755,inode64 0 0
+/dev/sda1 /boot vfat rw,noatime,nodiratime,fmask=0177,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,flush,errors=remount-ro 0 0
+/dev/loop0 /lib/firmware squashfs ro,relatime,errors=continue 0 0
+/dev/loop1 /lib/modules squashfs ro,relatime,errors=continue 0 0
+tmpfs /var/log tmpfs rw,relatime,size=131072k,mode=755,inode64 0 0
+/dev/md1p1 /mnt/disk1 xfs rw,noatime,nouuid,attr2,inode64,logbufs=8,logbsize=32k,noquota 0 0
+/dev/md2p1 /mnt/disk2 xfs rw,noatime,nouuid,attr2,inode64,logbufs=8,logbsize=32k,noquota 0 0
+/dev/nvme0n1p1 /mnt/cache btrfs rw,noatime,ssd,discard=async,space_cache=v2,subvolid=5,subvol=/ 0 0
+shfs /mnt/user0 fuse.shfs rw,nosuid,nodev,noatime,user_id=0,group_id=0,default_permissions,allow_other 0 0
+shfs /mnt/user fuse.shfs rw,nosuid,nodev,noatime,user_id=0,group_id=0,default_permissions,allow_other 0 0
+/dev/loop2 /var/lib/docker btrfs rw,noatime,ssd,discard=async,space_cache=v2,subvolid=5,subvol=/ 0 0
+/dev/loop3 /etc/libvirt btrfs rw,noatime,ssd,discard=async,space_cache=v2,subvolid=5,subvol=/ 0 0
+/dev/sdd1 /mnt/disks/My\040Backup ext4 ro,noatime 0 0
+
+<<<m64:file:/proc/diskstats>>>
+   7       0 loop0 123 0 4567 12 0 0 0 0 0 12 12 0 0 0 0 0 0
+   7       1 loop1 234 0 5678 23 0 0 0 0 0 23 23 0 0 0 0 0 0
+   7       2 loop2 34567 0 1234567 3456 45678 0 2345678 4567 0 5678 8023 0 0 0 0 0 0
+   8       0 sda 1234 0 45678 234 56 0 789 12 0 234 246 0 0 0 0 0 0
+   8       1 sda1 1200 0 45600 230 56 0 789 12 0 230 242 0 0 0 0 0 0
+   8      16 sdb 345678 0 123456789 234567 23456 0 3456789 34567 0 245678 269134 0 0 0 0 0 0
+   8      17 sdb1 345600 0 123456700 234560 23450 0 3456780 34560 0 245670 269120 0 0 0 0 0 0
+   8      32 sdc 456789 0 234567890 345678 34567 0 4567890 45678 0 356789 391356 0 0 0 0 0 0
+   8      33 sdc1 456700 0 234567800 345670 34560 0 4567880 45670 0 356780 391340 0 0 0 0 0 0
+   8      48 sdd 1234 0 23456 123 0 0 0 0 0 123 123 0 0 0 0 0 0
+   8      49 sdd1 1200 0 23400 120 0 0 0 0 0 120 120 0 0 0 0 0 0
+ 259       0 nvme0n1 2345678 0 345678901 123456 3456789 0 456789012 234567 0 345678 358023 0 0 0 0 23456 7890
+ 259       1 nvme0n1p1 2345600 0 345678800 123450 3456780 0 456789000 234560 0 345670 358010 0 0 0 0 0 0
+   9       1 md1p1 345678 0 123456789 0 23456 0 3456789 0 0 0 0 0 0 0 0 0 0
+   9       2 md2p1 456789 0 234567890 0 34567 0 4567890 0 0 0 0 0 0 0 0 0 0
+
+<<<m64:file:/proc/net/dev>>>
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 12345678  123456    0    0    0     0          0         0 12345678  123456    0    0    0     0       0          0
+  eth0: 345678901234 234567890    0    0    0     0          0    345678 234567890123 123456789    0    0    0     0       0          0
+ bond0: 345678901234 234567890    0    0    0     0          0    345678 234567890123 123456789    0    0    0     0       0          0
+   br0: 334567890123 224567890    0  123    0     0          0    300000 224567890123 113456789    0    0    0     0       0          0
+docker0: 1234567 12345    0    0    0     0          0         0 2345678 23456    0    0    0     0       0          0
+vethabc1234: 123456 1234    0    0    0     0          0         0 234567 2345    0    0    0     0       0          0
+ virbr0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+
+<<<m64:file:/proc/net/bonding/bond0>>>
+Ethernet Channel Bonding Driver: v6.1.79-Unraid
+
+Bonding Mode: fault-tolerance (active-backup)
+Primary Slave: None
+Currently Active Slave: eth0
+MII Status: up
+MII Polling Interval (ms): 100
+Up Delay (ms): 0
+Down Delay (ms): 0
+Peer Notification Delay (ms): 0
+
+Slave Interface: eth0
+MII Status: up
+Speed: 2500 Mbps
+Duplex: full
+Link Failure Count: 1
+Permanent HW addr: a8:a1:59:11:22:33
+Slave queue ID: 0
+
+<<<m64:df>>>
+Filesystem     Type      1024-blocks       Used  Available Capacity Mounted on
+rootfs         rootfs       16249416    1234567   15014849       8% /
+tmpfs          tmpfs           32768       1234      31534       4% /run
+/dev/sda1      vfat         30015472     987654   29027818       4% /boot
+/dev/loop0     squashfs        34560      34560          0     100% /lib/firmware
+/dev/loop1     squashfs        16384      16384          0     100% /lib/modules
+tmpfs          tmpfs          131072       4567     126505       4% /var/log
+/dev/md1p1     xfs        7811939328 6234567890 1577371438      80% /mnt/disk1
+/dev/md2p1     xfs        7811939328 3456789012 4355150316      45% /mnt/disk2
+/dev/nvme0n1p1 btrfs       976761560  234567890  741234567      25% /mnt/cache
+shfs           fuse.shfs 15623878656 9691356902 5932521754      63% /mnt/user0
+shfs           fuse.shfs 16600640216 9925924792 6673756321      60% /mnt/user
+/dev/loop2     btrfs        20971520   12345678    8123456      61% /var/lib/docker
+/dev/loop3     btrfs          1048576       6789     925000       1% /etc/libvirt
+/dev/sdd1      ext4         960379496  456789012  454789012      51% /mnt/disks/My Backup
+
+<<<m64:df_i>>>
+Filesystem         Inodes   IUsed      IFree IUse% Mounted on
+rootfs            4062354   34567    4027787    1% /
+tmpfs             4096000     789    4095211    1% /run
+/dev/sda1               0       0          0     - /boot
+/dev/loop0              8       8          0  100% /lib/firmware
+/dev/loop1             11      11          0  100% /lib/modules
+tmpfs             4096000     123    4095877    1% /var/log
+/dev/md1p1      781193920  234567  780959353    1% /mnt/disk1
+/dev/md2p1      781193920  123456  781070464    1% /mnt/disk2
+/dev/nvme0n1p1          0       0          0     - /mnt/cache
+shfs           1562387840  358023 1562029817    1% /mnt/user0
+shfs           1562387840  358023 1562029817    1% /mnt/user
+/dev/loop2              0       0          0     - /var/lib/docker
+/dev/loop3              0       0          0     - /etc/libvirt
+/dev/sdd1        61054976   12345   61042631    1% /mnt/disks/My Backup
+
+<<<m64:attr>>>
+/proc/sys/kernel/osrelease	6.1.79-Unraid
+/sys/block/nvme0n1/device/model	CT1000P3SSD8
+/sys/block/nvme0n1/device/serial	2238E6A1B2C3
+/sys/block/nvme0n1/queue/rotational	0
+/sys/block/sda/device/model	Cruzer Fit
+/sys/block/sda/queue/rotational	1
+/sys/block/sdb/device/model	ST8000VN004-3CP1
+/sys/block/sdb/device/wwid	t10.ATA     ST8000VN004-3CP101                          WWZ1ABCD
+/sys/block/sdb/queue/rotational	1
+/sys/block/sdc/device/model	ST8000VN004-3CP1
+/sys/block/sdc/device/wwid	t10.ATA     ST8000VN004-3CP101                          WWZ2EFGH
+/sys/block/sdc/queue/rotational	1
+/sys/block/sdd/device/model	Elements 25A2
+/sys/block/sdd/queue/rotational	1
+/sys/class/net/bond0/operstate	up
+/sys/class/net/bond0/carrier	1
+/sys/class/net/bond0/speed	2500
+/sys/class/net/bond0/duplex	full
+/sys/class/net/bond0/address	a8:a1:59:11:22:33
+/sys/class/net/bond0/mtu	1500
+/sys/class/net/bond0/bonding	1
+/sys/class/net/bond0/master	../br0
+/sys/class/net/br0/operstate	up
+/sys/class/net/br0/carrier	1
+/sys/class/net/br0/address	a8:a1:59:11:22:33
+/sys/class/net/br0/mtu	1500
+/sys/class/net/br0/bridge	1
+/sys/class/net/br0/uevent	DEVTYPE=bridge
+/sys/class/net/docker0/operstate	down
+/sys/class/net/docker0/carrier	0
+/sys/class/net/docker0/address	02:42:12:34:56:78
+/sys/class/net/docker0/mtu	1500
+/sys/class/net/docker0/bridge	1
+/sys/class/net/docker0/uevent	DEVTYPE=bridge
+/sys/class/net/eth0/operstate	up
+/sys/class/net/eth0/carrier	1
+/sys/class/net/eth0/speed	2500
+/sys/class/net/eth0/duplex	full
+/sys/class/net/eth0/address	a8:a1:59:11:22:33
+/sys/class/net/eth0/mtu	1500
+/sys/class/net/eth0/statistics/rx_crc_errors	0
+/sys/class/net/eth0/device	1
+/sys/class/net/eth0/master	../bond0
+/sys/class/net/vethabc1234/operstate	up
+/sys/class/net/vethabc1234/carrier	1
+/sys/class/net/vethabc1234/speed	10000
+/sys/class/net/vethabc1234/duplex	full
+/sys/class/net/vethabc1234/address	12:34:56:78:9a:bc
+/sys/class/net/vethabc1234/mtu	1500
+/sys/class/net/vethabc1234/master	../br0
+/sys/class/net/virbr0/operstate	down
+/sys/class/net/virbr0/carrier	0
+/sys/class/net/virbr0/address	52:54:00:12:34:56
+/sys/class/net/virbr0/mtu	1500
+/sys/class/net/virbr0/bridge	1
+/sys/class/net/virbr0/uevent	DEVTYPE=bridge
+/sys/class/hwmon/hwmon0/name	nvme
+/sys/class/hwmon/hwmon0/temp1_input	44850
+/sys/class/hwmon/hwmon0/temp1_label	Composite
+/sys/class/hwmon/hwmon0/temp1_crit	89850
+/sys/class/hwmon/hwmon0/temp1_max	84850
+/sys/class/hwmon/hwmon0/device	../../nvme0
+/sys/class/hwmon/hwmon1/name	coretemp
+/sys/class/hwmon/hwmon1/temp1_input	48000
+/sys/class/hwmon/hwmon1/temp1_label	Package id 0
+/sys/class/hwmon/hwmon1/temp1_crit	100000
+/sys/class/hwmon/hwmon1/temp1_max	80000
+/sys/class/hwmon/hwmon1/device	../../../coretemp.0
+/sys/class/hwmon/hwmon2/name	nct6798
+/sys/class/hwmon/hwmon2/temp1_input	36000
+/sys/class/hwmon/hwmon2/temp2_input	41500
+/sys/class/hwmon/hwmon2/temp3_input	-62000
+/sys/class/hwmon/hwmon2/temp1_label	SYSTIN
+/sys/class/hwmon/hwmon2/temp2_label	CPUTIN
+/sys/class/hwmon/hwmon2/temp3_label	AUXTIN0
+/sys/class/hwmon/hwmon2/temp1_max	80000
+/sys/class/hwmon/hwmon2/temp2_max	80000
+/sys/class/hwmon/hwmon2/device	../../../nct6775.656
+
+<<<m64:smart:/dev/sda>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 4],
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "scsi", "/dev/sda"],
+    "exit_status": 4
+  },
+  "device": {"name": "/dev/sda", "info_name": "/dev/sda", "type": "scsi", "protocol": "SCSI"},
+  "scsi_vendor": "SanDisk",
+  "scsi_product": "Cruzer Fit",
+  "scsi_model_name": "SanDisk Cruzer Fit",
+  "user_capacity": {"blocks": 60063744, "bytes": 30752636928},
+  "smart_support": {"available": false}
+}
+
+<<<m64:smart:/dev/sdb>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 4],
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "sat", "/dev/sdb"],
+    "messages": [{"string": "Device is in STANDBY mode, exit(2)", "severity": "information"}],
+    "exit_status": 2
+  },
+  "device": {"name": "/dev/sdb", "info_name": "/dev/sdb [SAT]", "type": "sat", "protocol": "ATA"}
+}
+
+<<<m64:smart:/dev/sdc>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 4],
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "sat", "/dev/sdc"],
+    "exit_status": 64
+  },
+  "device": {"name": "/dev/sdc", "info_name": "/dev/sdc [SAT]", "type": "sat", "protocol": "ATA"},
+  "model_family": "Seagate IronWolf",
+  "model_name": "ST8000VN004-3CP101",
+  "serial_number": "WWZ2EFGH",
+  "user_capacity": {"blocks": 15628053168, "bytes": 8001563222016},
+  "rotation_rate": 7200,
+  "smart_support": {"available": true, "enabled": true},
+  "smart_status": {"passed": true},
+  "ata_smart_attributes": {
+    "revision": 10,
+    "table": [
+      {"id": 1, "name": "Raw_Read_Error_Rate", "value": 83, "worst": 64, "thresh": 44, "raw": {"value": 213456789, "string": "213456789"}},
+      {"id": 5, "name": "Reallocated_Sector_Ct", "value": 100, "worst": 100, "thresh": 10, "raw": {"value": 16, "string": "16"}},
+      {"id": 9, "name": "Power_On_Hours", "value": 72, "worst": 72, "thresh": 0, "raw": {"value": 24678, "string": "24678 (5 12 0)"}},
+      {"id": 190, "name": "Airflow_Temperature_Cel", "value": 64, "worst": 50, "thresh": 40, "raw": {"value": 36, "string": "36 (Min/Max 22/50)"}},
+      {"id": 194, "name": "Temperature_Celsius", "value": 36, "worst": 50, "thresh": 0, "raw": {"value": 36, "string": "36 (0 18 0 0 0)"}},
+      {"id": 197, "name": "Current_Pending_Sector", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 8, "string": "8"}},
+      {"id": 198, "name": "Offline_Uncorrectable", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 8, "string": "8"}},
+      {"id": 199, "name": "UDMA_CRC_Error_Count", "value": 200, "worst": 200, "thresh": 0, "raw": {"value": 0, "string": "0"}}
+    ]
+  },
+  "power_on_time": {"hours": 24678},
+  "temperature": {"current": 36}
+}
+
+<<<m64:smart:/dev/nvme0>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 4],
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "nvme", "/dev/nvme0"],
+    "exit_status": 0
+  },
+  "device": {"name": "/dev/nvme0", "info_name": "/dev/nvme0", "type": "nvme", "protocol": "NVMe"},
+  "model_name": "CT1000P3SSD8",
+  "serial_number": "2238E6A1B2C3",
+  "nvme_total_capacity": 1000204886016,
+  "smart_support": {"available": true, "enabled": true},
+  "smart_status": {"passed": false, "nvme": {"value": 4}},
+  "nvme_smart_health_information_log": {
+    "critical_warning": 4,
+    "temperature": 45,
+    "available_spare": 100,
+    "available_spare_threshold": 5,
+    "percentage_used": 101,
+    "power_on_hours": 9876,
+    "media_errors": 3,
+    "num_err_log_entries": 12
+  },
+  "temperature": {"current": 45},
+  "power_on_time": {"hours": 9876}
+}
+
+<<<m64:note>>>
+updates kein Paketverwalter erkannt
+
+<<<m64:end>>>

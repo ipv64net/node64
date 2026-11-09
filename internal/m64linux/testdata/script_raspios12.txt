@@ -1,0 +1,111 @@
+
+<<<m64:start>>>
+1
+
+<<<m64:file:/proc/uptime>>>
+523456.78 2012345.67
+
+<<<m64:file:/proc/stat>>>
+cpu  345678 1234 123456 20123456 23456 0 3456 0 0 0
+cpu0 86419 308 30864 5030864 5864 0 864 0 0 0
+cpu1 86419 308 30864 5030864 5864 0 864 0 0 0
+cpu2 86420 309 30864 5030864 5864 0 864 0 0 0
+cpu3 86420 309 30864 5030864 5864 0 864 0 0 0
+intr 12345678 0 0
+ctxt 23456789
+btime 1794000000
+processes 123456
+procs_running 1
+procs_blocked 0
+
+<<<m64:file:/proc/meminfo>>>
+MemTotal:        3881580 kB
+MemFree:         1234567 kB
+MemAvailable:    3012345 kB
+Buffers:           45678 kB
+Cached:          1567890 kB
+SwapCached:            0 kB
+SwapTotal:        204796 kB
+SwapFree:         204796 kB
+
+<<<m64:file:/proc/loadavg>>>
+0.08 0.12 0.10 1/234 4567
+
+<<<m64:file:/proc/mounts>>>
+/dev/mmcblk0p2 / ext4 rw,noatime 0 0
+devtmpfs /dev devtmpfs rw,relatime,size=1677176k,nr_inodes=419294,mode=755 0 0
+proc /proc proc rw,relatime 0 0
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+tmpfs /dev/shm tmpfs rw,nosuid,nodev 0 0
+devpts /dev/pts devpts rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,size=776316k,nr_inodes=819200,mode=755 0 0
+cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0
+/dev/mmcblk0p1 /boot/firmware vfat rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,errors=remount-ro 0 0
+/dev/sda1 /media/usb ext4 rw,relatime 0 0
+
+<<<m64:file:/proc/diskstats>>>
+ 179       0 mmcblk0 123456 23456 3456789 45678 234567 34567 4567890 567890 0 345678 613568 0 0 0 0 0 0
+ 179       1 mmcblk0p1 345 0 12345 123 2 0 4 1 0 100 124 0 0 0 0 0 0
+ 179       2 mmcblk0p2 123100 23456 3444400 45550 234565 34567 4567886 567889 0 345500 613439 0 0 0 0 0 0
+   8       0 sda 2345 12 123456 1234 345 6 23456 2345 0 1234 3579 0 0 0 0 0 0
+   8       1 sda1 2300 12 123400 1230 345 6 23456 2345 0 1230 3575 0 0 0 0 0 0
+   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ 254       0 zram0 345 0 2760 4 1234 0 9872 12 0 20 16 0 0 0 0 0 0
+
+<<<m64:file:/proc/net/dev>>>
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo:   45678     567    0    0    0     0          0         0    45678     567    0    0    0     0       0          0
+  eth0: 1234567890 2345678    0    0    0     0          0     12345 234567890 1234567    0    0    0     0       0          0
+ wlan0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+
+<<<m64:df>>>
+Filesystem     Type     1024-blocks    Used Available Capacity Mounted on
+/dev/root      ext4        30335916 4567890  24474568      16% /
+devtmpfs       devtmpfs     1677176       0   1677176       0% /dev
+tmpfs          tmpfs        1940788       0   1940788       0% /dev/shm
+tmpfs          tmpfs         776316    1234    775082       1% /run
+/dev/mmcblk0p1 vfat          522230   65678    456552      13% /boot/firmware
+/dev/sda1      ext4       120172760 2345678 111701016       3% /media/usb
+
+<<<m64:attr>>>
+/proc/sys/kernel/osrelease	6.6.51+rpt-rpi-v8
+/run/systemd/system	1
+/lib/modules/6.6.51+rpt-rpi-2712/modules.dep	1
+/lib/modules/6.6.51+rpt-rpi-v8/modules.dep	1
+/sys/block/mmcblk0/device/name	SN64G
+/sys/block/mmcblk0/device/serial	0x1234abcd
+/sys/block/mmcblk0/queue/rotational	0
+/sys/block/sda/device/model	Extreme Pro
+/sys/block/sda/queue/rotational	1
+/sys/class/net/eth0/operstate	up
+/sys/class/net/eth0/carrier	1
+/sys/class/net/eth0/speed	1000
+/sys/class/net/eth0/duplex	full
+/sys/class/net/eth0/address	dc:a6:32:12:34:56
+/sys/class/net/eth0/mtu	1500
+/sys/class/net/eth0/device	1
+/sys/class/net/wlan0/operstate	down
+/sys/class/net/wlan0/address	dc:a6:32:12:34:57
+/sys/class/net/wlan0/mtu	1500
+/sys/class/net/wlan0/device	1
+/sys/class/net/wlan0/uevent	DEVTYPE=wlan
+/sys/class/hwmon/hwmon0/name	cpu_thermal
+/sys/class/hwmon/hwmon0/temp1_input	47236
+/sys/class/hwmon/hwmon0/temp1_crit	110000
+/sys/class/hwmon/hwmon1/name	rpi_volt
+/sys/class/thermal/thermal_zone0/type	cpu-thermal
+/sys/class/thermal/thermal_zone0/temp	47236
+/sys/class/thermal/thermal_zone0/trip_point_0_type	critical
+/sys/class/thermal/thermal_zone0/trip_point_0_temp	110000
+
+<<<m64:systemd_failed>>>
+
+<<<m64:systemd_state>>>
+running
+
+<<<m64:updates:apt>>>
+Inst raspi-firmware [1:1.20240924-1] (1:1.20241008-1 Raspberry Pi Foundation:stable [all])
+Inst libc6 [2.36-9+rpt2+deb12u7] (2.36-9+rpt2+deb12u8 Debian-Security:12/stable-security, Raspbian:stable [arm64])
+
+<<<m64:end>>>

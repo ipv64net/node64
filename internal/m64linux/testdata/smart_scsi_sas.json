@@ -1,0 +1,21 @@
+{
+  "json_format_version": [1, 0],
+  "smartctl": {"version": [7, 3], "argv": ["smartctl", "-j", "-a", "/dev/sdc"], "exit_status": 0},
+  "device": {"name": "/dev/sdc", "info_name": "/dev/sdc", "type": "scsi", "protocol": "SCSI"},
+  "scsi_vendor": "SEAGATE",
+  "scsi_product": "ST4000NM0023",
+  "scsi_model_name": "SEAGATE ST4000NM0023",
+  "scsi_revision": "GS0F",
+  "user_capacity": {"blocks": 7814037168, "bytes": 4000787030016},
+  "serial_number": "Z1Z0ABCD0000C1234567",
+  "rotation_rate": 7200,
+  "smart_support": {"available": true, "enabled": true},
+  "smart_status": {"passed": true},
+  "temperature": {"current": 38, "drive_trip": 68},
+  "power_on_time": {"hours": 45678, "minutes": 12},
+  "scsi_grown_defect_list": 12,
+  "scsi_error_counter_log": {
+    "read": {"errors_corrected_by_eccfast": 123, "errors_corrected_by_eccdelayed": 0, "errors_corrected_by_rereads_rewrites": 0, "total_errors_corrected": 123, "correction_algorithm_invocations": 0, "gigabytes_processed": "123456.789", "total_uncorrected_errors": 1},
+    "write": {"errors_corrected_by_eccfast": 0, "errors_corrected_by_eccdelayed": 0, "errors_corrected_by_rereads_rewrites": 0, "total_errors_corrected": 0, "correction_algorithm_invocations": 0, "gigabytes_processed": "98765.432", "total_uncorrected_errors": 2}
+  }
+}

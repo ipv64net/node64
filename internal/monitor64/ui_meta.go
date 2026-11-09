@@ -1,0 +1,153 @@
+package monitor64
+
+import (
+	"strings"
+
+	"github.com/ipv64net/node64/internal/monitor64/eval"
+)
+
+// Beschreibungen fuer die Oberflaeche: Arten der Schwellen (Standard-Tabelle), Kategorien der Dienste, Arten der
+// Hosts im Assistenten. Texte stehen in den Sprachdateien unter monitor64.*.
+
+// ruleKind beschreibt eine Art der Standard-Tabelle fuer die Oberflaeche.
+type ruleKind struct {
+	Kind   string  `json:"kind"`
+	Group  string  `json:"group"`            // system, storage, disks, network, devices, fixed
+	Unit   string  `json:"unit"`             // Anzeige-Einheit (%, °C, Tage, Min.)
+	Factor float64 `json:"factor,omitempty"` // Anzeige = Wert / Factor (USV-Restlaufzeit: Sekunden -> Minuten)
+	Store  bool    `json:"store,omitempty"`  // Fuellstand: auch "GB frei"
+	State  bool    `json:"state,omitempty"`  // Zustandsregel (Kritisch/Warnung/nicht melden)
+	Down   bool    `json:"down,omitempty"`   // Schwelle nach unten
+	NoFor  bool    `json:"nofor,omitempty"`  // ohne Dauer (Trend)
+}
+
+// ruleKinds in der Reihenfolge der Seite Schwellen (wie im Entwurf).
+var ruleKinds = []ruleKind{
+	{Kind: eval.KindCPUUtil, Group: "system", Unit: "%"},
+	{Kind: eval.KindLoadCore, Group: "system"},
+	{Kind: eval.KindMemUsed, Group: "system", Unit: "%"},
+	{Kind: eval.KindSwapUsed, Group: "system", Unit: "%"},
+	{Kind: eval.KindTempSystem, Group: "system", Unit: "°C"},
+	{Kind: eval.KindFSUsed, Group: "storage", Unit: "%", Store: true},
+	{Kind: eval.KindStoreUsed, Group: "storage", Unit: "%", Store: true},
+	{Kind: eval.KindFSTrendDays, Group: "storage", Unit: "days", Down: true, NoFor: true},
+	{Kind: eval.KindDiskTemp, Group: "disks", Unit: "°C"},
+	{Kind: eval.KindDiskTempNVMe, Group: "disks", Unit: "°C"},
+	{Kind: eval.KindSSDWear, Group: "disks", Unit: "%"},
+	{Kind: eval.KindIfUtil, Group: "network", Unit: "%"},
+	{Kind: eval.KindIfErrRate, Group: "network", Unit: "%"},
+	{Kind: eval.KindPrinterSupply, Group: "devices", Unit: "%", Down: true},
+	{Kind: eval.KindUPSRuntime, Group: "devices", Unit: "min", Factor: 60, Down: true},
+	{Kind: eval.KindPoEUsed, Group: "devices", Unit: "%"},
+
+	{Kind: eval.KindSmartFailed, Group: "fixed", State: true},
+	{Kind: eval.KindSmartSectors, Group: "fixed", State: true},
+	{Kind: eval.KindSmartSectorsUp, Group: "fixed", State: true},
+	{Kind: eval.KindRAIDDegraded, Group: "fixed", State: true},
+	{Kind: eval.KindBondMemberDown, Group: "fixed", State: true},
+	{Kind: eval.KindBondLACP, Group: "fixed", State: true},
+	{Kind: eval.KindUPSOnBattery, Group: "fixed", State: true},
+	{Kind: eval.KindUpdatesSecurity, Group: "fixed", State: true},
+	{Kind: eval.KindRebootRequired, Group: "fixed", State: true},
+	{Kind: eval.KindGuestDown, Group: "fixed", State: true},
+	{Kind: eval.KindSystemdFailed, Group: "fixed", State: true},
+	{Kind: eval.KindServiceGone, Group: "fixed", State: true},
+	{Kind: eval.KindAccessFailed, Group: "fixed", State: true},
+}
+
+// ruleGroups ist die Reihenfolge der Abschnitte auf der Seite Schwellen.
+var ruleGroups = []string{"system", "storage", "disks", "network", "devices"}
+
+func ruleKindOf(kind string) (ruleKind, bool) {
+	for _, k := range ruleKinds {
+		if k.Kind == kind {
+			return k, true
+		}
+	}
+	return ruleKind{}, false
+}
+
+// kindKey ist der Teil des Sprachschluessels einer Art (Punkte sind in den Sprachdateien Ebenen).
+func kindKey(kind string) string { return strings.ReplaceAll(kind, ".", "_") }
+
+// svcCategory ordnet die Art eines Dienstes einer Kategorie der Dienste-Tabelle zu.
+func svcCategory(kind string) string {
+	switch kind {
+	case "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "cluster", "ha", "ceph":
+		return "system"
+	case "fs":
+		return "fs"
+	case "zfs", "raid", "store", "ds":
+		return "storage"
+	case "disk":
+		return "disks"
+	case "if", "bond":
+		return "network"
+	case "vm", "ct", "backup", "job":
+		return "guests"
+	case "ctr":
+		return "docker"
+	case "winsvc":
+		return "winsvc"
+	case "local":
+		return "local"
+	case "access":
+		return "access"
+	}
+	return "other"
+}
+
+// svcCategories in der Reihenfolge der Dienste-Tabelle.
+var svcCategories = []string{"system", "fs", "storage", "disks", "network", "guests", "docker", "winsvc", "local", "access", "other"}
+
+// guestKind: Dienst mit Soll-Zustand (Proxmox-Gast, Docker-Container).
+func guestKind(kind string) bool { return kind == "vm" || kind == "ct" || kind == "ctr" }
+
+// hostKinds sind die Arten im Assistenten "Host hinzufuegen" (Reihenfolge wie im Entwurf). Access ist der Zugang,
+// den der Assistent anlegt; Soon = Zugang gibt es noch nicht (SNMP folgt in Phase 2).
+type hostKind struct {
+	Kind   string `json:"kind"`
+	Icon   string `json:"icon"`
+	Access string `json:"access"`
+	Soon   bool   `json:"soon,omitempty"`
+}
+
+var hostKinds = []hostKind{
+	{Kind: "linux-agent", Icon: "bi-ubuntu", Access: "agent"},
+	{Kind: "windows", Icon: "bi-windows", Access: "agent"},
+	{Kind: "ssh", Icon: "bi-terminal", Access: "ssh"},
+	{Kind: "pve", Icon: "bi-hdd-rack", Access: "pve"},
+	{Kind: "pbs", Icon: "bi-archive", Access: "pbs"},
+	{Kind: "docker", Icon: "bi-box-seam", Access: "docker"},
+	{Kind: "snmp", Icon: "bi-diagram-3", Access: "snmp", Soon: true},
+	{Kind: "nas", Icon: "bi-device-hdd", Access: "snmp", Soon: true},
+}
+
+func hostKindOf(kind string) (hostKind, bool) {
+	for _, k := range hostKinds {
+		if k.Kind == kind {
+			return k, true
+		}
+	}
+	return hostKind{}, false
+}
+
+// hostIcon ist das Symbol eines Hosts nach seiner Art.
+func hostIcon(kind string) string {
+	if k, ok := hostKindOf(kind); ok {
+		return k.Icon
+	}
+	return "bi-pc-display"
+}
+
+// accessTypes sind die Zugangsarten, die angelegt werden koennen (SNMP und Prometheus folgen).
+var accessTypes = []string{"agent", "ssh", "pve", "pbs", "docker"}
+
+func validAccessType(t string) bool {
+	for _, a := range accessTypes {
+		if a == t {
+			return true
+		}
+	}
+	return false
+}

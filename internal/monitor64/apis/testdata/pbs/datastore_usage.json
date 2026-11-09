@@ -1,0 +1,7 @@
+[
+  {"store":"backup","total":8000000000000,"used":6800000000000,"avail":1200000000000,"estimated-full-date":1797000000,"history":[0.84,0.845,0.85],"history-start":1794000000,"history-delta":86400,
+   "gc-status":{"disk-bytes":6700000000000,"index-data-bytes":40000000000000,"disk-chunks":3000000,"index-data-chunks":20000000,"removed-bytes":0,"pending-bytes":0,"removed-chunks":0,"pending-chunks":0,"still-bad":0,"removed-bad":0},
+   "mount-status":"nonremovable","backend-type":"filesystem"},
+  {"store":"usb","total":0,"used":0,"avail":0,"mount-status":"notmounted","backend-type":"filesystem"},
+  {"store":"broken","total":0,"used":0,"avail":0,"error":"datastore is in maintenance mode: offline","mount-status":"nonremovable","backend-type":"filesystem"}
+]

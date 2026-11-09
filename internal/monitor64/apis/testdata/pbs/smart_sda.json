@@ -1,0 +1,7 @@
+{"status":"passed","wearout":null,"attributes":[
+  {"name":"Reallocated_Sector_Ct","value":"100","worst":"100","threshold":"010","fail":"-","id":5,"raw":"0","normalized":100.0,"flags":"PO--CK"},
+  {"name":"Power_On_Hours","value":"087","worst":"087","threshold":"000","fail":"-","id":9,"raw":"11612","normalized":87.0,"flags":"-O--CK"},
+  {"name":"Temperature_Celsius","value":"038","worst":"049","threshold":"000","fail":"-","id":194,"raw":"38 (0 21 0 0 0)","normalized":38.0,"flags":"-O---K"},
+  {"name":"Current_Pending_Sector","value":"100","worst":"100","threshold":"000","fail":"-","id":197,"raw":"2","normalized":100.0,"flags":"-O--C-"},
+  {"name":"Offline_Uncorrectable","value":"100","worst":"100","threshold":"000","fail":"-","id":198,"raw":"0","normalized":100.0,"flags":"----C-"}
+]}

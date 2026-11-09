@@ -1,0 +1,4 @@
+[
+  {"Package":"libssl3","Title":"Secure Sockets Layer toolkit - shared libraries","Description":"OpenSSL shared libraries","Origin":"Debian","Label":"Debian-Security","Priority":"optional","Section":"libs","Version":"3.0.15-1~deb12u1","OldVersion":"3.0.14-1~deb12u2","Arch":"amd64"},
+  {"Package":"proxmox-backup-server","Title":"Proxmox Backup Server daemon with tools and GUI","Description":"","Origin":"Proxmox","Priority":"optional","Section":"admin","Version":"3.3.2-1","OldVersion":"3.3.1-1","Arch":"amd64"}
+]

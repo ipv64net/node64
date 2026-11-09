@@ -1,0 +1,20 @@
+{{define "content"}}
+{{template "m64-top" .}}
+<div id="m64" data-m64-page="new">
+	<h1 class="h3 mb-3">{{.T "monitor64.new.title"}}</h1>
+	<div class="steps" id="m64-steps"></div>
+	<div class="card">
+		<div class="card-body" id="m64-wizard">
+			<p class="text-body-secondary">{{.T "monitor64.new.intro"}}</p>
+			<div class="row g-3">
+			{{range .Data.HostKinds}}
+				<div class="col-6 col-md-3"><div class="card kind-tile{{if .Soon}} disabled{{end}}" data-kind="{{.Kind}}"><div class="card-body"><i class="bi {{.Icon}}"></i><div class="fw-semibold mt-1">{{$.T (printf "monitor64.hostkind.%s.title" .Kind)}}</div><div class="small">{{$.T (printf "monitor64.hostkind.%s.sub" .Kind)}}</div>{{if .Soon}}<span class="badge text-bg-light mt-1">{{$.T "monitor64.new.soon"}}</span>{{end}}</div></div></div>
+			{{end}}
+			</div>
+		</div>
+		<div class="card-footer d-flex"><a class="btn btn-outline-secondary" href="/monitor64" id="m64-back">{{.T "monitor64.cancel"}}</a><button class="btn btn-primary ms-auto" type="button" id="m64-next" disabled>{{.T "monitor64.new.next"}}</button></div>
+	</div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

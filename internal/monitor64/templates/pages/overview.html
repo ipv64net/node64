@@ -1,0 +1,41 @@
+{{define "content"}}
+{{template "m64-top" .}}
+<div id="m64" data-m64-page="overview">
+	<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+		<h1 class="h3 mb-0 me-auto"><i class="bi bi-activity text-primary"></i> {{.T "monitor64.title"}} <span class="badge text-bg-warning fs-6 align-middle">{{.T "monitor64.preview"}}</span></h1>
+		<a class="btn btn-outline-secondary btn-sm" href="/monitor64/rules"><i class="bi bi-sliders"></i> {{.T "monitor64.tab.rules"}}</a>
+		<a class="btn btn-primary btn-sm" href="/monitor64/new" id="m64-add"><i class="bi bi-plus-lg"></i> {{.T "monitor64.ov.add"}}</a>
+	</div>
+	<div class="row g-3 mb-3" id="m64-stats"></div>
+	<div class="row g-3 mb-1">
+		<div class="col-xl-6">
+			<div class="card h-100">
+				<div class="card-header d-flex align-items-center py-2"><span class="fw-semibold">{{.T "monitor64.ov.problems"}}</span><span class="badge text-bg-secondary ms-2" id="m64-prob-count">0</span><a class="ms-auto small" href="/monitor64/problems">{{.T "monitor64.ov.all_problems"}} <i class="bi bi-arrow-right"></i></a></div>
+				<div class="prob-list" id="m64-problems"></div>
+			</div>
+		</div>
+		<div class="col-xl-6">
+			<div class="card h-100">
+				<div class="card-header d-flex align-items-center py-2"><span class="fw-semibold">{{.T "monitor64.ov.recent"}}</span><a class="ms-auto small" href="/monitor64/problems?status=closed">{{.T "monitor64.ov.history"}} <i class="bi bi-arrow-right"></i></a></div>
+				<div class="prob-list" id="m64-recent"></div>
+			</div>
+		</div>
+	</div>
+	<div class="d-flex flex-wrap align-items-center gap-2 mb-2 mt-3" id="m64-filter">
+		<span id="m64-groups" class="d-flex flex-wrap gap-2"></span>
+		<div class="form-check form-switch ms-2 mb-0"><input class="form-check-input" type="checkbox" id="m64-only-prob"><label class="form-check-label small" for="m64-only-prob">{{.T "monitor64.ov.only_problems"}}</label></div>
+		<div class="ms-auto d-flex gap-2">
+			<input class="form-control form-control-sm m64-search" id="m64-q" placeholder="{{.T "monitor64.ov.search"}}" aria-label="{{.T "monitor64.ov.search"}}">
+			<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary active" type="button" data-view="tiles" title="{{.T "monitor64.ov.tiles"}}"><i class="bi bi-grid-3x2-gap"></i></button><button class="btn btn-outline-secondary" type="button" data-view="list" title="{{.T "monitor64.ov.list"}}"><i class="bi bi-list-ul"></i></button></div>
+		</div>
+	</div>
+	<div id="m64-hosts"></div>
+	<div class="text-center text-body-secondary p-5 d-none" id="m64-empty">
+		<i class="bi bi-activity fs-1 text-primary"></i>
+		<p class="mt-2 mb-3">{{.T "monitor64.ov.empty"}}</p>
+		<a class="btn btn-primary" href="/monitor64/new"><i class="bi bi-plus-lg"></i> {{.T "monitor64.ov.add"}}</a>
+	</div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

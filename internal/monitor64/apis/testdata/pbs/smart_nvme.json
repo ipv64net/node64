@@ -1,0 +1,5 @@
+{"status":"passed","wearout":94.0,"attributes":[
+  {"name":"Critical Warning","value":"0x00"},{"name":"Temperature","value":"44 Celsius"},{"name":"Available Spare","value":"100%"},
+  {"name":"Available Spare Threshold","value":"10%"},{"name":"Percentage Used","value":"6%"},{"name":"Data Units Read","value":"9,876,543 [5.05 TB]"},
+  {"name":"Media and Data Integrity Errors","value":"0"},{"name":"Error Information Log Entries","value":"0"}
+]}

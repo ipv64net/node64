@@ -1,0 +1,4 @@
+[
+  {"name":"rpool","size":479559942144,"alloc":122045337600,"free":357514604544,"frag":8,"dedup":1,"health":"ONLINE"},
+  {"name":"tank","size":7999999999999,"alloc":3999999999999,"free":4000000000000,"frag":21,"dedup":1,"health":"DEGRADED"}
+]

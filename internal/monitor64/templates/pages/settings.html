@@ -1,0 +1,62 @@
+{{define "content"}}
+{{template "m64-top" .}}
+{{$s := .Data.Settings}}{{$st := $s.Status}}
+<div id="m64" data-m64-page="settings">
+	<h1 class="h3 mb-3">{{.T "monitor64.tab.settings"}}</h1>
+	<div class="row g-3">
+		<div class="col-xl-6">
+			<form class="card mb-3" id="m64-settings-form">
+				<div class="card-header fw-semibold">{{.T "monitor64.st.polling"}}</div>
+				<div class="card-body"><div class="row g-3">
+					<div class="col-sm-6"><label class="form-label" for="m64-interval">{{.T "monitor64.st.interval"}}</label>
+						<select class="form-select form-select-sm" id="m64-interval" name="interval">
+							<option value="30"{{if eq $s.Interval 30}} selected{{end}}>{{.T "monitor64.iv.30"}}</option>
+							<option value="60"{{if eq $s.Interval 60}} selected{{end}}>{{.T "monitor64.iv.60"}}</option>
+							<option value="120"{{if eq $s.Interval 120}} selected{{end}}>{{.T "monitor64.iv.120"}}</option>
+							<option value="300"{{if eq $s.Interval 300}} selected{{end}}>{{.T "monitor64.iv.300"}}</option>
+							<option value="900"{{if eq $s.Interval 900}} selected{{end}}>{{.T "monitor64.iv.900"}}</option>
+						</select><div class="form-text">{{.T "monitor64.st.interval_hint"}}</div></div>
+					<div class="col-sm-6"><label class="form-label" for="m64-workers">{{.T "monitor64.st.workers"}}</label>
+						<input class="form-control form-control-sm" id="m64-workers" name="workers" type="number" min="1" max="512" value="{{$s.Workers}}"><div class="form-text">{{.T "monitor64.st.workers_hint"}}</div></div>
+					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_raw"}}</div><div class="fw-semibold" id="m64-ret-raw">{{.T "monitor64.st.hours" "n" $s.RetRawH}}</div></div>
+					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_5m"}}</div><div class="fw-semibold">{{.T "monitor64.st.days" "n" $s.Ret5mD}}</div></div>
+					<div class="col-sm-4"><div class="form-label">{{.T "monitor64.st.ret_1h"}}</div><div class="fw-semibold">{{.T "monitor64.st.days" "n" $s.Ret1hD}}</div></div>
+					<div class="col-12 small text-body-secondary" id="m64-totals">{{.T "monitor64.st.totals" "hosts" $s.Hosts "services" $s.Services "mb" (printf "%.1f" $st.HistoryMB)}}</div>
+				</div></div>
+				<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit">{{.T "monitor64.save"}}</button></div>
+			</form>
+			<div class="card mb-3" id="m64-agent">
+				<div class="card-header fw-semibold">{{.T "monitor64.st.agent"}}</div>
+				<div class="card-body small">
+					<div>{{.T "monitor64.st.agent_port" "port" $s.Port}}{{if $s.Fingerprint}} · {{.T "monitor64.st.node_key"}} <code id="m64-fp">{{$s.Fingerprint}}</code> <button class="btn btn-sm btn-link p-0" type="button" data-copy-target="#m64-pubkey"><i class="bi bi-clipboard"></i> {{.T "monitor64.copy"}}</button>{{end}}</div>
+					{{if $s.PublicKey}}<div class="cmd mt-2" id="m64-pubkey">{{$s.PublicKey}}</div>{{end}}
+					<div class="mt-2">{{.T "monitor64.st.agent_download"}}</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-xl-6">
+			<div class="card mb-3" id="m64-status">
+				<div class="card-header fw-semibold">{{.T "monitor64.st.tech"}} <span class="small text-body-secondary fw-normal">{{.T "monitor64.st.version" "version" $st.Version}}{{if $st.Uptime}} · {{.T "monitor64.st.uptime" "uptime" $st.Uptime}}{{end}}</span></div>
+				<div class="card-body"><div class="row g-3">
+					<div class="col-sm-6"><div class="small text-body-secondary">{{.T "monitor64.status.jobs"}}</div><div class="fs-4 fw-semibold">{{$st.Sched.Jobs}}</div><div class="small text-body-secondary">{{.T "monitor64.status.workers" "n" $st.Sched.Workers}}</div></div>
+					<div class="col-sm-6"><div class="small text-body-secondary">{{.T "monitor64.status.runs"}}</div><div class="fs-4 fw-semibold">{{$st.Sched.Runs}}</div><div class="small text-body-secondary">{{.T "monitor64.status.late" "n" $st.Sched.Late}}</div></div>
+					<div class="col-sm-6"><div class="small text-body-secondary">{{.T "monitor64.status.history"}}</div><div class="fs-4 fw-semibold">{{printf "%.1f" $st.HistoryMB}} MB</div><div class="small text-body-secondary">monitor64.db</div></div>
+					<div class="col-sm-6"><div class="small text-body-secondary">{{.T "monitor64.status.memory"}}</div><div class="fs-4 fw-semibold">{{printf "%.0f" $st.HeapMB}} MB</div><div class="small text-body-secondary">{{.T "monitor64.status.goroutines" "n" $st.Routines}}</div></div>
+				</div>
+				{{if $st.LoadHosts}}<div class="alert alert-warning small mt-3 mb-0" id="m64-loadgen"><i class="bi bi-speedometer2"></i> {{.T "monitor64.status.loadgen" "hosts" $st.LoadHosts "rate" (printf "%.0f" $st.LoadRate)}}</div>{{end}}
+				</div>
+			</div>
+			<div class="card mb-3">
+				<div class="card-header fw-semibold">{{.T "monitor64.st.prometheus"}}</div>
+				<div class="card-body small">{{.T "monitor64.st.prometheus_text"}}</div>
+			</div>
+			<div class="card">
+				<div class="card-header fw-semibold">{{.T "monitor64.st.backup"}}</div>
+				<div class="card-body small">{{.T "monitor64.st.backup_text"}}</div>
+			</div>
+		</div>
+	</div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

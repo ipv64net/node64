@@ -1,0 +1,7 @@
+{"fsid":"c3a1b2d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d","election_epoch":42,"quorum":[0,1,2],"quorum_names":["pve1","pve2","pve3"],
+  "health":{"status":"HEALTH_WARN","checks":{"OSD_DOWN":{"severity":"HEALTH_WARN","summary":{"message":"1 osds down","count":1},"muted":false},
+    "PG_DEGRADED":{"severity":"HEALTH_WARN","summary":{"message":"Degraded data redundancy: 1234/37020 objects degraded (3.333%), 45 pgs degraded","count":45},"muted":false}},"mutes":[]},
+  "monmap":{"epoch":3,"min_mon_release_name":"reef","num_mons":3},
+  "osdmap":{"epoch":512,"num_osds":6,"num_up_osds":5,"osd_up_since":1794200000,"num_in_osds":6,"osd_in_since":1790000000,"num_remapped_pgs":0},
+  "pgmap":{"pgs_by_state":[{"state_name":"active+clean","count":84},{"state_name":"active+undersized+degraded","count":45}],"num_pgs":129,"num_pools":3,"num_objects":12340,"data_bytes":48000000000,"bytes_used":146000000000,"bytes_avail":5854000000000,"bytes_total":6000000000000},
+  "fsmap":{"epoch":1,"by_rank":[],"up:standby":0},"mgrmap":{"available":true,"num_standbys":2},"servicemap":{"epoch":12}}

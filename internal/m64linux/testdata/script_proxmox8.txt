@@ -1,0 +1,481 @@
+
+<<<m64:start>>>
+1
+
+<<<m64:file:/proc/uptime>>>
+1209600.51 9480000.12
+
+<<<m64:file:/proc/stat>>>
+cpu  10132545 1203 3021456 492011234 120345 0 45123 17 0 0
+cpu0 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu1 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu2 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu3 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu4 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu5 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu6 1266568 150 377682 61501404 15043 0 5640 2 0 0
+cpu7 1266568 153 377682 61501406 15044 0 5643 3 0 0
+intr 2034512345 0 9 0 0 0 0 0 0 0 0 0 0 0
+ctxt 3456789012
+btime 1793016000
+processes 4567890
+procs_running 2
+procs_blocked 0
+softirq 1234567890 0 123 456 789 0 0 1 2 0 3
+
+<<<m64:file:/proc/meminfo>>>
+MemTotal:       65777316 kB
+MemFree:         2012344 kB
+MemAvailable:   20123456 kB
+Buffers:          123456 kB
+Cached:          3123456 kB
+SwapCached:            0 kB
+Active:         12345678 kB
+Inactive:        2345678 kB
+SwapTotal:       8388604 kB
+SwapFree:        8388000 kB
+HugePages_Total:       0
+Hugepagesize:       2048 kB
+
+<<<m64:file:/proc/loadavg>>>
+1.25 1.10 0.98 3/1203 3456789
+
+<<<m64:file:/proc/mounts>>>
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+proc /proc proc rw,relatime 0 0
+udev /dev devtmpfs rw,nosuid,relatime,size=32863440k,nr_inodes=8215860,mode=755,inode64 0 0
+devpts /dev/pts devpts rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,noexec,relatime,size=6577732k,mode=755,inode64 0 0
+rpool/ROOT/pve-1 / zfs rw,relatime,xattr,noacl,casesensitive 0 0
+securityfs /sys/kernel/security securityfs rw,nosuid,nodev,noexec,relatime 0 0
+tmpfs /dev/shm tmpfs rw,nosuid,nodev,inode64 0 0
+cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0
+efivarfs /sys/firmware/efi/efivars efivarfs rw,nosuid,nodev,noexec,relatime 0 0
+rpool /rpool zfs rw,relatime,xattr,noacl,casesensitive 0 0
+rpool/ROOT /rpool/ROOT zfs rw,relatime,xattr,noacl,casesensitive 0 0
+rpool/data /rpool/data zfs rw,relatime,xattr,noacl,casesensitive 0 0
+rpool/data/subvol-101-disk-0 /rpool/data/subvol-101-disk-0 zfs rw,relatime,xattr,posixacl,casesensitive 0 0
+tank /tank zfs rw,relatime,xattr,noacl,casesensitive 0 0
+/dev/sdb1 /mnt/backup ext4 rw,relatime 0 0
+/dev/sdb1 /srv/backup-bind ext4 rw,relatime 0 0
+lxcfs /var/lib/lxcfs fuse.lxcfs rw,nosuid,nodev,relatime,user_id=0,group_id=0,allow_other 0 0
+/dev/fuse /etc/pve fuse rw,nosuid,nodev,relatime,user_id=0,group_id=0,default_permissions,allow_other 0 0
+192.168.1.10:/export/iso /mnt/pve/nas-iso nfs4 rw,relatime,vers=4.2,rsize=1048576,wsize=1048576,hard,proto=tcp 0 0
+tmpfs /run/user/0 tmpfs rw,nosuid,nodev,relatime,size=6577728k,nr_inodes=1644432,mode=700,inode64 0 0
+
+<<<m64:file:/proc/diskstats>>>
+ 259       0 nvme0n1 1234567 12 98765432 123456 2345678 34 187654321 234567 0 345678 358023 0 0 0 0 12345 6789
+ 259       1 nvme0n1p1 123 0 4567 12 0 0 0 0 0 20 12 0 0 0 0 0 0
+ 259       2 nvme0n1p2 456 0 12345 34 2 0 16 1 0 40 35 0 0 0 0 0 0
+ 259       3 nvme0n1p3 1233988 12 98748520 123410 2345676 34 187654305 234566 0 345600 357976 0 0 0 0 0 0
+ 259       4 nvme1n1 1234000 10 98700000 120000 2345600 30 187650000 230000 0 340000 350000 0 0 0 0 12000 6500
+ 259       5 nvme1n1p1 1234000 10 98700000 120000 2345600 30 187650000 230000 0 340000 350000 0 0 0 0 0 0
+   8       0 sda 345678 123 23456789 45678 456789 234 34567890 56789 0 67890 102467 0 0 0 0 0 0
+   8       1 sda1 345600 123 23456700 45670 456700 234 34567800 56780 0 67800 102450 0 0 0 0 0 0
+   8      16 sdb 12345 0 3456789 23456 6789 0 1234567 34567 0 45678 58023 0 0 0 0 0 0
+   8      17 sdb1 12300 0 3456700 23450 6780 0 1234560 34560 0 45670 58010 0 0 0 0 0 0
+ 230       0 zd0 2345 0 123456 789 3456 0 234567 890 0 1234 1679 0 0 0 0 0 0
+ 253       0 dm-0 1234 0 56789 123 2345 0 67890 234 0 345 357 0 0 0 0 0 0
+
+<<<m64:file:/proc/net/dev>>>
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 123456789  234567    0    0    0     0          0         0 123456789  234567    0    0    0     0       0          0
+  eno1: 987654321098 765432109    0   12    0     0          0    123456 876543210987 654321098    0    0    0     0       0          0
+  eno2: 123456789012 98765432    3    4    0     3          0     12345 98765432101 87654321    0    0    0     0       0          0
+ bond0: 1111111110110 864197541    3   16    0     3          0    135801 975308643088 741975419    0    0    0     0       0          0
+ vmbr0: 1098765432109 854321098    0  120    0     0          0    130000 965432109876 731975419    0    0    0     0       0          0
+vmbr0.20: 12345678 23456    0    0    0     0          0         0 23456789 34567    0    0    0     0       0          0
+tap100i0: 2345678901 3456789    0    0    0     0          0         0 3456789012 4567890    0    0    0     0       0          0
+fwbr100i0: 0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+fwpr100p0: 3456789012 4567890    0    0    0     0          0         0 2345678901 3456789    0    0    0     0       0          0
+fwln100i0: 2345678901 3456789    0    0    0     0          0         0 3456789012 4567890    0    0    0     0       0          0
+veth101i0: 456789012 567890    0    0    0     0          0         0 567890123 678901    0    0    0     0       0          0
+
+<<<m64:file:/proc/net/bonding/bond0>>>
+Ethernet Channel Bonding Driver: v6.8.12-4-pve
+
+Bonding Mode: IEEE 802.3ad Dynamic link aggregation
+Transmit Hash Policy: layer3+4 (1)
+MII Status: up
+MII Polling Interval (ms): 100
+Up Delay (ms): 0
+Down Delay (ms): 0
+Peer Notification Delay (ms): 0
+
+802.3ad info
+LACP active: on
+LACP rate: fast
+Min links: 0
+Aggregator selection policy (ad_select): stable
+System priority: 65535
+System MAC address: 3c:ec:ef:12:34:56
+Active Aggregator Info:
+	Aggregator ID: 1
+	Number of ports: 1
+	Actor Key: 9
+	Partner Key: 1001
+	Partner Mac Address: 74:83:c2:aa:bb:cc
+
+Slave Interface: eno1
+MII Status: up
+Speed: 1000 Mbps
+Duplex: full
+Link Failure Count: 0
+Permanent HW addr: 3c:ec:ef:12:34:56
+Slave queue ID: 0
+Aggregator ID: 1
+Actor Churn State: none
+Partner Churn State: none
+Actor Churned Count: 0
+Partner Churned Count: 0
+details actor lacp pdu:
+    system priority: 65535
+    system mac address: 3c:ec:ef:12:34:56
+    port key: 9
+    port priority: 255
+    port number: 1
+    port state: 63
+details partner lacp pdu:
+    system priority: 32768
+    system mac address: 74:83:c2:aa:bb:cc
+    oper key: 1001
+    port priority: 1
+    port number: 3
+    port state: 63
+
+Slave Interface: eno2
+MII Status: down
+Speed: Unknown
+Duplex: Unknown
+Link Failure Count: 3
+Permanent HW addr: 3c:ec:ef:12:34:57
+Slave queue ID: 0
+Aggregator ID: 2
+Actor Churn State: churned
+Partner Churn State: churned
+Actor Churned Count: 1
+Partner Churned Count: 1
+details actor lacp pdu:
+    system priority: 65535
+    system mac address: 3c:ec:ef:12:34:56
+    port key: 0
+    port priority: 255
+    port number: 2
+    port state: 69
+details partner lacp pdu:
+    system priority: 65535
+    system mac address: 00:00:00:00:00:00
+    oper key: 1
+    port priority: 255
+    port number: 1
+    port state: 1
+
+<<<m64:df>>>
+Filesystem                   Type     1024-blocks      Used  Available Capacity Mounted on
+udev                         devtmpfs    32863440         0   32863440       0% /dev
+tmpfs                        tmpfs        6577732      2140    6575592       1% /run
+rpool/ROOT/pve-1             zfs        858993459  12345678  846647781       2% /
+tmpfs                        tmpfs       32888656     46800   32841856       1% /dev/shm
+efivarfs                     efivarfs         256        68        184      27% /sys/firmware/efi/efivars
+rpool                        zfs        846647909       128  846647781       1% /rpool
+rpool/ROOT                   zfs        846647909       128  846647781       1% /rpool/ROOT
+rpool/data                   zfs        846647909       128  846647781       1% /rpool/data
+rpool/data/subvol-101-disk-0 zfs          8388608   1234567    7154041      15% /rpool/data/subvol-101-disk-0
+tank                         zfs       7797264656 3906250000 3891014656      51% /tank
+/dev/sdb1                    ext4      1921724676 912345678  911003422      51% /mnt/backup
+/dev/sdb1                    ext4      1921724676 912345678  911003422      51% /srv/backup-bind
+/dev/fuse                    fuse          131072        36     131036       1% /etc/pve
+tmpfs                        tmpfs        6577728         0    6577728       0% /run/user/0
+
+<<<m64:df_i>>>
+Filesystem                     Inodes  IUsed      IFree IUse% Mounted on
+udev                          8215860    923    8214937    1% /dev
+tmpfs                         8222164   1534    8220630    1% /run
+rpool/ROOT/pve-1           1693419523  98765 1693320758    1% /
+tmpfs                         8222164    131    8222033    1% /dev/shm
+efivarfs                            0      0          0     - /sys/firmware/efi/efivars
+rpool                      1693295569      8 1693295561    1% /rpool
+rpool/ROOT                 1693295569      7 1693295562    1% /rpool/ROOT
+rpool/data                 1693295569      6 1693295563    1% /rpool/data
+rpool/data/subvol-101-disk-0 14361412  45678   14315734    1% /rpool/data/subvol-101-disk-0
+tank                       7782029312 123456 7781905856    1% /tank
+/dev/sdb1                   122101760  34567  122067193    1% /mnt/backup
+/dev/sdb1                   122101760  34567  122067193    1% /srv/backup-bind
+/dev/fuse                      262144     52     262092    1% /etc/pve
+tmpfs                         1644432     20    1644412    1% /run/user/0
+
+<<<m64:attr>>>
+/proc/sys/kernel/osrelease	6.8.12-4-pve
+/run/systemd/system	1
+/lib/modules/6.8.12-2-pve/modules.dep	1
+/lib/modules/6.8.12-4-pve/modules.dep	1
+/sys/block/nvme0n1/device/model	Samsung SSD 980 PRO 1TB
+/sys/block/nvme0n1/device/serial	S5GXNF0R123456A
+/sys/block/nvme0n1/queue/rotational	0
+/sys/block/nvme1n1/device/model	Samsung SSD 980 PRO 1TB
+/sys/block/nvme1n1/device/serial	S5GXNF0R654321B
+/sys/block/nvme1n1/queue/rotational	0
+/sys/block/sda/device/model	Samsung SSD 870
+/sys/block/sda/device/wwid	t10.ATA     Samsung SSD 870 EVO 1TB                     S6PTNM0T123456K
+/sys/block/sda/queue/rotational	0
+/sys/block/sdb/device/model	WDC WD20EFRX-68E
+/sys/block/sdb/device/wwid	t10.ATA     WDC WD20EFRX-68EUZN0                        WD-WCC4M1234567
+/sys/block/sdb/queue/rotational	1
+/sys/class/net/bond0/operstate	up
+/sys/class/net/bond0/carrier	1
+/sys/class/net/bond0/speed	1000
+/sys/class/net/bond0/duplex	full
+/sys/class/net/bond0/address	3c:ec:ef:12:34:56
+/sys/class/net/bond0/mtu	1500
+/sys/class/net/bond0/bonding	1
+/sys/class/net/bond0/master	../../../virtual/net/vmbr0
+/sys/class/net/eno1/operstate	up
+/sys/class/net/eno1/carrier	1
+/sys/class/net/eno1/speed	1000
+/sys/class/net/eno1/duplex	full
+/sys/class/net/eno1/address	3c:ec:ef:12:34:56
+/sys/class/net/eno1/mtu	1500
+/sys/class/net/eno1/statistics/rx_crc_errors	0
+/sys/class/net/eno1/device	1
+/sys/class/net/eno1/master	../../../../virtual/net/bond0
+/sys/class/net/eno2/operstate	down
+/sys/class/net/eno2/carrier	0
+/sys/class/net/eno2/address	3c:ec:ef:12:34:56
+/sys/class/net/eno2/mtu	1500
+/sys/class/net/eno2/statistics/rx_crc_errors	3
+/sys/class/net/eno2/device	1
+/sys/class/net/eno2/master	../../../../virtual/net/bond0
+/sys/class/net/fwbr100i0/operstate	up
+/sys/class/net/fwbr100i0/carrier	1
+/sys/class/net/fwbr100i0/address	6a:12:34:56:78:9a
+/sys/class/net/fwbr100i0/mtu	1500
+/sys/class/net/fwbr100i0/bridge	1
+/sys/class/net/fwbr100i0/uevent	DEVTYPE=bridge
+/sys/class/net/fwln100i0/operstate	up
+/sys/class/net/fwln100i0/carrier	1
+/sys/class/net/fwln100i0/speed	10000
+/sys/class/net/fwln100i0/duplex	full
+/sys/class/net/fwln100i0/address	7a:12:34:56:78:9b
+/sys/class/net/fwln100i0/mtu	1500
+/sys/class/net/fwln100i0/master	../fwbr100i0
+/sys/class/net/fwpr100p0/operstate	up
+/sys/class/net/fwpr100p0/carrier	1
+/sys/class/net/fwpr100p0/speed	10000
+/sys/class/net/fwpr100p0/duplex	full
+/sys/class/net/fwpr100p0/address	8a:12:34:56:78:9c
+/sys/class/net/fwpr100p0/mtu	1500
+/sys/class/net/fwpr100p0/master	../vmbr0
+/sys/class/net/tap100i0/operstate	unknown
+/sys/class/net/tap100i0/carrier	1
+/sys/class/net/tap100i0/speed	10
+/sys/class/net/tap100i0/duplex	full
+/sys/class/net/tap100i0/address	9a:12:34:56:78:9d
+/sys/class/net/tap100i0/mtu	1500
+/sys/class/net/tap100i0/master	../fwbr100i0
+/sys/class/net/veth101i0/operstate	up
+/sys/class/net/veth101i0/carrier	1
+/sys/class/net/veth101i0/speed	10000
+/sys/class/net/veth101i0/duplex	full
+/sys/class/net/veth101i0/address	fe:12:34:56:78:9e
+/sys/class/net/veth101i0/mtu	1500
+/sys/class/net/veth101i0/master	../vmbr0
+/sys/class/net/vmbr0/operstate	up
+/sys/class/net/vmbr0/carrier	1
+/sys/class/net/vmbr0/address	3c:ec:ef:12:34:56
+/sys/class/net/vmbr0/mtu	1500
+/sys/class/net/vmbr0/bridge	1
+/sys/class/net/vmbr0/uevent	DEVTYPE=bridge
+/sys/class/net/vmbr0.20/operstate	up
+/sys/class/net/vmbr0.20/carrier	1
+/sys/class/net/vmbr0.20/address	3c:ec:ef:12:34:56
+/sys/class/net/vmbr0.20/mtu	1500
+/sys/class/net/vmbr0.20/uevent	DEVTYPE=vlan
+/sys/class/hwmon/hwmon0/name	acpitz
+/sys/class/hwmon/hwmon0/temp1_input	27800
+/sys/class/hwmon/hwmon0/temp1_crit	119000
+/sys/class/hwmon/hwmon1/name	nvme
+/sys/class/hwmon/hwmon1/temp1_input	41850
+/sys/class/hwmon/hwmon1/temp2_input	45850
+/sys/class/hwmon/hwmon1/temp1_label	Composite
+/sys/class/hwmon/hwmon1/temp2_label	Sensor 1
+/sys/class/hwmon/hwmon1/temp1_crit	84850
+/sys/class/hwmon/hwmon1/temp2_crit	-273150
+/sys/class/hwmon/hwmon1/temp1_max	81850
+/sys/class/hwmon/hwmon1/device	../../nvme0
+/sys/class/hwmon/hwmon2/name	nvme
+/sys/class/hwmon/hwmon2/temp1_input	38850
+/sys/class/hwmon/hwmon2/temp1_label	Composite
+/sys/class/hwmon/hwmon2/temp1_crit	84850
+/sys/class/hwmon/hwmon2/temp1_max	81850
+/sys/class/hwmon/hwmon2/device	../../nvme1
+/sys/class/hwmon/hwmon3/name	coretemp
+/sys/class/hwmon/hwmon3/temp1_input	52000
+/sys/class/hwmon/hwmon3/temp2_input	50000
+/sys/class/hwmon/hwmon3/temp1_label	Package id 0
+/sys/class/hwmon/hwmon3/temp2_label	Core 0
+/sys/class/hwmon/hwmon3/temp1_crit	100000
+/sys/class/hwmon/hwmon3/temp2_crit	100000
+/sys/class/hwmon/hwmon3/temp1_max	80000
+/sys/class/hwmon/hwmon3/temp2_max	80000
+/sys/class/hwmon/hwmon3/device	../../../coretemp.0
+/sys/class/thermal/thermal_zone0/type	acpitz
+/sys/class/thermal/thermal_zone0/temp	27800
+/sys/class/thermal/thermal_zone0/trip_point_0_type	critical
+/sys/class/thermal/thermal_zone0/trip_point_0_temp	119000
+/sys/class/thermal/thermal_zone1/type	x86_pkg_temp
+/sys/class/thermal/thermal_zone1/temp	52000
+/sys/class/thermal/thermal_zone1/trip_point_0_type	passive
+/sys/class/thermal/thermal_zone1/trip_point_0_temp	0
+
+<<<m64:zpool_list>>>
+rpool	1992864825344	125000000000	1867864825344	3	ONLINE
+tank	7984378667008	4000000000000	3984378667008	12	DEGRADED
+
+<<<m64:zpool_status>>>
+  pool: rpool
+ state: ONLINE
+  scan: scrub repaired 0B in 00:04:12 with 0 errors on Sun Nov  8 00:28:13 2026
+config:
+
+	NAME                                                 STATE     READ WRITE CKSUM
+	rpool                                                ONLINE       0     0     0
+	  mirror-0                                           ONLINE       0     0     0
+	    nvme-eui.002538b123456789-part3                  ONLINE       0     0     0
+	    nvme-eui.002538b987654321-part3                  ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: tank
+ state: DEGRADED
+status: One or more devices could not be used because the label is missing or
+	invalid.  Sufficient replicas exist for the pool to continue
+	functioning in a degraded state.
+action: Replace the device using 'zpool replace'.
+   see: https://openzfs.github.io/openzfs-docs/msg/ZFS-8000-4J
+  scan: resilver in progress since Mon Nov  9 10:12:01 2026
+	1.20T / 3.64T scanned at 512M/s, 612G / 3.64T issued at 261M/s
+	612G resilvered, 16.42% done, 03:22:10 to go
+config:
+
+	NAME                      STATE     READ WRITE CKSUM
+	tank                      DEGRADED     0     0     0
+	  mirror-0                DEGRADED     0     0     0
+	    ata-WDC_WD40EFRX-1    ONLINE       0     0     0
+	    12345678901234567890  UNAVAIL      0     0     0  was /dev/sdc1
+
+errors: No known data errors
+
+<<<m64:systemd_failed>>>
+zfs-import@tank.service loaded failed failed Import ZFS pool tank
+
+<<<m64:systemd_state>>>
+degraded
+
+<<<m64:updates:apt>>>
+Inst proxmox-ve [8.2.0] (8.3.0 Proxmox:bookworm/pve-no-subscription [all])
+Inst pve-manager [8.2.7] (8.3.0 Proxmox:bookworm/pve-no-subscription [amd64])
+Inst libssl3 [3.0.14-1~deb12u2] (3.0.15-1~deb12u1 Debian-Security:12/stable-security [amd64])
+Inst openssl [3.0.14-1~deb12u2] (3.0.15-1~deb12u1 Debian-Security:12/stable-security [amd64])
+
+<<<m64:smart:/dev/nvme0>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 3],
+    "svn_revision": "5338",
+    "platform_info": "x86_64-linux-6.8.12-4-pve",
+    "build_info": "(local build)",
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "nvme", "/dev/nvme0"],
+    "exit_status": 0
+  },
+  "local_time": {"time_t": 1794225354, "asctime": "Mon Nov  9 12:55:54 2026 CET"},
+  "device": {"name": "/dev/nvme0", "info_name": "/dev/nvme0", "type": "nvme", "protocol": "NVMe"},
+  "model_name": "Samsung SSD 980 PRO 1TB",
+  "serial_number": "S5GXNF0R123456A",
+  "firmware_version": "5B2QGXA7",
+  "nvme_pci_vendor": {"id": 5197, "subsystem_id": 5197},
+  "nvme_ieee_oui_identifier": 9528,
+  "nvme_total_capacity": 1000204886016,
+  "nvme_unallocated_capacity": 0,
+  "nvme_controller_id": 6,
+  "nvme_version": {"string": "1.3", "value": 66304},
+  "nvme_number_of_namespaces": 1,
+  "nvme_namespaces": [{"id": 1, "size": {"blocks": 1953525168, "bytes": 1000204886016}}],
+  "user_capacity": {"blocks": 1953525168, "bytes": 1000204886016},
+  "logical_block_size": 512,
+  "smart_support": {"available": true, "enabled": true},
+  "smart_status": {"passed": true, "nvme": {"value": 0}},
+  "nvme_smart_health_information_log": {
+    "critical_warning": 0,
+    "temperature": 42,
+    "available_spare": 100,
+    "available_spare_threshold": 10,
+    "percentage_used": 7,
+    "data_units_read": 123456789,
+    "data_units_written": 234567890,
+    "host_reads": 1234567890,
+    "host_writes": 2345678901,
+    "controller_busy_time": 12345,
+    "power_cycles": 123,
+    "power_on_hours": 18234,
+    "unsafe_shutdowns": 45,
+    "media_errors": 0,
+    "num_err_log_entries": 0,
+    "warning_temp_time": 0,
+    "critical_comp_time": 0,
+    "temperature_sensors": [42, 46]
+  },
+  "temperature": {"current": 42},
+  "power_cycle_count": 123,
+  "power_on_time": {"hours": 18234}
+}
+
+<<<m64:smart:/dev/sda>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 3],
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "sat", "/dev/sda"],
+    "exit_status": 0
+  },
+  "device": {"name": "/dev/sda", "info_name": "/dev/sda [SAT]", "type": "sat", "protocol": "ATA"},
+  "model_name": "Samsung SSD 870 EVO 1TB",
+  "serial_number": "S6PTNM0T123456K",
+  "user_capacity": {"blocks": 1953525168, "bytes": 1000204886016},
+  "rotation_rate": 0,
+  "smart_support": {"available": true, "enabled": true},
+  "smart_status": {"passed": true},
+  "ata_smart_attributes": {
+    "revision": 1,
+    "table": [
+      {"id": 5, "name": "Reallocated_Sector_Ct", "value": 100, "worst": 100, "thresh": 10, "when_failed": "", "flags": {"value": 51, "string": "PO--CK "}, "raw": {"value": 0, "string": "0"}},
+      {"id": 9, "name": "Power_On_Hours", "value": 97, "worst": 97, "thresh": 0, "when_failed": "", "flags": {"value": 50, "string": "-O--CK "}, "raw": {"value": 12045, "string": "12045"}},
+      {"id": 12, "name": "Power_Cycle_Count", "value": 99, "worst": 99, "thresh": 0, "when_failed": "", "flags": {"value": 50, "string": "-O--CK "}, "raw": {"value": 98, "string": "98"}},
+      {"id": 177, "name": "Wear_Leveling_Count", "value": 96, "worst": 96, "thresh": 0, "when_failed": "", "flags": {"value": 19, "string": "PO--C- "}, "raw": {"value": 42, "string": "42"}},
+      {"id": 187, "name": "Uncorrectable_Error_Cnt", "value": 100, "worst": 100, "thresh": 0, "when_failed": "", "flags": {"value": 50, "string": "-O--CK "}, "raw": {"value": 0, "string": "0"}},
+      {"id": 194, "name": "Temperature_Celsius", "value": 67, "worst": 52, "thresh": 0, "when_failed": "", "flags": {"value": 34, "string": "-O---K "}, "raw": {"value": 236224364577, "string": "33 (Min/Max 18/55)"}},
+      {"id": 197, "name": "Current_Pending_Sector", "value": 100, "worst": 100, "thresh": 0, "when_failed": "", "flags": {"value": 50, "string": "-O--CK "}, "raw": {"value": 0, "string": "0"}},
+      {"id": 198, "name": "Offline_Uncorrectable", "value": 100, "worst": 100, "thresh": 0, "when_failed": "", "flags": {"value": 48, "string": "----CK "}, "raw": {"value": 0, "string": "0"}},
+      {"id": 199, "name": "UDMA_CRC_Error_Count", "value": 100, "worst": 100, "thresh": 0, "when_failed": "", "flags": {"value": 62, "string": "-OSRCK "}, "raw": {"value": 2, "string": "2"}},
+      {"id": 241, "name": "Total_LBAs_Written", "value": 99, "worst": 99, "thresh": 0, "when_failed": "", "flags": {"value": 50, "string": "-O--CK "}, "raw": {"value": 45678901234, "string": "45678901234"}}
+    ]
+  },
+  "power_on_time": {"hours": 12045},
+  "power_cycle_count": 98,
+  "temperature": {"current": 33}
+}
+
+<<<m64:smart:/dev/sdb>>>
+{
+  "json_format_version": [1, 0],
+  "smartctl": {
+    "version": [7, 3],
+    "argv": ["smartctl", "-j", "-a", "-n", "standby", "-d", "sat", "/dev/sdb"],
+    "messages": [{"string": "Device is in STANDBY mode, exit(2)", "severity": "information"}],
+    "exit_status": 2
+  },
+  "device": {"name": "/dev/sdb", "info_name": "/dev/sdb [SAT]", "type": "sat", "protocol": "ATA"}
+}
+
+<<<m64:end>>>

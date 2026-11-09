@@ -1,0 +1,1 @@
+{"bios":"ovmf","boot":"order=scsi0","cores":4,"digest":"0a1b2c3d4e5f60718293a4b5c6d7e8f901234567","machine":"pc-q35-8.1","memory":"8192","name":"win11","onboot":1,"ostype":"win11","scsi0":"local-zfs:vm-102-disk-1,size=64G","sockets":1,"tpmstate0":"local-zfs:vm-102-disk-2,size=4M,version=v2.0"}

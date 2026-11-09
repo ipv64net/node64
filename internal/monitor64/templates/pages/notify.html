@@ -1,0 +1,69 @@
+{{define "content"}}
+{{template "m64-top" .}}
+<div id="m64" data-m64-page="notify">
+	<h1 class="h3 mb-3">{{.T "monitor64.tab.notify"}}</h1>
+	<div class="row g-3">
+		<div class="col-xl-6">
+			<div class="card mb-3">
+				<div class="card-header fw-semibold">{{.T "monitor64.nf.where"}}</div>
+				<div class="table-responsive"><table class="table mb-0 align-middle">
+					<thead><tr><th>{{.T "monitor64.nf.channel"}}</th><th class="text-center"><span class="st-dot st-warn"></span> {{.T "monitor64.state.warn"}}</th><th class="text-center"><span class="st-dot st-crit"></span> {{.T "monitor64.state.crit"}}</th></tr></thead>
+					<tbody id="m64-nf-channels"></tbody>
+				</table></div>
+				<div class="card-footer small text-body-secondary"><i class="bi bi-check2-circle"></i> {{.T "monitor64.nf.where_hint"}} <a href="/notifications">{{.T "monitor64.nf.channels_link"}}</a></div>
+			</div>
+			<div class="card mb-3">
+				<div class="card-header fw-semibold">{{.T "monitor64.nf.when"}}</div>
+				<ul class="list-group list-group-flush small">
+					<li class="list-group-item"><i class="bi bi-arrow-down-right text-danger"></i> {{.T "monitor64.nf.when1"}}</li>
+					<li class="list-group-item"><i class="bi bi-stack"></i> {{.T "monitor64.nf.when2"}}</li>
+					<li class="list-group-item"><i class="bi bi-wifi-off"></i> {{.T "monitor64.nf.when3"}}</li>
+					<li class="list-group-item"><i class="bi bi-activity"></i> {{.T "monitor64.nf.when4"}}</li>
+					<li class="list-group-item text-body-secondary"><i class="bi bi-slash-circle"></i> {{.T "monitor64.nf.when5"}}</li>
+					<li class="list-group-item"><div class="d-flex flex-wrap align-items-center gap-2"><span class="me-auto">{{.T "monitor64.nf.remind"}}</span>
+						<span class="st-dot st-crit"></span><select class="form-select form-select-sm w-auto" id="m64-remind-crit" aria-label="{{.T "monitor64.state.crit"}}"><option value="0">{{.T "monitor64.nf.never"}}</option><option value="14400">{{.T "monitor64.nf.every4h"}}</option><option value="86400">{{.T "monitor64.nf.daily"}}</option></select>
+						<span class="st-dot st-warn ms-2"></span><select class="form-select form-select-sm w-auto" id="m64-remind-warn" aria-label="{{.T "monitor64.state.warn"}}"><option value="0">{{.T "monitor64.nf.never"}}</option><option value="14400">{{.T "monitor64.nf.every4h"}}</option><option value="86400">{{.T "monitor64.nf.daily"}}</option></select>
+					</div></li>
+				</ul>
+			</div>
+		</div>
+		<div class="col-xl-6">
+			<div class="card mb-3">
+				<div class="card-header fw-semibold"><i class="bi bi-moon-stars"></i> {{.T "monitor64.nf.quiet"}}</div>
+				<div class="card-body">
+					<div class="d-flex flex-wrap align-items-center gap-2 mb-2"><span class="badge text-bg-secondary" id="m64-quiet">–</span><span class="small text-body-secondary">{{.T "monitor64.nf.quiet_from_settings"}}</span> <a class="small" href="/notifications">{{.T "monitor64.nf.quiet_link"}}</a></div>
+					<p class="small mb-2">{{.T "monitor64.nf.quiet_text"}}</p>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-crit-quiet"><label class="form-check-label small" for="m64-crit-quiet">{{.T "monitor64.nf.crit_in_quiet"}}</label></div>
+				</div>
+			</div>
+			<div class="card mb-3">
+				<div class="card-header fw-semibold">{{.T "monitor64.nf.overrides"}}</div>
+				<div class="card-body py-2 small text-body-secondary"><i class="bi bi-sort-down"></i> {{.T "monitor64.nf.overrides_hint"}}</div>
+				<div class="list-group list-group-flush" id="m64-nf-ovr"></div>
+				<div id="m64-nf-ovr-form"></div>
+				<div class="card-footer"><button class="btn btn-outline-primary btn-sm" type="button" id="m64-nf-add"><i class="bi bi-plus-lg"></i> {{.T "monitor64.nf.override_add"}}</button> <span class="small text-body-secondary ms-2">{{.T "monitor64.nf.override_sub"}}</span></div>
+			</div>
+			<div class="card">
+				<div class="card-header d-flex align-items-center"><span class="fw-semibold me-auto">{{.T "monitor64.nf.preview"}}</span><button class="btn btn-outline-secondary btn-sm" type="button" id="m64-nf-test"><i class="bi bi-send"></i> {{.T "monitor64.nf.test"}}</button></div>
+				<div class="card-body">
+					<ul class="nav nav-pills mb-2 small" id="m64-pv-tabs">
+						<li class="nav-item"><a class="nav-link py-1 px-2 active" href="#" data-pv="p">{{.T "monitor64.nf.pv_problem"}}</a></li>
+						<li class="nav-item"><a class="nav-link py-1 px-2" href="#" data-pv="o">{{.T "monitor64.nf.pv_ok"}}</a></li>
+						<li class="nav-item"><a class="nav-link py-1 px-2" href="#" data-pv="u">{{.T "monitor64.nf.pv_up"}}</a></li>
+						<li class="nav-item"><a class="nav-link py-1 px-2" href="#" data-pv="d">{{.T "monitor64.nf.pv_digest"}}</a></li>
+						<li class="nav-item"><a class="nav-link py-1 px-2" href="#" data-pv="f">{{.T "monitor64.nf.pv_flap"}}</a></li>
+					</ul>
+					<div class="msg m64-pre" data-pv-box="p">{{.T "monitor64.nf.pvt_problem"}}</div>
+					<div class="msg m64-pre d-none" data-pv-box="o">{{.T "monitor64.nf.pvt_ok"}}</div>
+					<div class="msg m64-pre d-none" data-pv-box="u">{{.T "monitor64.nf.pvt_up"}}</div>
+					<div class="msg m64-pre d-none" data-pv-box="d">{{.T "monitor64.nf.pvt_digest"}}</div>
+					<div class="msg m64-pre d-none" data-pv-box="f">{{.T "monitor64.nf.pvt_flap"}}</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<button class="btn btn-primary mt-3" type="button" id="m64-nf-save">{{.T "monitor64.save"}}</button>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

@@ -1,0 +1,8 @@
+{"health":"FAILED","type":"ata","attributes":[
+  {"id":"  5","name":"Reallocated_Sector_Ct","value":"098","worst":"098","threshold":"010","fail":"-","flags":"PO--CU","raw":"24","normalized":98},
+  {"id":"190","name":"Airflow_Temperature_Cel","value":"062","worst":"051","threshold":"040","fail":"-","flags":"-O---K","raw":"38 (Min/Max 21/49)","normalized":62},
+  {"id":"194","name":"Temperature_Celsius","value":"038","worst":"049","threshold":"000","fail":"-","flags":"-O---K","raw":"38 (0 18 0 0 0)","normalized":38},
+  {"id":"197","name":"Current_Pending_Sector","value":"100","worst":"100","threshold":"000","fail":"-","flags":"-O--C-","raw":"8","normalized":100},
+  {"id":"198","name":"Offline_Uncorrectable","value":"100","worst":"100","threshold":"000","fail":"-","flags":"----C-","raw":"8","normalized":100},
+  {"id":"199","name":"UDMA_CRC_Error_Count","value":"200","worst":"200","threshold":"000","fail":"-","flags":"-OSRCK","raw":"0","normalized":200}
+]}

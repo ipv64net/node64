@@ -1,0 +1,110 @@
+package apis
+
+import (
+	"context"
+	"net/url"
+	"sort"
+	"sync"
+	"time"
+
+	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/proxmox"
+)
+
+// slowDisks haelt die Platten-Dienste zwischen den SMART-Abfragen (Proxmox VE und PBS).
+type slowDisks struct {
+	at      time.Time
+	svcs    []model.Service
+	sectors map[string]uint64 // Schluessel -> Sektoren der vorigen Abfrage
+}
+
+// collect liefert die Platten-Dienste; faellig alle every, sonst der letzte Stand. Schlaegt disks/list fehl, bleibt
+// der vorige Stand stehen (Dienste verschwinden nicht, naechste Runde neu) und der Fehler geht an part. param baut den Wert fuer
+// ?disk= (Proxmox VE: /dev/sda, PBS: sda).
+func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string, now time.Time, every time.Duration,
+	param func(diskEntry) string, part *partial) []model.Service {
+	if every <= 0 {
+		every = DefaultSmartEvery
+	}
+	if !s.at.IsZero() && now.Sub(s.at) < every {
+		return s.svcs
+	}
+	if s.sectors == nil {
+		s.sectors = map[string]uint64{}
+	}
+	base := "/nodes/" + url.PathEscape(node) + "/disks"
+	var list []diskEntry
+	if err := c.Get(ctx, base+"/list", &list); err != nil {
+		part.add("disks/list", err)
+		if !s.at.IsZero() && now.Sub(s.at) > 4*every {
+			s.svcs = nil // keine ewig alten Werte
+		}
+		return s.svcs
+	}
+	type res struct {
+		sm  *smartData
+		bad bool
+	}
+	results := make([]res, len(list))
+	idx := make([]int, len(list))
+	for i := range list {
+		idx[i] = i
+	}
+	var authOnce sync.Once
+	runParallel(ctx, idx, func(ctx context.Context, i int) {
+		var r smartResp
+		if err := c.Get(ctx, base+"/smart?disk="+url.QueryEscape(param(list[i])), &r); err != nil {
+			results[i].bad = true
+			if authErr(err) {
+				authOnce.Do(func() { part.add("disks/smart", err) })
+			}
+			return
+		}
+		d := parseSmart(r)
+		results[i].sm = &d
+	})
+	out := make([]model.Service, 0, len(list))
+	seen := map[string]bool{}
+	for i, d := range list {
+		svc := diskService(d, results[i].sm, results[i].bad, s.sectors)
+		if seen[svc.Key] {
+			continue // gleiche Seriennummer zweimal (Multipath): einmal
+		}
+		seen[svc.Key] = true
+		out = append(out, svc)
+	}
+	for k := range s.sectors {
+		if !seen[k] {
+			delete(s.sectors, k)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	s.at, s.svcs = now, out
+	return out
+}
+
+// slowUpdates haelt den Dienst "updates" zwischen den Abfragen.
+type slowUpdates struct {
+	at  time.Time
+	svc *model.Service
+}
+
+func (s *slowUpdates) collect(ctx context.Context, c *proxmox.Client, node string, now time.Time, every time.Duration, part *partial) *model.Service {
+	if every <= 0 {
+		every = DefaultUpdatesEvery
+	}
+	if !s.at.IsZero() && now.Sub(s.at) < every {
+		return s.svc
+	}
+	var list []aptUpdate
+	if err := c.Get(ctx, "/nodes/"+url.PathEscape(node)+"/apt/update", &list); err != nil {
+		part.add("apt/update", err)
+		if !s.at.IsZero() && now.Sub(s.at) > 4*every {
+			s.svc = nil
+		}
+		return s.svc
+	}
+	svc := updatesService(list)
+	s.at, s.svc = now, &svc
+	return s.svc
+}

@@ -79,7 +79,21 @@ const (
 
 	KindUpdateOK     Kind = "update_ok"     // Node64 hat sich selbst aktualisiert (neue Version laeuft stabil)
 	KindUpdateFailed Kind = "update_failed" // Selbst-Update fehlgeschlagen, zurueck auf die vorige Version
+
+	// Monitor64: gebuendelte Meldung eines Hosts (Data: host, path, key, severity, lines als JSON, siehe composeMonitor)
+	KindMonitorProblem     Kind = "monitor_problem"     // Verschlechterung (Warnung, Kritisch, Unbekannt)
+	KindMonitorOK          Kind = "monitor_ok"          // Entwarnung (auch "besser, aber noch Warnung")
+	KindMonitorUnreachable Kind = "monitor_unreachable" // Host nicht erreichbar
+	KindMonitorReachable   Kind = "monitor_reachable"   // Host wieder erreichbar
+	KindMonitorFlapping    Kind = "monitor_flapping"    // Dienst flattert
+	KindMonitorReminder    Kind = "monitor_reminder"    // Erinnerung an ein offenes Problem
 )
+
+// IsMonitor: Meldung von Monitor64 (wird in der Ruhezeit gesammelt wie die Checks).
+func IsMonitor(k Kind) bool {
+	return k == KindMonitorProblem || k == KindMonitorOK || k == KindMonitorUnreachable || k == KindMonitorReachable ||
+		k == KindMonitorFlapping || k == KindMonitorReminder
+}
 
 // CheckInfo sind die Angaben zum Check, die in Nachrichten erscheinen.
 type CheckInfo struct {

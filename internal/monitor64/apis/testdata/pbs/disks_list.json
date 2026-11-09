@@ -1,0 +1,4 @@
+[
+  {"name":"sda","devpath":"/dev/sda","disk-type":"hdd","model":"ST8000VN004-2M2101","serial":"WSD1ABCD","size":8001563222016,"status":"passed","wearout":null,"used":"filesystem","rpm":7200,"vendor":"ATA","wwn":"0x5000c500d1234567","gpt":true,"partitions":null},
+  {"name":"nvme0n1","devpath":"/dev/nvme0n1","disk-type":"nvme","model":"KINGSTON SNV2S500G","serial":"50026B7686123456","size":500107862016,"status":"passed","wearout":94.0,"used":"partitions","rpm":null,"vendor":null,"wwn":"eui.00026b7686123456","gpt":true}
+]

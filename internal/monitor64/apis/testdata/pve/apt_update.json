@@ -1,0 +1,4 @@
+[
+  {"Package":"pve-manager","Title":"Proxmox Virtual Environment Management Tools","Description":"This package contains the Proxmox Virtual Environment management tools.","Origin":"Proxmox","Priority":"important","Section":"admin","Version":"8.3.1","OldVersion":"8.3.0","Arch":"amd64","ChangeLogUrl":"https://enterprise.proxmox.com/debian/pve/dists/bookworm/pve-enterprise/binary-amd64/pve-manager_8.3.1.changelog"},
+  {"Package":"libssl3","Title":"Secure Sockets Layer toolkit - shared libraries","Description":"This package is part of the OpenSSL implementation of the SSL and TLS cryptographic protocols.","Origin":"Debian","Priority":"optional","Section":"libs","Version":"3.0.15-1~deb12u1","OldVersion":"3.0.14-1~deb12u2","Arch":"amd64"}
+]

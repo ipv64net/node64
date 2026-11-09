@@ -1,0 +1,1 @@
+{"arch":"amd64","cores":1,"digest":"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3","features":"nesting=1","hostname":"pihole","memory":512,"net0":"name=eth0,bridge=vmbr0,hwaddr=BC:24:11:DD:EE:FF,ip=dhcp,type=veth","onboot":1,"ostype":"debian","rootfs":"local-zfs:subvol-200-disk-0,size=8G","swap":512,"unprivileged":1}

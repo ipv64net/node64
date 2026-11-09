@@ -1,0 +1,25 @@
+{{define "content"}}
+{{template "m64-top" .}}
+<div id="m64" data-m64-page="problems">
+	<div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h1 class="h3 mb-0 me-auto">{{.T "monitor64.tab.problems"}}</h1><a class="btn btn-outline-secondary btn-sm" id="m64-csv" href="/api/monitor64/problems.csv"><i class="bi bi-download"></i> CSV</a></div>
+	<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+		<span class="chip active" data-tab="open" role="button" tabindex="0">{{.T "monitor64.pb.open"}} <span class="text-body-secondary" data-count="open"></span></span>
+		<span class="chip" data-tab="closed" role="button" tabindex="0">{{.T "monitor64.pb.closed"}} <span class="text-body-secondary" data-count="closed"></span></span>
+		<span class="chip" data-tab="all" role="button" tabindex="0">{{.T "monitor64.pb.all"}} <span class="text-body-secondary" data-count="all"></span></span>
+		<select class="form-select form-select-sm ms-2 w-auto" id="m64-range" aria-label="{{.T "monitor64.pb.range"}}">
+			<option value="24h">{{.T "monitor64.chart.r24h"}}</option><option value="7d" selected>{{.T "monitor64.chart.r7d"}}</option><option value="30d">{{.T "monitor64.chart.r30d"}}</option><option value="1y">{{.T "monitor64.chart.r1y"}}</option>
+		</select>
+		<select class="form-select form-select-sm w-auto" id="m64-who" aria-label="{{.T "monitor64.pb.person"}}"><option value="">{{.T "monitor64.pb.all_people"}}</option></select>
+		<input class="form-control form-control-sm ms-auto m64-search" id="m64-q" placeholder="{{.T "monitor64.pb.search"}}" aria-label="{{.T "monitor64.pb.search"}}">
+	</div>
+	<div class="card">
+		<div class="table-responsive"><table class="table table-hover mb-0 align-middle pb-table">
+			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.host_service"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.start"}}</th><th class="d-none d-sm-table-cell">{{.T "monitor64.col.duration"}}</th><th>{{.T "monitor64.col.resolved"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.notified"}}</th></tr></thead>
+			<tbody id="m64-pb"></tbody>
+		</table></div>
+	</div>
+	<div class="small text-body-secondary mt-2"><i class="bi bi-person-badge"></i> {{.T "monitor64.pb.footer"}}</div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}
