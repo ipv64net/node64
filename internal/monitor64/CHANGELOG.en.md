@@ -51,3 +51,5 @@
   pseudo filesystems (SNMP) and file mounts (node_exporter in a container) are left out; host tiles are real links;
   texts without plural errors.
 - Windows agent: services with start type automatic that were never started since boot do not count as stopped.
+  The installation no longer fails on an empty folder `%ProgramData%\monitor64-agent` owned by someone else; a
+  foreground start with invalid options no longer creates this folder.

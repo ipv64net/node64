@@ -52,3 +52,5 @@
   und Zugänge werden sofort abgefragt, neu auftauchende Dienste sofort angeboten; Pseudo-Dateisysteme (SNMP) und
   Datei-Mounts (node_exporter im Container) entfallen; Host-Kacheln sind echte Links; Texte ohne Plural-Fehler.
 - Windows-Agent: Dienste mit Starttyp Automatisch, die seit dem Booten nie gestartet wurden, zählen nicht als gestoppt.
+  Die Installation scheitert nicht mehr an einem leeren Ordner `%ProgramData%\monitor64-agent` eines anderen
+  Besitzers; ein Start im Vordergrund mit fehlerhaften Optionen legt diesen Ordner nicht mehr an.
