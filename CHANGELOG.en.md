@@ -18,7 +18,6 @@ Short summary of what changes per version. Details per module are in the node un
 - PROXY64: redirect on denied access per location – visitors turned away by the access list are sent to a configurable address with 302 instead of the error page (e.g. Vaultwarden `/admin` only from the LAN); logins stay unchanged (#55).
 - DNS64: block and allow lists understand AdGuard rules with a single bar – `@@|name^` exempts exactly this name, `|name^` blocks exactly it (previously ignored silently).
 - Certificates: wildcards like `*.lab.domain.tld` at Cloudflare and other DNS providers now also work when a wildcard CNAME points all subdomains home (e.g. to a DynDNS domain).
-- Healthchecks: for a Docker host via SSH the user is prefilled with `node64` (avoids typos in the commands of the guide).
 - PROXY64: HTTP/2 to the target – automatic for https targets, h2c for gRPC (e.g. NetBird), HTTP/1.1 only as a way out (#53). **Note:** https targets that offer HTTP/2 now get HTTP/2; if NTLM/Exchange has problems, set the host to "HTTP/1.1 only" under Advanced.
 - PROXY64: PROXY protocol to the target (v1/v2) for "TLS passthrough" and TCP streams, also via CDN64 – the target sees the real visitor address, e.g. mailcow (Postfix/Dovecot) or another reverse proxy (#52).
 - PROXY64: redirects with a path at the target and the return address of the access list sign-in no longer lead to foreign sites (found by CodeQL/gosec, #27).
