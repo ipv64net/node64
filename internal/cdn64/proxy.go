@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/httpcompress"
@@ -496,7 +497,7 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 	sort.SliceStable(routes, func(i, j int) bool { return len(routes[i].prefix) > len(routes[j].prefix) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Route nach dem bereinigten Pfad (//admin, %2e-Segmente); das Ziel bekommt den Pfad unveraendert (wie nginx).
-		// Gross-/Kleinschreibung zaehlt wie beim Ziel ueblich (/Admin ist nicht /admin).
+		// Gross-/Kleinschreibung, Parameter und Leerzeichen/Punkte am Ende zaehlen dabei nicht (pathIn).
 		p, ok := reqPath(r.URL.Path)
 		if !ok {
 			page(w, http.StatusBadRequest)
@@ -556,8 +557,29 @@ func reqPath(p string) (string, bool) {
 	return c, true
 }
 
-// pathIn: Pfad liegt unter dem Praefix einer Location.
-func pathIn(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
+// pathIn: Pfad liegt unter dem Praefix einer Location. Verglichen wird ueber pathKey: sonst liefen /ADMIN, "/admin "
+// oder /admin;x an Zugriffsliste bzw. Sperre von /admin vorbei, wenn das Ziel sie wie /admin behandelt (IIS,
+// Windows-Freigaben, Tomcat). Das Ziel bekommt den Pfad weiter unveraendert.
+func pathIn(p, prefix string) bool {
+	p, prefix = pathKey(p), pathKey(prefix)
+	return p == prefix || strings.HasPrefix(p, prefix+"/")
+}
+
+// pathKey: Pfad fuer den Vergleich mit Locations - klein, \ wie / (IIS), je Abschnitt ohne Parameter (;…),
+// NTFS-Stream (::…) und ohne Leerzeichen bzw. Punkte am Ende.
+func pathKey(p string) string {
+	segs := strings.Split(strings.ReplaceAll(p, "\\", "/"), "/")
+	for i, s := range segs {
+		if j := strings.IndexByte(s, ';'); j >= 0 {
+			s = s[:j]
+		}
+		if j := strings.Index(s, "::"); j >= 0 {
+			s = s[:j]
+		}
+		segs[i] = strings.TrimRightFunc(s, func(r rune) bool { return r == '.' || unicode.IsSpace(r) })
+	}
+	return strings.ToLower(strings.Join(segs, "/"))
+}
 
 // wsAt: WebSockets am Pfad erlaubt (Host bzw. die Location mit dem laengsten passenden Praefix).
 func wsAt(h *Host, p string) bool {

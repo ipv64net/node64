@@ -345,10 +345,10 @@ func normalizeLocations(list []Location) error {
 		if l.Path == "/" || strings.ContainsAny(l.Path, " ?#\\") || len(l.Path) > 200 {
 			return &FieldError{Field: "locations", Key: "cdn64.err.location_path", Name: l.Path}
 		}
-		if seen[l.Path] {
+		if seen[pathKey(l.Path)] { // /API und /api sind dieselbe Location (pathIn)
 			return &FieldError{Field: "locations", Key: "cdn64.err.location_dup", Name: l.Path}
 		}
-		seen[l.Path] = true
+		seen[pathKey(l.Path)] = true
 		if l.AccessListID < 0 { // vor dem continue: auch sperren/feste Antwort (proxy.go: <= 0 = wie der Host)
 			l.AccessListID = 0
 		}

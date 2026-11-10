@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.54.1 – 2026-11-10
+
+### Behoben
+- Locations: Zugriffsliste, Sperre und Einstellungen einer Location gelten auch für Schreibvarianten des Pfads – `/SECURE`, `/secure.`, `/secure%20`, `/secure;x` oder `/secure\x` landen jetzt bei der Location `/secure` statt ungeschützt beim Ziel (wichtig bei Zielen, die Groß-/Kleinschreibung nicht unterscheiden, z. B. IIS oder Windows). Das Ziel bekommt den Pfad weiter unverändert. Locations, die sich nur in der Schreibweise unterscheiden (`/api` und `/API`), gelten beim Speichern als doppelt (Sicherheits-Review).
+
 ## 1.54.0 – 2026-11-09
 
 ### Neu

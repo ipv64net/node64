@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: a location's access lists and blocks can no longer be bypassed with spelling variants of the path (`/SECURE`, `/secure.`, `/secure%20` …) – important for targets like IIS or Windows.
+
 ## 1.5.0 – 2026-11-10
 
 - **Monitor64 (new module, off by default):** monitor systems with thresholds and history – Linux, Windows and FreeBSD via the Monitor64 agent (also behind NAT in push mode, with an icon in the Windows taskbar and automatic updates), Linux without an agent via SSH, Proxmox VE, Proxmox Backup Server, Docker, TrueNAS, Unraid, server BMCs (Redfish), UPS (NUT), Prometheus exporters and SNMP devices including traps. Services are discovered and never adopted automatically; thresholds in three levels, problems with a timeline and acknowledgement, maintenance windows, notifications via the node's channels, entries on the status pages, Prometheus export. In a cluster one node monitors each host and a backup node takes over on failure. Switch it on under Settings → Modules.
