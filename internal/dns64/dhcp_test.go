@@ -513,12 +513,24 @@ func TestDHCPApplyState(t *testing.T) {
 	if err := m.SetDHCPMode(ctx, dhcpObserve); err != nil || m.dhcpSrv.Load() == nil {
 		t.Fatalf("observe: %v %v", err, m.dhcpSrv.Load())
 	}
-	w := metrics.New()
-	m.Metrics(ctx, w)
+	// Run ermittelt die Schnittstellen nebenlaeufig: auf den Fehler von eth9 kurz warten
+	wants := []string{"node64_dns64_dhcp_up 1", "node64_dns64_dhcp_observe 1", `node64_dns64_dhcp_addresses{network="192.168.50.0/24",interface="eth9"} 51`,
+		`node64_dns64_dhcp_network_error{network="192.168.50.0/24",interface="eth9"} 1`, "node64_dns64_dhcp_foreign_servers 0"}
 	var sb strings.Builder
-	_, _ = w.WriteTo(&sb)
-	for _, want := range []string{"node64_dns64_dhcp_up 1", "node64_dns64_dhcp_observe 1", `node64_dns64_dhcp_addresses{network="192.168.50.0/24",interface="eth9"} 51`,
-		`node64_dns64_dhcp_network_error{network="192.168.50.0/24",interface="eth9"} 1`, "node64_dns64_dhcp_foreign_servers 0"} {
+	for deadline := time.Now().Add(3 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		w := metrics.New()
+		m.Metrics(ctx, w)
+		sb.Reset()
+		_, _ = w.WriteTo(&sb)
+		all := true
+		for _, want := range wants {
+			all = all && strings.Contains(sb.String(), want)
+		}
+		if all || time.Now().After(deadline) {
+			break
+		}
+	}
+	for _, want := range wants {
 		if !strings.Contains(sb.String(), want) {
 			t.Errorf("metrics: %q missing in\n%s", want, sb.String())
 		}

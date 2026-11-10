@@ -27,13 +27,13 @@ func isPEM(b []byte) bool { return bytes.Contains(b, []byte("-----BEGIN ")) }
 // (PEM). certData darf PEM oder PKCS#12 sein; keyData darf leer sein, wenn der Schluessel in certData steckt
 // (PKCS#12 oder eine PEM-Datei mit beidem). password entschluesselt Schluessel bzw. PKCS#12.
 func PrepareUpload(certData, keyData []byte, password string) (certPEM, keyPEM string, err error) {
-	certData, keyData = bytes.TrimSpace(certData), bytes.TrimSpace(keyData)
-	if len(certData) == 0 {
+	if len(bytes.TrimSpace(certData)) == 0 {
 		return "", "", invalid("cert", "certificate missing")
 	}
-	if !isPEM(certData) { // binaer: PKCS#12
+	if !isPEM(certData) { // binaer: PKCS#12 - ungekuerzt, sonst fehlen Bytes, die zufaellig wie Leerzeichen aussehen
 		return fromP12(certData, password)
 	}
+	certData, keyData = bytes.TrimSpace(certData), bytes.TrimSpace(keyData)
 	if len(keyData) == 0 { // eine Datei mit Zertifikat und Schluessel
 		keyData = certData
 	}

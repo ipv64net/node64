@@ -51,7 +51,10 @@ func TestPrepareUploadEncryptedKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p12Legacy, _ := pkcs12.LegacyDES.Encode(key, leaf, nil, "geheim")
+	p12Legacy, err := pkcs12.LegacyDES.Encode(key, leaf, nil, "geheim")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	cases := map[string]struct{ cert, key string }{
 		"pkcs8":      {certPEM, p8PEM},
