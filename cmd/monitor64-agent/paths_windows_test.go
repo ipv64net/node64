@@ -112,6 +112,17 @@ func TestPrepareDirRejectsForeign(t *testing.T) {
 	if protectedDACL(t, foreign) {
 		t.Fatal("Rechte des fremden Ordners geaendert")
 	}
+	// leerer Ordner desselben fremden Eigentuemers: nichts darin - wird entfernt und mit festen Rechten neu angelegt
+	empty := filepath.Join(base, "leer")
+	if err := os.Mkdir(empty, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareDir(empty, testSDDL, dataEntries, trustedOwner); err != nil {
+		t.Fatalf("leerer fremder Ordner: %v", err)
+	}
+	if !protectedDACL(t, empty) {
+		t.Fatal("leerer fremder Ordner nicht mit festen Rechten neu angelegt")
+	}
 
 	// Ordner als Junction (z. B. auf einen Ordner des Benutzers)
 	link := filepath.Join(base, "verweis")

@@ -98,16 +98,24 @@ func checkEntry(h windows.Handle, path string, trusted func(*windows.SID) bool) 
 	}
 	owner, _, err := sd.Owner()
 	if err != nil || !trusted(owner) {
-		return fmt.Errorf("%s is owned by %s, not by SYSTEM or Administrators - someone else may have put keys there; "+
-			"check its contents, delete it and run install again", path, accountName(owner))
+		return &foreignOwnerError{path: path, owner: accountName(owner)}
 	}
 	return nil
+}
+
+// foreignOwnerError: der Eintrag gehoert weder SYSTEM noch den Administratoren.
+type foreignOwnerError struct{ path, owner string }
+
+func (e *foreignOwnerError) Error() string {
+	return fmt.Sprintf("%s is owned by %s, not by SYSTEM or Administrators - someone else may have put keys there; "+
+		"check its contents, delete it and run install again", e.path, e.owner)
 }
 
 // prepareDir legt einen Ordner der Ablage mit festen Rechten an bzw. uebernimmt einen vorhandenen nur, wenn er kein
 // Verweis ist und SYSTEM/Administratoren gehoert; dann werden Eigentuemer und Rechte neu gesetzt (an vorhandene
 // Eintraege vererbt) und danach die Eintraege aus entries ebenso geprueft. Sonst Abbruch: ein Benutzer koennte den
-// Ordner vorher angelegt und dort Schluessel, Hostschluessel oder Push-Ziele hinterlegt haben.
+// Ordner vorher angelegt und dort Schluessel, Hostschluessel oder Push-Ziele hinterlegt haben. Ausnahme: ein leerer
+// Ordner eines anderen Eigentuemers wird entfernt und neu angelegt.
 func prepareDir(dir, sddl string, entries []string, trusted func(*windows.SID) bool) error {
 	h, err := openEntry(dir)
 	if err != nil {
@@ -125,9 +133,33 @@ func prepareDir(dir, sddl string, entries []string, trusted func(*windows.SID) b
 		}
 		return nil
 	}
-	defer windows.CloseHandle(h) // bis zum Ende offen: der Ordner bleibt derselbe
+	closed := false
+	defer func() { // bis zum Ende offen: der Ordner bleibt derselbe
+		if !closed {
+			windows.CloseHandle(h)
+		}
+	}()
 	if err := checkEntry(h, dir, trusted); err != nil {
-		return err
+		// Leerer Ordner eines anderen Eigentuemers (z. B. lief der Agent einmal ohne Administratorrechte): darin kann
+		// niemand etwas hinterlegt haben. Entfernen und mit festen Rechten neu anlegen - RemoveDirectory gelingt nur
+		// bei einem leeren Ordner, sonst bleibt es beim Abbruch (auch bei Verweisen und Dateien).
+		var fo *foreignOwnerError
+		if !errors.As(err, &fo) {
+			return err
+		}
+		windows.CloseHandle(h) // das Handle sperrt das Loeschen
+		closed = true
+		p, perr := windows.UTF16PtrFromString(dir)
+		if perr != nil || windows.RemoveDirectory(p) != nil {
+			return err
+		}
+		if cerr := createDirSecure(dir, sddl); cerr != nil {
+			if errors.Is(cerr, windows.ERROR_ALREADY_EXISTS) {
+				return fmt.Errorf("%s was created by someone else in the meantime - run install again", dir)
+			}
+			return fmt.Errorf("%s: %w", dir, cerr)
+		}
+		return nil
 	}
 	// Erst die Rechte setzen (danach kann niemand sonst mehr Eintraege anlegen), dann die Eintraege pruefen.
 	if err := setSecurity(dir, sddl); err != nil {

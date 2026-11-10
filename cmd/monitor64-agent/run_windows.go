@@ -34,12 +34,17 @@ func init() { platformRun = runWindows }
 func runWindows(exe string, args []string) int {
 	keepRunLink(exe)
 	// Ordner der Einstellungen nie mit geerbten Rechten anlegen (Hostschluessel, Protokoll; siehe ensureDataDir)
-	dir := defaultDir
+	dir, flagsOK := defaultDir, false
 	if f, err := parseRunFlags(args, io.Discard); err == nil {
-		dir = f.dir
+		dir, flagsOK = f.dir, true
 	}
-	dirErr := ensureDataDir(dir)
 	isSvc, err := svc.IsWindowsService()
+	// Im Vordergrund mit fehlerhaften Flags keinen Ordner anlegen: der Standardordner gehoerte dann dem Benutzer und
+	// stuende einer spaeteren Installation im Weg. Der Dienst braucht ihn auch dann (Protokoll mit der Fehlermeldung).
+	var dirErr error
+	if flagsOK || (err == nil && isSvc) {
+		dirErr = ensureDataDir(dir)
+	}
 	if err != nil || !isSvc {
 		if dirErr != nil {
 			fmt.Fprintln(os.Stderr, "monitor64-agent:", dirErr)
