@@ -649,6 +649,13 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   angenommen. **Freigabe (Entscheidung Dennis): Monitor64 kommt mit der nächsten Version, zusammen mit dem Rückbau
   von Proxmox VE/Docker aus Healthchecks (Healthchecks 3.0.0, andere Sitzung).** Der Schalter `NODE64_MONITOR64`
   ist entfernt: Das Modul ist wie die anderen unter Einstellungen → Module einschaltbar, Standard aus.
+- **Logo steht aus:** Monitor64 bekommt ein eigenes Logo (liefert Dennis, nichts Eigenes entwerfen). Sobald es da
+  ist, wie bei den anderen Modulen nachziehen: Dateien `internal/web/static/img/monitor64.svg` und
+  `monitor64_dark.svg`; `Image:` in `module.Info` (`internal/monitor64/module.go`, bisher nur das Symbol
+  `bi-activity`) und – falls vorhanden – in Dashboard-Karte/`DashboardInfo`; Überschrift der Seiten
+  (`templates/pages/overview.html`, bisher `bi-activity`); Symbol des Windows-Agenten in der Taskleiste
+  (`cmd/monitor64-agent/tray.png`, bisher das Node64-Symbol, 32×32); auf node64.de Kopf der Seite
+  `docs/monitor64`, Karte in der Doku-Übersicht und `site.json`.
 - Offene Punkte: OPNsense, pfSense und TrueNAS CORE nur nachgestellt (Test durch die Community); Ruhezeit-Prüfung für Erinnerungen (Dispatcher
   exportieren); vor der Umstellung auf übersetzbare Namen erkannte Dienste behalten ihren deutschen Namen (der
   gespeicherte Name geht vor); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit
