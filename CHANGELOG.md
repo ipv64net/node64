@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Ein dauerhaft gestörter Online-Check verbraucht das Tageskontingent nicht mehr im 20-Sekunden-Takt – bei bestätigter Störung gilt wieder das normale Intervall.
 - DNS64: Blocklisten über 64 MB werden sichtbar gekürzt (Hinweis an der Liste) statt still abgeschnitten.
 - DNS64: Geräteprofile für Apple (`.mobileconfig`) lassen sich auf macOS und iOS installieren (#60).
 - Zertifikate: Bei Domains von ipv64 (und anderen Anbietern) prüft die Node den TXT-Eintrag wieder bei den richtigen Nameservern, auch wenn der Container eine Suchdomain mit Wildcard-CNAME hat (z. B. eigene Domain bei Cloudflare) – bisher scheiterte die Ausstellung mit „not visible on … ns.cloudflare.com“. Gleiche Korrektur für DynDNS und den DNS-Healthcheck.

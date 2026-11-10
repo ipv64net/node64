@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: a permanently failing online check no longer uses up the daily quota every 20 seconds – once the outage is confirmed, the normal interval applies again.
 - DNS64: blocklists over 64 MB are shortened visibly (hint on the list) instead of being cut off silently.
 - DNS64: Apple device profiles (`.mobileconfig`) install on macOS and iOS (#60).
 - Certificates: for ipv64 domains (and other providers) the node checks the TXT record at the right nameservers again, even if the container has a search domain with a wildcard CNAME (e.g. your own domain at Cloudflare) – so far issuing failed with “not visible on … ns.cloudflare.com”. Same fix for DynDNS and the DNS healthcheck.

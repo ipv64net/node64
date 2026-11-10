@@ -2794,6 +2794,7 @@
       "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen",
       "notify_degraded_hint": "Nur mit mehreren Messstellen relevant.",
       "interval_min": "Lokal ab 5 s, online und hybrid ab 20 s.",
+      "retry_hint": "Lokal: solange der Check gestört ist. Online: nur bis Störung bzw. Erholung bestätigt sind, danach wieder das normale Intervall (schont das Tageskontingent).",
       "channels_sys": "Dieser Check gehört zu „{item}“ auf {system}. Seine Kanäle legst du dort fest (Benachrichtigung → Kanäle) – sie gelten für den Check und für die Meldungen des Systems.",
       "channels_sys_link": "Kanäle dort ändern",
       "channels_now": "Es gelten",

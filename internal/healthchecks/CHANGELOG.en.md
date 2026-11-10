@@ -7,6 +7,7 @@
 
 ### Fixed
 - DNS check at the authoritative nameservers: the nameservers are looked up without the search domains from `resolv.conf` (otherwise a wildcard CNAME in the search domain could make the check ask foreign nameservers).
+- Online checks: once an outage is confirmed, the ipv64 servers measure at the normal interval again instead of permanently at the “interval while down” (default 20 s). Otherwise a permanently failing check used up the daily quota within a few hours and paused all online checks until midnight. The short interval still confirms outage and recovery; “Check now” checks immediately. Hint below the field (forum 5042).
 
 ## 2.54.0 – 2026-11-08
 

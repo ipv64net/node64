@@ -151,6 +151,11 @@ type Options struct {
 	Throttle func(c Check) bool
 	// Observe (optional, hub): jeder ausgefuehrte Lauf mit Messpunkt und Dauer (Prometheus je Check-Typ).
 	Observe func(c Check, m Measurement, took time.Duration)
+	// DownAtInterval (hub): im bestaetigten Stoerungszustand (und solange der uebergeordnete Check gestoert ist) das
+	// Normalintervall statt des Retry-Intervalls - sonst verbraucht ein dauerhaft gestoerter Online-Check alle 20 s
+	// eine Messung und leert das Tageskontingent (Forum 5042). Das Retry-Intervall gilt weiter zum Bestaetigen der
+	// Stoerung und der Erholung; "Jetzt pruefen" prueft sofort.
+	DownAtInterval bool
 }
 
 type entry struct {
@@ -741,8 +746,8 @@ func (s *Scheduler) transition(e *entry, m *Measurement, parentDown bool) []Even
 	return events
 }
 
-// nextInterval: im gestoerten oder stabilisierenden Zustand das Retry-Intervall,
-// sonst das Normalintervall, jeweils mit Jitter.
+// nextInterval: im gestoerten oder stabilisierenden Zustand das Retry-Intervall (mit DownAtInterval nur beim
+// Bestaetigen und Stabilisieren), sonst das Normalintervall, jeweils mit Jitter.
 func (s *Scheduler) nextInterval(e *entry) time.Duration {
 	iv := e.check.Interval
 	if iv <= 0 {
@@ -753,7 +758,11 @@ func (s *Scheduler) nextInterval(e *entry) time.Duration {
 		retry = iv
 	}
 	switch e.rt.State {
-	case StateDown, StateStabilizing, StateDependent:
+	case StateDown, StateDependent:
+		if !s.opts.DownAtInterval {
+			iv = retry
+		}
+	case StateStabilizing:
 		iv = retry
 	default:
 		if e.rt.ConsecutiveFail > 0 {

@@ -2794,6 +2794,7 @@
       "notify_degraded": "Also notify on \\u201cpartially down\\u201d",
       "notify_degraded_hint": "Only relevant with several measuring points.",
       "interval_min": "Local from 5 s, online and hybrid from 20 s.",
+      "retry_hint": "Local: as long as the check is down. Online: only until the outage or recovery is confirmed, then the normal interval again (saves the daily quota).",
       "channels_sys": "This check belongs to “{item}” on {system}. Its channels are set there (notifications → channels) – they apply to the check and to the system's alerts.",
       "channels_sys_link": "Change channels there",
       "channels_now": "In effect",

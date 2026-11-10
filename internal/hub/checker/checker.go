@@ -165,7 +165,7 @@ func (c *Checker) Start(ctx context.Context) error {
 		c.throttle = newThrottle(0, 0, c.log)
 	}
 	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers, Allow: c.st.AllowRun, Throttle: c.throttle.allow,
-		Observe: c.observe})
+		Observe: c.observe, DownAtInterval: true}) // Tageskontingent: gestoerte Checks im Normalintervall
 	nodes, _ := c.st.LiveNodes(ctx)
 	c.slotIdx, c.slotMod = c.st.SlotShare(nodes)
 	if len(nodes) > 0 {

@@ -657,3 +657,29 @@ func TestPushIgnoresCancelledRequest(t *testing.T) {
 		t.Fatalf("push down with cancelled context: %+v", ev)
 	}
 }
+
+// DownAtInterval (hub): bestaetigt gestoert bzw. abhaengig im Normalintervall, Bestaetigen und Stabilisieren im
+// Retry-Intervall; ohne die Option wie bisher (Forum 5042, Tageskontingent).
+func TestNextIntervalDown(t *testing.T) {
+	for _, tc := range []struct {
+		hub   bool
+		state State
+		fails int
+		want  time.Duration
+	}{
+		{false, StateDown, 3, 20 * time.Second},
+		{false, StateDependent, 0, 20 * time.Second},
+		{true, StateDown, 3, 600 * time.Second},
+		{true, StateDependent, 0, 600 * time.Second},
+		{true, StateStabilizing, 0, 20 * time.Second},
+		{true, StateUp, 1, 20 * time.Second}, // Stoerung bestaetigen
+		{true, StateUp, 0, 600 * time.Second},
+	} {
+		s := &Scheduler{opts: Options{DownAtInterval: tc.hub}}
+		e := &entry{check: Check{Interval: 600 * time.Second, RetryInterval: 20 * time.Second}}
+		e.rt.State, e.rt.ConsecutiveFail = tc.state, tc.fails
+		if got := s.nextInterval(e); got != tc.want {
+			t.Errorf("hub=%v %s fails=%d: %v, want %v", tc.hub, tc.state, tc.fails, got, tc.want)
+		}
+	}
+}

@@ -7,6 +7,7 @@
 
 ### Behoben
 - DNS-Check bei den zuständigen Nameservern: Die Nameserver werden ohne die Suchdomains aus `resolv.conf` gesucht (sonst konnten mit einem Wildcard-CNAME in der Suchdomain fremde Nameserver gefragt werden).
+- Online-Checks: Bei bestätigter Störung messen die ipv64-Server wieder im normalen Intervall statt dauerhaft im „Intervall bei Störung“ (Standard 20 s). Ein dauerhaft gestörter Check hat sonst das Tageskontingent in wenigen Stunden aufgebraucht und alle Online-Checks bis Mitternacht pausiert. Das kurze Intervall gilt weiter zum Bestätigen von Störung und Erholung; „Jetzt prüfen“ prüft sofort. Hinweis dazu unter dem Feld (Forum 5042).
 
 ## 2.54.0 – 2026-11-08
 
