@@ -4,6 +4,7 @@
 
 ### Security
 - DHCP names: a device can no longer take over a device name of a local zone with “Devices” via its DHCP hostname (e.g. `nas.home.lan` from the device groups when DHCP network and zone share the domain). So far the DHCP name answered before the zone. The device itself (same MAC or IP as in the group) keeps its DHCP name; names are rebuilt after changes to groups or zones.
+- DHCP: requests with giaddr (relay) for a directly attached network only count when they arrive on its interface – a device can no longer occupy leases and names in another network with a forged giaddr. Networks “behind a DHCP relay” unchanged.
 
 ## 1.39.0 – 2026-11-10
 

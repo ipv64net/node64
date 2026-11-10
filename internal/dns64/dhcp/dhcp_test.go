@@ -135,9 +135,9 @@ func TestRenewUnicastAndRelay(t *testing.T) {
 	if r == nil || r.msg.MessageType() != dhcpv4.MessageTypeAck || r.to != netip.AddrPortFrom(ip, 68) {
 		t.Fatalf("renew %v", r)
 	}
-	// Relay: Netz ueber giaddr, Antwort an das Relay
+	// Relay: Netz ueber giaddr, Antwort an das Relay (direkt angeschlossenes Netz: nur ueber seine Schnittstelle)
 	d := discover(t, macB, dhcpv4.WithGatewayIP(net.ParseIP("192.168.1.254")))
-	r = s.Handle("other0", d)
+	r = s.Handle("eth0", d)
 	if r == nil || r.to != netip.MustParseAddrPort("192.168.1.254:67") {
 		t.Fatalf("relay %v", r)
 	}
@@ -352,6 +352,28 @@ func TestRelayUnicastRenew(t *testing.T) {
 		dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("10.20.0.200"))))
 	if r := s.Handle("eth0", reboot); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak || !r.msg.IsBroadcast() {
 		t.Fatalf("relay nak %v", r)
+	}
+}
+
+// giaddr eines direkt angeschlossenen Netzes von einer anderen Schnittstelle: keine Antwort (gefaelschtes Relay).
+func TestGiaddrOtherInterface(t *testing.T) {
+	lan, guest := testScope(), testScope()
+	guest.ID, guest.Iface, guest.Subnet = 2, "eth1", netip.MustParsePrefix("10.30.0.0/24")
+	guest.Start, guest.End, guest.Router = netip.MustParseAddr("10.30.0.100"), netip.MustParseAddr("10.30.0.110"), netip.MustParseAddr("10.30.0.1")
+	s, _, _ := newTest(t, Config{Scopes: []Scope{lan, guest}})
+	s.Addrs = func(iface string) []netip.Prefix {
+		if iface == "eth1" {
+			return []netip.Prefix{netip.MustParsePrefix("10.30.0.2/24")}
+		}
+		return []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")}
+	}
+	s.bind(false)
+	req, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeDiscover), dhcpv4.WithGatewayIP(net.ParseIP("10.30.0.1")))
+	if r := s.Handle("eth0", req); r != nil {
+		t.Fatalf("offer for a directly attached network via a spoofed giaddr: %v", r)
+	}
+	if r := s.Handle("eth1", req); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeOffer {
+		t.Fatalf("relay on the network's own interface: %v", r)
 	}
 }
 

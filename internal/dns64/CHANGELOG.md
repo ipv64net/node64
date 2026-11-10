@@ -4,6 +4,7 @@
 
 ### Sicherheit
 - DHCP-Namen: Ein Gerät kann per DHCP-Hostname keinen Gerätenamen einer lokalen Zone mit „Geräte“ mehr übernehmen (z. B. `nas.home.lan` aus den Gerätegruppen, wenn DHCP-Netz und Zone dieselbe Domain haben). Bisher antwortete der DHCP-Name vor der Zone. Das Gerät selbst (gleiche MAC oder IP wie in der Gruppe) behält seinen DHCP-Namen; nach Änderungen an Gruppen oder Zonen werden die Namen neu gebaut.
+- DHCP: Anfragen mit giaddr (Relay) für ein direkt angeschlossenes Netz zählen nur, wenn sie über dessen Schnittstelle kommen – ein Gerät kann per gefälschtem giaddr keine Vergaben und Namen in einem anderen Netz belegen. Netze mit „hinter einem DHCP-Relay“ unverändert.
 
 ## 1.39.0 – 2026-11-10
 

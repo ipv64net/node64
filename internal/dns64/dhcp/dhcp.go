@@ -349,9 +349,14 @@ func (s *Server) conflict(ip netip.Addr, now time.Time) bool {
 
 // scopeFor waehlt das Netz einer Anfrage: ueber ein Relay das Netz des giaddr, sonst das Netz der Client-Adresse
 // (Unicast-Verlaengerung, RELEASE, INFORM - auch hinter einem Relay, RFC 2131 4.3.2), sonst das der Schnittstelle.
+// Ein Netz ohne Relay nur ueber seine eigene Schnittstelle (sonst koennte ein Geraet per gefaelschtem giaddr in einem
+// anderen direkt angeschlossenen Netz Vergaben und Namen belegen).
 func (s *Server) scopeFor(iface string, req *dhcpv4.DHCPv4) *scope {
 	if gi := ip4(req.GatewayIPAddr); gi.IsValid() {
-		return s.scopeOf(gi)
+		if sc := s.scopeOf(gi); sc != nil && (sc.Relay || sc.Iface == iface) {
+			return sc
+		}
+		return nil
 	}
 	if ci := ip4(req.ClientIPAddr); ci.IsValid() {
 		if sc := s.scopeOf(ci); sc != nil && (sc.Relay || sc.Iface == iface) {
