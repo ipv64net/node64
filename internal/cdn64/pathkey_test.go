@@ -59,3 +59,46 @@ func TestLocationDupByKey(t *testing.T) {
 		t.Fatalf("dup by key: %v", err)
 	}
 }
+
+// Location mit Pfad beim Ziel: der Rest hinter der Location kommt auch bei Schreibvarianten richtig an, und Formen von
+// ".." (..;, ".. ", ...) werden abgewiesen statt aus dem Pfad beim Ziel heraus zu fuehren (Review b3f1c000).
+func TestLocationForwardVariants(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	port, _ := pathBackend(t)
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID = []string{"fw.test"}, "127.0.0.1", port, CertNone
+	h.Locations = []Location{{Path: "/api", TargetHost: "127.0.0.1", TargetPort: port, ForwardPath: "/v1"}}
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	c := e.client(false)
+	for in, want := range map[string]string{"/api/x": "/v1/x", "/API/x": "/v1/x", "/api./x": "/v1/x", "/api%5cx": "/v1/x", "/Api/a/b/": "/v1/a/b/", "/api../x": "/v1/x"} {
+		if _, got, _ := getJSON(t, c, "http://fw.test"+in); got["path"] != want {
+			t.Errorf("%s: %v, want %s", in, got["path"], want)
+		}
+	}
+	for _, in := range []string{"/api/..;/x", "/api/..%20/x", "/api/.../x"} {
+		if code, _, _ := do(t, c, "GET", "http://fw.test"+in); code != 400 {
+			t.Errorf("%s: %d, want 400", in, code)
+		}
+	}
+}
+
+// Altbestand mit /admin und /Admin (gleicher key): buchstabengenau gewinnt, sonst die strengere Route.
+func TestPickRouteSameKey(t *testing.T) {
+	routes := []route{{prefix: "/Admin", key: "/admin"}, {prefix: "/admin", key: "/admin", strict: true}, {prefix: ""}}
+	if r := pickRoute(routes, "/admin/x"); r.prefix != "/admin" {
+		t.Fatalf("exact: %s", r.prefix)
+	}
+	if r := pickRoute(routes, "/Admin"); r.prefix != "/Admin" {
+		t.Fatalf("exact other: %s", r.prefix)
+	}
+	if r := pickRoute(routes, "/ADMIN"); r.prefix != "/admin" {
+		t.Fatalf("variant must take the strict route: %s", r.prefix)
+	}
+	if !pathIn("/ſecure", "/secure") {
+		t.Fatal("U+017F folds to s")
+	}
+}

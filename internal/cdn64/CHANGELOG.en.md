@@ -4,6 +4,7 @@
 
 ### Fixed
 - Locations: a location's access list, block and settings now also apply to spelling variants of the path – `/SECURE`, `/secure.`, `/secure%20`, `/secure;x` or `/secure\x` now reach the location `/secure` instead of the target unprotected (important for targets that ignore case, e.g. IIS or Windows). The target still gets the path unchanged. Locations that differ only in spelling (`/api` and `/API`) count as duplicates when saving (security review).
+- Paths with segments a target may read as `..` (`..;`, `.. `, `...`) are rejected with 400; for locations with a forward path the rest behind the location arrives correctly for spelling variants too (`/API/x` → `/v1/x`).
 
 ## 1.54.0 – 2026-11-09
 

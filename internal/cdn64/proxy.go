@@ -333,7 +333,7 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 	// Besucher-Anfrage merken: Rueckschreiben (Host, Pfad), {{HOST}} der Fehlerseite und robots.txt brauchen sie
 	keepIn := host && (t.forward != "" || adv.AIRobots) || adv.ErrorOverride && adv.ErrorHTML != ""
 	join := func(fw, in string) string {
-		rest := strings.TrimPrefix(strings.TrimPrefix(in, t.prefix), "/")
+		rest := stripSegs(in, strings.Count(t.prefix, "/")) // Location: Abschnitte ihres Pfads, Host: nur der erste /
 		if rest != "" || strings.HasSuffix(in, "/") {
 			return strings.TrimSuffix(fw, "/") + "/" + rest
 		}
@@ -444,6 +444,8 @@ func compress(next http.Handler, opt httpcompress.Options) http.Handler {
 // route ist ein Pfad eines Hosts mit eigenem Proxy und eigener Zugriffsliste.
 type route struct {
 	prefix string // "" = Host selbst
+	key    string // pathKey(prefix)
+	strict bool   // Zugriffsliste bzw. sperren/feste Antwort: gewinnt bei gleichem key (pickRoute)
 	ws     bool
 	acl    int64
 	deny   string // Weiterleitung bei verweigertem Zugriff (#55), "" = Fehlerseite
@@ -492,9 +494,16 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		if deniedLoop(h.Names, h.Locations, &l) { // beim Speichern schon abgelehnt; hier nur zur Sicherheit
 			deny = ""
 		}
-		routes = append(routes, route{prefix: prefix, ws: l.WebSockets, acl: acl, deny: deny, next: ln})
+		routes = append(routes, route{prefix: prefix, key: pathKey(prefix), strict: acl > 0 || l.Action != LocProxy, ws: l.WebSockets,
+			acl: acl, deny: deny, next: ln})
 	}
-	sort.SliceStable(routes, func(i, j int) bool { return len(routes[i].prefix) > len(routes[j].prefix) })
+	// laengster key zuerst, gleiche keys nebeneinander (pickRoute)
+	sort.SliceStable(routes, func(i, j int) bool {
+		if len(routes[i].key) != len(routes[j].key) {
+			return len(routes[i].key) > len(routes[j].key)
+		}
+		return routes[i].key < routes[j].key
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Route nach dem bereinigten Pfad (//admin, %2e-Segmente); das Ziel bekommt den Pfad unveraendert (wie nginx).
 		// Gross-/Kleinschreibung, Parameter und Leerzeichen/Punkte am Ende zaehlen dabei nicht (pathIn).
@@ -507,9 +516,10 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 			return
 		}
 		rt := &routes[len(routes)-1]
+		pk := pathKey(p)
 		for i := range routes {
-			if routes[i].prefix == "" || pathIn(p, routes[i].prefix) {
-				rt = &routes[i]
+			if routes[i].prefix == "" || keyIn(pk, routes[i].key) {
+				rt = pickRoute(routes[i:], p)
 				break
 			}
 		}
@@ -539,14 +549,35 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 	})
 }
 
+// pickRoute: routes[0] passt; unter den folgenden Routen mit gleichem key (vor 1.54.1 gespeichert, z. B. /admin und
+// /Admin) gewinnt die buchstabengenau passende, sonst die strengere.
+func pickRoute(routes []route, p string) *route {
+	best := &routes[0]
+	for i := range routes {
+		r := &routes[i]
+		if r.prefix == "" || r.key != routes[0].key {
+			break
+		}
+		if p == r.prefix || strings.HasPrefix(p, r.prefix+"/") {
+			return r
+		}
+		if r.strict && !best.strict {
+			best = r
+		}
+	}
+	return best
+}
+
 // reqPath: Pfad fuer die Wahl der Route, doppelte Schraegstriche zusammengefasst (Schraegstrich am Ende bleibt);
-// ok = false bei Punkt-Segmenten ("." und "..", auch kodiert oder mit Backslash), die Browser nie schicken.
+// ok = false bei Punkt-Segmenten ("." und "..", auch kodiert oder mit Backslash), die Browser nie schicken - auch in
+// Formen, die ein Ziel wie ".." lesen kann ("..;", ".. ", "...": Tomcat bzw. IIS/Windows), sonst ginge es aus dem
+// Pfad beim Ziel heraus.
 func reqPath(p string) (string, bool) {
 	if !strings.HasPrefix(p, "/") {
 		return p, true
 	}
 	for _, s := range strings.FieldsFunc(p, func(c rune) bool { return c == '/' || c == '\\' }) {
-		if s == "." || s == ".." {
+		if segKey(s) == "" {
 			return "", false
 		}
 	}
@@ -560,9 +591,23 @@ func reqPath(p string) (string, bool) {
 // pathIn: Pfad liegt unter dem Praefix einer Location. Verglichen wird ueber pathKey: sonst liefen /ADMIN, "/admin "
 // oder /admin;x an Zugriffsliste bzw. Sperre von /admin vorbei, wenn das Ziel sie wie /admin behandelt (IIS,
 // Windows-Freigaben, Tomcat). Das Ziel bekommt den Pfad weiter unveraendert.
-func pathIn(p, prefix string) bool {
-	p, prefix = pathKey(p), pathKey(prefix)
-	return p == prefix || strings.HasPrefix(p, prefix+"/")
+func pathIn(p, prefix string) bool { return keyIn(pathKey(p), pathKey(prefix)) }
+
+// keyIn: wie pathIn mit schon gebildeten Schluesseln.
+func keyIn(pk, key string) bool { return pk == key || strings.HasPrefix(pk, key+"/") }
+
+// stripSegs: Pfad ohne seine ersten n Abschnitte (/ und \ trennen wie bei pathKey) - der Rest hinter einer Location,
+// auch wenn der Besucher ihren Pfad anders schreibt (/API/x, /api./x unter /api).
+func stripSegs(p string, n int) string {
+	for i := 0; i < len(p); i++ {
+		if p[i] == '/' || p[i] == '\\' {
+			if n == 0 {
+				return p[i+1:]
+			}
+			n--
+		}
+	}
+	return ""
 }
 
 // pathKey: Pfad fuer den Vergleich mit Locations - klein, \ wie / (IIS), je Abschnitt ohne Parameter (;…),
@@ -570,15 +615,21 @@ func pathIn(p, prefix string) bool {
 func pathKey(p string) string {
 	segs := strings.Split(strings.ReplaceAll(p, "\\", "/"), "/")
 	for i, s := range segs {
-		if j := strings.IndexByte(s, ';'); j >= 0 {
-			s = s[:j]
-		}
-		if j := strings.Index(s, "::"); j >= 0 {
-			s = s[:j]
-		}
-		segs[i] = strings.TrimRightFunc(s, func(r rune) bool { return r == '.' || unicode.IsSpace(r) })
+		segs[i] = segKey(s)
 	}
-	return strings.ToLower(strings.Join(segs, "/"))
+	// erst gross, dann klein: auch Zeichen, die gross zu ASCII werden (U+017F -> S), wie IIS/.NET vergleichen
+	return strings.ToLower(strings.ToUpper(strings.Join(segs, "/")))
+}
+
+// segKey: ein Abschnitt ohne Parameter (;...), NTFS-Stream (::...) und ohne Punkte bzw. Leerzeichen am Ende.
+func segKey(s string) string {
+	if j := strings.IndexByte(s, ';'); j >= 0 {
+		s = s[:j]
+	}
+	if j := strings.Index(s, "::"); j >= 0 {
+		s = s[:j]
+	}
+	return strings.TrimRightFunc(s, func(r rune) bool { return r == '.' || unicode.IsSpace(r) })
 }
 
 // wsAt: WebSockets am Pfad erlaubt (Host bzw. die Location mit dem laengsten passenden Praefix).
