@@ -556,20 +556,28 @@ function pageOverview() {
 			if (!q) { return true; }
 			return (h.name + ' ' + h.address + ' ' + h.kind + ' ' + (h.tags || []).join(' ') + ' ' + h.group).toLowerCase().indexOf(q) >= 0;
 		});
-		var html = '';
+		var html = '', seen = [];
+		hs.forEach(function (h) { if (seen.indexOf(h.group) < 0) { seen.push(h.group); } });
+		var inGroup = function (g) { return hs.filter(function (h) { return h.group === g; }); };
 		if (!data.hosts.length) { html = ''; }
 		else if (!hs.length) { html = '<div class="text-body-secondary p-4 text-center">' + esc(L('ov.no_match')) + '</div>'; }
 		else if (OV.view === 'list') {
-			html = '<div class="card"><div class="table-responsive"><table class="table table-hover mb-0 align-middle"><thead><tr><th style="width:2rem"></th><th>' + esc(L('col.host')) + '</th><th class="d-none d-md-table-cell">' + esc(L('col.address')) + '</th><th class="d-none d-lg-table-cell">' + esc(L('col.tags')) + '</th><th>CPU</th><th>RAM</th><th>' + esc(L('ov.problems')) + '</th></tr></thead><tbody>' + hs.map(row).join('') + '</tbody></table></div></div>';
+			// Gruppen als Trennzeilen: table-sort.js sortiert damit je Gruppe. Die Tabelle bleibt beim Auffrischen stehen
+			// (nur die Zeilen neu), sonst ginge die gewaehlte Sortierung alle 15 s verloren.
+			var rows = seen.map(function (g) {
+				var gh = inGroup(g);
+				return '<tr class="table-group" data-sort-sep><td colspan="7" class="small fw-semibold text-body-secondary">' + esc(g || L('ov.no_group')) + ' <span class="fw-normal text-body-tertiary">' + gh.length + '</span></td></tr>' + gh.map(row).join('');
+			}).join('');
+			var tb = $('#m64-hosts table tbody');
+			if (tb) { tb.innerHTML = rows; html = null; }
+			else { html = '<div class="card"><div class="table-responsive"><table class="table table-hover mb-0 align-middle"><thead><tr><th style="width:2rem"></th><th>' + esc(L('col.host')) + '</th><th class="d-none d-md-table-cell">' + esc(L('col.address')) + '</th><th class="d-none d-lg-table-cell">' + esc(L('col.tags')) + '</th><th>CPU</th><th>RAM</th><th>' + esc(L('ov.problems')) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'; }
 		} else {
-			var seen = [];
-			hs.forEach(function (h) { if (seen.indexOf(h.group) < 0) { seen.push(h.group); } });
 			seen.forEach(function (g) {
-				var gh = hs.filter(function (h) { return h.group === g; });
+				var gh = inGroup(g);
 				html += '<div class="group-head">' + esc(g || L('ov.no_group')) + ' <span class="fw-normal text-body-tertiary">' + gh.length + '</span></div><div class="row g-3">' + gh.map(tile).join('') + '</div>';
 			});
 		}
-		$('#m64-hosts').innerHTML = html;
+		if (html !== null) { $('#m64-hosts').innerHTML = html; }
 		$('#m64-empty').classList.toggle('d-none', data.hosts.length > 0);
 		$('#m64-filter').classList.toggle('d-none', data.hosts.length === 0);
 		clOrphans(CLV.orphans, function () { return api('GET', '/api/monitor64/cluster/views').then(function (v) { CLV = v || CLV; render(); refresh(); }); }); // Cluster: verwaiste Hosts

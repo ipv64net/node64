@@ -1,5 +1,11 @@
 # Monitor64 – Änderungen
 
+## 0.1.1 – 2026-11-10
+
+- Übersicht, Ansicht „Liste“: Hosts stehen nach Gruppen zusammen (Gruppenzeile mit Anzahl wie bei den Kacheln). Ein
+  Klick auf eine Spalte sortiert innerhalb jeder Gruppe, und die gewählte Sortierung bleibt beim automatischen
+  Auffrischen erhalten.
+
 ## 0.1.0 – 2026-11-10
 
 - Neues Modul: Systeme überwachen mit Schwellen und Verlauf (Plan `docs/PLAN-NODE64-MONITOR64.md`).

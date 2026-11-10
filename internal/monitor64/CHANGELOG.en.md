@@ -1,5 +1,10 @@
 # Monitor64 – Changes
 
+## 0.1.1 – 2026-11-10
+
+- Overview, "List" view: hosts stay together by group (group row with count, as with the tiles). Clicking a column
+  sorts within each group, and the chosen order survives the automatic refresh.
+
 ## 0.1.0 – 2026-11-10
 
 - New module: monitor systems with thresholds and history.
