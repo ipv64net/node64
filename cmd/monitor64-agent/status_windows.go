@@ -19,7 +19,7 @@ import (
 const (
 	statusFile  = "status.json"
 	statusEvery = 5 * time.Second
-	statusBeat  = time.Minute // spaetestens so oft neu schreiben (das Symbol erkennt daran einen haengenden Dienst nicht, aber die Datei bleibt frisch)
+	statusBeat  = time.Minute // auch ohne Aenderung so oft neu schreiben
 )
 
 func statusPath(exe string) string { return filepath.Join(filepath.Dir(exe), statusFile) }
@@ -52,10 +52,11 @@ func writeStatus(path string, st m64agent.Status) error {
 }
 
 // statusLoop schreibt den Stand des Dienstes bei jeder Aenderung und entfernt die Datei beim Beenden. Eine von der
-// Node gemeldete verfuegbare Version uebersteht den Neustart (aus der vorigen Datei), solange sie nicht die laufende ist.
+// Node gemeldete verfuegbare Version uebersteht den Neustart nach einem Update (aus der vorigen Datei): das Symbol
+// zeigt dann gleich "aktuell" statt "noch keine Angabe".
 func statusLoop(ctx context.Context, srv *m64agent.Server, exe string, log *slog.Logger) {
 	path := statusPath(exe)
-	if old, ok := readStatus(path); ok && old.Latest != "" && old.Latest != Version {
+	if old, ok := readStatus(path); ok && old.Latest != "" {
 		srv.SetLatest(old.Latest, time.Unix(old.LatestAt, 0))
 	}
 	var last m64agent.Status

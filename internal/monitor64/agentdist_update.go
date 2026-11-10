@@ -492,7 +492,7 @@ func (m *Module) agentPush(ctx context.Context, rt *hostRT, acc string, by Actor
 		case <-time.After(agentRestartPoll):
 		}
 		ictx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		info, err := agentInfo(ictx, ac, "")
+		info, err := agentInfo(ictx, ac, hdr.Version) // nennt dem Agent gleich die jetzt aktuelle Version
 		cancel()
 		if err == nil && sameAgentVersion(info.Version, hdr.Version) {
 			m.agentNoteInfo(ctx, h, acc, info, nil, time.Now())

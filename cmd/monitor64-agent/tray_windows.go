@@ -162,7 +162,7 @@ func trayLines(v trayView, de bool, now time.Time) (tip string, lines []string) 
 	case v.Latest == "":
 		lines = append(lines, t("Update: noch keine Angabe der Node", "Update: no information from the node yet"))
 	case newerVersion(v.Latest, v.Version):
-		lines = append(lines, t("Update verfügbar: ", "Update available: ")+v.Latest+t(" – die Node spielt es ein", " – installed by the node"))
+		lines = append(lines, t("Update verfügbar: ", "Update available: ")+v.Latest+t(" – Einspielen über Node64", " – installed via Node64"))
 		tip += t(" – Update verfügbar: ", " – update available: ") + v.Latest
 	default:
 		lines = append(lines, t("Update: aktuell", "Update: up to date"))

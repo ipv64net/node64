@@ -24,12 +24,12 @@ func TestTrayLines(t *testing.T) {
 	}
 	v.Latest = "0.4.0"
 	tip, lines = trayLines(v, true, now)
-	if tip != "Monitor64-Agent 0.3.0 – läuft – Update verfügbar: 0.4.0" || lines[3] != "Update verfügbar: 0.4.0 – die Node spielt es ein" {
+	if tip != "Monitor64-Agent 0.3.0 – läuft – Update verfügbar: 0.4.0" || lines[3] != "Update verfügbar: 0.4.0 – Einspielen über Node64" {
 		t.Fatalf("update: %q %q", tip, lines)
 	}
 	tip, lines = trayLines(v, false, now)
 	if tip != "Monitor64-Agent 0.3.0 – running – update available: 0.4.0" || lines[2] != "Last poll by the node: 42 s ago" ||
-		lines[3] != "Update available: 0.4.0 – installed by the node" {
+		lines[3] != "Update available: 0.4.0 – installed via Node64" {
 		t.Fatalf("englisch: %q %q", tip, lines)
 	}
 	v.Latest = "0.3.0"

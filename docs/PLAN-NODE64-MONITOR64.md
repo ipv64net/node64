@@ -636,8 +636,14 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   eines Kerns; mit zusätzlich 1.000 Schein-Hosts 90–112 MB RAM (stabil über 20 min) und rund 1 % eines Kerns.
   **Windows-Agent echt** auf Windows 11 im Vordergrund (Push-Betrieb): Werte stimmen; Funde behoben (nie gestartete
   Automatik-Dienste, „Updates“ erst nach der stündlichen Erkennung).
-- Offene Punkte: Windows-Agent als Dienst über `install.ps1` und Ende-zu-Ende-Test der signierten Updates stehen
-  noch aus; OPNsense, pfSense und TrueNAS CORE nur nachgestellt; Ruhezeit-Prüfung für Erinnerungen (Dispatcher
+- 2026-11-10 (Nachmittag): **Windows-Agent als Dienst echt getestet** (Windows 11, `install.ps1` von einer Testnode
+  mit Testschlüssel, Push-Betrieb): Installation, Abfrage mit Systemrechten (Plattentemperatur, Verschleiß),
+  automatisches Update samt Signaturprüfung, Gegenprobe mit fremder Signatur (abgelehnt). Funde behoben: leerer
+  Datenordner eines anderen Besitzers blockierte die Installation. Neu auf Wunsch: **Symbol im Infobereich der
+  Taskleiste** (der Dienst startet es je angemeldeter Sitzung; zeigt läuft/Version/letzte Abfrage/Update verfügbar –
+  die Node nennt dem Agent die verfügbare Version mit `info latest=<version>`), echt getestet inklusive Update.
+  Englische Oberfläche durchgeklickt, Funde behoben.
+- Offene Punkte: OPNsense, pfSense und TrueNAS CORE nur nachgestellt (Test durch die Community); Ruhezeit-Prüfung für Erinnerungen (Dispatcher
   exportieren); vor der Umstellung auf übersetzbare Namen erkannte Dienste behalten ihren deutschen Namen (der
   gespeicherte Name geht vor); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit
   ändern (`tsdb.SetRetention`). Rollout: Node vor den Agents aktualisieren (neue Agents senden Hinweis-Codes, die
