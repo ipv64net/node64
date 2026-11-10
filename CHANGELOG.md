@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.5.1 – 2026-11-10
+
 - PROXY64: Zugriffslisten und Sperren einer Location lassen sich nicht mehr über Schreibvarianten des Pfads umgehen (`/SECURE`, `/secure.`, `/secure%20` …) – wichtig bei Zielen wie IIS oder Windows.
 - Monitor64: In der Listenansicht der Übersicht stehen die Hosts nach Gruppen zusammen; ein Klick auf eine Spalte sortiert innerhalb jeder Gruppe, und die Sortierung bleibt beim automatischen Auffrischen erhalten.
 
