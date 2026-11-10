@@ -906,7 +906,7 @@ func describe(ms eval.MetricStatus, kind string, free bool) string {
 	if known {
 		label = model.Sub(model.T("monitor64.kind." + kindKey(rk.Kind)))
 	}
-	if st.Threshold.Off {
+	if st.Threshold.Off || (known && rk.State) {
 		return string(label)
 	}
 	if free {

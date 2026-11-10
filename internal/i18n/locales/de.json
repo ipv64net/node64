@@ -5875,7 +5875,8 @@
     "unit": {
       "days": "Tage",
       "min": "Min.",
-      "gb_free": "GB frei"
+      "gb_free": "GB frei",
+      "decimal": ","
     },
     "day": {
       "0": "So",

@@ -210,7 +210,13 @@ function numIn(v) {
 // keine Token mehr (txRaw entschaerft den Rest). Der Aufrufer escaped danach wie bisher.
 var reI18n = /i18n:([a-z0-9_]+(?:\.[a-z0-9_]+)*)(?:\?([A-Za-z0-9%+=&_.~-]*))?/g;
 function txRaw(s) { return s.replace(/i18n:(?=[a-z0-9_])/g, 'i18n: '); }
-function tx(s, depth) {
+// Die Sammler schreiben Groessen mit Komma ("4,4 GB"): ausserhalb des Deutschen vor einer Einheit als Punkt zeigen.
+var reDec = /(\d),(\d{1,2})(?=\s?(?:%|°C|[KMGTP]?B\/s|[KMGTP]?B(?![A-Za-z])|[kMG]?bit\/s))/g;
+function tx(s) {
+	s = txT(s, 0);
+	return D.lang === 'de' ? s : s.replace(reDec, '$1.$2');
+}
+function txT(s, depth) {
 	if (s === undefined || s === null) { return ''; }
 	s = String(s);
 	if (s.indexOf('i18n:') < 0) { return s; }
@@ -221,7 +227,7 @@ function tx(s, depth) {
 		var k = key.slice(10), a = {}, vals = [];
 		if (q) {
 			try {
-				new URLSearchParams(q).forEach(function (v, n) { a[n] = (n === 'since' || n === 'at') && toDate(v) ? fmtTime(v) : tx(v, depth + 1); vals.push(a[n]); });
+				new URLSearchParams(q).forEach(function (v, n) { a[n] = (n === 'since' || n === 'at') && toDate(v) ? fmtTime(v) : txT(v, depth + 1); vals.push(a[n]); });
 			} catch (e) { return txRaw(all); }
 		}
 		if (!TX[k]) { return vals.length ? k + ' (' + vals.join(', ') + ')' : k; }
@@ -522,8 +528,8 @@ function pageOverview() {
 		switch (r.kind) {
 		case 'ok': t = L('ov.r_ok', { n: name }); sub = L('ov.r_ok_sub'); break;
 		case 'resolved': icon = 'bi-person-check text-primary'; t = L('ov.r_resolved', { n: name }); sub = L('ov.r_by', { w: whoTxt(r.by) }) + (r.text ? ' – ' + quote(r.text) : ''); break;
-		case 'maint': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint', { n: r.text || '' }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
-		case 'maint_end': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint_end', { n: r.text || '' }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
+		case 'maint': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint', { n: tx(r.text || '') }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
+		case 'maint_end': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint_end', { n: tx(r.text || '') }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
 		}
 		return '<div class="prob-row" data-goto="/monitor64/problems?status=closed" role="link" tabindex="0"><i class="bi ' + icon + '"></i><div class="prob-main"><div class="prob-title">' + esc(t) + '</div><div class="prob-sub">' + esc(sub) + '</div></div><span class="prob-since">' + esc(ago(r.at)) + '</span></div>';
 	}

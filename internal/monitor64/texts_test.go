@@ -279,9 +279,9 @@ func TestMapReportLanguages(t *testing.T) {
 	svcs := MapReport(nil, cur)
 	for key, want := range map[string][4]string{
 		"cpu":             {"CPU", "CPU", "8 Kerne", "cores: 8"},
-		"mem":             {"RAM", "RAM", "4,0 GB von 16,0 GB frei", "4,0 GB of 16,0 GB free"},
-		"fs:/":            {"Dateisystem /", "Filesystem /", "40,0 GB von 100,0 GB frei · nur lesbar", "40,0 GB of 100,0 GB free · read-only"},
-		"zfs:tank":        {"ZFS tank", "ZFS tank", "ONLINE · 3,0 TB frei", "ONLINE · 3,0 TB free"},
+		"mem":             {"RAM", "RAM", "4,0 GB von 16,0 GB frei", "4.0 GB of 16.0 GB free"},
+		"fs:/":            {"Dateisystem /", "Filesystem /", "40,0 GB von 100,0 GB frei · nur lesbar", "40.0 GB of 100.0 GB free · read-only"},
+		"zfs:tank":        {"ZFS tank", "ZFS tank", "ONLINE · 3,0 TB frei", "ONLINE · 3.0 TB free"},
 		"temp:coretemp/0": {"Temperatur Package id 0", "Temperature Package id 0", "", ""},
 		"systemd":         {"systemd-Dienste", "systemd services", "1 fehlgeschlagen: nginx.service", "1 failed: nginx.service"},
 		"updates":         {"Updates", "Updates", "12 verfügbar, 3 Sicherheitsupdates", "12 available, 3 security updates"},
@@ -377,7 +377,7 @@ func TestTxReq(t *testing.T) {
 	if got := m.txReq(r, name); got != "Filesystem /var" {
 		t.Errorf("en Name = %q", got)
 	}
-	if got := m.txReq(r, text); got != "ONLINE · 3,0 GB free · read-only" {
+	if got := m.txReq(r, text); got != "ONLINE · 3.0 GB free · read-only" {
 		t.Errorf("en Text = %q", got)
 	}
 	lang = "de"

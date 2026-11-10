@@ -5875,7 +5875,8 @@
     "unit": {
       "days": "days",
       "min": "min",
-      "gb_free": "GB free"
+      "gb_free": "GB free",
+      "decimal": "."
     },
     "day": {
       "0": "Sun",
@@ -6380,10 +6381,10 @@
       "updates_security": "Security updates pending (longer than 1 day)",
       "reboot_required": "Reboot required",
       "guest_down": "Guest or container not running although it should",
-      "systemd_failed": "failed systemd units",
+      "systemd_failed": "Failed systemd units",
       "winsvc_stopped": "Windows service stopped (automatic start, updaters ignored)",
       "svc_vanished": "Service vanished",
-      "access_failed": "an access method does not answer",
+      "access_failed": "An access method does not answer",
       "ctr_unhealthy": "Container reports “unhealthy”",
       "backup_old": "Last backup too old (PBS)",
       "job_failed": "Job failed (verify, GC, prune, sync)",

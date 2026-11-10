@@ -103,8 +103,19 @@ func Translate(s string, tr func(key string, args ...any) string) string {
 	if tr == nil {
 		return s
 	}
-	return translate(s, tr, 0)
+	out := translate(s, tr, 0)
+	if tr(decimalKey) == "." {
+		out = reDecimal.ReplaceAllString(out, "${1}.${2}${3}")
+	}
+	return out
 }
+
+// Die Sammler schreiben Groessen mit Komma ("4,4 GB", "0,5 Mbit/s"). In Sprachen mit Dezimalpunkt (Text des
+// Schluessels decimalKey ist ".") wird das Komma vor einer Einheit zum Punkt - nur dort, damit Listen wie "1,2"
+// bleiben.
+const decimalKey = "monitor64.unit.decimal"
+
+var reDecimal = regexp.MustCompile(`(\d),(\d{1,2})(\s?(?:%|°C|[KMGTP]?B/s|[KMGTP]?B\b|[kMG]?bit/s))`)
 
 const maxDepth = 4 // Token in Parametern: so tief wird uebersetzt, darunter nur noch entschaerft
 

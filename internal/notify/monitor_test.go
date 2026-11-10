@@ -30,7 +30,7 @@ func TestMonitorMessageLanguage(t *testing.T) {
 		Data: map[string]string{"host": "nas01", "path": "/monitor64/host/h1", "severity": "crit", "lines": string(raw)}}
 
 	en := d.compose("en", a)
-	for _, want := range []string{"Filesystem /: Critical – File system / drive used 92 % (threshold 90 %)", "ZFS tank: Warning – DEGRADED · 3,0 TB free · read-only",
+	for _, want := range []string{"Filesystem /: Critical – File system / drive used 92 % (threshold 90 %)", "ZFS tank: Warning – DEGRADED · 3.0 TB free · read-only",
 		"Access Docker API: Warning – 1 sub-query(ies) failed: inspect (2): connection refused", "i18n: monitor64.state.ok (VM 100): Critical – stopped, should be running (start at boot)",
 		"Arbeitsspeicher: Warning – alter gespeicherter Text"} {
 		if !strings.Contains(en.Text, want) {

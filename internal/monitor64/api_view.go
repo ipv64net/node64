@@ -214,8 +214,14 @@ func (m *Module) overview(ctx context.Context) ovData {
 		return stateRank[a.State] > stateRank[b.State]
 	})
 	// Zuletzt: geloeste Probleme und Wartung
-	if evs, err := m.store.RecentEvents(ctx, []string{"ok", "resolved", "maint", "maint_end"}, 8); err == nil {
+	if evs, err := m.store.RecentEvents(ctx, []string{"ok", "resolved", "maint", "maint_end"}, 16); err == nil {
 		for _, e := range evs {
+			if e.Kind == "maint" && e.Problem != "" { // Hinweis am Problem ("in Wartung, nicht gemeldet"), keine eingetragene Wartung
+				continue
+			}
+			if len(d.Recent) >= 8 {
+				break
+			}
 			rc := ovRecent{Kind: e.Kind, HostUID: e.HostUID, Host: names[e.HostUID], Text: e.Text, By: e.Actor, At: e.At}
 			if e.Key != "" {
 				rc.Name = firstNonEmpty(svcNames[e.HostUID+"|"+e.Key], e.Key)
