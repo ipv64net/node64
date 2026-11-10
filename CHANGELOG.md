@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.5.0 – 2026-11-10
+
 - **Monitor64 (neues Modul, standardmäßig aus):** Systeme überwachen mit Schwellen und Verlauf – Linux, Windows und FreeBSD über den Monitor64-Agent (auch hinter NAT im Push-Betrieb, mit Symbol in der Windows-Taskleiste und automatischen Updates), Linux ohne Agent per SSH, Proxmox VE, Proxmox Backup Server, Docker, TrueNAS, Unraid, Server-BMC (Redfish), USV (NUT), Prometheus-Exporter und SNMP-Geräte samt Traps. Dienste werden erkannt und nie automatisch übernommen; Schwellen in drei Stufen, Probleme mit Ablauf und Quittieren, Wartungsfenster, Benachrichtigung über die Kanäle der Node, Einträge auf den Statusseiten, Prometheus-Export. Im Cluster überwacht je Host eine Node, eine Ersatz-Node übernimmt bei Ausfall. Einschalten unter Einstellungen → Module.
 - Healthchecks: **Achtung:** Proxmox VE und Docker sind ins Modul Monitor64 umgezogen. Beim Update werden die bisherigen Proxmox-/Docker-Checks und -Systeme samt Daten gelöscht (auch bei ipv64 und im Cluster) und nicht übernommen – bitte in Monitor64 neu einrichten.
 - Healthchecks: Ein dauerhaft gestörter Online-Check verbraucht das Tageskontingent nicht mehr im 20-Sekunden-Takt – bei bestätigter Störung gilt wieder das normale Intervall.
