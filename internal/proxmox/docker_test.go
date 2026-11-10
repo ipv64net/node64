@@ -307,60 +307,8 @@ func dkRes(name, status string, st State, detail string) Resource {
 	return r
 }
 
-func TestRulesDocker(t *testing.T) {
-	p := newPveRun(t)
-	p.set.Kind = KindDocker
-	// beendet mit Fehler, nie laufend gesehen: keine Meldung (alte Container)
-	p.expect(p.snap(true, dkRes("old", "exited", StateError, DockerExited), dkRes("web", "running", StateRunning, "")), "")
-	p.expect(p.snap(true, dkRes("old", "exited", StateError, DockerExited), dkRes("web", "running", StateRunning, "")), "")
-	// lief: beendet mit Fehler -> sofort (Verzoegerung 1)
-	evs := p.snap(true, dkRes("old", "exited", StateError, DockerExited), dkRes("web", "exited", StateError, DockerExited))
-	p.expect(evs, "down:exited:docker/web")
-	if evs[0].Detail != "1" || !strings.Contains(evs[0].Text, "Exit-Code 1") {
-		t.Fatalf("detail/text: %+v", evs[0])
-	}
-	p.expect(p.snap(true, dkRes("web", "running", StateRunning, "")), "up:exited:docker/web")
-	// unhealthy laeuft: sofort, unabhaengig von „erwartet“
-	p.expect(p.snap(true, dkRes("web", "running", StateError, DockerUnhealthy)), "down:unhealthy:docker/web")
-	p.expect(p.snap(true, dkRes("web", "running", StateRunning, "")), "up:unhealthy:docker/web")
-	// beendet mit 0: wie gestoppt nach Verzoegerung 2
-	p.expect(p.snap(true, dkRes("web", "exited", StateStopped, "")), "")
-	p.expect(p.snap(true, dkRes("web", "exited", StateStopped, "")), "down:stopped:docker/web")
-	p.expect(p.snap(true, dkRes("web", "running", StateRunning, "")), "up:stopped:docker/web")
-	// Label nomonitor: nichts
-	x := dkRes("web", "running", StateError, DockerUnhealthy)
-	x.Labels = map[string]string{LabelNoMonitor: "1"}
-	p.expect(p.snap(true, x), "")
-	// Absturz-Regel aus: nichts
-	off := false
-	p.item("").Rules.Crashed = &off
-	p.expect(p.snap(true, dkRes("web", "restarting", StateError, DockerRestarting)), "")
-	// nicht erreichbar: Text nennt Docker
-	p.item("").Rules = RuleSet{}
-	p.snap(false)
-	evs = p.snap(false)
-	p.expect(evs, "down:unreachable:")
-	if !strings.HasPrefix(evs[0].Text, "Docker „Lab“") {
-		t.Fatalf("text: %q", evs[0].Text)
-	}
-}
-
-func TestStoreDockerSystem(t *testing.T) {
-	ctx := context.Background()
-	s, core := pveTestStore(t)
-	ds := NewStore(core, nil) // Docker braucht keinen Schluessel
-	sys := &System{Kind: KindDocker, Name: "Docker", Enabled: true}
-	if err := ds.SaveSystem(ctx, sys); err != nil {
-		t.Fatal(err)
-	}
-	got, err := s.System(ctx, sys.ID)
-	if err != nil || got.Kind != KindDocker || len(got.Addresses) != 1 || got.Addresses[0] != DefaultDockerHost() || got.Interval != DefaultInterval || got.Secret != "" {
-		t.Fatalf("docker system: %+v %v", got, err)
-	}
-	pve := pveNewSystem(t, s)
-	if got, _ := s.System(ctx, pve.ID); got.Kind != KindPVE {
-		t.Fatalf("pve kind: %q", got.Kind)
-	}
+// Angaben eines Docker-Hosts: Adresse und Art werden geprueft.
+func TestValidateDockerSystem(t *testing.T) {
 	for _, a := range []string{"ftp://x", "unix://relative", "tcp://"} {
 		if err := ValidateSystem(&System{Kind: KindDocker, Addresses: []string{a}}, true); err == nil {
 			t.Errorf("%s: kein Fehler", a)
@@ -371,22 +319,5 @@ func TestStoreDockerSystem(t *testing.T) {
 	}
 	if !ValidKey("docker/my-app_1.web") || ValidKey("docker/") || ValidKey("docker/-x") || ValidKey("docker/a/b") {
 		t.Error("ValidKey docker")
-	}
-	set, err := s.Settings(ctx, sys.ID)
-	if err != nil || set.Kind != KindDocker {
-		t.Fatalf("settings kind: %+v %v", set, err)
-	}
-	// Verlauf: nur laufende Container, SeenRunning fuer laufende
-	snap := &Snapshot{SystemID: sys.ID, OK: true, Time: time.Now(), Resources: []Resource{
-		dkRes("web", "running", StateRunning, ""), dkRes("old", "exited", StateError, DockerExited)}}
-	if err := s.Record(ctx, snap); err != nil {
-		t.Fatal(err)
-	}
-	if n := pveCount(t, s, "pve_hist_1m"); n != 1 {
-		t.Fatalf("verlauf: %d", n)
-	}
-	set, _ = s.Settings(ctx, sys.ID)
-	if it := set.Item("docker/web"); it == nil || !it.SeenRunning || set.Item("docker/old") != nil {
-		t.Fatalf("seen: %+v", set.Items)
 	}
 }

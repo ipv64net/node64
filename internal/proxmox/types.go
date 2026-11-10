@@ -1,11 +1,10 @@
-// Package proxmox ueberwacht Proxmox-VE-Systeme (Einzel-Node oder Cluster) ueber die API – nur lesend, Node64 aendert
-// in Proxmox nichts. Plan: docs/PLAN-NODE64-PROXMOX.md. Das Paket kennt weder Oberflaeche noch Benachrichtigung; die
-// Einbindung (Healthchecks, Menue „Proxmox VE“) liegt in internal/healthchecks/proxmox_*.go.
-//
-// Diese Datei ist der Vertrag der parallelen Teile (client/poller, store/history/rules, Einbindung).
+// Package proxmox fragt Proxmox-VE-Systeme (Einzel-Node oder Cluster), Proxmox Backup Server und Docker-Hosts ueber
+// ihre API ab – nur lesend, Node64 aendert dort nichts. Das Paket kennt weder Oberflaeche noch Benachrichtigung; es
+// liefert Clients, Abfragen und Typen fuer Monitor64, PROXY64 und DNS64. Die fruehere Einbindung in die Healthchecks
+// (Datenhaltung, Regeln, Verlauf) gibt es seit Healthchecks 3.0.0 nicht mehr (nach Monitor64 umgezogen).
 //
 // Docker: ein Docker-Host ist ein System der Art KindDocker (docker.go), seine Container sind Gaeste vom Typ
-// TypeDocker (Key docker/<name>). Regeln, Verlauf, Einstellungen und Benachrichtigung sind dieselben.
+// TypeDocker (Key docker/<name>).
 //
 // Proxmox Backup Server: ein System der Art KindPBS (pbs.go) mit genau einem Node und ohne Gaeste; seine Datastores
 // stehen nur zur Anzeige im Snapshot (Snapshot.PBS).
@@ -283,16 +282,5 @@ type ProbeResult struct {
 	NeedConfirm bool `json:"need_confirm,omitempty"`
 }
 
-// Event ist ein Ergebnis der Regeln (rules.go) fuer die Benachrichtigung.
-type Event struct {
-	SystemID int64     `json:"system_id"`
-	Key      string    `json:"key"` // Resource.Key() oder "" fuer das System selbst
-	Name     string    `json:"name"`
-	Kind     string    `json:"kind"` // down, up, threshold, threshold_ok, restarted
-	What     string    `json:"what"` // z. B. stopped, paused, suspended, offline, unreachable, cpu, mem, disk
-	Value    float64   `json:"value,omitempty"`
-	Limit    float64   `json:"limit,omitempty"`
-	Since    time.Time `json:"since"`
-	Text     string    `json:"text"`             // kurzer Text (Sprache wie Anzeige)
-	Detail   string    `json:"detail,omitempty"` // Zusatz, z. B. qmpstatus beim Absturz (fuer i18n-Text pve.ev.<Kind>.<What>)
-}
+// TagNoMonitor schliesst einen Gast aus (Proxmox-Tag).
+const TagNoMonitor = "nomonitor"

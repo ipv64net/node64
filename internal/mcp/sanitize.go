@@ -253,6 +253,14 @@ func parseTS(v any) time.Time {
 	return t
 }
 
+// pct: Anteil a von b in Prozent (eine Nachkommastelle), 0 ohne b.
+func pct(a, b float64) float64 {
+	if b <= 0 {
+		return 0
+	}
+	return round(a/b*100, 1)
+}
+
 // round auf n Nachkommastellen (kompakte Ausgabe).
 func round(f float64, n int) float64 {
 	p := 1.0

@@ -280,6 +280,10 @@ func TestAggregation(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { core.Close() })
+	cm, _ := store.CoreMigrations() // Einstellungen (settings) wie im Betrieb vor den Migrationen des Moduls
+	if err := core.Migrate(context.Background(), "core", cm); err != nil {
+		t.Fatal(err)
+	}
 	if err := core.Migrate(context.Background(), Name, New(core, log, nil, nil, "test").Migrations()); err != nil {
 		t.Fatal(err)
 	}
@@ -336,6 +340,10 @@ func TestAggregationBoundaryDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { core.Close() })
+	cm, _ := store.CoreMigrations() // Einstellungen (settings) wie im Betrieb vor den Migrationen des Moduls
+	if err := core.Migrate(context.Background(), "core", cm); err != nil {
+		t.Fatal(err)
+	}
 	if err := core.Migrate(context.Background(), Name, New(core, log, nil, nil, "test").Migrations()); err != nil {
 		t.Fatal(err)
 	}

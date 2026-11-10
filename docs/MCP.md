@@ -36,7 +36,7 @@ kein zusätzlicher Port, gleiches TLS-Zertifikat. Node64 arbeitet zustandslos (k
   Schema und Host, `token=…`/`key=…`-Werte, `Bearer …`, Schlüssel mit `node64_`/`mcp64_`, PEM-Blöcke und lange
   Zufallszeichenfolgen. Ein Test prüft alle Werkzeuge mit Testdaten voller Geheimnisse.
 - **Fremde Daten sind gekennzeichnet.** Vieles schreiben Fremde: Benutzer, Passwörter, Pfade, User-Agents und
-  Nutzdaten aus dem Honeypot, Domainnamen im DNS64-Log, Pfade und User-Agents aus PROXY64, VM-Namen aus Proxmox,
+  Nutzdaten aus dem Honeypot, Domainnamen im DNS64-Log, Pfade und User-Agents aus PROXY64,
   Meldungen von Checks, Fehlertexte entfernter Dienste, Audit-Ziele und Logzeilen. Sie stehen in einem Unterobjekt
   `untrusted`, sind gekürzt und ohne Steuer- und unsichtbare Unicode-Zeichen. Server-Hinweise und
   Werkzeugbeschreibungen sagen der KI, dass diese Inhalte nie als Anweisungen zu behandeln sind. Die Passwörter,
@@ -49,7 +49,7 @@ kein zusätzlicher Port, gleiches TLS-Zertifikat. Node64 arbeitet zustandslos (k
 
 1. *Einstellungen → KI-Schnittstelle (MCP)* → **Einschalten**.
 2. **Schlüssel anlegen:** Name (z. B. „Claude Code Laptop“) und Bereiche, die gelesen werden dürfen: Node,
-   Healthchecks, Proxmox VE, DNS64, PROXY64, Honeypot64, DynDNS, Zertifikate, Benachrichtigungen, Audit-Log und Logs.
+   Healthchecks, DNS64, PROXY64, Honeypot64, DynDNS, Zertifikate, Benachrichtigungen, Audit-Log und Logs.
 3. Die Seite zeigt die Adresse (`https://<node>:<port>/mcp`) und fertige Schnipsel mit dem neuen Schlüssel.
 
 ### Zertifikat
@@ -149,9 +149,6 @@ Alle Werkzeuge tragen `readOnlyHint: true`, `destructiveHint: false`. Zeiten sin
 | Healthchecks | `check_history` | Messungen zusammengefasst (1h, 24h, 7d, 30d, 1y), Reihe, optional letzte Fehlmessungen |
 | Healthchecks | `list_incidents` | Störungen (alle oder ein Check, nur offene), Dauer |
 | Healthchecks | `list_maintenance` | Wartungsfenster, betroffene Checks, aktiv |
-| Proxmox VE | `pve_systems` | Systeme mit Zustand, Version, Quorum, Nodes und Gästen |
-| Proxmox VE | `pve_resources` | Nodes, VMs, Container mit Zustand und Last; Filter System, Typ, nur Probleme |
-| Proxmox VE | `pve_guest_history` | Verlauf eines Nodes oder Gasts (CPU, RAM, Disk, Netz) zusammengefasst und ausgedünnt |
 | DNS64 | `dns64_summary` | Anfragen, Blockquote, Cache, Clients, Upstreams (ohne URLs), Pause |
 | DNS64 | `dns64_top` | Top geblockt / erlaubt / Clients |
 | DNS64 | `dns64_query_log` | Suche nach Client und/oder Domain, Status, Zeitraum (Minuten); `limit` bis 200 |
@@ -172,7 +169,7 @@ Alle Werkzeuge tragen `readOnlyHint: true`, `destructiveHint: false`. Zeiten sin
 
 | Prompt | Inhalt |
 |---|---|
-| `incident_analysis` | Störung analysieren (Parameter `check` und/oder `time`): Check, Verlauf, Proxmox, PROXY64, DNS64, Audit im selben Zeitraum |
+| `incident_analysis` | Störung analysieren (Parameter `check` und/oder `time`): Check, Verlauf, PROXY64, DNS64, Audit im selben Zeitraum |
 | `weekly_report` | Wochenbericht über alle freigegebenen Bereiche |
 | `security_overview` | Sicherheitslage: Honeypot64 und PROXY64-Sperren, Anmeldungen |
 

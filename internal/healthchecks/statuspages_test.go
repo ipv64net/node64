@@ -457,7 +457,7 @@ func TestStatusPagesTemplates(t *testing.T) {
 	cases := map[string]any{
 		"status_pages": statusPagesData{Pages: []statusPageRow{{StatusPage: p, Items: 2, Open: 1, URL: "/status/s", Preview: "/x"}}},
 		"status_page_form": statusFormData{Page: p, Edit: true, Dirty: true, Errors: map[string]string{"slug": "x", "groups": "y"}, Error: "e", Names: map[string]string{"t1": "Check 1"},
-			Checks:   []statusCheckOpt{{Token: "t1", Value: "t1", Name: "Check 1", Tags: "a,b", Group: "G", OnPage: true, Paused: true}, {Res: true, Value: "1|qemu/100", Name: "vm", Group: "Proxmox VE", Sub: "lab", Type: "pve.type.qemu"}},
+			Checks:   []statusCheckOpt{{Token: "t1", Value: "t1", Name: "Check 1", Tags: "a,b", Group: "G", OnPage: true, Paused: true}, {Value: "t3", Name: "Check 3", Group: "Web", Sub: "lab", Type: "hc.type.http"}},
 			PageList: []statusPageItem{{Token: "t1", Name: "Check 1", Group: "G"}, {Token: "t2", Label: "L"}}, Tags: []string{"a"}, HCGroups: []string{"G"}, Layouts: []string{"list", "tiles", "compact"}, Themes: []string{"auto"}, DaysOpts: []int{30, 90}, Items: 2},
 		"status_page_notices": statusNoticesData{Page: p, Form: map[string]string{"level": "info"}, Open: []StatusNotice{{ID: 1, Title: "N", Level: "warning", CreatedAt: now, Updates: []StatusNoticeUpdate{{Time: now, Text: "x"}}}}, Resolved: []StatusNotice{{ID: 2, Title: "R", Level: "info", CreatedAt: now, ResolvedAt: now}}},
 	}
@@ -475,7 +475,7 @@ func TestStatusPagesTemplates(t *testing.T) {
 		}
 		if name == "status_page_form" && (!strings.Contains(buf.String(), `name="it_tok" value="t1"`) || !strings.Contains(buf.String(), "statuspages.js") ||
 			!strings.Contains(buf.String(), "/preview/logo?v=") || !strings.Contains(buf.String(), `enctype="multipart/form-data"`) || !strings.Contains(buf.String(), `value="rm-1"`) ||
-			!strings.Contains(buf.String(), `name="add_res" value="1|qemu/100"`) || !strings.Contains(buf.String(), "hc.status.res_new") || !strings.Contains(buf.String(), "Proxmox VE · lab") ||
+			!strings.Contains(buf.String(), `name="add_tok" value="t3"`) || strings.Contains(buf.String(), "add_res") || !strings.Contains(buf.String(), "Web · lab") ||
 			!strings.Contains(buf.String(), "data-sp-selall") || strings.Contains(buf.String(), "gr_name") || !strings.Contains(buf.String(), `name="hc_groups" id="sp-hcgroups" checked`)) {
 			t.Fatalf("form output: %s", buf.String())
 		}

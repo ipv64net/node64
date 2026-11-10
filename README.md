@@ -88,7 +88,7 @@ services:
       # - "8443:8443"   # optional HTTPS, dazu NODE64_HTTPS_PORT=8443 setzen
     volumes:
       - node64-data:/data
-      # Optional: Docker-Container überwachen (siehe "Docker-Container prüfen")
+      # Optional: Docker-Labels für PROXY64/DNS64 (siehe "Docker-Socket")
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     # group_add:
     #   - "996"   # Gruppe des Sockets: stat -c %g /var/run/docker.sock
@@ -107,9 +107,9 @@ volumes:
   node64-data:
 ```
 
-### Docker-Container prüfen
+### Docker-Socket
 
-Der Check-Typ **Docker-Container** fragt die Docker-Engine-API nach dem Zustand eines Containers auf demselben Host (nur lesende Anfragen). Dazu braucht die Node Zugriff auf den Socket:
+PROXY64 und DNS64 lesen auf Wunsch Docker-Labels (`node64.proxy.*`, `node64.dns.*`) über die Docker-Engine-API (nur lesende Anfragen). Dazu braucht die Node Zugriff auf den Socket:
 
 ```yaml
     volumes:
@@ -118,13 +118,9 @@ Der Check-Typ **Docker-Container** fragt die Docker-Engine-API nach dem Zustand 
       - "996"   # stat -c %g /var/run/docker.sock
 ```
 
-**Docker-Überwachung** (Menüpunkt **Healthchecks → Docker**, `/healthchecks/docker`): Ist der Socket erreichbar, richtet Node64 den Host automatisch ein und überwacht alle Container wie Proxmox-Gäste: alle 30 s Zustand, Health, Neustarts, Exit-Code/OOM, CPU (bezogen auf das CPU-Limit bzw. alle Kerne), RAM (ohne Page-Cache wie `docker stats`, bezogen auf das Limit bzw. den RAM des Hosts), Netz und Block-I/O mit Verlauf (1 h bis 30 Tage), Regeln mit Vererbung Host → Container (Störung, gestoppt, pausiert, Neustart, CPU/RAM-Schwellen, Verzögerung), Kanälen, Ruhezeiten und Wartungsfenstern. Störung sofort: unhealthy, Neustart-Schleife (3 Neustarts in 10 min bzw. Status restarting), beendet mit Fehler, OOM, dead – beendete Container nur, wenn sie laufen sollen (liefen schon einmal oder fest eingestellt). Label `node64.nomonitor=true` schließt einen Container aus. Ein Klick auf einen Container zeigt Werte, Graphen, Labels und seine Regeln. „Als Check führen“ legt zusätzlich einen Check vom Typ Docker an (Statusseiten, Sync, Uptime); vorhandene Docker-Checks werden automatisch zugeordnet. Ausschalten auf der Seite, Entfernen per API (dann keine automatische Einrichtung mehr; Docker-Checks bleiben). Checks ohne Container erscheinen als „Container fehlt“, ohne Socket zeigt die Seite die Docker-Checks und wie der Socket eingebunden wird. API: `GET /api/healthchecks/docker/containers` und `/api/healthchecks/docker/systems/{id}/…` (wie Proxmox), Prometheus `node64_docker_*`.
+**Proxmox VE und Docker überwachen:** Seit Healthchecks 3.0.0 gehört das zum Modul **Monitor64**. Die früheren Proxmox-/Docker-Checks der Healthchecks (Check-Typen `docker` und `proxmox`, Seiten *Healthchecks → Proxmox VE/Docker*) wurden beim Update samt Daten entfernt und nicht übernommen – bitte in Monitor64 neu einrichten.
 
-Bewertung des Check-Typs (angelehnt an Uptime Kuma): läuft = OK, läuft mit Healthcheck „healthy“ oder „starting“ = OK, Healthcheck „unhealthy“, gestoppt (mit Exit-Code, OOM), pausiert oder in einer Neustart-Schleife = gestört, nicht vorhanden = gestört. Docker-Checks stehen als normale Zeilen in der Healthchecks-Liste.
-
-Docker-Checks laufen nur lokal auf der Node; sie lassen sich nicht online prüfen oder umhängen. Mit ipv64 verknüpft wird ihr Zustand trotzdem gemeldet und ist im Portal sichtbar.
-
-**Sicherheit:** Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro` (das schützt nur die Datei, nicht die API). Die Node sendet ausschließlich GET-Anfragen. Wer das Risiko begrenzen will, setzt einen [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) mit `CONTAINERS=1` davor und trägt in der Node `NODE64_DOCKER_HOST=tcp://socket-proxy:2375` ein (oder je Check unter „Docker-Host“).
+**Sicherheit:** Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro` (das schützt nur die Datei, nicht die API). Die Node sendet ausschließlich GET-Anfragen. Wer das Risiko begrenzen will, setzt einen [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) mit `CONTAINERS=1` davor und trägt in der Node `NODE64_DOCKER_HOST=tcp://socket-proxy:2375` ein.
 
 ## Lokale API
 
@@ -136,9 +132,9 @@ Anmeldung mit einem API-Key aus den Einstellungen (`Authorization: Bearer node64
 
 ### Healthchecks per API
 
-Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `json` (Bedingungen auf eine JSON-Antwort, z. B. `status == ok`, `queue < 100`), `dns` (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA, PTR, SOA; Erwartung z. B. enthält Wert, Regex, NXDOMAIN oder „zeigt auf meine öffentliche IP“), `icmp`, `tcp`, `port`, `cert`, `push`, `docker`.
+Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `json` (Bedingungen auf eine JSON-Antwort, z. B. `status == ok`, `queue < 100`), `dns` (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA, PTR, SOA; Erwartung z. B. enthält Wert, Regex, NXDOMAIN oder „zeigt auf meine öffentliche IP“), `icmp`, `tcp`, `port`, `cert`, `whois`, `push`. Die früheren Typen `docker` und `proxmox` gibt es seit Healthchecks 3.0.0 nicht mehr (nach Monitor64 umgezogen; Anlegen antwortet 400).
 
-Mit ipv64.net verknüpft bilden alle Nodes eines Accounts ein System: `nodes` legt fest, welche Nodes einen Check messen, `owner` zeigt, ob er dieser Node (`self`), einer anderen (`other`) oder nur ipv64 (`online`) gehört. Jede Node darf jeden Check ändern, pausieren, löschen und mit `run` sofort messen lassen. Misst sie ihn nicht selbst, geht der Auftrag über ipv64 an die messenden Nodes. Nur die Messstelle eines Docker-Checks bleibt bei der Node mit dem Container. Ohne Verbindung werden Änderungen gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere.
+Mit ipv64.net verknüpft bilden alle Nodes eines Accounts ein System: `nodes` legt fest, welche Nodes einen Check messen, `owner` zeigt, ob er dieser Node (`self`), einer anderen (`other`) oder nur ipv64 (`online`) gehört. Jede Node darf jeden Check ändern, pausieren, löschen und mit `run` sofort messen lassen. Misst sie ihn nicht selbst, geht der Auftrag über ipv64 an die messenden Nodes. Ohne Verbindung werden Änderungen gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere.
 
 ```bash
 # Check anlegen

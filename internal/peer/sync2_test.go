@@ -29,9 +29,9 @@ func newProv(n *testNode) *fakeProv {
 	return p
 }
 
-// newHCProv: Bereiche des Healthchecks-Moduls ueber v2 (Proxmox VE, Docker) wie healthchecks/hccluster.
+// newHCProv: Bereich des Healthchecks-Moduls ueber v2 (Statusseiten) wie healthchecks/hccluster.
 func newHCProv(n *testNode) *fakeProv {
-	p := &fakeProv{n: n, mod: "healthchecks", items: []ItemInfo{{ID: "proxmox"}, {ID: "docker"}}, data: map[string]string{}}
+	p := &fakeProv{n: n, mod: "healthchecks", items: []ItemInfo{{ID: "statuspages"}}, data: map[string]string{}}
 	n.m.RegisterProvider(p)
 	return p
 }
@@ -364,8 +364,9 @@ func TestVersionSuspendAutoResume(t *testing.T) {
 	}
 }
 
-// Proxmox VE und Docker: Bereiche des eingebauten Healthchecks-Moduls, aber ueber /peer/v2/sync (ohne Einstellung aus);
-// der eigene Weg (v1) sieht sie nicht, die Liste der Module bleibt ohne doppeltes Healthchecks.
+// Statusseiten: Bereich des eingebauten Healthchecks-Moduls, aber ueber /peer/v2/sync (ohne Einstellung aus); der eigene
+// Weg (v1) sieht ihn nicht, die Liste der Module bleibt ohne doppeltes Healthchecks. Die frueheren Bereiche proxmox und
+// docker gibt es nicht mehr.
 func TestClusterHealthchecksV2Items(t *testing.T) {
 	ctx := context.Background()
 	a, b := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522)
@@ -378,40 +379,34 @@ func TestClusterHealthchecksV2Items(t *testing.T) {
 	}
 	waitMembers(t, a, "B")
 	mods := a.m.SyncModules(ctx)
-	if len(mods) != 2 || mods[0].ID != "healthchecks" || len(mods[0].Items) != 5 || mods[0].Items[2].ID != "proxmox" || mods[0].Items[2].Enabled {
+	if len(mods) != 2 || mods[0].ID != "healthchecks" || len(mods[0].Items) != 3 || mods[0].Items[2].ID != "statuspages" || mods[0].Items[2].Enabled {
 		t.Fatalf("modules: %+v", mods)
 	}
-	pa.data["proxmox/u1"] = "pve"
+	if err := a.m.SetSync(ctx, "healthchecks", "proxmox", true); !errors.Is(err, ErrUnknownSync) {
+		t.Fatalf("proxmox is gone: %v", err)
+	}
+	pa.data["statuspages/u1"] = "page"
 	round2(a, b)
-	if pb.get("proxmox", "u1") != "" || len(a.m.HCItemMembers(ctx, "proxmox")) != 0 {
-		t.Fatal("proxmox is off by default")
+	if pb.get("statuspages", "u1") != "" {
+		t.Fatal("statuspages is off by default")
 	}
 	for _, n := range []*testNode{a, b} {
-		if err := n.m.SetSync(ctx, "healthchecks", "proxmox", true); err != nil {
+		if err := n.m.SetSync(ctx, "healthchecks", "statuspages", true); err != nil {
 			t.Fatal(err)
 		}
 	}
 	round2(a, b)
-	if pb.get("proxmox", "u1") != "pve" {
-		t.Fatalf("proxmox system must reach B, got %q", pb.get("proxmox", "u1"))
+	if pb.get("statuspages", "u1") != "page" {
+		t.Fatalf("status page must reach B, got %q", pb.get("statuspages", "u1"))
 	}
-	pb.set("proxmox", "u1", "")
+	pb.set("statuspages", "u1", "")
 	round2(a, b)
-	if pa.get("proxmox", "u1") != "" {
+	if pa.get("statuspages", "u1") != "" {
 		t.Fatal("delete must reach A")
 	}
 	x, _ := a.m.member(ctx, "node-b")
 	if w := a.m.v1Wants(a.m.syncCaps(ctx), *x); strings.Join(w, ",") != "checks,maintenance,settings" {
 		t.Fatalf("v1 items: %v", w)
-	}
-	if l := a.m.HCItemMembers(ctx, "proxmox"); len(l) != 1 || l[0].NodeID != "node-b" || len(a.m.HCItemMembers(ctx, "docker")) != 0 {
-		t.Fatalf("item members: %+v", l)
-	}
-	// Checks aus: kein Mitmessen, auch wenn der Bereich an ist
-	_ = b.m.SetSync(ctx, "healthchecks", "checks", false)
-	a.m.pingAll(ctx)
-	if len(a.m.HCItemMembers(ctx, "proxmox")) != 0 {
-		t.Fatal("without checks no item members")
 	}
 }
 

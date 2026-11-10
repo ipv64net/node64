@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ipv64net/node64/internal/module"
@@ -47,14 +48,18 @@ func (m *Module) statusExport(ctx context.Context) ([]statusExportPage, error) {
 }
 
 // statusImport legt Seiten an bzw. ersetzt sie (gleicher Slug) samt Gruppen; ein mitgeliefertes Logo wird
-// uebernommen, ein vorhandenes bleibt sonst. Die Checks der Eintraege kommen vorher mit dem Import (gleicher Token).
-func (m *Module) statusImport(ctx context.Context, in []statusExportPage) (int, error) {
+// uebernommen, ein vorhandenes bleibt sonst. Die Checks der Eintraege kommen vorher mit dem Import (gleicher Token);
+// Eintraege uebersprungener Checks (skip, Typ docker bzw. proxmox aelterer Exporte) fallen weg.
+func (m *Module) statusImport(ctx context.Context, in []statusExportPage, skip map[string]bool) (int, error) {
 	seal := module.SecretSealerOf(ctx)
 	n := 0
 	var problems []string
 	for _, x := range in {
 		p := x.StatusPage
 		p.ID, p.Password = 0, ""
+		for gi := range p.Groups {
+			p.Groups[gi].Items = slices.DeleteFunc(p.Groups[gi].Items, func(it StatusItem) bool { return skip[it.Token] })
+		}
 		if old, err := m.st.StatusPageBySlug(ctx, p.Slug); err == nil {
 			p.ID = old.ID
 		} else if !errors.Is(err, ErrStatusPageNotFound) {

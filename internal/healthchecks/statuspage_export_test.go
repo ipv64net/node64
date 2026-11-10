@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 // Statusseiten ziehen mit Export/Import um: Gruppen, Eintraege und Logo; der Passwort-Hash nur mit Export-Passwort,
@@ -50,7 +51,10 @@ func TestStatusPagesExportImport(t *testing.T) {
 	}
 
 	// mit Passwort: Hash verschluesselt dabei, Seite bleibt eingeschaltet und geschuetzt
-	seal := pveBox(t, 9)
+	seal, err := secrets.New(bytes.Repeat([]byte{9}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
 	sctx := module.WithSecretSealer(ctx, seal)
 	raw = export(sctx)
 	if strings.Contains(string(raw), "$2a$") || !strings.Contains(string(raw), `"password_hash":"enc:`) {

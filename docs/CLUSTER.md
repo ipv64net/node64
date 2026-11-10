@@ -28,7 +28,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | POST | `/peer/v1/poke` | „bei mir gibt es Neues“ → sofort abholen |
 | GET | `/peer/v1/measurements` | Messwerte der anderen Node (Healthchecks) |
 | GET | `/peer/v1/relay` | hub-Daten einer verknüpften Node für nicht verknüpfte |
-| GET | `/peer/v2/sync?since=&items=` | allgemeiner Abgleich der übrigen Module und Bereiche (Zertifikate, DNS64, Proxmox VE/Docker, Statusseiten, Kanäle) |
+| GET | `/peer/v2/sync?since=&items=` | allgemeiner Abgleich der übrigen Module und Bereiche (Zertifikate, DNS64, Statusseiten, Kanäle) |
 | POST | `/peer/v2/call/{modul}/{name}` | Anfrage eines Moduls an die andere Node (live abfragen statt abgleichen, z. B. Verlauf von Monitor64); nur mit einem Bereich des Moduls auf beiden Seiten, sonst 404 |
 
 ## Sicherheit
@@ -87,7 +87,7 @@ liefernde prüft ihre); neue Bereiche der anderen Nodes erfährt eine Node beim 
 | Modul | Bereiche | Standard | Weg |
 |---|---|---|---|
 | `healthchecks` | `checks` (mit Messwerten), `maintenance` | an | `/peer/v1/changes`, `/measurements`, `/relay` |
-| `healthchecks` | `proxmox`, `docker` (Systeme samt Zugang), `statuspages` | aus | `/peer/v2/sync` |
+| `healthchecks` | `statuspages` (die früheren Bereiche `proxmox` und `docker` gibt es seit Healthchecks 3.0.0 nicht mehr; Einträge älterer Nodes werden verworfen) | aus | `/peer/v2/sync` |
 | `notifications` | `settings` (Ruhezeiten, Drossel, Bündeln) | an | `/peer/v1/changes` |
 | `notifications` | `channels` (eigene Kanäle der Node samt Zugangsdaten) | aus | `/peer/v2/sync`, Zuordnung Check → Kanal mit den Checks |
 | `certs` | `certificates`, `acme`, `dns_accounts`, `cas` | aus | `/peer/v2/sync` |
@@ -363,7 +363,6 @@ Zusammengeführt wird nur bei exakt gleichem Inhalt, nie bei bloß ähnlichen Ei
 | Statusseiten | gleicher Slug und alles oben Genannte gleich (Logo-Inhalt ja, Zeitpunkt des Logos nein; Passwort-Hashes sind gesalzen, mit Passwort also praktisch nie gleich) |
 | Kanäle | Typ, Name, Konfiguration samt Geheimnissen (leer = nicht gesetzt), an/aus, Standard, Sprache, Ausfall/Entwarnung |
 | DynDNS-Namen | Domain, Host, Record-ID, Token-Art, Token, Modi, feste Adressen, Interface-ID, Interface, an/aus (Laufzeitstand und Verlauf zählen nicht und bleiben) |
-| Proxmox VE, Docker | Art, Name, Adressen, Token-ID, Secret, Pin, Intervall, an/aus (Heim-Node zählt nicht); Proxmox-Checks mit der alten Kennung bekommen die neue (als Änderung) |
 | Wartungsfenster | nur lokale Fenster (ohne Server-ID): Name, Beginn, Ende, Wiederholung, Ende der Wiederholung, Checks, an/aus; das Fenster mit der größeren Kennung wird mit Löschvermerk entfernt |
 | Checks | **nie** – derselbe Check auf zwei Nodes sind zwei Messstellen (eigene Tokens, Verlauf und messende Node, beim hub eigene Checks) |
 | Zertifikate | eigene Regel, siehe „Zertifikate: gleiche Einträge und ACME-Konto“ |
@@ -371,8 +370,7 @@ Zusammengeführt wird nur bei exakt gleichem Inhalt, nie bei bloß ähnlichen Ei
 
 Grenzen: Doppel, die schon vor dieser Version über den Cluster auf beiden Nodes gelandet sind, werden nicht nachträglich
 zusammengeführt (einmal von Hand löschen). Bei drei und mehr Nodes kann eine Node, die das Doppel mit der größeren
-Kennung schon übernommen hatte, beim Löschvermerk die zugehörigen Checks eines Proxmox-Systems „als Check“ mit
-entfernen (wie bei jedem gelöschten System).
+Kennung schon übernommen hatte, beim Löschvermerk zugehörige Einträge mit entfernen.
 
 ### Modul `node` (API-Key und allgemeine Einstellungen)
 

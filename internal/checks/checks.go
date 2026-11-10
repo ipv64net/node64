@@ -37,8 +37,10 @@ const (
 	TypeWhois   Type = "whois" // Registrierungsdaten (RDAP, sonst WHOIS) einer Domain, IP bzw. eines AS
 )
 
-// Types sind alle bekannten Typen in Anzeigereihenfolge.
-var Types = []Type{TypeHTTP, TypeKeyword, TypeJSON, TypeDNS, TypeICMP, TypeTCP, TypePort, TypeCert, TypeWhois, TypePush, TypeDocker}
+// Types sind die auf einer Node anlegbaren Typen in Anzeigereihenfolge (Auswahl und /api/check-types). docker und
+// proxmox kennt das Paket weiter (hubs, aeltere Nodes), die Node fuehrt sie seit Healthchecks 3.0.0 nicht mehr (nach
+// Monitor64 umgezogen).
+var Types = []Type{TypeHTTP, TypeKeyword, TypeJSON, TypeDNS, TypeICMP, TypeTCP, TypePort, TypeCert, TypeWhois, TypePush}
 
 // IPMode bestimmt, welche Adressfamilie geprueft wird.
 type IPMode string

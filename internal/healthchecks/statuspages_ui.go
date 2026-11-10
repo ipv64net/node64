@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/node64/internal/proxmox"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,14 +42,12 @@ type statusCheckOpt struct {
 	Name   string
 	Tags   string // durch Komma getrennt (Filter)
 	Group  string // Healthchecks-Gruppe
-	Sub    string // Proxmox-System bzw. Docker-Host
+	Sub    string // Zusatz zum Namen ("" = keiner)
 	Paused bool
-	OnPage bool // schon auf der Seite
-	// Node, Gast oder Container ohne Check: Value "<System-ID>|<Key>" (add_res), der Check wird beim Hinzufuegen angelegt
-	Res   bool
-	Value string
-	Type  string // i18n-Schluessel des Typs (pve.type.*)
-	M64   bool   // Host bzw. Dienst aus Monitor64: Value ist die Quelle (add_m64)
+	OnPage bool   // schon auf der Seite
+	Value  string // Wert im Formular (Check: Token)
+	Type   string // i18n-Schluessel der Art ("" = Check)
+	M64    bool   // Host bzw. Dienst aus Monitor64: Value ist die Quelle (add_m64)
 }
 
 // statusPageItem ist ein Eintrag der Seite im Formular (eine Liste, gruppiert wird nach den Healthchecks-Gruppen).
@@ -60,29 +57,13 @@ type statusPageItem struct {
 	Link                      string // Monitor64: Seite des Hosts
 }
 
-// statusResSys ist ein System bzw. Docker-Host mit Nodes, Gaesten bzw. Containern.
-type statusResSys struct {
-	Name  string
-	Items []statusResOpt
-}
-
-// statusResOpt ist ein Node, Gast oder Container; ohne Token wird der Check beim Hinzufuegen angelegt.
-type statusResOpt struct {
-	ID     string // fuer id/for im Formular
-	Value  string // "<System-ID>|<Key>"
-	Name   string
-	Type   string // i18n-Schluessel des Typs
-	Token  string // Check („auch als Check fuehren“), "" = noch keiner
-	OnPage bool
-}
-
 type statusFormData struct {
 	Page     *StatusPage
 	Edit     bool
 	Dirty    bool // Gruppen/Eintraege geaendert, noch nicht gespeichert
 	Errors   map[string]string
 	Error    string
-	Checks   []statusCheckOpt  // Auswahl: Checks und Nodes/Gaeste/Container ohne Check
+	Checks   []statusCheckOpt  // Auswahl
 	PageList []statusPageItem  // Eintraege der Seite
 	Names    map[string]string // Token -> Name des Checks ("" = geloescht)
 	Tags     []string
@@ -238,7 +219,7 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 			on[it.Token] = true
 			pi := statusPageItem{Token: it.Token, Name: d.Names[it.Token], Label: it.Label}
 			if c := byTok[it.Token]; c != nil {
-				pi.Group = statusGroupName(c)
+				pi.Group = strings.TrimSpace(c.Group)
 			}
 			if isM64Source(it.Token) {
 				pi.M64, pi.Group, pi.Link = true, m64Group[it.Token], "/monitor64/host/"+statusM64HostUID(it.Token)
@@ -248,27 +229,10 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 		}
 	}
 	d.Items = len(d.PageList)
-	// Nodes, Gaeste und Container ohne Check (mit Check stehen sie unten als Check in der Liste)
-	linked := map[string]bool{}
-	for _, docker := range []bool{false, true} {
-		group := pveCheckGroup
-		if docker {
-			group = dockerCheckGroup
-		}
-		for _, sys := range m.statusResources(r.Context(), docker, d.Names, on, linked) {
-			for _, o := range sys.Items {
-				if o.Token != "" {
-					continue
-				}
-				d.Checks = append(d.Checks, statusCheckOpt{Name: o.Name, Group: group, Sub: sys.Name, Res: true, Value: o.Value, Type: o.Type})
-				groups[group] = true
-			}
-		}
-	}
 	if err == nil {
 		for _, c := range list {
 			d.Checks = append(d.Checks, statusCheckOpt{Token: c.Token, Value: c.Token, Name: c.Name, Tags: strings.Join(c.Tags, ","), Group: c.Group,
-				Sub: checkSystemOf(c), Paused: c.Paused, OnPage: on[c.Token]})
+				Paused: c.Paused, OnPage: on[c.Token]})
 			for _, t := range c.Tags {
 				tags[t] = true
 			}
@@ -335,111 +299,6 @@ func statusPageFromForm(r *http.Request, p *StatusPage) {
 }
 
 // statusFormOp wendet einen Knopf des Formulars auf die Gruppen und Eintraege an (ohne zu speichern).
-// statusResources liefert die Proxmox-Systeme (docker=false) bzw. Docker-Hosts mit Nodes, Gaesten bzw. Containern aus
-// dem letzten Abruf, dazu Eintraege, die schon als Check gefuehrt werden, aber gerade nicht abgerufen sind. linked
-// sammelt die Checks dieser Eintraege.
-func (m *Module) statusResources(ctx context.Context, docker bool, names map[string]string, on, linked map[string]bool) []statusResSys {
-	list, err := m.pve.st.Systems(ctx)
-	if err != nil {
-		return nil
-	}
-	sort.Slice(list, func(i, j int) bool { return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name) })
-	var out []statusResSys
-	for _, sys := range list {
-		if sys.IsDocker() != docker {
-			continue
-		}
-		set, _ := m.pve.st.Settings(ctx, sys.ID)
-		g := statusResSys{Name: sys.Name}
-		add := func(key, name string) {
-			o := statusResOpt{ID: strconv.FormatInt(sys.ID, 10) + "-" + strconv.Itoa(len(g.Items)), Value: strconv.FormatInt(sys.ID, 10) + "|" + key, Name: name}
-			typ, _, _ := strings.Cut(key, "/")
-			o.Type = "pve.type." + typ
-			if it := set.Item(key); it != nil && it.AsCheck && names[it.CheckToken] != "" {
-				o.Token, o.OnPage = it.CheckToken, on[it.CheckToken]
-				linked[it.CheckToken] = true
-			}
-			g.Items = append(g.Items, o)
-		}
-		seen := map[string]bool{}
-		if s := m.pveLast(sys.ID); s != nil {
-			for i := range s.Resources {
-				res := &s.Resources[i]
-				if res.Excluded() {
-					continue
-				}
-				key := res.Key()
-				seen[key] = true
-				name := res.Name
-				if name == "" {
-					name = key
-				}
-				add(key, name)
-			}
-		}
-		if set != nil {
-			keys := make([]string, 0, len(set.Items))
-			for key, it := range set.Items {
-				if key != "" && !seen[key] && it.AsCheck && names[it.CheckToken] != "" {
-					keys = append(keys, key)
-				}
-			}
-			sort.Strings(keys)
-			for _, key := range keys {
-				add(key, names[set.Items[key].CheckToken])
-			}
-		}
-		// Nodes zuerst, dann nach Name
-		sort.SliceStable(g.Items, func(i, j int) bool {
-			ni, nj := g.Items[i].Type == "pve.type.node", g.Items[j].Type == "pve.type.node"
-			if ni != nj {
-				return ni
-			}
-			return strings.ToLower(g.Items[i].Name) < strings.ToLower(g.Items[j].Name)
-		})
-		out = append(out, g)
-	}
-	return out
-}
-
-// statusResTokens liefert die Checks zu ausgewaehlten Nodes, Gaesten bzw. Containern ("<System-ID>|<Key>"). Fehlt der
-// Check, wird er angelegt wie mit „auch als Check fuehren“ (Kanaele der Regeln, keine doppelte Meldung).
-func (m *Module) statusResTokens(r *http.Request, vals []string) ([]string, error) {
-	ctx := r.Context()
-	var toks []string
-	for _, v := range vals {
-		ids, key, ok := strings.Cut(v, "|")
-		id, err := strconv.ParseInt(ids, 10, 64)
-		if !ok || err != nil || !proxmox.ValidKey(key) {
-			continue
-		}
-		sys, err := m.pve.st.System(ctx, id)
-		if err != nil || sys == nil {
-			continue
-		}
-		token := func() string {
-			set, _ := m.pve.st.Settings(ctx, id)
-			if it := set.Item(key); it != nil && it.AsCheck && it.CheckToken != "" {
-				if c, _ := m.st.Check(ctx, it.CheckToken); c != nil {
-					return c.Token
-				}
-			}
-			return ""
-		}
-		t := token()
-		if t == "" {
-			if err := m.pveSetAsCheck(r, sys, key, true); err != nil {
-				return toks, err
-			}
-			t = token()
-		}
-		if t != "" {
-			toks = append(toks, t)
-		}
-	}
-	return toks, nil
-}
-
 func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPage, op string) error {
 	if len(p.Groups) == 0 {
 		p.Groups = []StatusGroup{{Items: []StatusItem{}}}
@@ -454,14 +313,10 @@ func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPag
 	if op != "add" {
 		return nil
 	}
-	toks, opErr := m.statusResTokens(r, r.PostForm["add_res"]) // Nodes, Gaeste, Container: fehlende Checks anlegen
-	if err := m.statusAddTokens(ctx, g, append(r.PostForm["add_tok"], toks...)); err != nil {
+	if err := m.statusAddTokens(ctx, g, r.PostForm["add_tok"]); err != nil {
 		return err
 	}
-	if err := m.statusAddM64(ctx, g, r.PostForm["add_m64"]); err != nil {
-		return err
-	}
-	return opErr
+	return m.statusAddM64(ctx, g, r.PostForm["add_m64"])
 }
 
 // statusAddTokens haengt die Checks (Token) an die Gruppe an, die es gibt und die dort noch fehlen (Reihenfolge wie
@@ -584,7 +439,7 @@ func (m *Module) pageStatusSave(w http.ResponseWriter, r *http.Request) {
 	d := statusFormData{Page: p, Edit: edit}
 	if op := r.PostFormValue("op"); op != "" && op != "save" {
 		if err := m.statusFormOp(ctx, r, p, op); err != nil {
-			d.Error = m.pveErrText(r, err)
+			d.Error = err.Error()
 		}
 		d.Dirty = true
 		m.renderStatusForm(w, r, http.StatusOK, d)

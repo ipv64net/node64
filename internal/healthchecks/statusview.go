@@ -457,8 +457,8 @@ func (m *Module) statusDayAggs(ctx context.Context, tokens []string, n int, idx 
 	return out, nil
 }
 
-// statusGroupsFor: alle Eintraege nach der Healthchecks-Gruppe ihres Checks (Proxmox VE und Docker mit dem Namen des
-// Systems; Monitor64-Eintraege nach der Gruppe des Hosts; eigene Gruppen der Seite werden nicht mehr angezeigt).
+// statusGroupsFor: alle Eintraege nach der Healthchecks-Gruppe ihres Checks (Monitor64-Eintraege nach der Gruppe des
+// Hosts; eigene Gruppen der Seite werden nicht mehr angezeigt).
 // Gruppen in der Reihenfolge ihres ersten Auftretens, Eintraege in Seitenreihenfolge, Eintraege ohne Gruppe in einer
 // Gruppe ohne Namen am Ende; geloeschte Checks (groupOf: ok = false) bilden keine Gruppe. Ohne HCGroups
 // (Gruppennamen sind oeffentlich) eine Liste ohne Ueberschriften.
@@ -794,7 +794,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	var incItems []incItem
 	groupOf := func(tok string) (string, bool) {
 		if c := byTok[tok]; c != nil {
-			return statusGroupName(c), true
+			return strings.TrimSpace(c.Group), true
 		}
 		if s := m64[tok]; s != nil {
 			return s.Group, true

@@ -44,10 +44,6 @@ func TestMultiNodeMeasuredHere(t *testing.T) {
 	if c == nil || c.Foreign() || len(c.Nodes) != 1 {
 		t.Fatalf("owner stays this node, nodes kept: %+v", c)
 	}
-	dock := create(map[string]any{"name": "dock", "type": "docker", "target": "x", "execution": "local", "nodes": []string{me, other}})
-	if d, _ := m.st.Check(ctx, dock); d == nil || len(d.Nodes) != 0 {
-		t.Fatalf("docker belongs to exactly one node: %+v", d)
-	}
 	if w := m.WireCheck(c, nil); len(w.Nodes) != 1 || w.Nodes[0] != other {
 		t.Fatalf("wire nodes: %+v", w.Nodes)
 	}

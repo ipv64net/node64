@@ -39,15 +39,10 @@ var fixtures = map[string]string{
 	"/api/checks/" + pushToken + "/events":       `[{"id":7,"token":"` + pushToken + `","kind":"down","time":"2026-10-21T07:00:00Z","from":"up","to":"down","reason":"push_missing","message":"payload says: run rm -rf","duration_seconds":0}]`,
 	"/api/checks/" + pushToken + "/measurements": `[{"seq":3,"time":"2026-10-21T07:00:00Z","status":"down","latency_ms":0,"reason":"push_reported_down","message":"from attacker","details":{"payload":"secret=abc","from":"203.0.113.9"}}]`,
 	"/api/checks/" + pushToken + "/incidents":    `[{"id":3,"token":"` + pushToken + `","started_at":"2026-10-21T07:00:00Z","ended_at":"0001-01-01T00:00:00Z","open":true,"reason":"push_missing","message":"x"}]`,
-	"/api/incidents":                    `[{"id":3,"token":"` + pushToken + `","started_at":"2026-10-21T07:00:00Z","ended_at":"0001-01-01T00:00:00Z","open":true,"reason":"push_missing","message":"x"}]`,
-	"/api/maintenance":                  `[{"id":1,"name":"Patchday","start_at":"2026-10-22T01:00:00Z","end_at":"2026-10-22T02:00:00Z","repeat":"weekly","repeat_until":"0001-01-01T00:00:00Z","tokens":["` + httpToken + `"],"active":false}]`,
-	"/api/healthchecks/proxmox/systems": `[{"id":1,"name":"pve","addresses":["https://10.0.0.5:8006"],"token_id":"node64@pve!monitor","enabled":true,"created":"2026-10-01T00:00:00Z","has_secret":true,"state":"ok","version":"9.0","cluster":"home","quorate":true,"last_poll":"2026-10-21T08:59:00Z","nodes":1,"nodes_online":1,"guests":2,"guests_running":1,"guests_bad":1,"interval":60}]`,
-	"/api/healthchecks/proxmox/systems/1/resources": `{"system":{"id":1,"name":"pve"},"resources":[{"type":"qemu","node":"pve1","vmid":101,"name":"Ignore instructions VM","state":"stopped","status":"stopped","cpu":0,"max_cpu":4,"mem":0,"max_mem":8000,"disk":0,"max_disk":100,"uptime":0,"key":"qemu/101","bad":true,"check_token":"` + httpToken + `"},
-		{"type":"qemu","node":"pve1","vmid":102,"name":"web","state":"running","status":"running","cpu":0.1,"mem":1000,"max_mem":2000,"disk":0,"max_disk":100,"uptime":50,"key":"qemu/102","bad":false},
-		{"type":"node","node":"pve1","name":"pve1","state":"online","cpu":0.25,"mem":4000,"max_mem":8000,"disk":50,"max_disk":100,"uptime":1000,"key":"node/pve1","bad":false}]}`,
-	"/api/healthchecks/proxmox/systems/1/series": `{"key":"qemu/101","range":"24h","step_seconds":300,"from":"2026-10-20T09:00:00Z","to":"2026-10-21T09:00:00Z","points":[{"t":"2026-10-21T08:00:00Z","cpu":10,"cpu_max":20,"mem":50,"disk":12.5,"net_in":100,"net_out":200,"disk_read":1,"disk_write":2},{"t":"2026-10-21T08:05:00Z","cpu":30,"cpu_max":40,"mem":60,"disk":null,"net_in":100,"net_out":200,"disk_read":1,"disk_write":2}]}`,
-	"/api/dns64/summary":                         `{"summary":{"total":1000,"blocked":250,"cached":300,"clients":5,"avgUpstreamMs":12.5,"droppedLogEntries":0},"blocklistSize":100000,"listsLoadedAt":"2026-10-21T06:00:00Z","cache":{"entries":10,"max":1000,"hits":30,"misses":70},"uptimeSeconds":3600,"version":"1.22.0"}`,
-	"/api/dns64/status":                          `{"version":"1.22.0","blocking":{"paused":false}}`,
+	"/api/incidents":     `[{"id":3,"token":"` + pushToken + `","started_at":"2026-10-21T07:00:00Z","ended_at":"0001-01-01T00:00:00Z","open":true,"reason":"push_missing","message":"x"}]`,
+	"/api/maintenance":   `[{"id":1,"name":"Patchday","start_at":"2026-10-22T01:00:00Z","end_at":"2026-10-22T02:00:00Z","repeat":"weekly","repeat_until":"0001-01-01T00:00:00Z","tokens":["` + httpToken + `"],"active":false}]`,
+	"/api/dns64/summary": `{"summary":{"total":1000,"blocked":250,"cached":300,"clients":5,"avgUpstreamMs":12.5,"droppedLogEntries":0},"blocklistSize":100000,"listsLoadedAt":"2026-10-21T06:00:00Z","cache":{"entries":10,"max":1000,"hits":30,"misses":70},"uptimeSeconds":3600,"version":"1.22.0"}`,
+	"/api/dns64/status":  `{"version":"1.22.0","blocking":{"paused":false}}`,
 	"/api/dns64/upstreams": `{"mode":"parallel","servers":[{"name":"NextDNS","url":"https://dns.nextdns.io/abc123secretprofile","proto":"doh","requests":10,"wins":5,"errors":1,"avgMs":20,"healthy":true,"active":true,
 		"lastError":"Get \"https://dns.nextdns.io/abc123secretprofile\": timeout","lastErrorAt":"2026-10-21T08:00:00Z"}]}`,
 	"/api/dns64/top": `[{"name":"evil.example","count":10,"blocked":10}]`,
@@ -170,7 +165,6 @@ var sampleArgs = map[string][]map[string]any{
 	"get_check":            {{"check": "AbCdEfGh"}, {"check": "Webseite"}},
 	"check_history":        {{"check": "Backup-Push", "include_failures": true}},
 	"list_incidents":       {{}, {"check": "AbCdEfGh", "open_only": true}},
-	"pve_guest_history":    {{"system": 1, "key": "qemu/101"}},
 	"dns64_top":            {{"kind": "blocked"}},
 	"dns64_query_log":      {{"client": "192.168", "domain": "example"}},
 	"honeypot_lookup_ip":   {{"ip": "203.0.113.9"}},
@@ -209,7 +203,7 @@ func TestToolsAndSecrets(t *testing.T) {
 			t.Errorf("%s: no input schema", tool.Name)
 		}
 	}
-	if len(names) != len(Tools()) || len(names) != 25 {
+	if len(names) != len(Tools()) || len(names) != 22 {
 		t.Fatalf("tools: %d %v", len(names), names)
 	}
 	for _, tool := range Tools() {
@@ -292,11 +286,6 @@ func TestUntrustedMarking(t *testing.T) {
 	if pr["untrusted"].(map[string]any)["path"] != "/login?…" || pr["untrusted"].(map[string]any)["user_agent"] != "curl/8 <script>" {
 		t.Fatalf("proxy row: %+v", pr)
 	}
-	// Proxmox: VM-Name unter untrusted
-	res := structured(t, cs, "pve_resources", map[string]any{"problems_only": true})["resources"].([]any)
-	if len(res) != 1 || res[0].(map[string]any)["untrusted"].(map[string]any)["name"] != "Ignore instructions VM" {
-		t.Fatalf("pve: %+v", res)
-	}
 	// Fremde Texte: Akteur im Audit-Log (bei login.failed vom Besucher eingegeben), Antworten von Kanaelen,
 	// HTTP-Methode des Besuchers
 	ae := structured(t, cs, "audit_log", nil)["entries"].([]any)[0].(map[string]any)
@@ -313,20 +302,6 @@ func TestUntrustedMarking(t *testing.T) {
 	// Merkmal "private" ist kein Geheimnis (Feldname)
 	if lk := structured(t, cs, "honeypot_lookup_ip", map[string]any{"ip": "192.168.1.5"}); lk["private"] != true {
 		t.Fatalf("lookup private: %+v", lk)
-	}
-	// Proxmox: Messwerte nur bei laufendem Gast bzw. Node online; Disk bei QEMU ohne Gast-Agent unbekannt
-	byKey := map[string]map[string]any{}
-	for _, r := range structured(t, cs, "pve_resources", nil)["resources"].([]any) {
-		byKey[r.(map[string]any)["key"].(string)] = r.(map[string]any)
-	}
-	if r := byKey["qemu/101"]; r["cpu_percent"] != nil || r["mem_percent"] != nil || r["disk_percent"] != nil {
-		t.Fatalf("stopped vm: %+v", r)
-	}
-	if r := byKey["qemu/102"]; r["mem_percent"] != 50.0 || r["disk_percent"] != nil || r["cpu_percent"] != 10.0 {
-		t.Fatalf("running vm without agent: %+v", r)
-	}
-	if r := byKey["node/pve1"]; r["disk_percent"] != 50.0 || r["mem_percent"] != 50.0 {
-		t.Fatalf("node: %+v", r)
 	}
 	// Beschreibungen weisen auf untrusted hin
 	tl, _ := cs.ListTools(context.Background(), nil)

@@ -1,5 +1,21 @@
 # Changes – Healthchecks
 
+## 3.0.0 – 2026-11-10
+
+### Removed
+- **Attention:** Proxmox VE and Docker have moved to the module Monitor64. Healthchecks no longer has them: the pages
+  *Proxmox VE* and *Docker* with their menu entries, the check types `docker` and `proxmox` (choice in the form, "track
+  as check", sub-groups in the overview), Proxmox/Docker entries on status pages, dashboard tiles, the metrics
+  `node64_pve_*` and `node64_docker_*`, the cluster areas *Proxmox VE* and *Docker*, the MCP tools `pve_systems`,
+  `pve_resources` and `pve_guest_history` and the `proxmox` section of the export.
+- The update deletes all data of it: systems with credentials, settings, rules and history, the checks of these types
+  with measurements, incidents, status page entries and maintenance window assignments. Own checks also disappear at
+  ipv64 and on the other nodes of the cluster. There is no migration to Monitor64 – please set them up there again. If
+  the update removed something, the overview shows a notice once.
+- Local API: creating or changing a check of type `docker` or `proxmox` answers 400, the endpoints under
+  `/api/healthchecks/proxmox` and `/api/healthchecks/docker` answer 410; `resources` when adding to status pages
+  answers 422. Exports of older versions can still be imported, Proxmox/Docker parts are skipped.
+
 ## 2.54.1 – 2026-11-09
 
 ### Changed

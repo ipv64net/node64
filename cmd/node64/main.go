@@ -174,7 +174,6 @@ func run() error {
 
 	modules := module.NewRegistry(st, logger.Slog())
 	hcModule := healthchecks.New(st, logger.Slog(), dispatcher, nfStore, Version)
-	hcModule.SetSecrets(box) // Proxmox VE: Token-Secrets verschluesselt
 	modules.Register(hcModule)
 	ipv64Key := ipv64api.NewKey(st, box, ipv64api.NewClient(os.Getenv("NODE64_IPV64_API"), "node64/"+Version), logger.Slog()) // leer = ipv64.net (Env nur fuer Tests)
 	ipv64Key.Client().SetNodeID(func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") })           // X-Node64-Node
@@ -390,7 +389,7 @@ func run() error {
 	})
 	certcluster.Register(peerMgr, certMgr, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Zertifikate ueber den Cluster
 	dns64cluster.Register(peerMgr, dnsModule)                                                                                  // DNS64 ueber den Cluster
-	hccluster.Register(peerMgr, hcModule)                                                                                      // Proxmox VE, Docker und Statusseiten ueber den Cluster
+	hccluster.Register(peerMgr, hcModule)                                                                                      // Statusseiten ueber den Cluster
 	nfcluster.Register(peerMgr, nfStore)                                                                                       // Benachrichtigungskanaele ueber den Cluster
 	nodecluster.Register(peerMgr, nodecfg.New(nodecfg.Deps{Store: st, Box: box, Key: ipv64Key, Account: peerMgr.Account, ClusterAccount: peerMgr.ClusterAccount, Log: logger.Slog().With("module", "peer")}),
 		func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // API-Key und allgemeine Einstellungen ueber den Cluster

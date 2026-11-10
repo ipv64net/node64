@@ -25,6 +25,54 @@ import (
 // ClusterItemStatusPages ist der Bereich der Statusseiten im Cluster (Modul healthchecks).
 const ClusterItemStatusPages = "statuspages"
 
+// ClusterHooks verbinden das Modul mit dem Cluster (main.go ueber healthchecks/hccluster); leer = kein Cluster.
+type ClusterHooks struct {
+	// Change meldet eine Aenderung einer Statusseite (id = UID); ctx traegt bei Uebernahmen die Herkunft.
+	Change func(ctx context.Context, item, id string, deleted bool)
+}
+
+// SetCluster haengt den Cluster an (vor Start).
+func (m *Module) SetCluster(h ClusterHooks) {
+	m.cluster = h
+	m.st.OnStatusCluster = nil
+	if h.Change != nil {
+		m.st.OnStatusCluster = func(ctx context.Context, uid string, deleted bool) {
+			h.Change(ctx, ClusterItemStatusPages, uid, deleted)
+		}
+	}
+}
+
+var errClusterItem = errors.New("cluster: unknown area")
+
+// ClusterIDs: Kennungen der Statusseiten (erster Abgleich). Die frueheren Bereiche proxmox und docker gibt es nicht
+// mehr (nach Monitor64 umgezogen): leer.
+func (m *Module) ClusterIDs(ctx context.Context, item string) ([]string, error) {
+	if item != ClusterItemStatusPages {
+		return nil, nil
+	}
+	return m.statusClusterIDs(ctx)
+}
+
+// ClusterGet liefert eine Statusseite (found=false: gibt es nicht).
+func (m *Module) ClusterGet(ctx context.Context, item, id string) (json.RawMessage, bool, error) {
+	if item != ClusterItemStatusPages {
+		return nil, false, nil
+	}
+	return m.statusClusterGet(ctx, id)
+}
+
+// ClusterApply uebernimmt eine Statusseite einer anderen Node. Systeme der frueheren Bereiche proxmox und docker
+// (aeltere Nodes) werden stillschweigend verworfen.
+func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error {
+	switch item {
+	case ClusterItemStatusPages:
+		return m.statusClusterApply(ctx, id, data, deleted)
+	case "proxmox", "docker":
+		return nil
+	}
+	return errClusterItem
+}
+
 var statusUIDRe = regexp.MustCompile(`^[0-9a-f]{16,64}$`)
 
 // clusterStatusPage ist eine Seite im Cluster.
@@ -158,7 +206,7 @@ var errStatusSlug = errors.New("cluster: status page with this slug exists here 
 // den Hook des Stores mit ihrer Herkunft (ctx) weiter an den Cluster.
 func (m *Module) statusClusterApply(ctx context.Context, uid string, data json.RawMessage, deleted bool) error {
 	if !statusUIDRe.MatchString(uid) {
-		return errClusterSystem
+		return errClusterItem
 	}
 	cur, err := m.st.statusPageWhere(ctx, `uid = ?`, uid)
 	if errors.Is(err, ErrStatusPageNotFound) {

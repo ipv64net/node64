@@ -32,9 +32,6 @@ func addPrompts(srv *sdk.Server, o Options, id Identity) {
 				"1. get_check and list_incidents: state, start/end of the outage, reason.",
 				"2. check_history (include_failures=true) for the affected range.",
 			}
-			if has(AreaProxmox) {
-				steps = append(steps, "3. pve_resources (problems_only=true) and pve_guest_history of related guests: was a VM/host down or overloaded?")
-			}
 			if has(AreaProxy64) {
 				steps = append(steps, "4. proxy_hosts and proxy_access_log (status=5xx or rejected) in the same period.")
 			}
@@ -56,9 +53,6 @@ func addPrompts(srv *sdk.Server, o Options, id Identity) {
 		}
 		if has(AreaHealthchecks) {
 			steps = append(steps, "- list_checks, list_incidents (limit 50) and check_history (range=7d) for checks with incidents: availability and outages.")
-		}
-		if has(AreaProxmox) {
-			steps = append(steps, "- pve_systems and pve_resources: state and load of the Proxmox VE systems.")
 		}
 		if has(AreaDNS64) {
 			steps = append(steps, "- dns64_summary (range=7d) and dns64_top (kind=blocked, range=7d).")

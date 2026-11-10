@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
@@ -12,13 +14,14 @@ import (
 )
 
 // Export/Import der Konfiguration (module.Exporter). Messdaten sind nicht
-// enthalten, nur Checks, Wartungsfenster, Proxmox-Systeme (proxmox_export.go)
-// und Statusseiten (statuspage_export.go).
+// enthalten, nur Checks, Wartungsfenster und Statusseiten (statuspage_export.go).
+// Exporte aelterer Versionen mit Proxmox-Systemen ("proxmox") und Checks vom Typ
+// docker bzw. proxmox lassen sich weiter importieren: diese Teile werden
+// uebersprungen (nach Monitor64 umgezogen, removed.go).
 
 type exportFile struct {
 	Checks      []checkJSON        `json:"checks"`
 	Maintenance []Maintenance      `json:"maintenance"`
-	Proxmox     []pveExportSystem  `json:"proxmox,omitempty"`
 	StatusPages []statusExportPage `json:"status_pages,omitempty"`
 }
 
@@ -54,13 +57,6 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	if mw, err := m.st.MaintenanceList(ctx); err == nil && mw != nil {
 		out.Maintenance = mw
 	}
-	px, err := m.pveExport(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(px) > 0 {
-		out.Proxmox = px
-	}
 	sp, err := m.statusExport(ctx)
 	if err != nil {
 		return nil, err
@@ -79,6 +75,14 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		return 0, fmt.Errorf("healthchecks: %w", err)
 	}
 	n := 0
+	skipped := map[string]bool{} // Checks vom Typ docker bzw. proxmox (aeltere Exporte)
+	in.Checks = slices.DeleteFunc(in.Checks, func(j checkJSON) bool {
+		if removedType(checks.Type(strings.ToLower(strings.TrimSpace(j.Type)))) {
+			skipped[j.Token] = true
+			return true
+		}
+		return false
+	})
 	// Erst alle ohne Parent anlegen, damit Abhaengigkeiten aufloesbar sind
 	for pass := 0; pass < 2; pass++ {
 		for _, j := range in.Checks {
@@ -144,9 +148,12 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		}
 		var tokens []string
 		for _, t := range mw.Tokens {
-			if tokenRe.MatchString(t) {
+			if tokenRe.MatchString(t) && !skipped[t] {
 				tokens = append(tokens, t)
 			}
+		}
+		if len(tokens) == 0 && len(mw.Tokens) > 0 {
+			continue // nur fuer uebersprungene Checks (leer hiesse „alle Checks“)
 		}
 		mw.Tokens = tokens
 		if old, ok := byName[mw.Name]; ok {
@@ -162,16 +169,6 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		}
 		n++
 	}
-	k, err := m.pveImport(ctx, in.Proxmox)
-	n += k
-	k, serr := m.statusImport(ctx, in.StatusPages)
-	switch {
-	case err != nil && serr != nil:
-		err = fmt.Errorf("%v; %v", err, serr)
-	case serr != nil:
-		err = serr
-	}
+	k, err := m.statusImport(ctx, in.StatusPages, skipped)
 	return n + k, err
 }
-
-var _ = checks.TypePush

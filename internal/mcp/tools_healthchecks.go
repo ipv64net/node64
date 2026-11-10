@@ -3,14 +3,13 @@ package mcp
 import (
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Healthchecks und Proxmox VE (beides Modul healthchecks).
+// Healthchecks (Modul healthchecks).
 
 func healthTools() []Tool {
 	checkArg := pStr("check", "Check id (8 characters, from list_checks) or exact check name.", 200)
@@ -18,7 +17,7 @@ func healthTools() []Tool {
 		{Name: "list_checks", Area: AreaHealthchecks, Title: "List health checks", Untrusted: true,
 			Desc: "Health checks with current state (up/down/paused/...), last result and latency. Filter by state, group, type, tag or text.",
 			Schema: schema(nil, pEnum("state", "Only checks in this state.", "", "up", "down", "pending", "paused", "degraded", "flapping", "stabilizing", "dependent"),
-				pStr("group", "Only checks in this group (exact).", 100), pStr("type", "Only checks of this type (http, keyword, json, tcp, icmp, dns, cert, docker, push, proxmox, ...).", 30),
+				pStr("group", "Only checks in this group (exact).", 100), pStr("type", "Only checks of this type (http, keyword, json, tcp, icmp, dns, cert, whois, push, ...).", 30),
 				pStr("tag", "Only checks with this tag.", 60), pStr("query", "Text search in name, target and tags.", 100), pInt("limit", "Maximum number of checks.", 100, 1, 500)),
 			Run: listChecks},
 		{Name: "get_check", Area: AreaHealthchecks, Title: "Get health check", Untrusted: true,
@@ -37,21 +36,6 @@ func healthTools() []Tool {
 		{Name: "list_maintenance", Area: AreaHealthchecks, Title: "List maintenance windows",
 			Desc:   "Maintenance windows (times, repetition, affected checks, active now).",
 			Schema: schema(nil, pBool("active_only", "Only windows that are active now.")), Run: listMaintenance},
-
-		{Name: "pve_systems", Area: AreaProxmox, Title: "Proxmox VE systems", Untrusted: true,
-			Desc:   "Monitored Proxmox VE systems (clusters or hosts): state, version, quorum, number of nodes and guests, problems.",
-			Schema: noArgs, Run: pveSystems},
-		{Name: "pve_resources", Area: AreaProxmox, Title: "Proxmox VE nodes and guests", Untrusted: true,
-			Desc: "Nodes, VMs and containers of the Proxmox VE systems from the last poll with state and load (CPU, memory, disk). Load values are only present for online nodes and running guests; disk_percent is missing for VMs without guest agent.",
-			Schema: schema(nil, pIntOpt("system", "Only this system id (from pve_systems).", 1, 1<<30), pEnum("type", "Only this resource type.", "", "node", "qemu", "lxc"),
-				pBool("problems_only", "Only resources with a problem (stopped, offline, error, ...)."), pInt("limit", "Maximum number of resources.", 200, 1, 1000)),
-			Run: pveResources},
-		{Name: "pve_guest_history", Area: AreaProxmox, Title: "Proxmox VE history",
-			Desc: "Load history of a Proxmox node or guest summarized (CPU, memory, disk, network) with a downsampled series.",
-			Schema: schema([]string{"system", "key"}, pIntOpt("system", "System id (from pve_systems).", 1, 1<<30),
-				pStr("key", "Resource key from pve_resources, e.g. qemu/101, lxc/200 or node/pve1.", 80), pEnum("range", "Time range.", "24h", "1h", "24h", "7d", "30d"),
-				pInt("points", "Maximum number of series points.", 48, 0, 200)),
-			Run: pveGuestHistory},
 	}
 }
 
@@ -356,191 +340,4 @@ func listMaintenance(c *call, a map[string]any) (map[string]any, error) {
 		out = append(out, o)
 	}
 	return obj{"maintenance": out, "count": len(out)}, nil
-}
-
-// ---------------------------------------------------------------- Proxmox VE
-
-const pvePath = "/api/healthchecks/proxmox/systems"
-
-func pveSystemOut(m obj) obj {
-	o := obj{"id": i64(m, "id"), "name": clean(str(m, "name"), 80), "enabled": boolean(m, "enabled"), "state": str(m, "state"), "version": clean(str(m, "version"), 40),
-		"last_poll": ts(m["last_poll"]), "nodes": i64(m, "nodes"), "nodes_online": i64(m, "nodes_online"), "guests": i64(m, "guests"),
-		"guests_running": i64(m, "guests_running"), "guests_with_problems": i64(m, "guests_bad"), "interval_seconds": i64(m, "interval")}
-	if q, ok := m["quorate"].(bool); ok {
-		o["quorate"] = q
-	}
-	u := obj{}
-	if s := str(m, "cluster"); s != "" {
-		u["cluster"] = clean(s, 80)
-	}
-	if s := str(m, "error"); s != "" {
-		u["error"] = clean(s, 300)
-	}
-	o["untrusted"] = u
-	return o
-}
-
-func pveSystems(c *call, _ map[string]any) (map[string]any, error) {
-	list, err := c.getArr(pvePath, nil)
-	if err != nil {
-		return nil, err
-	}
-	var out []any
-	for _, e := range list {
-		out = append(out, pveSystemOut(asObj(e)))
-	}
-	return obj{"systems": out, "count": len(out)}, nil
-}
-
-func pct(a, b float64) float64 {
-	if b <= 0 {
-		return 0
-	}
-	return round(a/b*100, 1)
-}
-
-func pveResources(c *call, a map[string]any) (map[string]any, error) {
-	var ids []int64
-	if id := argInt(a, "system", 0, 0, 1<<30); id > 0 {
-		ids = []int64{int64(id)}
-	} else {
-		list, err := c.getArr(pvePath, nil)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range list {
-			ids = append(ids, i64(asObj(e), "id"))
-		}
-	}
-	typ, problems, limit := argStr(a, "type"), argBool(a, "problems_only"), argInt(a, "limit", 200, 1, 1000)
-	var out []any
-	total := 0
-	for _, id := range ids {
-		res, err := c.getObj(pvePath+"/"+strconv.FormatInt(id, 10)+"/resources", nil)
-		if err != nil {
-			return nil, err
-		}
-		sysName := clean(str(asObj(res["system"]), "name"), 80)
-		for _, e := range asArr(res["resources"]) {
-			m := asObj(e)
-			if typ != "" && str(m, "type") != typ {
-				continue
-			}
-			if problems && !boolean(m, "bad") {
-				continue
-			}
-			total++
-			if len(out) >= limit {
-				continue
-			}
-			o := obj{"system": id, "system_name": sysName, "key": str(m, "key"), "type": str(m, "type"), "node": clean(str(m, "node"), 64),
-				"state": str(m, "state"), "problem": boolean(m, "bad")}
-			if vmid := i64(m, "vmid"); vmid > 0 {
-				o["vmid"] = vmid
-			}
-			// Messwerte wie in der Oberflaeche (healthchecks/proxmox_ui.go, proxmox.Resource.DiskPercent): nur bei
-			// Node online bzw. laufendem Gast; Disk bei QEMU ohne Gast-Agent (disk 0) unbekannt statt 0 %
-			if str(m, "state") == "online" || str(m, "status") == "running" {
-				o["cpu_percent"], o["uptime_seconds"] = round(num(m, "cpu")*100, 1), i64(m, "uptime")
-				if num(m, "max_mem") > 0 {
-					o["mem_percent"], o["mem_bytes"] = pct(num(m, "mem"), num(m, "max_mem")), i64(m, "mem")
-				}
-				if num(m, "max_disk") > 0 && (num(m, "disk") > 0 || str(m, "type") != "qemu") {
-					o["disk_percent"] = pct(num(m, "disk"), num(m, "max_disk"))
-				}
-			}
-			if boolean(m, "muted") {
-				o["muted"] = true
-			}
-			if boolean(m, "excluded") {
-				o["excluded"] = true
-			}
-			if boolean(m, "template") {
-				o["template"] = true
-			}
-			if t := str(m, "check_token"); t != "" {
-				o["check_id"] = shortID(t)
-			}
-			u := obj{"name": clean(str(m, "name"), 80)}
-			if t := strs(m, "tags"); len(t) > 0 {
-				u["tags"] = t
-			}
-			if l := str(m, "lock"); l != "" {
-				u["lock"] = clean(l, 40)
-			}
-			o["untrusted"] = u
-			out = append(out, o)
-		}
-	}
-	return obj{"resources": out, "total": total, "truncated": total > len(out)}, nil
-}
-
-func pveGuestHistory(c *call, a map[string]any) (map[string]any, error) {
-	id := argInt(a, "system", 0, 0, 1<<30)
-	key := argStr(a, "key")
-	if id <= 0 || key == "" {
-		return nil, errors.New("parameters system and key are required")
-	}
-	rng := argStr(a, "range")
-	if rng == "" {
-		rng = "24h"
-	}
-	s, err := c.getObj(pvePath+"/"+strconv.Itoa(id)+"/series", url.Values{"key": {key}, "range": {rng}})
-	if err != nil {
-		return nil, err
-	}
-	pts := asArr(s["points"])
-	out := obj{"system": id, "key": str(s, "key"), "range": str(s, "range"), "from": ts(s["from"]), "to": ts(s["to"]), "step_seconds": i64(s, "step_seconds"),
-		"points_total": len(pts)}
-	type agg struct{ sum, max float64 }
-	var cpu, mem, nin, nout, dr, dw agg
-	var disk *float64
-	add := func(g *agg, v float64) {
-		g.sum += v
-		if v > g.max {
-			g.max = v
-		}
-	}
-	for _, e := range pts {
-		p := asObj(e)
-		add(&cpu, num(p, "cpu"))
-		add(&mem, num(p, "mem"))
-		add(&nin, num(p, "net_in"))
-		add(&nout, num(p, "net_out"))
-		add(&dr, num(p, "disk_read"))
-		add(&dw, num(p, "disk_write"))
-		if _, ok := p["disk"]; ok && p["disk"] != nil {
-			d := num(p, "disk")
-			disk = &d
-		}
-	}
-	if n := float64(len(pts)); n > 0 {
-		sum := func(g agg, dec int) obj { return obj{"avg": round(g.sum/n, dec), "max": round(g.max, dec)} }
-		out["cpu_percent"], out["mem_percent"] = sum(cpu, 1), sum(mem, 1)
-		out["net_in_bytes_per_s"], out["net_out_bytes_per_s"] = sum(nin, 0), sum(nout, 0)
-		out["disk_read_bytes_per_s"], out["disk_write_bytes_per_s"] = sum(dr, 0), sum(dw, 0)
-		if disk != nil {
-			out["disk_percent_last"] = round(*disk, 1)
-		}
-	}
-	// Reihe ausduennen: hoechstens "points" Werte, je Gruppe gemittelt
-	maxPts := argInt(a, "points", 48, 0, 200)
-	if maxPts > 0 && len(pts) > 0 {
-		per := int(math.Ceil(float64(len(pts)) / float64(maxPts)))
-		var series []any
-		for i := 0; i < len(pts); i += per {
-			j := min(len(pts), i+per)
-			var c, m, cm float64
-			for _, e := range pts[i:j] {
-				p := asObj(e)
-				c += num(p, "cpu")
-				m += num(p, "mem")
-				cm = math.Max(cm, num(p, "cpu_max"))
-			}
-			k := float64(j - i)
-			series = append(series, obj{"time": ts(asObj(pts[i])["t"]), "cpu": round(c/k, 1), "cpu_max": round(cm, 1), "mem": round(m/k, 1)})
-		}
-		out["series"] = series
-	}
-	return out, nil
 }

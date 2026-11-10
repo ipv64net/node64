@@ -44,8 +44,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	m.maintenanceRoutes(mux, page)
 	m.incidentsRoutes(mux, page)
 	m.statusPagesRoutes(mux, page)
-	m.pveRoutes(mux, page)
-	m.dockerRoutes(mux, page)
+	m.removedRoutes(mux, page) // Proxmox VE und Docker: nach Monitor64 umgezogen (removed.go)
 }
 
 // ---------------------------------------------------------------- Darstellung
@@ -108,8 +107,8 @@ func (r row) CertClass() string {
 	return "success"
 }
 
-// group ist ein Abschnitt der Liste (eine frei benannte Gruppe). Parts teilt sie weiter auf: in den Gruppen
-// „Proxmox VE“ und „Docker“ je System bzw. Docker-Host (aufklappbar), sonst ein Teil ohne Namen.
+// group ist ein Abschnitt der Liste (eine frei benannte Gruppe). Parts teilt sie weiter auf (derzeit immer ein Teil
+// ohne Namen).
 type group struct {
 	Key, Name        string
 	Rows             []row
@@ -155,6 +154,7 @@ type listData struct {
 	// Konto-Leiste (verknuepft) und Filter nach Ausfuehrungsort/Node
 	Acct  *acctBar
 	Peers []Peer
+	Moved bool // Hinweis: Proxmox-/Docker-Checks beim Update entfernt (nach Monitor64 umgezogen, removed.go)
 }
 
 // acctBar: Klasse, belegte Online-Messstellen, Ausfuehrungsorte und Nodes (wie im Portal).
@@ -369,7 +369,7 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		if f["q"] != "" && !strings.Contains(strings.ToLower(c.Name+" "+c.Target+" "+c.Group+" "+strings.Join(c.Tags, " ")), strings.ToLower(f["q"])) {
 			continue
 		}
-		d.Rows = append(d.Rows, rw) // Docker-Checks als normale Zeilen; Container des Hosts auf /healthchecks/docker
+		d.Rows = append(d.Rows, rw)
 	}
 	for t := range tagSet {
 		d.Tags = append(d.Tags, t)
@@ -381,13 +381,13 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(d.AllGrps, func(i, j int) bool { return strings.ToLower(d.AllGrps[i]) < strings.ToLower(d.AllGrps[j]) })
 	sortRows(d.Rows, d.Sort, d.Dir == "desc")
 	d.Grouped = len(d.AllGrps) > 0
-	d.Groups = groupRows(d.Rows, d.AllGrps, m.g.T(r, "hc.group.none"), m.subGroupOf(ctx, r))
+	d.Groups = groupRows(d.Rows, d.AllGrps, m.g.T(r, "hc.group.none"))
+	d.Moved = m.removedNotice(ctx)
 	m.g.Render(w, r, http.StatusOK, Name+"/list", "nav.healthchecks", d)
 }
 
-// groupRows verteilt die (schon sortierten) Zeilen auf Gruppen; Checks ohne Gruppe kommen zuletzt. sub liefert je
-// Zeile der Gruppen „Proxmox VE“ und „Docker“ den Namen des Systems bzw. Docker-Hosts (nil bzw. "" = kein Teil).
-func groupRows(rows []row, names []string, none string, sub func(row) string) []group {
+// groupRows verteilt die (schon sortierten) Zeilen auf Gruppen; Checks ohne Gruppe kommen zuletzt.
+func groupRows(rows []row, names []string, none string) []group {
 	idx := map[string]int{}
 	var out []group
 	for i, n := range names {
@@ -408,27 +408,6 @@ func groupRows(rows []row, names []string, none string, sub func(row) string) []
 			continue
 		}
 		g.Parts = []group{{Key: g.Key + "-p", Rows: g.Rows}}
-		if sub != nil && (g.Name == pveCheckGroup || g.Name == dockerCheckGroup) {
-			parts, pi := []group{{Key: g.Key + "-p"}}, map[string]int{"": 0}
-			for _, r := range g.Rows {
-				n := sub(r)
-				i, ok := pi[n]
-				if !ok {
-					i = len(parts)
-					pi[n] = i
-					parts = append(parts, group{Key: g.Key + "-s" + strconv.Itoa(i), Name: n})
-				}
-				parts[i].count(r)
-			}
-			named := parts[1:]
-			sort.SliceStable(named, func(i, j int) bool { return strings.ToLower(named[i].Name) < strings.ToLower(named[j].Name) })
-			g.Parts = parts[:0]
-			for _, p := range parts {
-				if len(p.Rows) > 0 {
-					g.Parts = append(g.Parts, p)
-				}
-			}
-		}
 		res = append(res, g)
 	}
 	return res
@@ -626,16 +605,12 @@ type formData struct {
 	Errors      map[string]string
 	Types       []checks.Type
 	Parents     []*Check
-	Groups      []string           // vorhandene Gruppen (Vorschlaege)
-	Containers  []checks.Container // Docker: Container des Hosts (Vorschlaege)
-	Devices     []NetDevice        // Geraete aus DNS64 (Auswahl beim Anlegen, nur wenn DNS64 laeuft)
-	DockerErr   string
-	DockerHost  string
+	Groups      []string    // vorhandene Gruppen (Vorschlaege)
+	Devices     []NetDevice // Geraete aus DNS64 (Auswahl beim Anlegen, nur wenn DNS64 laeuft)
 	IPModes     []string
 	Error       string
 	Channels    []channelOpt
-	ChanDefault string   // Namen der Standardkanaele (gelten ohne Auswahl)
-	SysChan     *sysChan // Check „als Check“ eines Systems: Kanaele kommen aus dessen Regeln
+	ChanDefault string // Namen der Standardkanaele (gelten ohne Auswahl)
 	// Hybrid-Vorbereitung: Messstellen und Bewertung (aktiv erst mit ipv64-Verknuepfung)
 	Policies   []string
 	Locations  []string
@@ -651,8 +626,6 @@ type formData struct {
 	WhoisSources               []string
 	// Online-Messstellen des Accounts ohne diesen Check und Limit der Klasse (0 = unbegrenzt/unbekannt)
 	PointsUsed, PointsLimit int
-	// Neuer Check aus einem ueberwachten System (form_systems.go)
-	PickPVE, PickDocker []sysPick
 }
 
 type channelOpt struct {
@@ -770,19 +743,6 @@ func formFromCheck(c *Check) map[string]string {
 	case checks.TypePush:
 		set("period_seconds", "period_seconds")
 		set("grace_seconds", "grace_seconds")
-	case checks.TypeDocker:
-		set("docker_host", "host")
-		set("docker_system", "system") // Anzeige-Name des Docker-Hosts bleibt beim Bearbeiten erhalten
-		var dp checks.DockerParams
-		if json.Unmarshal(c.Params, &dp) == nil && dp.SystemCustom {
-			f["sys_label"], f["docker_system"] = dp.System, "" // leer gespeichert: der naechste Abruf setzt den Host
-		}
-	case checks.TypeProxmox:
-		f["pve_params"] = string(c.Params) // System und Gast stehen fest (Proxmox VE → „als Check“)
-		var pp checks.ProxmoxParams
-		if json.Unmarshal(c.Params, &pp) == nil && pp.SystemCustom {
-			f["sys_label"] = pp.System
-		}
 	case checks.TypeWhois:
 		var wp checks.WhoisParams
 		_ = json.Unmarshal(c.Params, &wp)
@@ -991,16 +951,6 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if on("skip_hostname") {
 			p["skip_hostname"] = true
 		}
-	case checks.TypeDocker:
-		if s := strings.TrimSpace(v("docker_host")); s != "" {
-			p["host"] = s
-		}
-		if s := v("docker_system"); s != "" {
-			p["system"] = s
-		}
-		if s := sysLabel(v("sys_label")); s != "" { // Untergruppe von Hand
-			p["system"], p["system_custom"] = s, true
-		}
 	case checks.TypeWhois:
 		if s := v("whois_source"); s != "" && s != "auto" {
 			p["source"] = s
@@ -1044,21 +994,6 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if err := num("grace_seconds", "grace_seconds"); err != nil {
 			return in, err
 		}
-	case checks.TypeProxmox: // unveraendert aus dem verborgenen Feld; das Ziel ist der Key
-		var pp checks.ProxmoxParams
-		if err := json.Unmarshal([]byte(v("pve_params")), &pp); err != nil {
-			return in, fmt.Errorf("proxmox: %w", err)
-		}
-		// Untergruppe von Hand; leer = wieder automatisch (der naechste Abruf setzt den Clusternamen)
-		if pp.SystemCustom {
-			pp.System, pp.SystemCustom = "", false
-		}
-		if s := sysLabel(v("sys_label")); s != "" {
-			pp.System, pp.SystemCustom = s, true
-		}
-		in.Target = pp.Key
-		in.Params, _ = json.Marshal(pp)
-		return in, nil
 	}
 	in.Params, _ = json.Marshal(p)
 	return in, nil
@@ -1077,33 +1012,10 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 		}
 	}
 	sort.Strings(d.Groups)
-	d.DockerHost = checks.DefaultDockerHost()
-	cctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-	var derr error
-	if d.Containers, derr = checks.ListContainersVia(cctx, m.dockerRemote, d.Form["docker_host"]); derr != nil {
-		d.DockerErr = derr.Error()
-	}
-	cancel()
 	if !d.Edit && m.netDevices != nil {
 		d.Devices = m.netDevices(r.Context())
 	}
 	d.Types = checks.Types
-	if d.Form["type"] == string(checks.TypeProxmox) { // nur ueber Proxmox VE angelegt, hier nur bearbeiten
-		d.Types = append(append([]checks.Type{}, checks.Types...), checks.TypeProxmox)
-	}
-	if !d.Edit && !d.APIMode { // neu: Docker-Container und Proxmox-Maschinen aus den ueberwachten Systemen waehlen
-		d.Types = nil
-		for _, t := range checks.Types {
-			if t != checks.TypeDocker {
-				d.Types = append(d.Types, t)
-			}
-		}
-		d.Types = append(d.Types, sysTypePVE, sysTypeDocker)
-		d.PickPVE, d.PickDocker = m.sysPicks(r.Context(), false), m.sysPicks(r.Context(), true)
-		if d.Form["type"] == string(checks.TypeDocker) { // alte Links (?type=docker): Auswahl ueber den Docker-Host
-			d.Form["type"] = string(sysTypeDocker)
-		}
-	}
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.DNSRecordTypes, d.DNSExpects = checks.DNSRecordTypes, checks.DNSExpects
 	d.WhoisSources = checks.WhoisSources
@@ -1120,15 +1032,6 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	}
 	if d.Linked || (m.groupPeers != nil && len(m.groupPeers(r.Context())) > 0) { // auch in der lokalen Gruppe ohne hub
 		d.Peers = m.peers(r.Context())
-		for _, item := range []string{ClusterItemProxmox, ClusterItemDocker} { // Docker/Proxmox: nur diese Nodes waehlbar
-			for _, p := range m.clusterMembers(r.Context(), item) {
-				for i := range d.Peers {
-					if d.Peers[i].ID == p.ID {
-						d.Peers[i].Cluster = strings.TrimSpace(d.Peers[i].Cluster + " " + item)
-					}
-				}
-			}
-		}
 		if d.Form["nodes"] == "" {
 			d.Form["nodes"] = selfNodeID() // neu bzw. bisher nur diese Node
 		}
@@ -1149,17 +1052,8 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 			d.ChanDefault = strings.Join(defs, ", ")
 		}
 	}
-	if d.Edit {
-		d.SysChan = m.sysChanOf(r.Context(), d.Token)
-	}
-	if d.APIMode { // Online-Check bei ipv64: nur online, ohne lokale Kanaele, Eltern-Checks und Docker
+	if d.APIMode { // Online-Check bei ipv64: nur online, ohne lokale Kanaele und Eltern-Checks
 		d.Executions, d.Channels, d.Parents, d.Peers = []string{"online"}, nil, nil, nil
-		d.Types = nil
-		for _, t := range checks.Types {
-			if t != checks.TypeDocker {
-				d.Types = append(d.Types, t)
-			}
-		}
 	}
 	if d.Errors == nil {
 		d.Errors = map[string]string{}
@@ -1187,9 +1081,6 @@ func (m *Module) pageForm(w http.ResponseWriter, r *http.Request) {
 		if v := strings.TrimSpace(r.URL.Query().Get("name")); v != "" {
 			d.Form["name"] = v
 		}
-		if v := strings.TrimSpace(r.URL.Query().Get("sys")); v != "" { // vorgewaehltes System (Docker-/Proxmox-Seite)
-			d.Form["sys_id_docker"], d.Form["sys_id_proxmox"] = v, v
-		}
 	}
 	m.formPage(w, r, http.StatusOK, d)
 }
@@ -1203,17 +1094,10 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if kind, ok := strings.CutPrefix(r.PostFormValue("type"), "sys:"); ok && (kind == "proxmox" || kind == "docker") {
-			m.formSystemCheck(w, r, kind)
-			return
-		}
 		c = &Check{Token: NewToken()}
 	}
 	d := formData{Edit: edit, Token: c.Token}
 	in, err := checkFromForm(r)
-	if err == nil && edit && m.sysChanOf(ctx, c.Token) != nil {
-		in.Channels = nil // Kanaele kommen aus den Regeln des Systems (Formular zeigt sie nur an)
-	}
 	if err == nil {
 		c.UpdatedBy = m.g.Actor(r)
 		oldType := c.Type
@@ -1268,7 +1152,7 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Aktionen
 
 // Foreign: Check einer anderen Node. Jede Node des Accounts darf ihn trotzdem bearbeiten, pausieren,
-// loeschen und messen lassen; nur die Messstelle eines Docker-Checks bleibt bei der Container-Node.
+// loeschen und messen lassen.
 func (c *Check) Foreign() bool { return c.Owner == "other" }
 
 // DisplayTarget: Ziel fuer die Uebersicht (mit Port bei TCP/Port).
@@ -1296,10 +1180,6 @@ func (c *Check) TargetBadge() Badge {
 		return Badge{Text: t, Class: "bi-shield-lock"}
 	case checks.TypeWhois:
 		return Badge{Text: t, Class: "bi-person-vcard"}
-	case checks.TypeDocker:
-		return Badge{Text: t, Class: "bi-box"}
-	case checks.TypeProxmox:
-		return Badge{Text: t, Class: "bi-hdd-rack"}
 	case checks.TypeDNS:
 		var p checks.DNSParams
 		_ = json.Unmarshal(c.Params, &p)
@@ -1341,15 +1221,13 @@ func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
 	back := "/healthchecks/" + c.Token
 	if r.PostFormValue("back") == "list" {
 		back = "/healthchecks"
-	} else if r.PostFormValue("back") == "docker" {
-		back = dockerPath
 	}
 	if err := m.doAction(r, c, action); err != nil {
 		m.g.Flash(w, r, "danger", err.Error())
 	} else {
 		m.g.Flash(w, r, "success", m.g.T(r, "hc.done."+action, "name", c.Name))
 	}
-	if action == "delete" && back != dockerPath {
+	if action == "delete" {
 		back = "/healthchecks"
 	}
 	if action == "clone" {

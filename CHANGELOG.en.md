@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - **Monitor64 (new module, off by default):** monitor systems with thresholds and history – Linux, Windows and FreeBSD via the Monitor64 agent (also behind NAT in push mode, with an icon in the Windows taskbar and automatic updates), Linux without an agent via SSH, Proxmox VE, Proxmox Backup Server, Docker, TrueNAS, Unraid, server BMCs (Redfish), UPS (NUT), Prometheus exporters and SNMP devices including traps. Services are discovered and never adopted automatically; thresholds in three levels, problems with a timeline and acknowledgement, maintenance windows, notifications via the node's channels, entries on the status pages, Prometheus export. In a cluster one node monitors each host and a backup node takes over on failure. Switch it on under Settings → Modules.
+- Healthchecks: **Attention:** Proxmox VE and Docker have moved to the module Monitor64. The update deletes the previous Proxmox/Docker checks and systems with their data (also at ipv64 and in the cluster) and does not migrate them – please set them up again in Monitor64.
 - Healthchecks: a permanently failing online check no longer uses up the daily quota every 20 seconds – once the outage is confirmed, the normal interval applies again.
 - DNS64: blocklists over 64 MB are shortened visibly (hint on the list) instead of being cut off silently.
 - DNS64: Apple device profiles (`.mobileconfig`) install on macOS and iOS (#60).

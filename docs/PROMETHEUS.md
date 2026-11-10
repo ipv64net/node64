@@ -71,9 +71,8 @@ Labels je Check: `token` (bleibt gleich, auch wenn der Name sich ändert), `chec
 | `node64_hc_checks{state}` | Anzahl je Zustand, `maintenance` zählt zusätzlich |
 | `node64_hc_incidents_open` | offene Störungen |
 
-Proxmox VE (Healthchecks → Proxmox VE): `node64_pve_up{system}`, `node64_pve_poll_failures_total`,
-`node64_pve_guest_state{system,node,type,vmid,name,state}`, CPU/RAM/Disk je Node und Gast
-(`node64_pve_node_*_ratio`, `node64_pve_guest_*_ratio`), Netz und Disk-I/O je Gast (`node64_pve_guest_net_*_bytes`, `node64_pve_guest_disk_*_bytes`) – Liste in [PROXMOX.md](PROXMOX.md#prometheus).
+Die früheren Metriken von Proxmox VE und Docker (`node64_pve_*`, `node64_docker_*`) gibt es seit Healthchecks 3.0.0
+nicht mehr (nach Monitor64 umgezogen).
 
 ## DynDNS
 

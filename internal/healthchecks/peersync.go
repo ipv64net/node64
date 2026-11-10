@@ -3,8 +3,10 @@ package healthchecks
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/wire"
 )
 
@@ -81,8 +83,12 @@ func (m *Module) PeerTokens(ctx context.Context) []string {
 // ApplyPeerCheck uebernimmt einen Check einer anderen Node, wenn ihre Aenderung juenger ist. Kanaele bleiben
 // je Node lokal, ausser beide Nodes gleichen die Kanaele ab (w.ChannelUIDs): dann gelten die Kanaele der anderen
 // Node ueber ihre Kennung, Kanaele hier ausserhalb des Clusters (z. B. die des Portals) bleiben. Sicht auf den Besitz
-// (self/other/online) ergibt sich aus den messenden Nodes.
+// (self/other/online) ergibt sich aus den messenden Nodes. Checks vom Typ docker bzw. proxmox (aeltere Nodes) werden
+// stillschweigend verworfen (removed.go).
 func (m *Module) ApplyPeerCheck(ctx context.Context, w wire.Check, changedAt time.Time, origin, self string) (bool, error) {
+	if removedType(checks.Type(strings.ToLower(strings.TrimSpace(w.Type)))) {
+		return false, nil
+	}
 	cur, err := m.st.Check(ctx, w.Token)
 	if err != nil {
 		return false, err

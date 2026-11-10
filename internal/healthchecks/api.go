@@ -155,6 +155,9 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 		return errors.New("name is required (max 200 characters)")
 	}
 	c.Type = checks.Type(strings.ToLower(strings.TrimSpace(in.Type)))
+	if removedType(c.Type) {
+		return errRemovedType
+	}
 	c.Target = strings.TrimSpace(in.Target)
 	if len(in.Params) > 0 {
 		var tmp any
@@ -230,9 +233,6 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 		switch in.Execution {
 		case "local":
 		case "online", "both":
-			if singleNode(c.Type) {
-				return errors.New("execution: " + string(c.Type) + " checks run only locally on this node")
-			}
 			if !m.onlineOK() {
 				return errors.New("execution: online and hybrid need the ipv64 link")
 			}
@@ -274,7 +274,6 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 			}
 		}
 	}
-	prevNodes := c.Nodes
 	if in.Nodes != nil {
 		list, ok := cleanNodes(in.Nodes)
 		if !ok {
@@ -282,11 +281,8 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 		}
 		c.Nodes = list
 	}
-	switch {
-	case c.Execution == "online":
+	if c.Execution == "online" {
 		c.Nodes = nil // online: keine Nodes
-	case singleNode(c.Type):
-		c.Nodes = m.clusterNodesOf(c, prevNodes) // Docker/Proxmox: nur die Besitzer-Node, im Cluster auch Nodes mit dem Bereich
 	}
 	if in.NotifyDegraded != nil {
 		c.NotifyDegraded = *in.NotifyDegraded
@@ -469,7 +465,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := m.apply(c, in, true); err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		writeErr(w, applyStatus(err), err.Error())
 		return
 	}
 	if c.Parent != "" {
@@ -489,6 +485,14 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "check.create", c)
 	writeJSON(w, http.StatusCreated, m.toJSON(c, r))
+}
+
+// applyStatus: Antwort auf eine abgelehnte Eingabe – 400 fuer die entfernten Typen docker und proxmox, sonst 422.
+func applyStatus(err error) int {
+	if errors.Is(err, errRemovedType) {
+		return http.StatusBadRequest
+	}
+	return http.StatusUnprocessableEntity
 }
 
 func errText(err error, def string) string {
@@ -515,7 +519,7 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := m.apply(c, in, false); err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		writeErr(w, applyStatus(err), err.Error())
 		return
 	}
 	if c.Parent != "" {

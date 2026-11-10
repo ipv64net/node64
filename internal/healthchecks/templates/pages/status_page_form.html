@@ -179,13 +179,13 @@
 		<div class="border rounded p-2 mb-2" style="max-height:360px;overflow:auto" data-sp-list>
 			{{range $i, $c := $d.Checks}}
 			<div class="form-check" data-sp-check data-name="{{.Name}} {{.Sub}}" data-tags="{{.Tags}}" data-group="{{.Group}}">
-				<input class="form-check-input" type="checkbox" name="{{if .Res}}add_res{{else if .M64}}add_m64{{else}}add_tok{{end}}" value="{{.Value}}" id="sp-c-{{$i}}"{{if .OnPage}} disabled{{end}}>
+				<input class="form-check-input" type="checkbox" name="{{if .M64}}add_m64{{else}}add_tok{{end}}" value="{{.Value}}" id="sp-c-{{$i}}"{{if .OnPage}} disabled{{end}}>
 				<label class="form-check-label small" for="sp-c-{{$i}}">{{.Name}}
 					{{if .Group}}<span class="badge text-bg-light"><i class="bi bi-collection"></i> {{.Group}}{{with .Sub}} · {{.}}{{end}}</span>{{end}}
 					{{if .Type}}<span class="badge text-bg-light">{{$.T .Type}}</span>{{end}}
 					{{if .Tags}}<span class="text-body-secondary"><i class="bi bi-tags"></i> {{.Tags}}</span>{{end}}
 					{{if .Paused}}<span class="badge text-bg-secondary">{{$.T "hc.state.paused"}}</span>{{end}}
-					{{if .OnPage}}<span class="badge text-bg-success-subtle text-success-emphasis"><i class="bi bi-check2"></i> {{$.T "hc.status.on_page"}}</span>{{else if .Res}}<span class="badge text-bg-secondary-subtle text-secondary-emphasis" title="{{$.T "hc.status.res_new_hint"}}"><i class="bi bi-plus"></i> {{$.T "hc.status.res_new"}}</span>{{end}}
+					{{if .OnPage}}<span class="badge text-bg-success-subtle text-success-emphasis"><i class="bi bi-check2"></i> {{$.T "hc.status.on_page"}}</span>{{end}}
 				</label>
 			</div>
 			{{end}}

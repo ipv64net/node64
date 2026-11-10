@@ -18,7 +18,6 @@ import (
 
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
-	"github.com/ipv64net/node64/internal/proxmox"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 	"github.com/ipv64net/node64/internal/wire"
@@ -242,61 +241,24 @@ func TestMaintenanceClusterDuplicate(t *testing.T) {
 	}
 }
 
-// Docker-Host auf zwei Nodes gleich angelegt: beide landen bei der kleineren Kennung, die lokale Nummer bleibt.
-func TestDockerClusterDuplicate(t *testing.T) {
+// Die frueheren Bereiche proxmox und docker (aeltere Nodes): Systeme werden ohne Fehler verworfen, nichts geliefert.
+func TestClusterRemovedItems(t *testing.T) {
 	ctx := context.Background()
-	coreA, coreB := pveCore(t), pveCore(t)
-	mA, _, _ := newPVEModule(t, coreA, pveBox(t, 1))
-	mB, _, _ := newPVEModule(t, coreB, pveBox(t, 2))
-	var la, lb hcLog
-	mA.SetCluster(ClusterHooks{Change: la.hook})
-	mB.SetCluster(ClusterHooks{Change: lb.hook})
-	const nodeA, nodeB = "nodeA_0123456789abcdef", "nodeB_0123456789abcdef"
-	uidA, uidB := strings.Repeat("a", 32), strings.Repeat("b", 32)
-	host := func(uid string) *proxmox.System {
-		return &proxmox.System{Kind: proxmox.KindDocker, Name: "nas", Addresses: []string{"tcp://192.0.2.7:2375"}, Interval: 30, Enabled: true, UID: uid}
-	}
-	setSelfID(t, nodeA)
-	if err := mA.pveSaveSystemBy(ctx, host(uidA), "test"); err != nil {
-		t.Fatal(err)
-	}
-	setSelfID(t, nodeB)
-	_ = mB.pveSaveSystemBy(ctx, &proxmox.System{Kind: proxmox.KindDocker, Name: "andere", Addresses: []string{"tcp://192.0.2.9:2375"}, Interval: 30, Enabled: true}, "test")
-	sb := host(uidB)
-	if err := mB.pveSaveSystemBy(ctx, sb, "test"); err != nil {
-		t.Fatal(err)
-	}
-	ca, cb := la.take(), lb.take()
-	setSelfID(t, nodeB)
-	hcTransfer(t, mA, mB, ca)
-	setSelfID(t, nodeA)
-	hcTransfer(t, mB, mA, cb)
-	callsB := lb.take()
-	if !slices.Contains(callsB, hcChange{ClusterItemDocker, uidB, true}) {
-		t.Fatalf("B must report its old uid as deleted: %+v", callsB)
-	}
-	hcTransfer(t, mB, mA, callsB)
-	for _, m := range []*Module{mA, mB} {
-		ids, _ := m.ClusterIDs(ctx, ClusterItemDocker)
-		if !slices.Contains(ids, uidA) || slices.Contains(ids, uidB) {
-			t.Fatalf("docker ids: %v", ids)
+	m, _ := newTestModule(t)
+	for _, item := range []string{"proxmox", "docker"} {
+		if err := m.ClusterApply(ctx, item, strings.Repeat("a", 32), json.RawMessage(`{"kind":"pve","name":"x"}`), false); err != nil {
+			t.Fatalf("%s: %v", item, err)
+		}
+		if ids, err := m.ClusterIDs(ctx, item); err != nil || len(ids) != 0 {
+			t.Fatalf("%s ids: %v %v", item, ids, err)
+		}
+		if _, found, err := m.ClusterGet(ctx, item, strings.Repeat("a", 32)); found || err != nil {
+			t.Fatalf("%s get: %v %v", item, found, err)
 		}
 	}
-	if len(mustIDs(t, mA)) != 2 || len(mustIDs(t, mB)) != 2 { // dazu der andere Host von B
-		t.Fatal("no duplicate systems")
+	if err := m.ClusterApply(ctx, "unknown", "x", nil, true); err == nil {
+		t.Fatal("unknown item must fail")
 	}
-	if got, err := mB.pve.st.SystemByUID(ctx, uidA); err != nil || got.ID != sb.ID { // Heim-Node: im Test teilen sich beide die eigene Kennung
-		t.Fatalf("B keeps its local system under the new uid: %+v %v", got, err)
-	}
-}
-
-func mustIDs(t *testing.T, m *Module) []string {
-	t.Helper()
-	ids, err := m.ClusterIDs(context.Background(), ClusterItemDocker)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ids
 }
 
 // nfModule: Healthchecks mit Kanalspeicher (Zuordnung Check -> Kanal ueber den Cluster).

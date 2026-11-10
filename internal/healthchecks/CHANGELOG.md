@@ -1,5 +1,21 @@
 # Änderungen – Healthchecks
 
+## 3.0.0 – 2026-11-10
+
+### Entfernt
+- **Achtung:** Proxmox VE und Docker sind ins Modul Monitor64 umgezogen. Die Healthchecks haben sie nicht mehr: Seiten
+  *Proxmox VE* und *Docker* samt Menüpunkten, die Check-Typen `docker` und `proxmox` (Auswahl im Formular, „als Check
+  führen“, Untergruppen in der Übersicht), Proxmox-/Docker-Einträge auf Statusseiten, Dashboard-Kacheln, die Metriken
+  `node64_pve_*` und `node64_docker_*`, die Bereiche *Proxmox VE* und *Docker* im Cluster, die MCP-Werkzeuge
+  `pve_systems`, `pve_resources` und `pve_guest_history` sowie der Abschnitt `proxmox` im Export.
+- Beim Update werden alle Daten dazu gelöscht: Systeme samt Zugangsdaten, Einstellungen, Regeln und Verlauf, die
+  Checks dieser Typen mit Messungen, Störungen, Statusseiten-Einträgen und Wartungsfenster-Zuordnungen. Eigene Checks
+  verschwinden auch bei ipv64 und auf den anderen Nodes des Clusters. Es gibt keine Übernahme nach Monitor64 – bitte
+  dort neu einrichten. Hat das Update etwas entfernt, zeigt die Übersicht einmal einen Hinweis.
+- Lokale API: Anlegen bzw. Ändern eines Checks vom Typ `docker` oder `proxmox` antwortet mit 400, die Endpunkte unter
+  `/api/healthchecks/proxmox` und `/api/healthchecks/docker` mit 410; `resources` beim Hinzufügen zu Statusseiten mit
+  422. Exporte älterer Versionen lassen sich weiter importieren, Proxmox-/Docker-Teile werden übersprungen.
+
 ## 2.54.1 – 2026-11-09
 
 ### Geändert

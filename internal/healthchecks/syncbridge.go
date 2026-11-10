@@ -50,11 +50,16 @@ func (m *Module) WireCheck(c *Check, chanMap ChannelMap) wire.Check {
 }
 
 // ApplyWireCheck uebernimmt einen Check vom Server (ohne Outbox-Eintrag).
-// Eigene Checks (owner self) laufen im Scheduler, fremde und reine Online-Checks nur zur Anzeige.
+// Eigene Checks (owner self) laufen im Scheduler, fremde und reine Online-Checks nur zur Anzeige. Checks vom Typ
+// docker bzw. proxmox (hub, aeltere Nodes des Clusters) werden stillschweigend verworfen (nach Monitor64 umgezogen,
+// removed.go): kein Fehler, kein Konflikt, nichts gespeichert.
 func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap ChannelMap) error {
 	ctx = WithRemote(ctx)
 	if !tokenRe.MatchString(w.Token) && len(w.Token) < 20 {
 		return errors.New("invalid token")
+	}
+	if removedType(checks.Type(strings.ToLower(strings.TrimSpace(w.Type)))) {
+		return nil
 	}
 	existing, err := m.st.Check(ctx, w.Token)
 	if err != nil {
@@ -69,7 +74,6 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 	grp := w.Group
 	// Felder neuerer Versionen (z. B. params.system) weglassen statt den ganzen Check abzulehnen
 	params := checks.WithoutUnknownParams(checks.Definition{Type: checks.Type(strings.ToLower(strings.TrimSpace(w.Type))), Target: strings.TrimSpace(w.Target), Params: w.Params})
-	params = keepSystemUID(existing, params)
 	in := checkJSON{Name: w.Name, Type: w.Type, Target: w.Target, Params: params, IPMode: w.IPMode, Tags: w.Tags, Group: &grp, Description: w.Description,
 		Execution: "local", Policy: w.Policy, Locations: w.Locations}
 	iv, riv, re, st, rp := w.IntervalSeconds, w.RetryIntervalSeconds, w.Retries, w.Stabilize, w.RepeatMinutes
@@ -123,9 +127,6 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 		return err
 	}
 	nc, _ := m.st.Check(ctx, c.Token)
-	if nc != nil {
-		m.pveLinkCheck(ctx, nc) // Check eines Systems aus dem Cluster: beim System vermerken
-	}
 	if s := m.scheduler(); s != nil && nc != nil {
 		if nc.MeasuredHere() {
 			var rt *scheduler.Runtime

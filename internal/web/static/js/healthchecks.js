@@ -12,36 +12,10 @@
 				el.classList.toggle("d-none", !on);
 				el.querySelectorAll("input, select, textarea").forEach(function (i) { i.disabled = !on; });
 			});
-			// Check aus einem ueberwachten System (sys:proxmox, sys:docker): Name optional, Gruppe, Messstellen und
-			// Meldungen kommen vom System
-			var sys = t.indexOf("sys:") === 0;
 			document.querySelectorAll("[data-hide-types]").forEach(function (el) {
 				el.classList.toggle("d-none", el.getAttribute("data-hide-types").split(" ").indexOf(t) >= 0);
 			});
-			var nm = document.getElementById("name");
-			if (nm) { nm.required = !sys; nm.placeholder = sys ? (nm.getAttribute("data-auto") || "") : ""; }
 		};
-		// Auswahl System -> Maschine bzw. Container: nur die Eintraege des gewaehlten Systems, gefuehrte gesperrt
-		document.querySelectorAll("[data-pick]").forEach(function (box) {
-			var sysSel = box.querySelector("[data-pick-sys]"), resSel = box.querySelector("[data-pick-res]");
-			if (!sysSel || !resSel) { return; }
-			var filter = function () {
-				var none = resSel.querySelector("[data-none]"), cur = resSel.selectedOptions[0], first = null, any = false;
-				resSel.querySelectorAll("option[data-sys]").forEach(function (o) {
-					var mine = o.getAttribute("data-sys") === sysSel.value;
-					o.hidden = !mine;
-					o.disabled = !mine || o.hasAttribute("data-taken");
-					if (mine) { any = true; }
-					if (!o.disabled && !first) { first = o; }
-				});
-				if (none) { none.hidden = any; }
-				if (!cur || cur.disabled || cur.hidden) {
-					if (first) { first.selected = true; } else if (none) { none.selected = true; }
-				}
-			};
-			sysSel.addEventListener("change", filter);
-			filter();
-		});
 		// Testlauf von ipv64 vor dem Umhaengen: die Standorte messen die Eingabe einmal (gespeichert wird nichts)
 		var ot = document.getElementById("hc-otest");
 		if (ot) {
@@ -118,34 +92,10 @@
 			});
 		}
 		var exSel = document.getElementById("execution");
-		var lockExec = function () {
-			if (!exSel) { return; }
-			var docker = typeSel.value === "docker";
-			exSel.querySelectorAll("option").forEach(function (o) {
-				if (o.value !== "local") {
-					if (docker) { o.dataset.wasDisabled = o.dataset.wasDisabled || String(o.disabled); o.disabled = true; }
-					else if (o.dataset.wasDisabled) { o.disabled = o.dataset.wasDisabled === "true"; delete o.dataset.wasDisabled; }
-				}
-			});
-			if (docker) { exSel.value = "local"; }
-		};
 		var nodesBox = document.getElementById("nodesbox");
 		var syncNodes = function () {
-			if (!nodesBox) { return; }
-			nodesBox.classList.toggle("d-none", !!exSel && exSel.value === "online");
-			// Docker/Proxmox: diese Node und im Cluster die Nodes mit dem Bereich (data-cl); Docker nur ueber das Netz
-			var item = typeSel.value === "docker" || typeSel.value === "proxmox" ? typeSel.value : "";
-			var host = document.getElementById("docker_host");
-			if (item === "docker" && !(host && /^(tcp|https?|ssh):\/\//i.test(host.value.trim()))) { item = "local"; }
-			nodesBox.querySelectorAll("input[name=nodes]").forEach(function (cb) {
-				var own = cb.closest(".form-check").querySelector(".badge.text-bg-success");
-				var ok = !item || !!own || (" " + (cb.dataset.cl || "") + " ").indexOf(" " + item + " ") >= 0;
-				if (!ok) { cb.checked = false; }
-				cb.disabled = !ok;
-			});
+			if (nodesBox) { nodesBox.classList.toggle("d-none", !!exSel && exSel.value === "online"); }
 		};
-		var hostIn = document.getElementById("docker_host");
-		if (hostIn) { hostIn.addEventListener("input", function () { syncNodes(); }); }
 		// Online-Standorte und Online-Test nur, wenn ipv64 mitmisst (online oder beides)
 		var onlineBox = document.getElementById("onlinebox");
 		var syncOnline = function () { if (onlineBox && exSel) { onlineBox.classList.toggle("d-none", exSel.value === "local"); } };
@@ -157,8 +107,8 @@
 			if (whois && (parseInt(ivIn.value, 10) || 0) < 3600) { ivIn.value = 3600; }
 		};
 		if (exSel) { exSel.addEventListener("change", syncNodes); exSel.addEventListener("change", syncMin); exSel.addEventListener("change", syncOnline); }
-		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); syncMin(); syncOnline(); });
-		update(); lockExec(); syncNodes(); syncMin(); syncOnline();
+		typeSel.addEventListener("change", function () { update(); syncNodes(); syncMin(); syncOnline(); });
+		update(); syncNodes(); syncMin(); syncOnline();
 		// Geraet aus DNS64 (#20): IP ins Ziel, Name vorschlagen; passt der Typ nicht zu einer Adresse, Ping
 		var dev = document.getElementById("hc-device");
 		if (dev) {

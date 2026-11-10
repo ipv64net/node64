@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ipv64net/node64/internal/proxmox"
 )
 
 // Statusseiten: JSON-API /api/status-pages (Anmeldung wie die uebrigen /api-Routen). Ein- und Ausgabe ist
@@ -149,21 +147,18 @@ func (m *Module) apiStatusPageUpdate(w http.ResponseWriter, r *http.Request) {
 	m.apiStatusPageOut(w, r, http.StatusOK, p.ID)
 }
 
-// apiStatusItemsAdd haengt Checks (tokens) und Nodes, Gaeste bzw. Container (resources: system_id und key) an eine
-// Gruppe an (group_id, 0 = erste) – wie „Hinzufuegen“ auf der Seite: fehlt der Check einer Ressource, wird er angelegt
-// wie mit „als Check fuehren“. Schon vorhandene Eintraege bleiben einmal. tokens darf auch Monitor64-Quellen enthalten.
+// apiStatusItemsAdd haengt Checks (tokens) an eine Gruppe an (group_id, 0 = erste) – wie „Hinzufuegen“ auf der Seite.
+// Schon vorhandene Eintraege bleiben einmal. tokens darf auch Monitor64-Quellen enthalten. Ressourcen von Proxmox VE
+// bzw. Docker (resources) gibt es nicht mehr.
 func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
 	p := m.apiStatusPage(w, r)
 	if p == nil {
 		return
 	}
 	var in struct {
-		GroupID   int64    `json:"group_id"`
-		Tokens    []string `json:"tokens"`
-		Resources []struct {
-			SystemID int64  `json:"system_id"`
-			Key      string `json:"key"`
-		} `json:"resources"`
+		GroupID   int64             `json:"group_id"`
+		Tokens    []string          `json:"tokens"`
+		Resources []json.RawMessage `json:"resources"` // frueher Proxmox VE und Docker: nur noch eine klare Absage
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
@@ -172,6 +167,10 @@ func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	bad := func(field, msg string) {
 		writeJSON(w, http.StatusUnprocessableEntity, statusAPIError{Error: msg, Field: field})
+	}
+	if len(in.Resources) > 0 {
+		bad("resources", errRemovedType.Error())
+		return
 	}
 	if len(p.Groups) == 0 {
 		p.Groups = []StatusGroup{{Items: []StatusItem{}}}
@@ -221,29 +220,7 @@ func (m *Module) apiStatusItemsAdd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	vals := make([]string, 0, len(in.Resources))
-	for _, res := range in.Resources {
-		if !proxmox.ValidKey(res.Key) || res.Key == "" {
-			bad("resources", "invalid key: "+res.Key)
-			return
-		}
-		if _, err := m.pve.st.System(ctx, res.SystemID); err != nil {
-			bad("resources", "system not found: "+strconv.FormatInt(res.SystemID, 10))
-			return
-		}
-		vals = append(vals, strconv.FormatInt(res.SystemID, 10)+"|"+res.Key)
-	}
-	toks, err := m.statusResTokens(r, vals)
-	if err != nil {
-		var fe *proxmox.FieldError
-		if errors.As(err, &fe) {
-			writeJSON(w, http.StatusUnprocessableEntity, statusAPIError{Error: m.translator("en")(fe.Key), Field: "resources", Key: fe.Key})
-		} else {
-			bad("resources", err.Error())
-		}
-		return
-	}
-	if err := m.statusAddTokens(ctx, g, append(in.Tokens, toks...)); err != nil {
+	if err := m.statusAddTokens(ctx, g, in.Tokens); err != nil {
 		m.writeStatusErr(w, err)
 		return
 	}

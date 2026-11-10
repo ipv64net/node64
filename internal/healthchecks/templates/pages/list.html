@@ -11,6 +11,10 @@
 	</div>
 </div>
 
+{{if $d.Moved}}<div class="alert alert-info d-flex align-items-start gap-2 py-2" id="hc-moved"><i class="bi bi-info-circle mt-1"></i>
+	<div class="flex-grow-1">{{.T "hc.moved.notice"}}</div>
+	<form method="post" action="/healthchecks/notice/monitor64"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn-close" type="submit" aria-label="{{.T "hc.moved.dismiss"}}" title="{{.T "hc.moved.dismiss"}}"></button></form>
+</div>{{end}}
 {{with $d.Acct}}<div class="d-flex flex-wrap gap-2 mb-2 small" id="hc-acct">
 	<span class="badge {{if and (gt .Limit 0) (ge .Used .Limit)}}text-bg-danger{{else}}text-bg-success{{end}}" title="{{$.T "hc.acct.points_hint"}}">{{$.T "hc.acct.points" "used" .Used "limit" (or .Limit "∞")}}</span>
 	{{if .Plan}}<span class="badge text-bg-light">{{$.T "hc.acct.plan" "plan" .Plan "locs" .Locs}}</span>{{end}}

@@ -7,13 +7,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/store"
 )
 
 // Mehrere Nodes je Account: ein Check kann von mehreren Nodes gemessen werden (Liste Nodes).
 // Besitzer bleibt die Node, die ihn angelegt hat (bearbeiten, Benachrichtigung ohne hub).
-// Docker-Checks gehoeren zu genau einer Node; Push-Checks koennen ueberall ausgeloest werden.
+// Push-Checks koennen ueberall ausgeloest werden.
 
 // Peer ist eine Node des Accounts (vom hub, /v1/nodes/me).
 type Peer struct {
@@ -22,7 +21,6 @@ type Peer struct {
 	Location string `json:"location"`
 	Online   bool   `json:"online"`
 	Self     bool   `json:"-"`
-	Cluster  string `json:"-"` // Bereiche, ueber die die Node Docker- bzw. Proxmox-Checks mitmessen kann ("proxmox docker")
 }
 
 // SettingPeers haelt die Nodes des Accounts (JSON, vom Sync-Client geschrieben).
@@ -52,11 +50,6 @@ func selfNodeID() string {
 	}
 	return self.id
 }
-
-// singleNode: Docker-Checks gehoeren zur Node mit dem Container, Proxmox-Checks zur Node, die das System abfragt
-// (Push-Checks sind frei zuordenbar). Im Cluster mit den Bereichen Proxmox VE bzw. Docker (Host ueber das Netz)
-// messen die Nodes mit, die den Bereich abgleichen (clusterNodesOf).
-func singleNode(t checks.Type) bool { return t == checks.TypeDocker || t == checks.TypeProxmox }
 
 // measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).
 // Where beschreibt fuer die Anzeige, wo ein Check gemessen wird (nicht, wem er gehoert):

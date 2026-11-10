@@ -92,15 +92,13 @@ type ModuleState struct {
 const setSync = "peer.sync" // {"module": {"enabled": true, "items": {"item": true}}}
 
 // Healthchecks und Benachrichtigungen sind fest eingebaut (eigener Weg /peer/v1/changes), die Bereiche schalten
-// die vorhandenen Eintragsarten (check, maintenance; settings = Benachrichtigungs-Einstellungen). Die Systeme der
-// Proxmox-VE- und Docker-Ueberwachung (proxmox, docker), die Statusseiten (statuspages) und die
-// Benachrichtigungskanaele (channels; alle ohne Einstellung aus) laufen ueber den allgemeinen Weg /peer/v2/sync: die
-// Module melden dafuer einen Provider mit der ID "healthchecks" bzw. "notifications" an (v2Item).
+// die vorhandenen Eintragsarten (check, maintenance; settings = Benachrichtigungs-Einstellungen). Die Statusseiten
+// (statuspages) und die Benachrichtigungskanaele (channels; beide ohne Einstellung aus) laufen ueber den allgemeinen
+// Weg /peer/v2/sync: die Module melden dafuer einen Provider mit der ID "healthchecks" bzw. "notifications" an
+// (v2Item). Die frueheren Bereiche proxmox und docker (Healthchecks bis 2.x) gibt es nicht mehr.
 var healthchecksModule = ModuleInfo{ID: "healthchecks", TitleKey: "cluster.mod.healthchecks", Items: []ItemInfo{
 	{ID: "checks", TitleKey: "cluster.item.checks", Default: true},
 	{ID: "maintenance", TitleKey: "cluster.item.maintenance", Default: true},
-	{ID: "proxmox", TitleKey: "cluster.item.proxmox"},
-	{ID: "docker", TitleKey: "cluster.item.docker"},
 	{ID: "statuspages", TitleKey: "cluster.item.statuspages"},
 }}
 
@@ -420,22 +418,6 @@ func (m *Manager) v1Members(ctx context.Context) []Member {
 	out := list[:0]
 	for _, x := range list {
 		if !x.Suspended() && len(m.v1Wants(own, x)) > 0 {
-			out = append(out, x)
-		}
-	}
-	return out
-}
-
-// HCItemMembers: Mitglieder, mit denen die Checks und der Healthchecks-Bereich item (proxmox, docker) abgeglichen
-// werden (hier und dort eingeschaltet, nicht ausgesetzt) – sie koennen solche Checks mitmessen.
-func (m *Manager) HCItemMembers(ctx context.Context, item string) []Member {
-	if !m.syncOn(ctx, "healthchecks", item) {
-		return nil
-	}
-	list := m.hcMembers(ctx)
-	out := make([]Member, 0, len(list))
-	for _, x := range list {
-		if memberSyncOn(x, "healthchecks", item) {
 			out = append(out, x)
 		}
 	}
