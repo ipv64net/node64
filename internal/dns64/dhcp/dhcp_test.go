@@ -1,6 +1,7 @@
 package dhcp
 
 import (
+	"bytes"
 	"net"
 	"net/netip"
 	"sync"
@@ -351,6 +352,33 @@ func TestRelayUnicastRenew(t *testing.T) {
 		dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("10.20.0.200"))))
 	if r := s.Handle("eth0", reboot); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak || !r.msg.IsBroadcast() {
 		t.Fatalf("relay nak %v", r)
+	}
+}
+
+// Option 82 eines Relays kommt unveraendert und als letzte Option in jede Antwort (RFC 3046 2.2: sonst verwerfen
+// manche Relays sie); das erledigt dhcpv4.NewReplyFromRequest in build.
+func TestRelayAgentInfoEcho(t *testing.T) {
+	lan, far := testScope(), testScope()
+	far.ID, far.Relay, far.Subnet = 2, true, netip.MustParsePrefix("10.20.0.0/24")
+	far.Start, far.End, far.Router = netip.MustParseAddr("10.20.0.100"), netip.MustParseAddr("10.20.0.110"), netip.MustParseAddr("10.20.0.1")
+	s, _, _ := newTest(t, Config{Scopes: []Scope{lan, far}})
+	info := []byte{1, 4, 'p', 'o', 'r', 't', 2, 2, 's', 'w'} // Circuit-ID "port", Remote-ID "sw"
+	opt82 := dhcpv4.OptGeneric(dhcpv4.OptionRelayAgentInformation, info)
+	req, _ := dhcpv4.New(dhcpv4.WithHwAddr(macA), dhcpv4.WithMessageType(dhcpv4.MessageTypeDiscover), dhcpv4.WithGatewayIP(net.ParseIP("10.20.0.1")), dhcpv4.WithOption(opt82))
+	offer := s.Handle("eth0", req)
+	if offer == nil || offer.msg.MessageType() != dhcpv4.MessageTypeOffer || !bytes.Equal(offer.msg.Options.Get(dhcpv4.OptionRelayAgentInformation), info) {
+		t.Fatalf("offer without option 82: %v", offer)
+	}
+	if b := offer.msg.ToBytes(); !bytes.Contains(b, append([]byte{82, byte(len(info))}, append(info, 255)...)) {
+		t.Fatal("option 82 not the last option")
+	}
+	nak, _ := dhcpv4.New(dhcpv4.WithHwAddr(macB), dhcpv4.WithMessageType(dhcpv4.MessageTypeRequest), dhcpv4.WithGatewayIP(net.ParseIP("10.20.0.1")),
+		dhcpv4.WithOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("10.20.0.200"))), dhcpv4.WithOption(opt82))
+	if r := s.Handle("eth0", nak); r == nil || r.msg.MessageType() != dhcpv4.MessageTypeNak || !bytes.Equal(r.msg.Options.Get(dhcpv4.OptionRelayAgentInformation), info) {
+		t.Fatalf("nak without option 82: %v", r)
+	}
+	if r := s.Handle("eth0", discover(t, macB)); r == nil || r.msg.Options.Has(dhcpv4.OptionRelayAgentInformation) {
+		t.Fatalf("option 82 without relay: %v", r)
 	}
 }
 
