@@ -46,7 +46,10 @@
   offene Traps bleiben bei einer Übernahme offen; Änderungen gehen nach einem Schreibfehler im Cluster-Protokoll
   nicht verloren. Statusseiten: Zeiten, in denen Monitor64 nicht lief, zählen weder als Störung noch als beobachtet.
 - Sicherheit: Bei SSH mit Passwort geht das Passwort erst an den Host, nachdem der Fingerabdruck seines
-  Hostschlüssels bestätigt wurde (Verbindungstest und nach „Hostschlüssel verwerfen“).
+  Hostschlüssels bestätigt wurde (Verbindungstest und nach „Hostschlüssel verwerfen“). Aus dem Security-Review: Das
+  gilt jetzt auch im Assistenten „Host hinzufügen“ (ein nur angezeigter, nicht bestätigter Fingerabdruck wird nicht
+  mehr übernommen) und wenn ein Zugang erstmals ein Passwort bekommt; SNMP-v3-Traps müssen mindestens die Stufe des
+  Benutzers haben; Texte von Geräten können die Anzeige nicht mehr über fremde Text-Schlüssel stören.
 - Aus dem Klicktest: RAM von Proxmox-VMs hat eine eigene Regel ohne Standardschwelle (der Wert enthält den Cache
   des Gastes); fehlt dem Proxmox-Token das Recht für Updates, steht das am Dienst statt als Teilfehler; neue Hosts
   und Zugänge werden sofort abgefragt, neu auftauchende Dienste sofort angeboten; Pseudo-Dateisysteme (SNMP) und

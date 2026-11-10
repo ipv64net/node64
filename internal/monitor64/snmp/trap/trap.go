@@ -129,6 +129,7 @@ type hostEntry struct {
 	comm   map[string]bool
 	v3     *gosnmp.GoSNMP // Parameter-Tabelle der v3-Benutzer (nil = keine)
 	engine map[string]string
+	level  map[string]gosnmp.SnmpV3MsgFlags // je v3-Benutzer die verlangte Stufe (AuthPriv, AuthNoPriv, NoAuthNoPriv)
 }
 
 // Receiver empfaengt Traps.
@@ -214,7 +215,7 @@ func (r *Receiver) EngineID() string { return hex.EncodeToString([]byte(r.engine
 func (r *Receiver) SetHosts(hosts []Host) error {
 	m := map[netip.Addr]*hostEntry{}
 	for _, h := range hosts {
-		e := &hostEntry{h: h, comm: map[string]bool{}, engine: map[string]string{}}
+		e := &hostEntry{h: h, comm: map[string]bool{}, engine: map[string]string{}, level: map[string]gosnmp.SnmpV3MsgFlags{}}
 		for _, c := range h.Communities {
 			if c != "" {
 				e.comm[c] = true
@@ -230,6 +231,14 @@ func (r *Receiver) SetHosts(hosts []Host) error {
 				}
 				if err := tab.Add(u.Name, sp); err != nil {
 					return fmt.Errorf("Host %s, Benutzer %s: %w", h.ID, u.Name, scrub(err, u.Secret))
+				}
+				switch u.Level {
+				case "noAuthNoPriv":
+					e.level[u.Name] = gosnmp.NoAuthNoPriv
+				case "authNoPriv":
+					e.level[u.Name] = gosnmp.AuthNoPriv
+				default:
+					e.level[u.Name] = gosnmp.AuthPriv
 				}
 				if u.EngineID != "" {
 					raw, err := hex.DecodeString(strings.TrimPrefix(strings.ToLower(u.EngineID), "0x"))
@@ -433,6 +442,13 @@ func (r *Receiver) process(b []byte, from netip.Addr) (reply []byte, ev *Event) 
 		}
 		p, err := he.v3.UnmarshalTrap(pkt, true)
 		if err != nil || p == nil {
+			r.rejected.Add(1)
+			ev.Rejected = "user"
+			return nil, ev
+		}
+		// Eigene Pruefung zusaetzlich zur Bibliothek: die Nachricht muss mindestens die Stufe des Benutzers haben
+		// (ein Benutzer mit authPriv nimmt keine unverschluesselte oder unsignierte Nachricht an).
+		if want, ok := he.level[user]; !ok || p.MsgFlags&gosnmp.AuthPriv&want != want {
 			r.rejected.Add(1)
 			ev.Rejected = "user"
 			return nil, ev

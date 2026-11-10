@@ -40,6 +40,34 @@ func TestPasswordAccessHostKeyConfirm(t *testing.T) {
 	if rec := e.do("PUT", "/api/monitor64/access/"+a.UID, map[string]any{"hostkey": "reset"}); rec.Code != 200 || stored() != "" {
 		t.Fatalf("reset: %d stored=%q", rec.Code, stored())
 	}
+	// Zugang mit Schluessel-Anmeldung und nur gelerntem Hostschluessel: das erste Passwort verwirft ihn (erst
+	// bestaetigen), mit dem Fingerabdruck in derselben Eingabe (in der Oberflaeche bestaetigt) bleibt er
+	keyAcc := func() accessOut {
+		rec := e.do("POST", "/api/monitor64/hosts/"+h.UID+"/access", map[string]any{"type": "ssh", "config": map[string]any{"user": "monitor64"}, "hostkey": fp1})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create key access: %d %s", rec.Code, rec.Body)
+		}
+		var o accessOut
+		decodeBody(t, rec.Body.Bytes(), &o)
+		return o
+	}
+	k1, k2 := keyAcc(), keyAcc()
+	if rec := e.do("PUT", "/api/monitor64/access/"+k1.UID, map[string]any{"secret": "geheim"}); rec.Code != 200 {
+		t.Fatalf("add password: %d %s", rec.Code, rec.Body)
+	}
+	if got := e.col(`SELECT hostkey FROM m64_access WHERE uid = ?`, k1.UID); got != "" {
+		t.Fatalf("learned host key kept for the first password: %q", got)
+	}
+	if rec := e.do("PUT", "/api/monitor64/access/"+k2.UID, map[string]any{"secret": "geheim", "hostkey": fp1}); rec.Code != 200 {
+		t.Fatalf("add password with confirmed key: %d %s", rec.Code, rec.Body)
+	}
+	if got := e.col(`SELECT hostkey FROM m64_access WHERE uid = ?`, k2.UID); got != fp1 {
+		t.Fatalf("confirmed host key lost: %q", got)
+	}
+	// ein weiteres Passwort (schon eines hinterlegt) laesst den bestaetigten Schluessel stehen
+	if rec := e.do("PUT", "/api/monitor64/access/"+k2.UID, map[string]any{"secret": "neu"}); rec.Code != 200 || e.col(`SELECT hostkey FROM m64_access WHERE uid = ?`, k2.UID) != fp1 {
+		t.Fatalf("password change dropped the confirmed key: %d", rec.Code)
+	}
 	// Anzeige am Zugang, solange die Bestaetigung fehlt
 	txt := accessErrText(&transport.UnconfirmedKeyError{Got: fp1})
 	if !strings.Contains(txt, "monitor64.detail.hostkey_unconfirmed") {

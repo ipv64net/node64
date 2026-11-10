@@ -44,7 +44,10 @@
   traps stay open on a takeover; changes are not lost after a write error in the cluster log. Status pages: times
   in which Monitor64 was not running count neither as an incident nor as observed.
 - Security: with SSH password login the password is only sent to the host after the fingerprint of its host key
-  was confirmed (connection test and after "discard host key").
+  was confirmed (connection test and after "discard host key"). From the security review: this now also holds in the
+  "add host" wizard (a fingerprint that was only shown but not confirmed is no longer stored) and when an access gets
+  a password for the first time; SNMP v3 traps must have at least the user's security level; texts from devices can
+  no longer disturb the display via foreign text keys.
 - From the click-through: memory of Proxmox VMs has its own rule without a default threshold (the value includes
   the guest's cache); if the Proxmox token lacks the permission for updates, the service says so instead of a
   partial error; new hosts and accesses are polled right away, newly appearing services are offered right away;

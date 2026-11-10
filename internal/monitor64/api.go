@@ -346,6 +346,7 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 		cfg, _ = json.Marshal(nc)
 	}
 	a.Config = cfg
+	hadSecret := a.Secret != ""
 	hk := strings.TrimSpace(in.HostKey)
 	switch {
 	case hk == "reset" && !isNew:
@@ -381,6 +382,12 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 		a.Secret = ""
 	default:
 		keepSecret = !isNew
+	}
+	// SSH: bekommt ein Zugang erstmals ein Passwort, gilt ein bisher nur gelernter Hostschluessel (Anmeldung mit dem
+	// Schluessel der Node, nie von jemandem verglichen) nicht als bestaetigt - ohne Fingerabdruck in der Eingabe wird
+	// er verworfen, das Passwort geht dann erst nach der Bestaetigung raus.
+	if a.Type == "ssh" && !isNew && !hadSecret && in.Secret != "" && hk == "" {
+		a.HostKey = ""
 	}
 	return keepSecret, nil
 }

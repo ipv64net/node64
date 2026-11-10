@@ -12,8 +12,9 @@ try { D = JSON.parse(dataEl.textContent || '{}') || {}; } catch (e) { D = {}; }
 var TX = D.t || {};
 
 // ---------- Hilfen ----------
+function hasText(k) { return Object.prototype.hasOwnProperty.call(TX, k) && typeof TX[k] === 'string' && TX[k] !== ''; }
 function L(k, a) {
-	var s = TX[k] || k;
+	var s = hasText(k) ? TX[k] : k; // nur eigene Texte: "constructor" u. ae. aus Geraetetexten sind keine Schluessel
 	if (a) { Object.keys(a).forEach(function (n) { s = s.split('{' + n + '}').join(a[n]); }); }
 	return s;
 }
@@ -230,7 +231,7 @@ function txT(s, depth) {
 				new URLSearchParams(q).forEach(function (v, n) { a[n] = (n === 'since' || n === 'at') && toDate(v) ? fmtTime(v) : txT(v, depth + 1); vals.push(a[n]); });
 			} catch (e) { return txRaw(all); }
 		}
-		if (!TX[k]) { return vals.length ? k + ' (' + vals.join(', ') + ')' : k; }
+		if (!hasText(k)) { return vals.length ? k + ' (' + vals.join(', ') + ')' : k; }
 		return L(k, a);
 	});
 }
@@ -1309,7 +1310,7 @@ function pageHost() {
 			'<div class="col-md-8" data-af="agent"><label class="form-label" for="m64-af-mode">' + esc(L('push.mode_label')) + '</label><select class="form-select" id="m64-af-mode"><option value="">' + esc(L('push.mode_pull')) + '</option><option value="push"' + (c.mode === 'push' ? ' selected' : '') + '>' + esc(L('push.mode_push')) + '</option></select></div>' +
 			(c.mode === 'push' && c.token ? '<div class="col-12" data-af="agent"><div class="form-label">' + esc(L('push.token')) + '</div><code class="small">' + esc(c.token) + '</code><div class="form-text">' + esc(L('push.token_hint')) + '</div>' +
 				'<div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-newtok"><label class="form-check-label small" for="m64-af-newtok">' + esc(L('push.token_new')) + '</label></div></div>' : '') +
-			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + (c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
+			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + esc(c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
 			'<div class="col-md-8" data-af="ssh prom nut truenas redfish"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
 			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.21:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
@@ -1373,7 +1374,9 @@ function pageHost() {
 		var body = modal(a ? L('acc.edit') + ' · ' + accLabel(a.type) : L('host.access_add'), accessForm(a), [{ label: L('cancel') }, { label: L('acc.test'), click: function () {
 			var res = $('#m64-af-res', body), acc;
 			try { acc = accessFromForm(body, a); } catch (e) { res.innerHTML = '<span class="text-danger">' + esc(e.message) + '</span>'; return null; }
-			if (acc.type === 'ssh' && (hk || (a && a.hostkey))) { acc.hostkey = hk || a.hostkey; }
+			// gemerkter Schluessel nur, wenn schon ein Passwort hinterlegt war: wird erstmals eines gesetzt, muss der
+			// (bisher nur gelernte) Schluessel erst bestaetigt werden
+			if (acc.type === 'ssh' && (hk || (a && a.hostkey && a.secret_set))) { acc.hostkey = hk || a.hostkey; }
 			var tq = accessTestReq(a, acc);
 			if (!tq) { // gespeichertes Geheimnis gibt es nur zur gespeicherten Konfiguration
 				res.innerHTML = '<span class="text-warning-emphasis">' + esc(L('acc.save_first')) + '</span>';
@@ -2300,7 +2303,8 @@ function pageNew() {
 		} else if (WZ.step === 3) {
 			var svcs = (WZ.test && WZ.test.services) || [];
 			if (!svcs.length) {
-				html = '<p class="text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(L('new.no_test')) + '</p>';
+				html = WZ.test && WZ.test.need_confirm ? '<p class="text-warning-emphasis"><i class="bi bi-shield-exclamation"></i> ' + esc(L('new.unconfirmed')) + '</p>' :
+					'<p class="text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(L('new.no_test')) + '</p>';
 			} else {
 				var cats = {};
 				svcs.forEach(function (s) { var c = catOfKind(s.kind); (cats[c] = cats[c] || []).push(s); });
@@ -2437,7 +2441,9 @@ function pageNew() {
 		if (WZ.step < 4) { WZ.step++; render(); if (WZ.step === 2 && kind() && kind().access === 'ssh') { nodeAddr(); } return; }
 		var acc, nodes = selectedNodes();
 		try { acc = access(); } catch (e) { toast(e.message, true); return; }
-		if (WZ.test && WZ.test.fingerprint && (acc.type === 'agent' || acc.type === 'ssh')) { acc.hostkey = WZ.test.fingerprint; }
+		// Fingerabdruck aus dem Test nur, wenn er dort schon galt (Anmeldung gelungen). Wartet er noch auf die Bestaetigung
+		// (SSH mit Passwort), kommt nur der bestaetigte aus access() mit - sonst ginge das Passwort an einen ungeprueften Host.
+		if (WZ.test && WZ.test.fingerprint && !WZ.test.need_confirm && (acc.type === 'agent' || acc.type === 'ssh')) { acc.hostkey = WZ.test.fingerprint; }
 		if (acc.type === 'pve' && nodes.length && !acc.config.node && WZ.test.node) { acc.config.node = WZ.test.node; } // weitere Nodes bekommen eigene Hosts
 		var tags = WZ.tags.split(/[,\s]+/).filter(Boolean), iv = parseInt(WZ.interval, 10) || 0;
 		var body = { name: WZ.name, address: WZ.address, kind: WZ.kind, group: WZ.group, tags: tags, interval_sec: iv, notes: '', paused: false,

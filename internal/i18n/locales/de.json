@@ -6543,7 +6543,8 @@
       "hint_truenas": "Unter Einstellungen → Benutzer einen Benutzer mit der Rolle „Read-Only Administrator“ anlegen und für ihn einen API-Key erzeugen; den Benutzernamen mit eintragen (ab TrueNAS 27 nötig). Nur https:// – über http:// benutzte Keys widerruft TrueNAS.",
       "hint_unraid": "Unter Einstellungen → Verwaltungszugriff → API-Keys einen Key mit der Rolle „Viewer“ anlegen (ab Unraid 7.2 eingebaut, davor Plugin „Unraid Connect“). https:// empfohlen.",
       "hint_redfish": "Im BMC einen eigenen Benutzer mit der Rolle „ReadOnly“ anlegen (iDRAC: Read Only, iLO: Login, Supermicro: User). Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
-      "hint_snmp": "Im Gerät SNMP einschalten (nur lesend) und diese Node als erlaubten Abfrager eintragen. Am besten v3 mit Authentifizierung und Verschlüsselung; v1/v2c senden die Community im Klartext. Profile (Synology, QNAP, MikroTik, UniFi, APC, Drucker …) wählt die Node selbst."
+      "hint_snmp": "Im Gerät SNMP einschalten (nur lesend) und diese Node als erlaubten Abfrager eintragen. Am besten v3 mit Authentifizierung und Verschlüsselung; v1/v2c senden die Community im Klartext. Profile (Synology, QNAP, MikroTik, UniFi, APC, Drucker …) wählt die Node selbst.",
+      "unconfirmed": "Der Fingerabdruck des Hosts ist noch nicht bestätigt. Du kannst den Host trotzdem anlegen – das Passwort wird aber erst gesendet, nachdem du den Fingerabdruck am Zugang über „Testen“ verglichen und bestätigt hast. Besser: zurück zu Schritt 2 und dort bestätigen."
     },
     "nf": {
       "where": "Wohin",
