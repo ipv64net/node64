@@ -85,6 +85,7 @@ func (m *Module) buildDeviceNames(list []groups.Group) {
 		}
 	}
 	m.devs.Store(&t)
+	m.dhcpNamesSoon() // DHCP-Namen weichen Geraetenamen der Zonen
 }
 
 // deviceIPs: aktuelle Adressen eines Geraetenamens (MAC ueber die Nachbartabelle).
@@ -278,6 +279,7 @@ func (m *Module) loadZones(ctx context.Context) error {
 	}
 	m.zns.Store(t)
 	m.clChanged(ctx, ItemRecords)
+	m.dhcpNamesSoon() // DHCP-Namen weichen Geraetenamen der Zonen
 	return nil
 }
 

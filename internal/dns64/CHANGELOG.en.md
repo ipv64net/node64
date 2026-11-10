@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.39.1 – 2026-11-10
+
+### Security
+- DHCP names: a device can no longer take over a device name of a local zone with “Devices” via its DHCP hostname (e.g. `nas.home.lan` from the device groups when DHCP network and zone share the domain). So far the DHCP name answered before the zone. The device itself (same MAC or IP as in the group) keeps its DHCP name; names are rebuilt after changes to groups or zones.
+
 ## 1.39.0 – 2026-11-10
 
 ### New

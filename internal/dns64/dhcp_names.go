@@ -11,13 +11,15 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 )
 
 // DHCP und DNS Hand in Hand (Plan D3): Jede aktive Vergabe und jede feste Adresse mit Namen bekommt
 // <name>.<Domain des Netzes> als A-Eintrag samt PTR. Der Name kommt aus der festen Adresse, sonst vom Geraet
 // (Option 12), als DNS-Name bereinigt (deviceSlug). Eigene Eintraege und Umschreibungen gehen vor: Namen, die es dort
 // gibt, bekommt kein Geraet (sonst widersprechen sich Vorwaerts- und Rueckwaertssuche bzw. ein Geraet koennte eine
-// Umschreibung zum Proxy uebernehmen); ebenso nie wpad, isatap, localhost. Wer einen Namen hat, behaelt ihn: feste
+// Umschreibung zum Proxy uebernehmen); ebenso Geraetenamen einer Zone mit Geraeten (Bezeichnung in den Gruppen), ausser
+// fuer das Geraet selbst, und nie wpad, isatap, localhost. Wer einen Namen hat, behaelt ihn: feste
 // Adressen zuerst, dann die bisherigen Besitzer, erst dann neue Geraete - ein spaeteres Geraet mit demselben
 // Hostnamen bekommt keinen. Die Tabelle entsteht aus node64.db (Netze, feste Adressen, aktive Vergaben) - also auch
 // auf Nodes ohne eigenen DHCP-Server, die die Vergaben ueber den Cluster bekommen. Dazu gehen MAC und IP der
@@ -100,7 +102,7 @@ func (m *Module) dhcpNamesBuild(ctx context.Context) error {
 			return
 		}
 		name := slug + "." + domain[scope]
-		if _, taken := t.owner[name]; taken || m.ownName(name) {
+		if _, taken := t.owner[name]; taken || m.ownName(name) || m.deviceNameTaken(slug, domain[scope], mac, ip) {
 			return
 		}
 		t.owner[name] = mac
@@ -179,6 +181,26 @@ func (m *Module) ownName(name string) bool {
 	}
 	_, ok := m.rewriteFor(name)
 	return ok
+}
+
+// deviceNameTaken: slug.domain ist der Geraetename eines anderen Geraets in einer Zone mit Geraeten (die Zone
+// antwortet sonst erst nach den DHCP-Namen - ein Geraet koennte per Option 12 den Namen z. B. des NAS uebernehmen).
+// Das Geraet selbst (gleiche MAC oder IP wie in der Gruppe) behaelt seinen DHCP-Namen.
+func (m *Module) deviceNameTaken(slug, domain, mac string, ip netip.Addr) bool {
+	zt, dt := m.zns.Load(), m.devs.Load()
+	if zt == nil || dt == nil {
+		return false
+	}
+	if z, ok := zt.byName[domain]; !ok || !z.Devices {
+		return false
+	}
+	list := (*dt)[slug]
+	for _, x := range list {
+		if (x.Kind == groups.KindMAC && strings.EqualFold(x.Value, mac)) || (x.Kind == groups.KindIP && x.Value == ip.String()) {
+			return false
+		}
+	}
+	return len(list) > 0
 }
 
 // dhcpNamesSoon baut die Namen gebuendelt kurz danach neu.

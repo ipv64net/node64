@@ -473,6 +473,28 @@ func TestDHCPNameRules(t *testing.T) {
 	if rrs, ok := m.Lookup("103.50.168.192.in-addr.arpa", dns.TypePTR); ok && len(rrs) > 0 {
 		t.Fatalf("PTR for a name owned by a rewrite: %v", rrs)
 	}
+	// Geraetenamen einer Zone mit Geraeten: ein anderes Geraet bekommt sie nicht per Option 12, das Geraet selbst schon
+	if _, err := m.AddZone(ctx, Zone{Name: "home.lan", Devices: true}); err != nil {
+		t.Fatal(err)
+	}
+	g, err := m.AddGroup(ctx, "Technik")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, x := range []groups.Member{{GroupID: g.ID, Kind: groups.KindIP, Value: "192.168.50.20", Label: "NAS"}, {GroupID: g.ID, Kind: groups.KindMAC, Value: "02:00:00:00:00:05", Label: "TV"}} {
+		if _, err := m.AddMember(ctx, x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("02:00:00:00:00:04", "192.168.50.104", "nas") // fremdes Geraet will den Namen des NAS
+	save("02:00:00:00:00:05", "192.168.50.105", "tv")  // das Geraet aus der Gruppe selbst
+	_ = m.dhcpNamesBuild(ctx)
+	if a("nas.home.lan") != "" || a("tv.home.lan") != "192.168.50.105" {
+		t.Fatalf("nas=%q tv=%q", a("nas.home.lan"), a("tv.home.lan"))
+	}
+	if ans, _, _, ok := m.zoneAnswer("nas.home.lan", dns.TypeA); !ok || len(ans) != 1 || ans[0].(*dns.A).A.String() != "192.168.50.20" {
+		t.Fatalf("zone answer for the NAS: %v", ans)
+	}
 }
 
 // Schalter aus bzw. kein Netz: kein laufender Server mehr; abgebrochener Kontext laesst DHCP nicht aus.

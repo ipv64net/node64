@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.39.1 – 2026-11-10
+
+### Sicherheit
+- DHCP-Namen: Ein Gerät kann per DHCP-Hostname keinen Gerätenamen einer lokalen Zone mit „Geräte“ mehr übernehmen (z. B. `nas.home.lan` aus den Gerätegruppen, wenn DHCP-Netz und Zone dieselbe Domain haben). Bisher antwortete der DHCP-Name vor der Zone. Das Gerät selbst (gleiche MAC oder IP wie in der Gruppe) behält seinen DHCP-Namen; nach Änderungen an Gruppen oder Zonen werden die Namen neu gebaut.
+
 ## 1.39.0 – 2026-11-10
 
 ### Neu
