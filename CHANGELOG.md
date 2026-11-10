@@ -11,6 +11,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Healthchecks: Ein dauerhaft gestörter Online-Check verbraucht das Tageskontingent nicht mehr im 20-Sekunden-Takt – bei bestätigter Störung gilt wieder das normale Intervall.
 - DNS64: Blocklisten über 64 MB werden sichtbar gekürzt (Hinweis an der Liste) statt still abgeschnitten.
 - DNS64: Geräteprofile für Apple (`.mobileconfig`) lassen sich auf macOS und iOS installieren (#60).
+- Zertifikate: Eigene Zertifikate als PKCS#12 (`.p12`/`.pfx`) lassen sich zuverlässig hochladen – bisher scheiterte etwa jede fünfzigste Datei mit „data truncated“.
 - Zertifikate: Bei Domains von ipv64 (und anderen Anbietern) prüft die Node den TXT-Eintrag wieder bei den richtigen Nameservern, auch wenn der Container eine Suchdomain mit Wildcard-CNAME hat (z. B. eigene Domain bei Cloudflare) – bisher scheiterte die Ausstellung mit „not visible on … ns.cloudflare.com“. Gleiche Korrektur für DynDNS und den DNS-Healthcheck.
 - PROXY64: Sicherheits-Header aus „Erweitert“ und HSTS gelten für jede Antwort des Hosts, auch Sperr-, Fehler- und Anmeldeseiten; headers-Middlewares aus Traefik-Labels werden übernommen.
 - DNS64: DHCP-Server als eigener Menüpunkt (opt-in, Standard aus, ohne Einschalten kein Port) – Netze je Schnittstelle/VLAN, feste Adressen, Probelauf, Erkennung fremder DHCP-Server, ARP-Prüfung, PXE/Netboot; nur mit Host-Netz oder macvlan (#59).
