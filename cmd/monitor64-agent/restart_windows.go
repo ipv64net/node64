@@ -19,6 +19,7 @@ var exitFn = os.Exit
 // beendet sich. Kehrt nur bei einem Fehler zurueck.
 func restartSelf(exe string) error {
 	if asService.Load() {
+		stopTrays() // die Symbole laufen mit der alten Datei: vor dem Neustart beenden
 		if logDone != nil {
 			logDone()
 		}

@@ -97,6 +97,7 @@ type Server struct {
 
 	collectMu chan struct{} // collect nacheinander (mehrere Nodes gleichzeitig)
 	updateMu  sync.Mutex
+	status    statusState // Stand fuer die Anzeige am Host (status.go)
 
 	mu     sync.Mutex
 	ln     map[net.Listener]struct{}
@@ -155,6 +156,7 @@ func New(cfg Config) (*Server, error) {
 
 		pushKeepaliveEvery: pushKeepaliveEvery,
 	}
+	s.status.started = time.Now()
 	if cfg.LocalDir != "" {
 		s.local = newLocalRunner(cfg.LocalDir)
 	}

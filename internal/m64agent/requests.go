@@ -70,11 +70,18 @@ func (s *Server) handleSession(ctx context.Context, ch ssh.Channel, reqs <-chan 
 	}
 }
 
-// parseCommand prueft den exec-Befehl: genau "info", "update", "keys", "collect" oder "collect a,b,c".
+// parseCommand prueft den exec-Befehl: genau "info", "info latest=<version>", "update", "keys", "collect" oder
+// "collect a,b,c". Bei "info latest=" steht die Version im zweiten Rueckgabewert.
 func parseCommand(cmd string) (string, []string, error) {
 	switch cmd {
 	case m64proto.ReqInfo, m64proto.ReqUpdate, m64proto.ReqKeys, m64proto.ReqCollect:
 		return cmd, nil, nil
+	}
+	if v, ok := strings.CutPrefix(cmd, m64proto.ReqInfo+" latest="); ok {
+		if !validLatest(v) {
+			return "", nil, errors.New("invalid version")
+		}
+		return m64proto.ReqInfo, []string{v}, nil
 	}
 	arg, ok := strings.CutPrefix(cmd, m64proto.ReqCollect+" ")
 	if !ok || arg == "" {
@@ -108,8 +115,13 @@ func sanitizeLog(s string) string {
 func (s *Server) run(ctx context.Context, ch ssh.Channel, cmd string, secs []string, remote, fp string) {
 	switch cmd {
 	case m64proto.ReqInfo:
+		if len(secs) == 1 { // die Node nennt die verfuegbare Version (Anzeige am Host)
+			s.SetLatest(secs[0], time.Now())
+		}
+		s.noteRequest()
 		s.doInfo(ctx, ch)
 	case m64proto.ReqCollect:
+		s.noteRequest()
 		s.doCollect(ctx, ch, secs)
 	case m64proto.ReqKeys:
 		s.doKeys(ctx, ch, remote, fp)

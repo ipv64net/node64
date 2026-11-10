@@ -51,17 +51,18 @@ func install(args []string) int {
 	port := fs.Int("port", m64proto.DefaultPort, "TCP port")
 	var pf pushFlags
 	pf.register(fs)
+	noTray := fs.Bool("no-tray", false, "no icon in the notification area")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := doInstall(*key, *port, pf); err != nil {
+	if err := doInstall(*key, *port, pf, *noTray); err != nil {
 		fmt.Fprintln(os.Stderr, "monitor64-agent: ERROR:", err)
 		return 1
 	}
 	return 0
 }
 
-func doInstall(key string, port int, pf pushFlags) error {
+func doInstall(key string, port int, pf pushFlags, noTray bool) error {
 	key, err := checkInstallArgs(key, port)
 	if err != nil {
 		return err
@@ -146,6 +147,9 @@ func doInstall(key string, port int, pf pushFlags) error {
 	runArgs := []string{"run", "--port", strconv.Itoa(port)}
 	if pf.noListen {
 		runArgs = append(runArgs, "--no-listen") // Ziele in <dir>\connect (nicht in der Befehlszeile)
+	}
+	if noTray {
+		runArgs = append(runArgs, "--no-tray")
 	}
 	if s == nil {
 		if s, err = m.CreateService(serviceName, exePath, cfg, runArgs...); err != nil {

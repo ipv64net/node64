@@ -222,13 +222,15 @@ func TestLimiterNeighbour(t *testing.T) {
 }
 
 func TestParseCommand(t *testing.T) {
-	ok := map[string]int{"info": 0, "collect": 0, "update": 0, "keys": 0, "collect cpu,mem,fs": 3, "collect cpu,cpu": 1}
+	ok := map[string]int{"info": 0, "collect": 0, "update": 0, "keys": 0, "collect cpu,mem,fs": 3, "collect cpu,cpu": 1,
+		"info latest=0.4.0": 1, "info latest=1.2.3-rc1": 1}
 	for in, n := range ok {
 		if _, secs, err := parseCommand(in); err != nil || len(secs) != n {
 			t.Errorf("%q: secs %v err %v", in, secs, err)
 		}
 	}
-	for _, in := range []string{"", "ls", "info ", " info", "collect ", "collect cpu;id", "collect CPU", "collect ../x",
+	for _, in := range []string{"", "ls", "info ", " info", "info latest=", "info latest=1.0 x", "info latest=../x", "info latest=" + strings.Repeat("1", 41),
+		"info other=1", "collect ", "collect cpu;id", "collect CPU", "collect ../x",
 		"collect a,,b", "keys extra", "update now", manySections(40), "sh -c id"} {
 		if _, _, err := parseCommand(in); err == nil {
 			t.Errorf("%q accepted", in)

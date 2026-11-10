@@ -54,3 +54,6 @@
 - Windows-Agent: Dienste mit Starttyp Automatisch, die seit dem Booten nie gestartet wurden, zählen nicht als gestoppt.
   Die Installation scheitert nicht mehr an einem leeren Ordner `%ProgramData%\monitor64-agent` eines anderen
   Besitzers; ein Start im Vordergrund mit fehlerhaften Optionen legt diesen Ordner nicht mehr an.
+- Windows-Agent: Symbol im Infobereich der Taskleiste für jeden angemeldeten Benutzer – zeigt, dass der Dienst läuft,
+  die Version, die letzte Abfrage durch die Node und ob ein Update verfügbar ist (abschaltbar mit `-NoTray` bzw.
+  `install --no-tray`).

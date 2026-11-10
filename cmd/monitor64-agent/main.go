@@ -54,6 +54,8 @@ const usage = `usage: monitor64-agent <command>
       [--connect token@node[:6466]] [--no-listen] connect to the node yourself (host behind NAT, VPS); nodes
                                                 are also read from <dir>/connect
   fingerprint                                   print the host key fingerprint
+  tray                                          Windows: show the icon in the notification area (started by the
+                                                service for every signed-in user; "install --no-tray" turns it off)
   version                                       print the version`
 
 func main() {
@@ -73,6 +75,8 @@ func main() {
 		os.Exit(uninstall(args))
 	case "fingerprint":
 		os.Exit(fingerprint(args))
+	case "tray":
+		os.Exit(tray(args))
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 	default:
@@ -93,6 +97,7 @@ type runFlags struct {
 	debug    bool
 	connect  []m64agent.PushTarget // --connect (zusaetzlich <dir>/connect)
 	noListen bool                  // nur Push, kein Lauschen
+	noTray   bool                  // Windows: kein Symbol im Infobereich
 }
 
 func parseRunFlags(args []string, errOut io.Writer) (runFlags, error) {
@@ -116,6 +121,7 @@ func parseRunFlags(args []string, errOut io.Writer) (runFlags, error) {
 		return nil
 	})
 	fs.BoolVar(&f.noListen, "no-listen", false, "do not listen (push only, needs --connect or <dir>/connect)")
+	fs.BoolVar(&f.noTray, "no-tray", false, "Windows service: no icon in the notification area")
 	if err := fs.Parse(args); err != nil {
 		return f, err
 	}
@@ -145,6 +151,8 @@ var restartFn = restartSelf
 var (
 	platformRun = runAgent
 	baseContext = context.Background
+	// onServer laeuft, sobald der Agent bereit ist (Windows als Dienst: Stand fuer das Symbol im Infobereich).
+	onServer = func(context.Context, *m64agent.Server, string, runFlags, *slog.Logger) {}
 )
 
 func run(args []string) int { return platformRun(selfPath(), args) }
@@ -244,6 +252,7 @@ func runAgent(exe string, args []string) int {
 
 	ctx, stop := signal.NotifyContext(baseContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	onServer(ctx, srv, exe, f, log)
 	served := make(chan error, 1)
 	if ln != nil {
 		go func() { served <- srv.Serve(ln) }()

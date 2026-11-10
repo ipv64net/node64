@@ -103,9 +103,22 @@ func (c *AgentClient) PushToken() string {
 
 // Info fragt Version, System und Faehigkeiten ab.
 func (c *AgentClient) Info(ctx context.Context) (*m64proto.Info, error) {
+	return c.InfoLatest(ctx, "")
+}
+
+// InfoLatest fragt wie Info und nennt dem Agent dabei die verfuegbare Version ("info latest=<version>", fuer die
+// Anzeige am Host). Lehnt der Agent die Form ab (aeltere Version), folgt die einfache Abfrage.
+func (c *AgentClient) InfoLatest(ctx context.Context, latest string) (*m64proto.Info, error) {
 	ctx, cancel := withDefaultTimeout(ctx, infoTimeout)
 	defer cancel()
-	out, err := c.exec(ctx, m64proto.ReqInfo, nil, m64proto.MaxInfoBytes)
+	var out []byte
+	err := errors.New("no version")
+	if latest != "" {
+		out, err = c.exec(ctx, m64proto.ReqInfo+" latest="+latest, nil, m64proto.MaxInfoBytes)
+	}
+	if err != nil {
+		out, err = c.exec(ctx, m64proto.ReqInfo, nil, m64proto.MaxInfoBytes)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,8 @@
 # https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
 # Push-Betrieb (Host hinter NAT, VPS): -Connect "token@node[:6466]" (auch mehrere, durch Komma) baut die Verbindung
 # zur Node selbst auf; -NoListen zusaetzlich, wenn der Agent nicht lauschen soll (dann auch keine Firewall-Regel).
+# -NoTray: kein Symbol im Infobereich der Taskleiste (sonst zeigt der Dienst es jedem angemeldeten Benutzer:
+# laeuft, Version, letzte Abfrage, Update verfuegbar).
 # Die Datei monitor64-agent-windows-amd64.exe wird gegen SHA256SUMS aus demselben Ordner geprueft und ruft dann
 # "monitor64-agent install" auf (Datei, Schluessel, Dienst, Firewall-Regel, Fingerabdruck des Hostschluessels).
 # Entfernen: & "$env:ProgramFiles\monitor64-agent\monitor64-agent.exe" uninstall
@@ -21,7 +23,8 @@ param(
     [int]$Port = 0,
     [string]$Base = 'https://node64.de/agent/',
     [string[]]$Connect = @(),
-    [switch]$NoListen
+    [switch]$NoListen,
+    [switch]$NoTray
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,6 +132,7 @@ try {
     if ($Port -gt 0) { $installArgs += @('--port', [string]$Port) }
     foreach ($c in $Connect) { $installArgs += @('--connect', $c) }
     if ($NoListen) { $installArgs += '--no-listen' }
+    if ($NoTray) { $installArgs += '--no-tray' }
     & $exe @installArgs
     if ($LASTEXITCODE -ne 0) { throw "monitor64-agent: install failed (exit code $LASTEXITCODE)" }
 } finally {

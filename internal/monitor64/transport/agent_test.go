@@ -138,6 +138,16 @@ func TestAgentInfoCollect(t *testing.T) {
 	if c.HostKey() != want || len(learned) != 1 || learned[0] != want {
 		t.Fatalf("TOFU: HostKey %q learned %v want %q", c.HostKey(), learned, want)
 	}
+	// die Node nennt die verfuegbare Version (Anzeige am Host); eine ungueltige Angabe faellt auf "info" zurueck
+	if st := e.srv.Status(); st.Latest != "" || st.LastRequest == 0 {
+		t.Fatalf("status after info: %+v", st)
+	}
+	if info, err := c.InfoLatest(ctx(t), "1.1.0"); err != nil || info.Version != "1.0.0" || e.srv.Status().Latest != "1.1.0" {
+		t.Fatalf("info latest: %+v %v status %+v", info, err, e.srv.Status())
+	}
+	if info, err := c.InfoLatest(ctx(t), "not a version"); err != nil || info.Version != "1.0.0" || e.srv.Status().Latest != "1.1.0" {
+		t.Fatalf("info with invalid latest: %+v %v status %+v", info, err, e.srv.Status())
+	}
 	rep, err := c.Collect(ctx(t))
 	if err != nil {
 		t.Fatal(err)

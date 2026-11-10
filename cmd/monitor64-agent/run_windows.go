@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -13,6 +14,8 @@ import (
 	"sync/atomic"
 
 	"golang.org/x/sys/windows/svc"
+
+	"github.com/ipv64net/node64/internal/m64agent"
 )
 
 // Name des Windows-Dienstes.
@@ -28,7 +31,22 @@ var asService atomic.Bool
 // logDone schliesst das Protokoll des Dienstes (vor os.Exit, damit nichts verloren geht).
 var logDone func()
 
-func init() { platformRun = runWindows }
+func init() {
+	platformRun = runWindows
+	onServer = desktopStatus
+}
+
+// desktopStatus: als Dienst den Stand fuer das Symbol im Infobereich schreiben und das Symbol in den angemeldeten
+// Sitzungen starten (ausser mit --no-tray). Im Vordergrund geschieht nichts.
+func desktopStatus(ctx context.Context, srv *m64agent.Server, exe string, f runFlags, log *slog.Logger) {
+	if !asService.Load() || exe == "" {
+		return
+	}
+	go statusLoop(ctx, srv, exe, log)
+	if !f.noTray {
+		go trayKeeper(ctx, exe, log)
+	}
+}
 
 // runWindows startet den Agent als Dienst (vom Dienst-Manager gestartet) bzw. im Vordergrund (Konsole).
 func runWindows(exe string, args []string) int {

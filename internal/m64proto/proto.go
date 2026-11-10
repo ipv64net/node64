@@ -14,7 +14,7 @@ const Version = 1
 
 // Anfragen an den Agent (SSH "exec"-Anfrage; alles andere lehnt der Agent ab).
 const (
-	ReqInfo    = "info"    // Info als JSON
+	ReqInfo    = "info"    // Info als JSON; optional "info latest=<version>": die Node nennt die verfuegbare Version
 	ReqCollect = "collect" // Report als JSON; optional Abschnitte: "collect cpu,mem,fs"
 	ReqUpdate  = "update"  // stdin: signierte neue Datei (UpdateHeader + Binary), Antwort UpdateResult
 	ReqKeys    = "keys"    // stdin: neue Schluesselliste (authorized_keys-Format), Antwort KeysResult

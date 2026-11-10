@@ -55,6 +55,7 @@ type agentState struct {
 
 	infoAt  time.Time // letzte Antwort auf "info"
 	infoTry time.Time // letzter Versuch
+	told    string    // dem Agent zuletzt genannte verfuegbare Version (Anzeige am Host)
 	busy    bool      // Update laeuft bzw. wartet auf einen freien Platz
 }
 
@@ -170,13 +171,14 @@ func (rt *hostRT) agentCol(acc string) *agentCollector {
 	return nil
 }
 
-// agentInfo fragt Version und Plattform ab (rt.mu gehalten).
-func agentInfo(ctx context.Context, ac *agentCollector) (*m64proto.Info, error) {
+// agentInfo fragt Version und Plattform ab (rt.mu gehalten). latest ist die verfuegbare Version aus dem
+// Verzeichnis ("" = unbekannt): der Agent zeigt damit am Host, ob ein Update ansteht.
+func agentInfo(ctx context.Context, ac *agentCollector, latest string) (*m64proto.Info, error) {
 	c, err := ac.ref.agent(ac.cfg)
 	if err != nil {
 		return nil, err
 	}
-	return c.Info(ctx)
+	return c.InfoLatest(ctx, latest)
 }
 
 // agentLoop laeuft, solange das Modul laeuft: Verzeichnis regelmaessig holen, Versionen der Agents merken,
@@ -306,14 +308,20 @@ func (m *Module) agentCheck(ctx context.Context, rt *hostRT, acc string, ix *age
 	if st.busy {
 		return false
 	}
+	latest := ""
+	if ix != nil {
+		latest = ix.Version
+	}
 	ask := st.infoAt.IsZero() && now.Sub(st.infoTry) >= agentInfoRetry || !st.infoAt.IsZero() && now.Sub(st.infoAt) >= agentInfoEvery ||
-		st.Pending != nil // nach einem Update bei jedem Durchgang, bis die neue Version da ist
+		st.Pending != nil || // nach einem Update bei jedem Durchgang, bis die neue Version da ist
+		!st.infoAt.IsZero() && latest != "" && st.told != latest // neues Verzeichnis: dem Agent die Version nennen
 	if ask {
-		info, err := agentInfo(ctx, ac)
+		info, err := agentInfo(ctx, ac, latest)
 		st = m.agentNoteInfo(ctx, h, acc, info, err, now)
 		if err != nil {
 			return false
 		}
+		m.agentSet(acc, h.UID, func(st *agentState) bool { st.told = latest; return false })
 	}
 	if st.Pending != nil || st.Version == "" || ix == nil || !update.Newer(ix.Version, st.Version) {
 		return false
@@ -421,7 +429,7 @@ func (m *Module) agentPush(ctx context.Context, rt *hostRT, acc string, by Actor
 			rt.mu.Unlock()
 			return errAgentGone
 		}
-		info, err := agentInfo(ctx, ac)
+		info, err := agentInfo(ctx, ac, "")
 		rt.mu.Unlock()
 		st = m.agentNoteInfo(ctx, h, acc, info, err, time.Now())
 		if err != nil {
@@ -484,7 +492,7 @@ func (m *Module) agentPush(ctx context.Context, rt *hostRT, acc string, by Actor
 		case <-time.After(agentRestartPoll):
 		}
 		ictx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		info, err := agentInfo(ictx, ac)
+		info, err := agentInfo(ictx, ac, "")
 		cancel()
 		if err == nil && sameAgentVersion(info.Version, hdr.Version) {
 			m.agentNoteInfo(ctx, h, acc, info, nil, time.Now())

@@ -53,3 +53,6 @@
 - Windows agent: services with start type automatic that were never started since boot do not count as stopped.
   The installation no longer fails on an empty folder `%ProgramData%\monitor64-agent` owned by someone else; a
   foreground start with invalid options no longer creates this folder.
+- Windows agent: icon in the notification area of the taskbar for every signed-in user – shows that the service is
+  running, the version, the last poll by the node and whether an update is available (can be switched off with
+  `-NoTray` or `install --no-tray`).
