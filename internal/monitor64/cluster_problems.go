@@ -139,6 +139,7 @@ func stateRankOK(s string) bool {
 // purgeTombstones meldet entfernte Probleme an den Cluster (Aufbewahrung; die anderen Nodes raeumen ebenso auf, der
 // Vermerk haelt nur das Protokoll klein).
 func (m *Module) purgeTombstones(ctx context.Context, cut string) {
+	m.purgeGaps(ctx, cut) // Laufzeit-Luecken: gleiche Aufbewahrung (uptime.go)
 	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_cstate WHERE host_uid NOT IN (SELECT uid FROM m64_hosts WHERE deleted = 0)`); err != nil {
 		m.log.Warn("monitor64: purge cluster state", "err", err)
 	}

@@ -124,7 +124,7 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 		}
 		col, err := m.newCollector(ctx, h, a)
 		if err == nil {
-			restoreSeenUp(col, rt.SeenUp[a.UID]) // SNMP: "schon verbunden" ueber Neustarts
+			restoreMemo(col, rt.SeenUp[a.UID]) // merkbarer Zustand ueber Neustarts (SNMP: "schon verbunden", NUT: TLS gesehen)
 		}
 		ar := &accRT{row: a, col: col}
 		if err != nil {

@@ -6,7 +6,8 @@ UCD-SNMP, IEEE8023-LAG, ENTITY-SENSOR, Printer-MIB, UPS-MIB) fragt der Sammler i
 
 Die Node wählt Profile selbst über `sysObjectID`/`sysDescr` und optional eine Probe-OID. Mehrere passende Profile
 gelten zusammen. Jede Datei `*.json` in diesem Ordner wird beim Bauen eingebettet und beim Start geprüft; der Test
-`TestProfilesLoad` lädt alle Profile – ein fehlerhaftes Profil lässt den Test scheitern.
+`TestProfilesLoad` lädt alle Profile – ein fehlerhaftes Profil lässt den Test scheitern. `TestProfileTexts` prüft die
+Anzeigetexte (siehe „Texte“).
 
 Beiträge sind willkommen (Pull-Request mit Profil und, wenn möglich, einem `snmpwalk -On` des Geräts unter
 `../testdata/` samt Test). Bitte nur lesende OIDs, keine Zugangsdaten oder Seriennummern in Testdaten.
@@ -53,7 +54,7 @@ Jeder Skalar bzw. jede Tabelle nennt den Dienst, in den der Wert geht:
 | Feld | Bedeutung |
 |---|---|
 | `key` | fester Dienst-Schlüssel, z. B. `ups`, `temp:system`, `disk:{name}` (Tabellen brauchen `{name}` oder `{index}`) |
-| `service` | Anzeigename, Platzhalter wie bei `key` |
+| `service` | Anzeigename, Platzhalter wie bei `key`; fester Text oder übersetzbar (siehe „Texte“) |
 | `kind` | Dienst-Art (`temp`, `disk`, `raid`, `zfs`, `store`, `ups`, `poe`, `fan`, `wlan`, `hw` …) |
 | `default` | beim Erkennen vorgeschlagen (Standard `true`) |
 
@@ -67,18 +68,18 @@ Platzhalter: `{name}` = Wert der Spalte `name_col` (bereinigt), `{index}` = Inde
 ### Skalare
 
 ```json
-{ "key": "ups", "service": "USV", "kind": "ups", "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.3.0",
+{ "key": "ups", "service": "i18n:monitor64.svc.ups_plain", "kind": "ups", "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.3.0",
   "metric": "runtime", "unit": "s", "factor": 0.01, "rule": "ups.runtime", "min": 0 }
 ```
 
 ### Tabellen
 
 ```json
-{ "key": "disk:{name}", "service": "Platte {name}", "kind": "disk", "oid": ".1.3.6.1.4.1.6574.2.1.1", "name_col": 2,
+{ "key": "disk:{name}", "service": "i18n:monitor64.svc.disk?name={name}", "kind": "disk", "oid": ".1.3.6.1.4.1.6574.2.1.1", "name_col": 2,
   "filter": { "col": 4, "values": [1] },
   "columns": [
     { "col": 6, "metric": "temp", "unit": "°C", "rule": "disk.temp" },
-    { "col": 5, "text": { "1": "Normal", "5": "Abgestürzt" }, "fact": { "code": "smart_failed", "when": [5] } }
+    { "col": 5, "text": { "1": "Normal", "5": "i18n:monitor64.snmp.crashed" }, "fact": { "code": "smart_failed", "when": [5] } }
   ] }
 ```
 
@@ -100,14 +101,14 @@ Jeder Skalar bzw. jede Spalte braucht mindestens eines von `metric`, `fact`, `te
 | `min`, `max` | gültiger Bereich des Rohwerts, sonst wird der Wert verworfen (z. B. `-1` = nicht unterstützt) |
 | `hide` | Messwert nicht im Dienst-Text zeigen |
 | `text` | Rohwert → Anzeigetext (`{"1": "Normal"}`); ein leerer Text blendet den Wert aus |
-| `label` | Rohtext mit diesem Vorsatz in den Dienst-Text (`"Modell"` → „Modell DS920+“) |
+| `label` | Rohtext mit diesem Vorsatz in den Dienst-Text (`"i18n:monitor64.snmp.model"` → „Modell DS920+“ bzw. „Model DS920+“) |
 | `pct` | Belegung in % aus zwei Werten: `{"total": "5", "free": "4"}` bzw. `"used"` (Tabellen: Spaltennummern, Skalare: OIDs), optional `"unit"` = Bytes je Einheit; liefert zusätzlich `free` in Bytes |
 | `fact` | Zustand, siehe unten |
 
 ### Zustände (`fact`)
 
 ```json
-{ "code": "raid_degraded", "when": [11, 12], "text": "Speicherpool beeinträchtigt" }
+{ "code": "raid_degraded", "when": [11, 12], "text": "i18n:monitor64.snmp.pool_degraded" }
 ```
 
 Genau eine Bedingung: `when` (Wert in Liste), `ok` (Wert nicht in Liste), `when_text`/`ok_text` (Teiltext, ohne
@@ -118,10 +119,31 @@ Erlaubte Codes: `smart_failed`, `smart_sectors`, `raid_degraded`, `zfs_degraded`
 `ups_alarm`, `printer_error`, `paper_empty`, `hw_failed`, `poe_fault`, `if_down`, `if_speed_low`, `if_half_duplex`,
 `restarted`. Wie stark ein Zustand meldet, legen die Regeln in Monitor64 fest (nicht das Profil).
 
+## Texte
+
+Die Oberfläche und die Meldungen gibt es in Deutsch und Englisch. Anzeigetexte im Profil (`service`, `label`, die
+Werte von `text`, `fact.text`) sind deshalb entweder
+
+- **fester Text**, der in beiden Sprachen gleich ist – Eigennamen und Zustände des Geräts wie `"RouterOS"`,
+  `"ZFS {name}"`, `"ONLINE"`, `"Smart Boost"` –, oder
+- ein **Token** `i18n:monitor64.<schlüssel>`: Der Text steht dann in beiden Sprachdateien
+  (`internal/i18n/locales/de.json` und `en.json`, verschachtelt unter `monitor64`). Eigene Texte eines Profils
+  gehören unter `monitor64.snmp.*`; vorhandene Texte dürfen mitbenutzt werden, z. B. `monitor64.svc.disk`
+  („Platte {name}“ / „Disk {name}“), `monitor64.svc.temp`, `monitor64.svc.fan`, `monitor64.svc.ups_plain`,
+  `monitor64.txt.ups_on_battery`. Neue Schlüssel zusätzlich in `collectorTexts`
+  (`internal/monitor64/textkeys.go`) eintragen – `TestTextKeys` nennt die fehlenden.
+
+Platzhalter im Token stehen als Parameter: `"service": "i18n:monitor64.svc.disk?name={name}"`, bei festen Namen
+`"i18n:monitor64.svc.temp?name=CPU"`. Der Name vom Gerät wird nie übersetzt. Ein deutscher Text ohne Token erscheint
+auch in der englischen Oberfläche deutsch; `TestProfileTexts` meldet Texte mit Umlauten und Token ohne Eintrag in
+den Sprachdateien.
+
 ## English summary
 
 Profiles are JSON files that map vendor OIDs (`scalars`, `tables`) to Monitor64 services: a metric with unit, factor
 and default threshold kind (`rule`), a state (`fact`) or display text. A profile applies when `sysObjectID` starts
 with one of `match.object_ids` or `sysDescr` contains one of `match.descr`, and the optional `match.probe` OID returns
-a value. Unknown fields are rejected; `TestProfilesLoad` validates every file. Pull requests with a profile and a
+a value. Unknown fields are rejected; `TestProfilesLoad` validates every file. Display texts (`service`, `label`,
+`text` values, `fact.text`) are either language-neutral literals or tokens `i18n:monitor64.<key>` whose German and
+English texts live in `internal/i18n/locales/*.json` (`TestProfileTexts`). Pull requests with a profile and a
 `snmpwalk -On` capture (no credentials or serial numbers) are welcome.

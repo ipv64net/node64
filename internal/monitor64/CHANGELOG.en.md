@@ -36,3 +36,18 @@
   preferred and backup nodes, takeover after 2 min and handback after 5 min stable, majority rule for separated parts,
   shared cluster key (agents are switched automatically, "change key"), overall view "monitored by", history live from
   the monitoring node, traps forwarded to the responsible node.
+- Menu item "Agent": the node keeps the signed agent files ready (download also for hosts without internet), shows
+  install commands and agent versions and updates agents automatically (can be switched off per host, "update now").
+- Agent installable on FreeBSD, OPNsense, pfSense and TrueNAS CORE via `install.sh` (rc.d service, push mode).
+- Service names, state and error texts in German and English (also in notifications, CSV and on status pages).
+- Cluster: sparklines also for hosts of other nodes; card "hosts without a monitoring node" (assign/remove); open
+  traps stay open on a takeover; changes are not lost after a write error in the cluster log. Status pages: times
+  in which Monitor64 was not running count neither as an incident nor as observed.
+- Security: with SSH password login the password is only sent to the host after the fingerprint of its host key
+  was confirmed (connection test and after "discard host key").
+- From the click-through: memory of Proxmox VMs has its own rule without a default threshold (the value includes
+  the guest's cache); if the Proxmox token lacks the permission for updates, the service says so instead of a
+  partial error; new hosts and accesses are polled right away, newly appearing services are offered right away;
+  pseudo filesystems (SNMP) and file mounts (node_exporter in a container) are left out; host tiles are real links;
+  texts without plural errors.
+- Windows agent: services with start type automatic that were never started since boot do not count as stopped.

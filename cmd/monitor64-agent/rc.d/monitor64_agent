@@ -5,24 +5,31 @@
 # KEYWORD: shutdown
 #
 # Monitor64-Agent (Node64) fuer FreeBSD, OPNsense, pfSense und TrueNAS CORE.
-# Ablage: /usr/local/etc/rc.d/monitor64_agent (Modus 0555), Programm /usr/local/sbin/monitor64-agent,
-# Einstellungen (keys, hostkey, local.d) in /usr/local/etc/monitor64-agent.
+# "monitor64-agent install" legt alles an: dieses Skript als /usr/local/etc/rc.d/monitor64_agent (Modus 0555;
+# pfSense: monitor64_agent.sh, nur solche Dateien startet pfSense beim Hochfahren), das Programm als
+# /usr/local/libexec/monitor64-agent/monitor64-agent mit Verweis /usr/local/sbin/monitor64-agent, die Einstellungen
+# (keys, hostkey, connect, local.d) in /usr/local/etc/monitor64-agent und den Schalter in
+# /etc/rc.conf.d/monitor64_agent (eigene Datei; rc.subr liest sie auf allen vier Systemen, OPNsense auch beim
+# Hochfahren ueber rc.freebsd).
 #
-# Einschalten (eigene Datei unter /etc/rc.conf.d, bleibt bei OPNsense-Updates erhalten):
+# Von Hand:
 #   sysrc -f /etc/rc.conf.d/monitor64_agent monitor64_agent_enable=YES
 #   service monitor64_agent start
 #
-# Optionen (rc.conf bzw. /etc/rc.conf.d/monitor64_agent):
-#   monitor64_agent_enable  YES/NO (Standard NO)
-#   monitor64_agent_port    TCP-Port (Standard 6465)
-#   monitor64_agent_dir     Einstellungen (Standard /usr/local/etc/monitor64-agent)
-#   monitor64_agent_args    weitere Optionen fuer "run", z. B. "--listen 192.168.1.1"; "--no-listen" fuer nur Push
+# Optionen (/etc/rc.conf.d/monitor64_agent bzw. rc.conf):
+#   monitor64_agent_enable    YES/NO (Standard NO)
+#   monitor64_agent_port      TCP-Port (Standard 6465)
+#   monitor64_agent_nolisten  YES = nur Push, der Agent lauscht nicht (Standard NO)
+#   monitor64_agent_dir       Einstellungen (Standard /usr/local/etc/monitor64-agent)
+#   monitor64_agent_args      weitere Optionen fuer "run", z. B. "--listen 192.168.1.1"
 #
 # Push-Betrieb (Firewall hinter NAT, VPS): die Nodes stehen in /usr/local/etc/monitor64-agent/connect (Modus 0600,
-# eine Zeile je Node: token@host[:6466], Befehl zeigt Node64); der Agent baut die Verbindung dann selbst auf.
+# eine Zeile je Node: token@host[:6466]; "monitor64-agent install --connect ..." traegt sie ein); der Agent baut die
+# Verbindung dann selbst auf.
 #
 # daemon(8) startet den Agent nach einem Absturz neu (-r, 5 s Pause) und schreibt die Ausgabe ins syslog
-# (Kennung monitor64-agent). Nach einem Update ersetzt sich der Agent selbst (exec, gleiche Prozessnummer).
+# (Kennung monitor64-agent); -f trennt ihn von der Ein-/Ausgabe des Aufrufers (sonst haengt z. B. ein Start ueber
+# SSH oder aus einem Programm heraus). Nach einem Update ersetzt sich der Agent selbst (exec, gleiche Prozessnummer).
 
 . /etc/rc.subr
 
@@ -34,6 +41,7 @@ load_rc_config $name
 
 : ${monitor64_agent_enable:="NO"}
 : ${monitor64_agent_port:="6465"}
+: ${monitor64_agent_nolisten:="NO"}
 : ${monitor64_agent_dir:="/usr/local/etc/monitor64-agent"}
 : ${monitor64_agent_args:=""}
 
@@ -41,7 +49,10 @@ monitor64_agent_bin="/usr/local/sbin/monitor64-agent"
 pidfile="/var/run/${name}.pid"
 required_files="${monitor64_agent_bin}"
 command="/usr/sbin/daemon"
-command_args="-r -R 5 -S -T monitor64-agent -P ${pidfile} ${monitor64_agent_bin} run --port ${monitor64_agent_port} --dir ${monitor64_agent_dir} ${monitor64_agent_args}"
+if checkyesno monitor64_agent_nolisten; then
+	monitor64_agent_args="--no-listen ${monitor64_agent_args}"
+fi
+command_args="-f -r -R 5 -S -T monitor64-agent -P ${pidfile} ${monitor64_agent_bin} run --port ${monitor64_agent_port} --dir ${monitor64_agent_dir} ${monitor64_agent_args}"
 start_precmd="${name}_prestart"
 
 monitor64_agent_prestart()

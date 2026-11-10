@@ -3,7 +3,7 @@ package promscrape
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"math"
 	"sort"
 	"strconv"
@@ -39,30 +39,30 @@ type CustomMetric struct {
 // ValidateCustom prueft die Liste (Kern: beim Speichern des Zugangs).
 func ValidateCustom(l []CustomMetric) error {
 	if len(l) > MaxCustom {
-		return fmt.Errorf("höchstens %d eigene Metriken", MaxCustom)
+		return errors.New(model.T("monitor64.txt.pm_custom_max", "n", MaxCustom))
 	}
 	for i, c := range l {
 		if c.Name == "" || len(c.Name) > 200 {
-			return fmt.Errorf("eigene Metrik %d: Name fehlt oder ist zu lang", i+1)
+			return errors.New(model.T("monitor64.txt.pm_custom_name_n", "n", i+1))
 		}
 		for j := 0; j < len(c.Name); j++ {
 			if !isNameChar(c.Name[j], j == 0) {
-				return fmt.Errorf("eigene Metrik %q: ungültiger Name (erlaubt: a-z, A-Z, 0-9, _ und :)", clip(c.Name, 60))
+				return errors.New(model.T("monitor64.txt.pm_custom_name_bad", "name", clip(c.Name, 60)))
 			}
 		}
 		if len(c.Labels) > maxCustomLabels {
-			return fmt.Errorf("eigene Metrik %q: höchstens %d Labels", c.Name, maxCustomLabels)
+			return errors.New(model.T("monitor64.txt.pm_custom_labels", "name", c.Name, "n", maxCustomLabels))
 		}
 		for k, v := range c.Labels {
 			if k == "" || len(k) > 100 || len(v) > 200 {
-				return fmt.Errorf("eigene Metrik %q: Label zu lang oder leer", c.Name)
+				return errors.New(model.T("monitor64.txt.pm_custom_label_bad", "name", c.Name))
 			}
 		}
 		if len(c.Title) > 100 || len(c.Unit) > 16 {
-			return fmt.Errorf("eigene Metrik %q: Anzeigename bzw. Einheit zu lang", c.Name)
+			return errors.New(model.T("monitor64.txt.pm_custom_title_long", "name", c.Name))
 		}
 		if !finite(c.Factor) {
-			return fmt.Errorf("eigene Metrik %q: ungültiger Faktor", c.Name)
+			return errors.New(model.T("monitor64.txt.pm_custom_factor", "name", c.Name))
 		}
 	}
 	return nil
@@ -108,7 +108,7 @@ func customServices(m *Metrics, list []CustomMetric, now time.Time, prev map[str
 					name += " (" + d + ")"
 				}
 			}
-			sv := model.Service{Key: key, Name: clip(name, 200), Kind: "prom", Default: true}
+			sv := model.Service{Key: key, Name: model.Raw(clip(name, 200)), Kind: "prom", Default: true}
 			f := c.Factor
 			if f == 0 {
 				f = 1
@@ -130,9 +130,9 @@ func customServices(m *Metrics, list []CustomMetric, now time.Time, prev map[str
 			}
 			if ok {
 				sv.Metrics = []model.Metric{{Name: "value", Value: round4(v), Unit: clip(c.Unit, 16)}}
-				sv.Text = strings.TrimSpace(formatValue(v) + " " + clip(c.Unit, 16))
+				sv.Text = strings.TrimSpace(formatValue(v) + " " + model.Raw(clip(c.Unit, 16)))
 			} else if !c.Rate || !finite(s.Value) {
-				sv.Text = "kein gültiger Wert"
+				sv.Text = model.T("monitor64.txt.no_valid_value")
 			}
 			out = append(out, sv)
 		}

@@ -3,7 +3,6 @@ package snmp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"net"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gosnmp/gosnmp"
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // Grenzen gegen feindliche bzw. kaputte Agenten (endlose Tabellen, nicht steigende OIDs).
@@ -60,7 +60,7 @@ type snmpError struct {
 }
 
 func (e *snmpError) Error() string {
-	return fmt.Sprintf("SNMP-Fehler %s (Index %d)", e.status, e.index)
+	return model.T("monitor64.txt.snmp_error", "status", e.status, "n", e.index)
 }
 
 func statusOf(err error) gosnmp.SNMPError {
@@ -89,7 +89,7 @@ func (c *gsConn) check(p *gosnmp.SnmpPacket, err error) ([]pdu, error) {
 		return nil, err
 	}
 	if p == nil {
-		return nil, errors.New("leere Antwort")
+		return nil, errors.New(model.T("monitor64.txt.resp_empty"))
 	}
 	if p.Error != gosnmp.NoError {
 		return nil, &snmpError{status: p.Error, index: int(p.ErrorIndex)}
@@ -462,7 +462,7 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 	for _, s := range cols {
 		o, ok := parseOID(s)
 		if !ok {
-			return out, fmt.Errorf("ungueltige OID %q", s)
+			return out, errors.New(model.T("monitor64.txt.oid_invalid", "v", s))
 		}
 		n := o.String()
 		out[n] = map[string]pdu{}
@@ -521,7 +521,7 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 			return out, err
 		}
 		if len(res) == 0 {
-			return out, errors.New("leere Antwort")
+			return out, errors.New(model.T("monitor64.txt.resp_empty"))
 		}
 		changed := false
 		for i, p := range res {
@@ -546,7 +546,7 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 			}
 			cp, size := clip(p)
 			if total += size; total > maxWalkBytes {
-				return out, errors.New("Antwort zu gross")
+				return out, errors.New(model.T("monitor64.txt.resp_too_large"))
 			}
 			out[st.name][o[len(st.prefix):].String()[1:]] = cp
 		}
@@ -556,5 +556,5 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 			}
 		}
 	}
-	return out, errors.New("zu viele Anfragen fuer eine Tabelle")
+	return out, errors.New(model.T("monitor64.txt.snmp_table_loop"))
 }

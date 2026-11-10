@@ -179,32 +179,49 @@ func (m *Module) snmpSecretIn(a *Access, in *accessIn, isNew bool) error {
 	return checkSNMPSecret(cfg, final)
 }
 
-// snmpOf liefert den SNMP-Sammler hinter einem Zugang (nil bei anderen Zugaengen).
-func snmpOf(col collector) *snmp.Collector {
-	if a, ok := col.(*apiAdapter); ok {
-		if c, ok := a.src.(*snmp.Collector); ok {
-			return c
-		}
-	}
-	return nil
+// memo ist der merkbare Zustand eines Sammlers: was er ueber Neustarts und Neuladen hinweg wissen muss, haelt der Kern
+// je Zugang im Laufzeitstand des Hosts (hostRT.SeenUp, m64_runtime) und gibt es dem neuen Sammler zurueck. SNMP: Ports,
+// die schon einmal verbunden waren (bleiben Vorschlag, auch ohne Link); NUT: upsd hat schon TLS gesprochen (eine
+// spaetere Ablehnung von STARTTLS bleibt ein Fehler statt Klartext).
+type memo interface {
+	Remembered() []string   // aktueller Stand (sortiert bzw. stabil, damit Aenderungen erkennbar sind)
+	Remember(keys []string) // gemerkten Stand uebernehmen
 }
 
-// restoreSeenUp gibt dem SNMP-Sammler die Ports, die schon einmal verbunden waren (aus dem Laufzeitstand des Hosts,
-// ueber Neustarts gemerkt): sie bleiben Vorschlag, auch wenn sie gerade keinen Link haben.
-func restoreSeenUp(col collector, keys []string) {
-	if c := snmpOf(col); c != nil && len(keys) > 0 {
-		c.AddSeenUp(keys)
+// snmpMemo: der SNMP-Sammler ueber SeenUp/AddSeenUp.
+type snmpMemo struct{ c *snmp.Collector }
+
+func (s snmpMemo) Remembered() []string   { return s.c.SeenUp() }
+func (s snmpMemo) Remember(keys []string) { s.c.AddSeenUp(keys) }
+
+// memoOf liefert den merkbaren Zustand hinter einem Zugang (nil: der Sammler merkt sich nichts).
+func memoOf(col collector) memo {
+	a, ok := col.(*apiAdapter)
+	if !ok {
+		return nil
+	}
+	if c, ok := a.src.(*snmp.Collector); ok {
+		return snmpMemo{c}
+	}
+	mm, _ := a.src.(memo)
+	return mm
+}
+
+// restoreMemo gibt dem Sammler den gemerkten Zustand aus dem Laufzeitstand des Hosts zurueck.
+func restoreMemo(col collector, keys []string) {
+	if mm := memoOf(col); mm != nil && len(keys) > 0 {
+		mm.Remember(keys)
 	}
 }
 
-// seenUpChanged liefert die Ports des SNMP-Sammlers, die schon einmal verbunden waren, wenn sie sich gegenueber dem
-// gemerkten Stand geaendert haben (dann im Laufzeitstand merken).
-func seenUpChanged(col collector, old []string) ([]string, bool) {
-	c := snmpOf(col)
-	if c == nil {
+// memoChanged liefert den merkbaren Zustand des Sammlers, wenn er sich gegenueber dem gemerkten Stand geaendert hat
+// (dann im Laufzeitstand merken).
+func memoChanged(col collector, old []string) ([]string, bool) {
+	mm := memoOf(col)
+	if mm == nil {
 		return nil, false
 	}
-	cur := c.SeenUp()
+	cur := mm.Remembered()
 	if slices.Equal(cur, old) {
 		return nil, false
 	}

@@ -26,6 +26,7 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindCPUUtil, Group: "system", Unit: "%"},
 	{Kind: eval.KindLoadCore, Group: "system"},
 	{Kind: eval.KindMemUsed, Group: "system", Unit: "%"},
+	{Kind: eval.KindGuestMem, Group: "system", Unit: "%"},
 	{Kind: eval.KindSwapUsed, Group: "system", Unit: "%"},
 	{Kind: eval.KindTempSystem, Group: "system", Unit: "°C"},
 	{Kind: eval.KindFSUsed, Group: "storage", Unit: "%", Store: true},
@@ -84,8 +85,9 @@ var ruleKinds = []ruleKind{
 // coreTexts sind Texte, die der Kern als "i18n:<schluessel>?..." liefert (Ursache, Zugangsfehler, Ablauf eines
 // Problems); das Skript uebersetzt sie mit diesen Schluesseln (unter monitor64.).
 var coreTexts = []string{"detail.vanished", "detail.not_running", "detail.access", "detail.threshold", "detail.maint_silent", "detail.unack",
-	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "detail.push_waiting", "err.not_running", "detail.traps", "detail.trap_last",
-	"detail.cluster_takeover", "detail.cluster_handover", "detail.handover"}
+	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "detail.push_waiting", "detail.hostkey_unconfirmed", "err.not_running", "detail.traps", "detail.trap_last",
+	"detail.cluster_takeover", "detail.cluster_handover", "detail.handover",
+	"detail.agent_updated", "agent.err_fallback", "agent.err_no_index", "agent.err_no_file"}
 
 // ruleGroups ist die Reihenfolge der Abschnitte auf der Seite Schwellen.
 var ruleGroups = []string{"system", "storage", "disks", "network", "devices"}

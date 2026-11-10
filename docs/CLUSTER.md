@@ -228,11 +228,14 @@ Plan: [PLAN-NODE64-MONITOR64.md](PLAN-NODE64-MONITOR64.md), Abschnitt „Cluster
 | Bereich | Einträge | Regel |
 |---|---|---|
 | `config` | `host:` (ohne zuständige Node; bevorzugte Node leer = die liefernde Node), `access:` (Geheimnis im Klartext über die Cluster-Verbindung, auf der Empfängerin mit ihrem Schlüssel gespeichert; nicht lesbar → `incomplete`, drüben nicht übernommen; Hostschlüssel mit), `service:`, `hostrule:`, `override:`, `maint:`, `setting:` (`monitor64.std`, `.notify`, `.interval`, `.prometheus`, `.prom_tags`), `owner:` (zuständige Node + letzte 20 Übernahmen), `key:cluster` | jüngere Änderung gewinnt, als Ganzes |
-| `status` | `problem:` (Problem mit Ablauf, Ereignisse je mit Node-Kennung), `state:<host>:<node>` (Ansicht, Laufzeitstand und Gedächtnis der Meldungen einer Node) | gehört einer Node; Ereignisse werden nur ergänzt, ein geschlossenes Problem öffnet keine ältere Fassung wieder |
-| nur lokal | Verlauf (`monitor64.db`), Arbeiter-Zahl, Trap-Port/Engine-ID, Push-Port/-Adresse, Agent-Download, `m64_runtime` | – |
+| `status` | `problem:` (Problem mit Ablauf, Ereignisse je mit Node-Kennung), `state:<host>:<node>` (Ansicht, Laufzeitstand samt offenen SNMP-Traps und Gedächtnis der Meldungen einer Node), `gap:<node>:<Beginn in ms>` (Zeit, in der Monitor64 auf der Node nicht lief) | gehört einer Node; Ereignisse werden nur ergänzt, ein geschlossenes Problem öffnet keine ältere Fassung wieder |
+| nur lokal | Verlauf (`monitor64.db`), Arbeiter-Zahl, Trap-Port/Engine-ID, Push-Port/-Adresse, Agent-Download, `m64_runtime`, Herzschlag (`monitor64.heartbeat`) | – |
 
 **Eigene Änderungen** erkennt die Node an allen Schreibstellen über Änderungszeit, Löschvermerk (und bei Problemen die
-Zahl der Ereignisse) gegenüber dem zuletzt gemeldeten bzw. übernommenen Stand (`m64_csync`), alle 2 s. Übernommene
+Zahl der Ereignisse) gegenüber dem zuletzt gemeldeten bzw. übernommenen Stand (`m64_csync`), alle 2 s. Als gemeldet gilt
+ein Eintrag erst, wenn er im Protokoll des Clusters steht (`peer.ClusterChangeErr`): scheitert das Schreiben (z. B.
+Datenbank belegt), bleibt der Zeitpunkt der Suche stehen und der nächste Lauf meldet erneut; direkte Meldungen
+(`owner:`, `key:cluster`, `state:`, `gap:`) merkt sich die Node und wiederholt sie mit dem nächsten Lauf. Übernommene
 Zeilen behalten die Änderungszeit der Urheberin. Kanäle stehen im Cluster als `uid:<nf_channels.uid>` (lokal: Nummer);
 unbekannte Kanäle entfallen beim Übernehmen (`default` bleibt). **Doppel:** Dienste und Einstellungen am Host sind je
 Host eindeutig – kommen sie auf zwei Nodes mit eigener Kennung an, gilt die kleinere (die andere geht als gelöscht
@@ -250,7 +253,7 @@ löschen), Abweichungen und Wartungsfenster ebenfalls nicht.
 | Blick | alle 30 s; nach dem Start 1 min Wartezeit |
 | ohne Mehrheit | eigene Hosts laufen weiter; hat der Host eine Ersatz-Node, misst die Node weiter (Verlauf ohne Lücke), meldet aber nicht und öffnet keine Probleme |
 | ohne erreichbare zuständige Node | die anderen zeigen „zuständige Node nicht erreichbar“ (Unbekannt), keine Meldung |
-| ohne Cluster (allein, Bereich aus) | jede Node meldet die Hosts, für die sie bevorzugt ist; übernommene fremde Hosts bleiben stehen (Unbekannt) |
+| ohne Cluster (allein, Bereich aus) | jede Node meldet die Hosts, für die sie bevorzugt ist; übernommene fremde Hosts bleiben stehen (Unbekannt) und erscheinen als verwaist (siehe unten) |
 | Ereignis | jede Übernahme/Rückgabe im Verlauf des Hosts (`takeover`/`handover`, Akteur System, Node-Kennung) |
 
 **Weitermachen statt doppelt melden:** Die zuständige Node führt offene Probleme anderer Nodes weiter (sie gehören dann
@@ -259,6 +262,17 @@ Meldungen der Node, die zuletzt gemeldet hat (und deren Laufzeitstand, wenn er j
 zweites „Problem“, die Entwarnung kommt von ihr. **Doppelt offene Probleme** (Split-Brain mit 2 Nodes) schließt die
 nicht zuständige Node mit `handover` („durch Übergabe beendet“), sobald sie die zuständige erreicht; ist die andere Node
 kein Mitglied mehr, schließt die zuständige.
+
+**Verwaiste Hosts** (`cluster_orphans.go`): Hosts, die keine Node mehr überwachen kann, weil ihre Node nicht mehr zum
+Cluster gehört – ohne Cluster (Austritt, Bereich aus) die Hosts der anderen Nodes (`node_gone`), im Cluster die Hosts,
+deren zuständige Node **und** alle Kandidatinnen keine Mitglieder mehr sind (`no_candidate`, z. B. bevorzugte Node
+entfernt, keine Ersatz-Node). Eine Node, die nur offline oder ausgesetzt ist, zählt nicht. Die Node tut von sich aus
+nichts; die Übersicht zeigt die Karte „Hosts ohne überwachende Node“ mit **Dieser Node zuweisen** (bevorzugte und
+zuständige Node = diese, entfernte Ersatz-Nodes fallen weg, Ereignis `takeover` mit dem Benutzer als Akteur) und
+**Entfernen** (wie „Host entfernen“; läuft der Abgleich, auch auf den anderen Nodes) – einzeln und für alle, Entfernen
+nur nach Bestätigung. API: `GET /api/monitor64/cluster/orphans`, `POST …/orphans/assign` und `…/orphans/remove` mit
+`{"uids":[…]}` oder `{"all":true}` (wirkt nur auf Hosts, die gerade verwaist sind); die Liste steht auch in
+`GET /api/monitor64/cluster/views` → `orphans`.
 
 **Zustand fremder Hosts:** jede Node schickt ihren Zustand je Host bei Änderung, sonst höchstens alle 5 min (`state:`);
 die Übersicht zeigt fremde Hosts mit „überwacht von“ (`HostView.cluster`). Statusseiten und Problem-Historie nutzen
@@ -269,7 +283,25 @@ beiden Seiten): `series` (Verlauf live: das Diagramm fragt zuständige, bevorzug
 Übernahmen im Zeitraum und legt die Stücke zusammen, bei Überschneidung gelten die Punkte der bevorzugten Node; nicht
 erreichbare Nodes stehen als Hinweis in `cluster` der Antwort), `repoll` (Trap an eine nicht zuständige Node → Anstoß an
 die zuständige; ist sie offline, fängt die nächste Runde es auf), `reach` (Zugänge eines Hosts von dieser Node aus
-testen, Vorschlag der Ersatz-Nodes; Agents im Push-Betrieb nur von ihrer Node).
+testen, Vorschlag der Ersatz-Nodes; Agents im Push-Betrieb nur von ihrer Node), `sparks` (Mini-Verläufe 24 Std. für
+Übersicht und Host-Seite: Hosts einer anderen Node fragt die Seite bei der zuständigen Node ab – gebündelt, eine
+Anfrage je Node (ab 2000 Reihen weitere, höchstens 5), Zeitlimit 4 s, Antwort 60 s gemerkt; nicht erreichbar oder
+ältere Version: leer ohne Fehler), `trap` (Trap an eine nicht zuständige Node: Eintrag, Anzeige und Zurücksetzen bei
+der zuständigen).
+
+**SNMP-Traps beim Wechsel:** Der Trap-Stand (offene Traps, letzte Einträge) geht mit dem Laufzeitstand (`state:`). Die
+übernehmende Node macht damit weiter (offene Traps bleiben offen, das Problem läuft weiter; dazu kommen nur Traps, die
+bei ihr nach dem Stand der anderen eintrafen), bei der abgebenden gilt danach keiner mehr als offen. Die Anzeige führt
+denselben Trap beider Nodes einmal.
+
+**Statusseiten – Zeiten ohne Monitor64:** Jede Node schreibt, solange das Modul läuft, jede Minute einen Herzschlag.
+Liegt der letzte beim Start (oder im Lauf, z. B. nach einem angehaltenen System) mindestens 5 min zurück, steht die Zeit
+als Lücke in `m64_gaps` und geht als `gap:` an die anderen Nodes (Aufbewahrung 1 Jahr wie die Probleme). Auf den
+Statusseiten zählt für einen Host die Zeit nicht – weder als beobachtet noch als Störung, wie Pause und Wartung –, in
+der **keine** seiner Nodes lief (zuständige, bevorzugte und Ersatz-Nodes nach heutigem Stand). Grenzen: die Lücke einer
+anderen Node kommt erst an, wenn sie wieder läuft (bis dahin „unbekannt“, die Balken zählen die Zeit noch); früher
+eingetragene Nodes des Hosts und eine Ersatz-Node, die mangels Mehrheit nicht übernehmen durfte, bleiben
+unberücksichtigt; die wenigen Minuten bis zu einer Übernahme zählen als beobachtet.
 
 **Cluster-Schlüssel:** Gibt es keinen, bringt ihn die Node mit der kleinsten Kennung ein (nach 2 min; eine beigetretene
 Node wartet 10 min, sie soll den des Clusters übernehmen). Übernimmt eine Node einen anderen Schlüssel (Beitritt,

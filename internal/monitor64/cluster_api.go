@@ -23,6 +23,9 @@ func (m *Module) clusterRoutes(mux *http.ServeMux, api func(http.HandlerFunc) ht
 	mux.Handle("POST /api/monitor64/cluster/keys/retry", api(m.apiClusterKeyRetry))
 	mux.Handle("POST /api/monitor64/cluster/keys/confirm", api(m.apiClusterKeyConfirm))
 	mux.Handle("POST /api/monitor64/cluster/keys/retire", api(m.apiClusterKeyRetire))
+	mux.Handle("GET /api/monitor64/cluster/orphans", api(m.apiClusterOrphans)) // verwaiste Hosts (cluster_orphans.go)
+	mux.Handle("POST /api/monitor64/cluster/orphans/assign", api(m.apiClusterOrphansAct(true)))
+	mux.Handle("POST /api/monitor64/cluster/orphans/remove", api(m.apiClusterOrphansAct(false)))
 }
 
 type clusterNodeOut struct {
@@ -112,6 +115,7 @@ type clusterViewsOut struct {
 	Self     string                 `json:"self"`
 	SelfName string                 `json:"self_name"`
 	Refs     map[string]*ClusterRef `json:"refs"`
+	Orphans  []orphanOut            `json:"orphans,omitempty"` // verwaiste Hosts (nur ohne host; cluster_orphans.go)
 }
 
 // clusterViews liest den Hinweis "ueberwacht von" aus dem Stand der Hosts (host = nur dieser; ohne Datenbank).
@@ -122,6 +126,9 @@ func (m *Module) clusterViews(ctx context.Context, host string) clusterViewsOut 
 		if v.Cluster != nil && (host == "" || v.Host.UID == host) {
 			out.Refs[v.Host.UID] = v.Cluster
 		}
+	}
+	if host == "" {
+		out.Orphans = m.orphanViews(s)
 	}
 	return out
 }

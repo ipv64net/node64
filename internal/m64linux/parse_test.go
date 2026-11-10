@@ -316,11 +316,11 @@ func TestParseSmartctl(t *testing.T) {
 		t.Fatalf("%+v", fail)
 	}
 	old := ParseSmartctl("/dev/sata1", readTestdata(t, "smart_smartctl65.txt"))
-	if !strings.HasPrefix(old.Error, "keine JSON-Ausgabe") {
+	if !strings.HasPrefix(old.Error, m64proto.HintNoJSON) {
 		t.Fatalf("%+v", old)
 	}
 	vm := ParseSmartctl("/dev/sda", section(t, "script_debian12_vm.txt", "smart:/dev/sda"))
-	if vm.Error != "SMART nicht verfuegbar" || vm.Model != "QEMU QEMU HARDDISK" || vm.TempC != nil {
+	if vm.Error != m64proto.HintSmartUnavail || vm.Model != "QEMU QEMU HARDDISK" || vm.TempC != nil {
 		t.Fatalf("%+v", vm)
 	}
 	if s := ParseSmartctl("/dev/x", []byte("{kaputt")); !strings.HasPrefix(s.Error, "JSON") {
@@ -535,10 +535,10 @@ errors: No known data errors
 `)
 	pools := []m64proto.ZPool{{Name: "tank", Health: "ONLINE"}, {Name: "data", Health: "ONLINE"}, {Name: "ok", Health: "ONLINE"}}
 	MergeZpoolStatus(pools, ParseZpoolStatus(st))
-	if pools[0].Errors != "No known data errors; Geraetefehler READ 0 WRITE 0 CKSUM 12" {
+	if pools[0].Errors != "No known data errors; {m64:dev_errors=READ 0 WRITE 0 CKSUM 12}" {
 		t.Fatalf("tank %q", pools[0].Errors)
 	}
-	if pools[1].Errors != "2 data errors, use '-v' for a list; Geraetefehler READ 1200 WRITE 0 CKSUM 0" {
+	if pools[1].Errors != "2 data errors, use '-v' for a list; {m64:dev_errors=READ 1200 WRITE 0 CKSUM 0}" {
 		t.Fatalf("data %q", pools[1].Errors)
 	}
 	if pools[2].Errors != "No known data errors" || !strings.HasPrefix(pools[0].ScanText, "scrub repaired 128K") {

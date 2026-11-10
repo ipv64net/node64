@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
@@ -39,22 +40,26 @@ const (
 
 // Fehlerarten des Web-Clients (errors.Is).
 var (
-	errWebAuth    = errors.New("Anmeldung abgelehnt")
-	errWebPerm    = errors.New("keine Berechtigung")
-	errWebCert    = errors.New("Zertifikat passt nicht")
-	errWebTrust   = errors.New("Zertifikat nicht vertrauenswürdig")
-	errWebNet     = errors.New("nicht erreichbar")
-	errWebTimeout = errors.New("Zeitlimit")
-	errWebResp    = errors.New("unerwartete Antwort")
+	errWebAuth    = errors.New(model.T("monitor64.txt.web_auth"))
+	errWebPerm    = errors.New(model.T("monitor64.txt.web_perm"))
+	errWebCert    = errors.New(model.T("monitor64.txt.web_cert"))
+	errWebTrust   = errors.New(model.T("monitor64.txt.web_trust"))
+	errWebNet     = errors.New(model.T("monitor64.txt.web_net"))
+	errWebTimeout = errors.New(model.T("monitor64.txt.web_timeout"))
+	errWebResp    = errors.New(model.T("monitor64.txt.web_resp"))
 )
 
-// webError ist der Fehler einer Anfrage (ohne Zugangsdaten: die stehen nur in Kopfzeilen).
+// webError ist der Fehler einer Anfrage (ohne Zugangsdaten: die stehen nur in Kopfzeilen). Der Text ist fuer die
+// Anzeige fertig: eigene Teile uebersetzbar, Texte des Geraets entschaerft (devText).
 type webError struct {
 	Kind   error
 	Status int    // HTTP-Status (0 = keine Antwort)
-	Detail string // Text des Geraets bzw. aus dem Netz (gekuerzt)
+	Detail string // eigener Text (model.T) bzw. Text des Geraets oder aus dem Netz (devText)
 	Where  string // Methode und Pfad
 }
+
+// devText kuerzt und entschaerft einen Text des Geraets bzw. aus dem Netz fuer webError.Detail.
+func devText(s string) string { return model.Raw(shortText(s)) }
 
 func (e *webError) Unwrap() error { return e.Kind }
 
@@ -73,7 +78,7 @@ func (e *webError) Error() string {
 		b.WriteString(" (" + e.Detail + ")")
 	}
 	if e.Where != "" {
-		b.WriteString(" bei " + e.Where)
+		b.WriteString(" " + model.T("monitor64.txt.at") + " " + model.Raw(e.Where))
 	}
 	return b.String()
 }
@@ -97,7 +102,17 @@ func webAuthErr(err error) bool { return errors.Is(err, errWebAuth) || errors.Is
 // webPinMismatch kommt aus VerifyPeerCertificate.
 type webPinMismatch struct{ got string }
 
-func (e *webPinMismatch) Error() string { return "Fingerabdruck " + e.got + " passt nicht zum Pin" }
+func (e *webPinMismatch) Error() string {
+	return model.T("monitor64.txt.pin_mismatch", "fp", model.Sub(e.shown()))
+}
+
+// shown: erhaltener Fingerabdruck bzw. "(keins)".
+func (e *webPinMismatch) shown() string {
+	if e.got == "" {
+		return model.T("monitor64.txt.none_paren")
+	}
+	return model.Raw(e.got)
+}
 
 // webTarget ist eine geprueft Adresse (scheme://host:port ohne Pfad).
 type webTarget struct {
@@ -112,7 +127,7 @@ type webTarget struct {
 func parseWebAddr(raw, defScheme, defPort string, allowHTTP bool) (webTarget, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
-		return webTarget{}, errors.New("keine Adresse angegeben")
+		return webTarget{}, errors.New(model.T("monitor64.txt.addr_missing"))
 	}
 	if a, err := netip.ParseAddr(s); err == nil && a.Is6() {
 		s = "[" + a.String() + "]" // IPv6 ohne Klammern
@@ -122,10 +137,10 @@ func parseWebAddr(raw, defScheme, defPort string, allowHTTP bool) (webTarget, er
 	}
 	u, err := url.Parse(s)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return webTarget{}, fmt.Errorf("ungültige Adresse %q", raw)
+		return webTarget{}, errors.New(model.T("monitor64.txt.addr_invalid", "addr", raw))
 	}
 	if p := strings.TrimRight(u.Path, "/"); p != "" {
-		return webTarget{}, fmt.Errorf("ungültige Adresse %q (ohne Pfad angeben)", raw)
+		return webTarget{}, errors.New(model.T("monitor64.txt.addr_no_path", "addr", raw))
 	}
 	scheme := strings.ToLower(u.Scheme)
 	switch {
@@ -133,9 +148,9 @@ func parseWebAddr(raw, defScheme, defPort string, allowHTTP bool) (webTarget, er
 	case scheme == "http" && allowHTTP:
 	default:
 		if allowHTTP {
-			return webTarget{}, fmt.Errorf("ungültige Adresse %q (http:// oder https://)", raw)
+			return webTarget{}, errors.New(model.T("monitor64.txt.addr_http", "addr", raw))
 		}
-		return webTarget{}, fmt.Errorf("ungültige Adresse %q (nur https://)", raw)
+		return webTarget{}, errors.New(model.T("monitor64.txt.addr_https", "addr", raw))
 	}
 	port := u.Port()
 	if port == "" {
@@ -148,7 +163,7 @@ func parseWebAddr(raw, defScheme, defPort string, allowHTTP bool) (webTarget, er
 		}
 	}
 	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
-		return webTarget{}, fmt.Errorf("ungültiger Port in %q", raw)
+		return webTarget{}, errors.New(model.T("monitor64.txt.port_invalid", "addr", raw))
 	}
 	host := strings.ToLower(u.Hostname())
 	hp := net.JoinHostPort(host, port)
@@ -164,7 +179,7 @@ func pinnedTLS(serverName, pin string, roots *x509.CertPool) *tls.Config {
 		tc.InsecureSkipVerify = true
 		tc.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
 			if len(raw) == 0 {
-				return &webPinMismatch{got: "(keins)"}
+				return &webPinMismatch{}
 			}
 			if got := proxmox.CertFingerprint(raw[0]); got != pin {
 				return &webPinMismatch{got: got}
@@ -189,10 +204,10 @@ type webClient struct {
 func newWebClient(t webTarget, pin string, roots *x509.CertPool) (*webClient, error) {
 	p, ok := proxmox.NormalizePin(pin)
 	if !ok {
-		return nil, errors.New("Fingerabdruck muss 64 Hex-Zeichen haben (SHA-256)")
+		return nil, errors.New(model.T("monitor64.txt.pin_format"))
 	}
 	if p != "" && !t.https {
-		return nil, errors.New("Fingerabdruck nur mit https://")
+		return nil, errors.New(model.T("monitor64.txt.pin_https"))
 	}
 	c := &webClient{t: t, pin: p, roots: roots, reqTO: webReqTimeout}
 	c.hc = HTTPClient(pinnedTLS(t.host, p, roots), webReqTimeout, 4, false)
@@ -245,13 +260,13 @@ func (c *webClient) do(ctx context.Context, method, path string, extra http.Head
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, &webError{Kind: errWebResp, Detail: err.Error(), Where: where}
+			return nil, &webError{Kind: errWebResp, Detail: devText(err.Error()), Where: where}
 		}
 		rd = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.t.base+path, rd)
 	if err != nil {
-		return nil, &webError{Kind: errWebResp, Detail: shortText(err.Error()), Where: where}
+		return nil, &webError{Kind: errWebResp, Detail: devText(err.Error()), Where: where}
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "node64-monitor64")
@@ -275,7 +290,7 @@ func (c *webClient) do(ctx context.Context, method, path string, extra http.Head
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Where: where,
-			Detail: "Weiterleitung nach " + shortText(resp.Header.Get("Location")) + " – diese Adresse eintragen"}
+			Detail: model.T("monitor64.txt.redirect", "to", shortText(resp.Header.Get("Location")))}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, webMaxErrBody))
@@ -286,14 +301,14 @@ func (c *webClient) do(ctx context.Context, method, path string, extra http.Head
 		return resp.Header, webClassify(err, where)
 	}
 	if len(b) > webMaxBody {
-		return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Detail: "Antwort zu groß", Where: where}
+		return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Detail: model.T("monitor64.txt.resp_too_large"), Where: where}
 	}
 	if out != nil {
 		if len(bytes.TrimSpace(b)) == 0 {
-			return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Detail: "leere Antwort", Where: where}
+			return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Detail: model.T("monitor64.txt.resp_empty"), Where: where}
 		}
 		if err := json.Unmarshal(b, out); err != nil {
-			return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Detail: "kein passendes JSON: " + shortText(err.Error()), Where: where}
+			return resp.Header, &webError{Kind: errWebResp, Status: resp.StatusCode, Detail: model.T("monitor64.txt.resp_json") + ": " + devText(err.Error()), Where: where}
 		}
 	}
 	return resp.Header, nil
@@ -326,7 +341,7 @@ func webStatusError(status int, body []byte, where string) *webError {
 		if len(env.Errors) > 0 {
 			gql = env.Errors[0].Message
 		}
-		e.Detail = shortText(firstNonEmpty(jsonMsg(env.Message), jsonMsg(env.Error), gql))
+		e.Detail = devText(firstNonEmpty(jsonMsg(env.Message), jsonMsg(env.Error), gql))
 	}
 	return e
 }
@@ -361,15 +376,15 @@ func webClassify(err error, where string) *webError {
 	var ne net.Error
 	switch {
 	case errors.As(err, &pm):
-		return &webError{Kind: errWebCert, Detail: "erhalten " + pm.got, Where: where}
+		return &webError{Kind: errWebCert, Detail: model.T("monitor64.txt.received", "v", model.Sub(pm.shown())), Where: where}
 	case errors.As(err, &he), errors.As(err, &ua), errors.As(err, &ci), errors.As(err, &cv):
-		return &webError{Kind: errWebTrust, Detail: shortText(unwrapURL(err).Error()), Where: where}
+		return &webError{Kind: errWebTrust, Detail: devText(unwrapURL(err).Error()), Where: where}
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
 		return &webError{Kind: errWebTimeout, Where: where}
 	case errors.Is(err, context.Canceled):
-		return &webError{Kind: errWebNet, Detail: "abgebrochen", Where: where}
+		return &webError{Kind: errWebNet, Detail: model.T("monitor64.txt.aborted"), Where: where}
 	}
-	return &webError{Kind: errWebNet, Detail: shortText(unwrapURL(err).Error()), Where: where}
+	return &webError{Kind: errWebNet, Detail: devText(unwrapURL(err).Error()), Where: where}
 }
 
 func unwrapURL(err error) error {
@@ -393,7 +408,7 @@ func shortText(s string) string {
 // keine Zugangsdaten senden (Fehler bzw. NeedConfirm in res). http:// ohne Zertifikat: weiter mit Hinweis.
 func probeCert(ctx context.Context, t webTarget, pin string, roots *x509.CertPool) (res TestResult, proceed bool) {
 	if !t.https {
-		res.Warning = "unverschlüsselt (http://) – Zugangsdaten gehen im Klartext durchs Netz, https:// empfohlen"
+		res.Warning = model.T("monitor64.txt.http_plain")
 		return res, true
 	}
 	leaf, trusted, err := fetchLeaf(ctx, t.hostPt, t.host, roots)
@@ -412,7 +427,7 @@ func certResult(leaf *x509.Certificate, trusted bool, pin string) (res TestResul
 	p, _ := proxmox.NormalizePin(pin)
 	switch {
 	case p != "" && p != res.Fingerprint:
-		res.Error = "Zertifikat passt nicht – Fingerabdruck " + res.Fingerprint + " statt des gemerkten (neues Zertifikat bestätigen?)"
+		res.Error = model.T("monitor64.txt.cert_changed", "fp", res.Fingerprint)
 		return res, false
 	case p == "" && !trusted:
 		res.NeedConfirm = true // Zugangsdaten nie an ein unbestaetigtes Zertifikat
@@ -439,7 +454,7 @@ func fetchLeaf(ctx context.Context, hostPort, serverName string, roots *x509.Cer
 // leafOf liefert das Leaf-Zertifikat einer TLS-Verbindung und ob die CA (roots nil = System) es bestaetigt.
 func leafOf(st tls.ConnectionState, serverName string, roots *x509.CertPool, where string) (*x509.Certificate, bool, error) {
 	if len(st.PeerCertificates) == 0 {
-		return nil, false, &webError{Kind: errWebTrust, Detail: "kein Zertifikat", Where: where}
+		return nil, false, &webError{Kind: errWebTrust, Detail: model.T("monitor64.txt.no_cert"), Where: where}
 	}
 	leaf := st.PeerCertificates[0]
 	return leaf, CertTrusted(leaf, st.PeerCertificates[1:], serverName, roots), nil

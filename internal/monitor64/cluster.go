@@ -28,7 +28,7 @@ import (
 //     Standard-Schwellen, Benachrichtigung, gemeinsame Einstellungen, die zustaendige Node je Host und der gemeinsame
 //     Cluster-Schluessel.
 //   - status (gehoert einer Node, kein Konflikt): Probleme samt Ablauf (Quittierungen, Kommentare, "gemeldet an"),
-//     Zustand und letzter Wert der Hosts je Node.
+//     Zustand und letzter Wert der Hosts je Node, Laufzeit-Luecken des Moduls je Node (Statusseiten, uptime.go).
 //
 // Nur lokal: Verlauf (monitor64.db; Diagramme fragen live bei der Node, cluster_series.go), Arbeiter-Zahl, Trap- und
 // Push-Port, Agent-Download-Zwischenspeicher.
@@ -46,7 +46,7 @@ const (
 )
 
 // ClusterCalls sind die Anfragen, die andere Nodes stellen duerfen (HandleClusterCall).
-var ClusterCalls = []string{callSeries, callRepoll, callReach, callTrap}
+var ClusterCalls = []string{callSeries, callRepoll, callReach, callTrap, callSparks}
 
 var (
 	clusterScanEvery = 2 * time.Second  // eigene Aenderungen suchen
@@ -70,8 +70,9 @@ type ClusterPeer struct {
 
 // ClusterHooks verbinden das Modul mit dem Cluster (main.go ueber monitor64/m64cluster); leer = kein Cluster.
 type ClusterHooks struct {
-	// Change meldet eine Aenderung eines Eintrags (ctx traegt bei Uebernahmen die Herkunft).
-	Change func(ctx context.Context, item, id string, deleted bool)
+	// Change meldet eine Aenderung eines Eintrags (ctx traegt bei Uebernahmen die Herkunft). Ein Fehler heisst: die
+	// Aenderung steht nicht im Protokoll des Clusters (z. B. Datenbank belegt) - das Modul meldet sie erneut.
+	Change func(ctx context.Context, item, id string, deleted bool) error
 	// Members: Mitglieder des Bereichs; ausgesetzte bzw. mit Monitor64/Bereich aus zaehlen als nicht erreichbar, wenn
 	// ein Host sie nennt; leer = allein bzw. Bereich hier aus.
 	Members func(ctx context.Context, item string) []ClusterPeer
@@ -114,7 +115,9 @@ type clusterRT struct {
 	dirtyCfg  bool
 	dirtyHost map[string]bool
 	timer     *time.Timer
-	bg        sync.WaitGroup // Hosts neu laden nach einem Schluesselwechsel, Umstellung der Agents (Tests warten darauf)
+	retry     map[string]clRetry     // Meldungen, die nicht ins Protokoll des Clusters kamen (clusterChange): erneut
+	sparks    map[string]*sparkCache // Mini-Verlaeufe fremder Hosts je Node (cluster_sparks.go)
+	bg        sync.WaitGroup         // Hosts neu laden nach einem Schluesselwechsel, Umstellung der Agents (Tests warten darauf)
 
 	ksLock  sync.Mutex // Umstellung der Agents (switchAgents): nie zwei Laeufe zugleich
 	ksMu    sync.Mutex // Lauf im Hintergrund (startKeySwitch): laeuft, danach erneut, erneut ohne Wartezeit
@@ -140,10 +143,56 @@ func (m *Module) clusterSelf() string {
 	return m.nodeID()
 }
 
-// clusterChange meldet eine Aenderung an den Cluster (ohne Cluster: nichts).
+// clRetry ist eine Meldung an den Cluster, die gescheitert ist (ctx ohne Abbruch: behaelt die Herkunft).
+type clRetry struct {
+	ctx      context.Context
+	item, id string
+	deleted  bool
+}
+
+const clRetryMax = 10000 // so viele gescheiterte Meldungen merkt sich die Node hoechstens
+
+// clusterChangeErr meldet eine Aenderung an den Cluster (ohne Cluster: nichts) und liefert den Fehler, wenn sie nicht
+// im Protokoll des Clusters steht.
+func (m *Module) clusterChangeErr(ctx context.Context, item, id string, deleted bool) error {
+	if m.hooks().Change == nil || id == "" {
+		return nil
+	}
+	return m.hooks().Change(ctx, item, id, deleted)
+}
+
+// clusterChange meldet eine Aenderung an den Cluster (ohne Cluster: nichts). Scheitert das Eintragen ins Protokoll
+// (z. B. Datenbank belegt), merkt sich die Node die Meldung und wiederholt sie mit dem naechsten Lauf von clusterScan -
+// sonst ginge die Aenderung nie hinaus.
 func (m *Module) clusterChange(ctx context.Context, item, id string, deleted bool) {
-	if m.hooks().Change != nil && id != "" {
-		m.hooks().Change(ctx, item, id, deleted)
+	err := m.clusterChangeErr(ctx, item, id, deleted)
+	key := item + "|" + id
+	m.cl.mu.Lock()
+	defer m.cl.mu.Unlock()
+	if err == nil {
+		delete(m.cl.retry, key) // juengere Meldung desselben Eintrags ist durch
+		return
+	}
+	m.log.Warn("monitor64: cluster change not logged, will retry", "item", item, "id", id, "err", err)
+	if m.cl.retry == nil {
+		m.cl.retry = map[string]clRetry{}
+	}
+	if _, ok := m.cl.retry[key]; ok || len(m.cl.retry) < clRetryMax {
+		m.cl.retry[key] = clRetry{ctx: context.WithoutCancel(ctx), item: item, id: id, deleted: deleted}
+	}
+}
+
+// clusterRetry wiederholt gescheiterte Meldungen (aus clusterScan); was wieder scheitert, bleibt gemerkt.
+func (m *Module) clusterRetry() {
+	m.cl.mu.Lock()
+	list := make([]clRetry, 0, len(m.cl.retry))
+	for _, r := range m.cl.retry {
+		list = append(list, r)
+	}
+	m.cl.retry = nil
+	m.cl.mu.Unlock()
+	for _, r := range list {
+		m.clusterChange(r.ctx, r.item, r.id, r.deleted)
 	}
 }
 
@@ -247,6 +296,20 @@ func (m *Module) ClusterIDs(ctx context.Context, item string) ([]string, error) 
 				out[i] = id + ":" + self
 			}
 		}
+		rows, err := m.st.Reader().QueryContext(ctx, `SELECT from_at FROM m64_gaps WHERE node_id = ?`, self) // Laufzeit-Luecken (uptime.go)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var at string
+			if rows.Scan(&at) == nil && !parseTS(at).IsZero() {
+				out = append(out, gapID(self, parseTS(at)))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errClItem
 	}
@@ -314,6 +377,8 @@ func (m *Module) ClusterGet(ctx context.Context, item, id string) (json.RawMessa
 		return m.problemGet(ctx, uid)
 	case item == ClusterItemStatus && kind == "state":
 		return m.stateGet(ctx, uid)
+	case item == ClusterItemStatus && kind == "gap":
+		return m.gapGet(ctx, uid)
 	}
 	return nil, false, errClItem
 }
@@ -346,6 +411,8 @@ func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.Ra
 		return m.problemApply(ctx, uid, data, deleted)
 	case item == ClusterItemStatus && kind == "state":
 		return m.stateApply(ctx, uid, data, deleted)
+	case item == ClusterItemStatus && kind == "gap":
+		return m.gapApply(ctx, uid, data, deleted)
 	}
 	return errClItem
 }
@@ -1012,15 +1079,18 @@ type scanRow struct {
 }
 
 // clusterScan sucht eigene Aenderungen (Aenderungszeit bzw. neue Ereignisse) und meldet, was vom zuletzt gemeldeten
-// bzw. uebernommenen Stand abweicht.
+// bzw. uebernommenen Stand abweicht. Als gemeldet gilt ein Eintrag erst, wenn er im Protokoll des Clusters steht:
+// scheitert das (z. B. Datenbank belegt), bleibt der Zeitpunkt der Suche stehen und der naechste Lauf meldet erneut.
 func (m *Module) clusterScan(ctx context.Context) {
 	if m.hooks().Change == nil {
 		return
 	}
 	m.cl.csMu.Lock()
 	defer m.cl.csMu.Unlock()
+	m.clusterRetry()
 	start := time.Now()
 	from := m.cl.scanFrom
+	failed := false
 	report := func(item, kind string, rows []scanRow) {
 		if len(rows) == 0 {
 			return
@@ -1045,7 +1115,11 @@ func (m *Module) clusterScan(ctx context.Context) {
 			if old == x.stamp {
 				continue
 			}
-			m.clusterChange(ctx, item, kind+":"+x.uid, x.deleted)
+			if err := m.clusterChangeErr(ctx, item, kind+":"+x.uid, x.deleted); err != nil {
+				m.log.Warn("monitor64: cluster change not logged, will retry", "item", item, "id", kind+":"+x.uid, "err", err)
+				failed = true
+				continue
+			}
 			m.csyncSet(ctx, kind, x.uid, x.stamp)
 		}
 	}
@@ -1083,7 +1157,6 @@ func (m *Module) clusterScan(ctx context.Context) {
 		rows.Close()
 	}
 	report(ClusterItemStatus, "problem", plist)
-	m.cl.eventMax = evMax
 	// gemeinsame Einstellungen (nur gesetzte; eine frische Node schickt keine Vorgaben hinaus)
 	var slist []scanRow
 	for _, k := range clSettings {
@@ -1093,9 +1166,17 @@ func (m *Module) clusterScan(ctx context.Context) {
 	}
 	for _, x := range slist { // wenige: einzeln vergleichen (report liest bei bis zu 20 einzeln)
 		if m.csyncGet(ctx, "setting", x.uid) != x.stamp {
-			m.clusterChange(ctx, ClusterItemConfig, "setting:"+x.uid, false)
+			if err := m.clusterChangeErr(ctx, ClusterItemConfig, "setting:"+x.uid, false); err != nil {
+				m.log.Warn("monitor64: cluster change not logged, will retry", "item", ClusterItemConfig, "id", "setting:"+x.uid, "err", err)
+				failed = true
+				continue
+			}
 			m.csyncSet(ctx, "setting", x.uid, x.stamp)
 		}
 	}
+	if failed {
+		return // Zeitpunkt und Ereignis-Nummer bleiben: der naechste Lauf findet die nicht gemeldeten Eintraege wieder
+	}
+	m.cl.eventMax = evMax
 	m.cl.scanFrom = ts(start.Add(-10 * time.Second)) // Schreibstellen mit etwas aelterer Zeit nicht verpassen
 }

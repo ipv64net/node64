@@ -95,6 +95,10 @@ jobs:
   # Selbst-Update: Programme je Architektur (wie im Image gebaut), Manifest und Signatur als Artefakt.
   # Ohne Secret NODE64_SIGNING_KEY wird nicht signiert (Artefakt ohne manifest.json.sig).
   # Hochladen nach https://ipv64.net/node64/releases/ (siehe docs/PLAN-SELF-UPDATE.md, Abschnitt Release).
+  # Monitor64-Agent: Dateien je Plattform unter dist/agent/ (Verzeichnis agents.json, Kopfzeilen fuer das automatische
+  # Update, Installationsskripte, SHA256SUMS); eigene Version aus cmd/monitor64-agent/VERSION. Ohne Secret unsigniert
+  # (ohne agents.json.sig und *.update.json - Nodes nehmen das nicht an). Hochladen nach
+  # https://ipv64.net/node64/agent/ und https://node64.de/agent/ (docs/MONITOR64-AGENT-RELEASE.md).
   release:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
@@ -114,11 +118,33 @@ jobs:
             CGO_ENABLED=0 GOOS=linux GOARCH=$goarch GOARM=$goarm go build -trimpath -ldflags="-s -w -X main.Version=$V" -o dist/$V/node64-linux-$a ./cmd/node64
           done
           go run ./cmd/node64-release manifest -version "$V" -out dist/manifest.json dist/$V/node64-linux-*
+      - name: build agent
+        run: |
+          AV="$(tr -d ' \r\n' < cmd/monitor64-agent/VERSION)"
+          out="dist/agent/$AV"
+          mkdir -p "$out"
+          for p in linux/amd64 linux/arm64 linux/arm windows/amd64 freebsd/amd64 freebsd/arm64; do
+            os="${p%/*}"; arch="${p#*/}"; name="$arch"; goarm=""; ext=""
+            if [ "$arch" = "arm" ]; then name=armv7; goarm=7; fi
+            if [ "$os" = "windows" ]; then ext=.exe; fi
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch GOARM=$goarm go build -trimpath -ldflags="-s -w -X main.Version=$AV" -o "$out/monitor64-agent-$os-$name$ext" ./cmd/monitor64-agent
+          done
+          cp cmd/monitor64-agent/install.sh cmd/monitor64-agent/install.ps1 "$out/"
+          go run ./cmd/node64-release agent-index -version "$AV" -out dist/agent/agents.json "$out"
+          # aktueller Stand zusaetzlich direkt im Ordner: dort suchen die Installationsskripte ohne --base
+          cp "$out"/monitor64-agent-* "$out/install.sh" "$out/install.ps1" "$out/SHA256SUMS" dist/agent/
+          echo "AGENT_VERSION=$AV" >> "$GITHUB_ENV"
       - name: sign
         env:
           NODE64_SIGNING_KEY: ${{ secrets.NODE64_SIGNING_KEY }}
         run: |
-          if [ -n "$NODE64_SIGNING_KEY" ]; then go run ./cmd/node64-release sign dist/manifest.json; else echo "no signing key - manifest not signed"; fi
+          if [ -n "$NODE64_SIGNING_KEY" ]; then
+            go run ./cmd/node64-release sign dist/manifest.json
+            go run ./cmd/node64-release agent-sign -version "$AGENT_VERSION" dist/agent/$AGENT_VERSION/monitor64-agent-*
+            go run ./cmd/node64-release sign dist/agent/agents.json
+          else
+            echo "no signing key - manifest and agent files not signed"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: node64-release-${{ github.ref_name }}

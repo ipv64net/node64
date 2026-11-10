@@ -51,7 +51,7 @@ func nodeServices(st nodeStatus) []model.Service {
 		Metrics: []model.Metric{{Name: "util", Value: round2(float64(st.CPU) * 100), Unit: "%", Rule: model.RuleCPU},
 			{Name: "iowait", Value: round2(float64(st.Wait) * 100), Unit: "%"}}}
 	if cpus > 0 {
-		cpu.Text = fmt.Sprintf("%.0f Kerne", cpus)
+		cpu.Text = model.T("monitor64.txt.cores", "n", fmt.Sprintf("%.0f", cpus))
 	}
 	out = append(out, cpu)
 	if len(st.LoadAvg) >= 3 {
@@ -69,7 +69,7 @@ func nodeServices(st nodeStatus) []model.Service {
 		out = append(out, model.Service{Key: "mem", Name: "RAM", Kind: "mem", Default: true,
 			Metrics: []model.Metric{{Name: "used", Value: pct(used, tot), Unit: "%", Rule: model.RuleMem, Max: tot},
 				{Name: "avail", Value: tot - used, Unit: "B"}},
-			Text: fmt.Sprintf("%s von %s frei", bytesText(tot-used), bytesText(tot))})
+			Text: model.T("monitor64.txt.free_of", "free", bytesText(tot-used), "total", bytesText(tot))})
 	}
 	if tot := float64(st.Swap.Total); tot > 0 {
 		out = append(out, model.Service{Key: "swap", Name: "Swap", Kind: "swap", Default: true,
@@ -85,10 +85,10 @@ func nodeServices(st nodeStatus) []model.Service {
 			avail = float64(fs.Free)
 		}
 		used := float64(fs.Used)
-		out = append(out, model.Service{Key: "fs:/", Name: "Dateisystem /", Kind: "fs", Default: true,
+		out = append(out, model.Service{Key: "fs:/", Name: model.T("monitor64.svc.fs", "name", "/"), Kind: "fs", Default: true,
 			Metrics: []model.Metric{{Name: "used", Value: pct(used, used+avail), Unit: "%", Rule: model.RuleFS, Max: tot}, // wie df
 				{Name: "free", Value: avail, Unit: "B", Max: tot}},
-			Text: fmt.Sprintf("%s von %s frei", bytesText(avail), bytesText(tot))})
+			Text: model.T("monitor64.txt.free_of", "free", bytesText(avail), "total", bytesText(tot))})
 	}
 	return out
 }
@@ -122,15 +122,15 @@ func updatesService(list []aptUpdate) model.Service {
 		Metrics: []model.Metric{{Name: "pending", Value: float64(len(list))}}}
 	switch {
 	case len(list) == 0:
-		s.Text = "keine ausstehend"
+		s.Text = model.T("monitor64.txt.none_pending")
 	case sec > 0:
-		s.Text = fmt.Sprintf("%d verfügbar, %d Sicherheitsupdates: %s", len(list), sec, strings.Join(limitList(names, 5), ", "))
+		s.Text = model.T("monitor64.txt.updates", "n", len(list), "sec", sec) + ": " + model.Raw(strings.Join(limitList(names, 5), ", "))
 	default:
-		s.Text = fmt.Sprintf("%d verfügbar: %s", len(list), strings.Join(limitList(names, 5), ", "))
+		s.Text = model.T("monitor64.txt.available_n", "n", len(list)) + ": " + model.Raw(strings.Join(limitList(names, 5), ", "))
 	}
 	if sec > 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "security", Value: float64(sec)})
-		s.Facts = append(s.Facts, model.Fact{Code: "updates_security", Text: fmt.Sprintf("%d Sicherheitsupdates", sec)})
+		s.Facts = append(s.Facts, model.Fact{Code: "updates_security", Text: model.T("monitor64.txt.security_updates", "n", sec)})
 	}
 	return s
 }
@@ -375,7 +375,7 @@ func diskService(key string, d diskEntry, sm *smartData, smartErr bool, prevSect
 	if d.Model != "" {
 		name += " (" + strings.TrimSpace(d.Model) + ")"
 	}
-	s := model.Service{Key: key, Name: name, Kind: "disk", Default: true}
+	s := model.Service{Key: key, Name: model.Raw(name), Kind: "disk", Default: true}
 	if sm == nil {
 		sm = &smartData{}
 	}
@@ -392,9 +392,9 @@ func diskService(key string, d diskEntry, sm *smartData, smartErr bool, prevSect
 		parts = append(parts, "SMART ok")
 	case sm.passed != nil:
 		parts = append(parts, "SMART FAILED")
-		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: "Gesamtstatus FAILED"})
+		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: model.T("monitor64.txt.smart_overall_failed")})
 	case smartErr:
-		parts = append(parts, "SMART nicht lesbar")
+		parts = append(parts, model.T("monitor64.txt.smart_unreadable"))
 	}
 	if sm.temp != nil {
 		rule := model.RuleDiskTemp
@@ -408,7 +408,7 @@ func diskService(key string, d diskEntry, sm *smartData, smartErr bool, prevSect
 		// ueber 100 % (NVMe "Percentage Used" bis 255, Proxmox-wearout negativ): verbraucht, also 100
 		w := min(max(*sm.wearUsed, 0), 100)
 		s.Metrics = append(s.Metrics, model.Metric{Name: "wear", Value: round2(w), Unit: "%", Rule: model.RuleWear})
-		parts = append(parts, fmt.Sprintf("Verschleiß %.0f %%", w))
+		parts = append(parts, model.T("monitor64.txt.wear", "v", fmt.Sprintf("%.0f", w)))
 	}
 	addCounter := func(name string, v *uint64) {
 		if v != nil {
@@ -425,17 +425,17 @@ func diskService(key string, d diskEntry, sm *smartData, smartErr bool, prevSect
 		if p, ok := prevSectors[key]; ok && p < sec {
 			code = "smart_sectors_rising"
 		}
-		s.Facts = append(s.Facts, model.Fact{Code: code, Text: fmt.Sprintf("%d umgelegte/ausstehende Sektoren", sec)})
-		parts = append(parts, fmt.Sprintf("%d Sektoren", sec))
+		s.Facts = append(s.Facts, model.Fact{Code: code, Text: model.T("monitor64.txt.sectors_bad", "n", sec)})
+		parts = append(parts, model.T("monitor64.txt.sectors", "n", sec))
 	}
 	if sm.realloc != nil || sm.pending != nil || sm.uncorr != nil {
 		prevSectors[key] = sm.sectors()
 	}
 	if sm.mediaE != nil && *sm.mediaE > 0 {
-		s.Facts = append(s.Facts, model.Fact{Code: "smart_sectors", Text: fmt.Sprintf("%d Medienfehler", *sm.mediaE)})
+		s.Facts = append(s.Facts, model.Fact{Code: "smart_sectors", Text: model.T("monitor64.txt.media_errors", "n", *sm.mediaE)})
 	}
 	if sm.critWarn != nil && *sm.critWarn != 0 {
-		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: fmt.Sprintf("NVMe-Warnung 0x%x", *sm.critWarn)})
+		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: model.T("monitor64.txt.nvme_warning", "v", fmt.Sprintf("0x%x", *sm.critWarn))})
 	}
 	if d.Size > 0 {
 		parts = append([]string{bytesText(float64(d.Size))}, parts...)

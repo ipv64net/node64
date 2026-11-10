@@ -163,10 +163,10 @@ func TestPBSPartialAndThreshold(t *testing.T) {
 	}
 	p.now = func() time.Time { return now }
 	svcs, err := p.Collect(context.Background())
-	if !IsPartial(err) || strings.Contains(err.Error(), testSecret) {
+	if !IsPartial(err) || strings.Contains(deErr(err), testSecret) {
 		t.Fatalf("erwartet PartialError: %v", err)
 	}
-	if !strings.Contains(err.Error(), "groups backup") || !strings.Contains(err.Error(), "admin/verify") {
+	if !strings.Contains(deErr(err), "groups backup") || !strings.Contains(deErr(err), "admin/verify") {
 		t.Errorf("Teilfehler = %v", err)
 	}
 	if !hasSvc(svcs, "ds:backup") || hasSvc(svcs, "backup:backup/vm/101") || hasSvc(svcs, "job:verify:v-3f2a1b7c-90de") {
@@ -193,7 +193,7 @@ func TestPBSTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := p.Test(context.Background())
+	res := deRes(p.Test(context.Background()))
 	if !res.OK || res.Version != "3.3.3" || res.Summary != "3 Datastores" || res.Node != "localhost" {
 		t.Errorf("Test = %+v", res)
 	}

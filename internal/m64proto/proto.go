@@ -91,6 +91,8 @@ type Report struct {
 	WinSvc  []WinService  `json:"winsvc,omitempty"`
 	Errors  []SectionErr  `json:"errors,omitempty"` // Abschnitte, die nicht gelesen werden konnten (Grund fuer "Unbekannt")
 	Notes   []SectionNote `json:"notes,omitempty"`  // Hinweise ohne Fehler (z. B. "smartctl fehlt")
+
+	localized bool // Errors/Notes sind schon Texte fuer die Anzeige (Localize)
 }
 
 // CPU: Summen-Zaehler aus /proc/stat (Jiffies, USER_HZ); Auslastung rechnet die Node aus zwei Berichten.

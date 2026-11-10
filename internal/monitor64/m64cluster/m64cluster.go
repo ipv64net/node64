@@ -32,8 +32,8 @@ func Register(pm *peer.Manager, m *monitor64.Module, nodeID func() string) {
 		})
 	}
 	m.SetCluster(monitor64.ClusterHooks{
-		Change: func(ctx context.Context, item, id string, deleted bool) {
-			pm.ClusterChange(ctx, monitor64.ClusterModuleID, item, id, deleted)
+		Change: func(ctx context.Context, item, id string, deleted bool) error {
+			return pm.ClusterChangeErr(ctx, monitor64.ClusterModuleID, item, id, deleted)
 		},
 		Members: members(pm, m), // ausgesetzte bzw. mit Monitor64/Bereich aus zaehlen als nicht erreichbar
 		Self:    nodeID,

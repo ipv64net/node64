@@ -355,7 +355,8 @@ func TestMaintLocalTimes(t *testing.T) {
 	}
 }
 
-// F11-K5 und F10-K6: neue Zustandsarten einstellbar; Windows "kommt bald"; kein Hinweis auf /monitor64/agent/.
+// F11-K5 und F10-K6: neue Zustandsarten einstellbar; Windows "kommt bald". Seit Runde 3 bietet die Node die
+// Agent-Dateien selbst an: das Skript darf auf /monitor64/agent/ zeigen, weil es die Route gibt (agentdist.go).
 func TestUIMetaPhase(t *testing.T) {
 	for _, k := range []string{eval.KindCtrUnhealthy, eval.KindBackupOld, eval.KindJobFailed, eval.KindStoreInactive, eval.KindClusterQuorum, eval.KindClusterNodeDown, eval.KindHAError, eval.KindCephWarn, eval.KindCephErr, eval.KindAccessFailed, eval.KindFSTrendDays} {
 		if _, ok := ruleKindOf(k); !ok {
@@ -365,8 +366,8 @@ func TestUIMetaPhase(t *testing.T) {
 	if k, _ := hostKindOf("windows"); k.Soon { // Windows-Agent seit Phase 2
 		t.Error("windows must not be 'soon'")
 	}
-	if strings.Contains(string(bundleJS), "/monitor64/agent/") {
-		t.Error("script points to /monitor64/agent/ (route does not exist)")
+	if !strings.Contains(string(bundleJS), "'/monitor64/agent/'") {
+		t.Error("script does not offer the agent files of this node (/monitor64/agent/)")
 	}
 	if !strings.Contains(string(bundleJS), "smartctl -j -a -n standby /dev/*") || strings.Contains(string(bundleJS), "NOPASSWD: /usr/sbin/smartctl')") {
 		t.Error("sudoers line not restricted")
@@ -380,9 +381,7 @@ func TestUIMetaPhase(t *testing.T) {
 		t.Error("no host kind may be 'soon' any more")
 	}
 	set := e.do("GET", "/monitor64/settings", nil).Body.String()
-	if strings.Contains(set, "/monitor64/agent/") {
-		t.Error("settings point to /monitor64/agent/")
-	}
+	mustContain(t, "settings", set, `href="/monitor64/agent" id="m64-agent-link"`) // Verweis auf die Seite Agent
 	mustContain(t, "settings", set, `id="m64-trap-port"`)
 	mustContain(t, "settings", set, `id="m64-traps"`)
 	pb := e.do("GET", "/monitor64/problems", nil).Body.String()

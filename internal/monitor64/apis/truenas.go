@@ -65,7 +65,7 @@ const (
 )
 
 // errTNNoRPC: /api/current ist keine WebSocket-Schnittstelle (aeltere Version) – REST nehmen.
-var errTNNoRPC = errors.New("keine JSON-RPC-Schnittstelle")
+var errTNNoRPC = errors.New(model.T("monitor64.txt.tn_no_rpc"))
 
 // TrueNAS ist der Sammler eines TrueNAS.
 type TrueNAS struct {
@@ -89,18 +89,18 @@ func NewTrueNAS(cfg TrueNASConfig) (*TrueNAS, error) {
 func newTrueNAS(cfg TrueNASConfig, roots *x509.CertPool) (*TrueNAS, error) {
 	t, err := parseWebAddr(cfg.Address, "https", "443", false)
 	if err != nil {
-		return nil, fmt.Errorf("%w – TrueNAS nur über https:// (API-Keys über http:// widerruft TrueNAS)", err)
+		return nil, fmt.Errorf("%w – %s", err, model.T("monitor64.txt.tn_https_only"))
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		return nil, errors.New("API-Key fehlt")
+		return nil, errors.New(model.T("monitor64.txt.apikey_missing"))
 	}
 	if strings.ContainsAny(cfg.APIKey, "\r\n") || strings.ContainsAny(cfg.User, "\r\n") {
-		return nil, errors.New("API-Key ungültig")
+		return nil, errors.New(model.T("monitor64.txt.apikey_invalid"))
 	}
 	switch cfg.API {
 	case TrueNASAuto, TrueNASRPC, TrueNASREST:
 	default:
-		return nil, fmt.Errorf("unbekannte TrueNAS-API %q", cfg.API)
+		return nil, errors.New(model.T("monitor64.txt.tn_api_unknown", "v", cfg.API))
 	}
 	wc, err := newWebClient(t, cfg.Pin, roots)
 	if err != nil {
@@ -149,7 +149,7 @@ func (e *tnRPCError) Error() string {
 	if e.Message != "" {
 		m += " " + e.Message
 	}
-	return shortText(m)
+	return devText(m)
 }
 
 // Unwrap ordnet Rechte- und Anmeldefehler ein (webAuthErr).
@@ -209,7 +209,7 @@ func (t *TrueNAS) dialRPC(ctx context.Context) (*tnRPC, error) {
 // 27), sonst bzw. auf aelteren Versionen auth.login_with_api_key (ab 26 veraltet).
 func (t *TrueNAS) loginRPC(ctx context.Context, r *tnRPC) error {
 	key := strings.TrimSpace(t.cfg.APIKey)
-	rejected := &webError{Kind: errWebAuth, Detail: "API-Key abgelehnt (widerrufen, abgelaufen oder falsch?)", Where: "Anmeldung"}
+	rejected := &webError{Kind: errWebAuth, Detail: model.T("monitor64.txt.apikey_rejected"), Where: "Login"}
 	if u := strings.TrimSpace(t.cfg.User); u != "" {
 		var res struct {
 			Type string `json:"response_type"`
@@ -219,7 +219,7 @@ func (t *TrueNAS) loginRPC(ctx context.Context, r *tnRPC) error {
 		case err == nil && res.Type == "SUCCESS":
 			return nil
 		case err == nil:
-			rejected.Detail += " – " + shortText(res.Type)
+			rejected.Detail += " – " + devText(res.Type)
 			return rejected
 		case !tnAbsent(err):
 			return err
@@ -230,7 +230,7 @@ func (t *TrueNAS) loginRPC(ctx context.Context, r *tnRPC) error {
 	if err := r.call(ctx, "auth.login_with_api_key", []any{key}, &ok); err != nil {
 		if tnAbsent(err) {
 			if t.cfg.User == "" {
-				return errors.New("auth.login_with_api_key gibt es nicht mehr (TrueNAS 27) – Benutzer des API-Keys eintragen")
+				return errors.New(model.T("monitor64.txt.tn_login_gone"))
 			}
 			return errTNNoRPC
 		}
@@ -294,11 +294,11 @@ func (r *tnRPC) call(ctx context.Context, method string, params []any, out any) 
 			return nil
 		}
 		if err := json.Unmarshal(msg.Result, out); err != nil {
-			return &webError{Kind: errWebResp, Detail: "kein passendes JSON: " + shortText(err.Error()), Where: method}
+			return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.resp_json") + ": " + devText(err.Error()), Where: method}
 		}
 		return nil
 	}
-	return &webError{Kind: errWebResp, Detail: "keine Antwort (nur Ereignisse)", Where: method}
+	return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.tn_no_reply"), Where: method}
 }
 
 // tnREST ruft die Methoden ueber REST v2.0 auf.
@@ -347,7 +347,7 @@ func (r *tnREST) call(ctx context.Context, method string, params []any, out any)
 		}
 		path = "/pool/dataset?id=" + url.QueryEscape(name)
 	default:
-		return &webError{Kind: errWebResp, Status: 404, Detail: "Methode ohne REST-Pfad", Where: method}
+		return &webError{Kind: errWebResp, Status: 404, Detail: model.T("monitor64.txt.tn_no_rest"), Where: method}
 	}
 	_, err := r.wc.do(ctx, verb, "/api/v2.0"+path, nil, body, out)
 	return err
@@ -362,7 +362,7 @@ func (t *TrueNAS) connect(ctx context.Context) (tnCaller, error) {
 		r, err := t.dialRPC(ctx)
 		if err != nil {
 			if errors.Is(err, errTNNoRPC) {
-				return nil, errors.New("JSON-RPC (wss://…/api/current) nicht vorhanden – TrueNAS vor 25.04: REST wählen")
+				return nil, errors.New(model.T("monitor64.txt.tn_rpc_missing"))
 			}
 			return nil, err
 		}
@@ -544,16 +544,16 @@ func (t *TrueNAS) Test(ctx context.Context) TestResult {
 			open++
 		}
 	}
-	res.Summary = fmt.Sprintf("%d Pools, %d Platten, %d offene Alarme", len(pools), len(disks), open)
+	res.Summary = model.T("monitor64.txt.tn_summary", "pools", len(pools), "disks", len(disks), "alerts", open)
 	if t.api == TrueNASREST {
 		res.Summary += " (REST v2.0)"
 		if v := tnMajor(info.Version); v >= 25 {
-			warn = append(warn, "REST-API ist ab TrueNAS 25.04 veraltet – JSON-RPC wählen")
+			warn = append(warn, model.T("monitor64.txt.tn_rest_deprecated"))
 		}
 	} else {
 		res.Summary += " (JSON-RPC)"
 		if strings.TrimSpace(t.cfg.User) == "" && tnMajor(info.Version) >= 26 {
-			warn = append(warn, "Benutzer des API-Keys eintragen – die Anmeldung ohne Benutzer entfällt mit TrueNAS 27")
+			warn = append(warn, model.T("monitor64.txt.tn_user_needed"))
 		}
 	}
 	res.Warning = strings.TrimSpace(strings.Join(append([]string{res.Warning}, warn...), "; "))
@@ -574,10 +574,10 @@ func tnMajor(v string) int {
 // hint ergaenzt Rechtefehler um den Hinweis auf die Rolle.
 func (t *TrueNAS) hint(err error) error {
 	if errors.Is(err, errWebPerm) {
-		return fmt.Errorf("%w – der API-Key braucht Leserechte (Benutzer mit Rolle Read-Only Administrator)", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.tn_hint_perm"))
 	}
 	if errors.Is(err, errWebAuth) {
-		return fmt.Errorf("%w – API-Key prüfen (widerrufen? TrueNAS widerruft Keys, die über http:// benutzt wurden)", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.tn_hint_auth"))
 	}
 	return err
 }
@@ -623,11 +623,11 @@ func tnSystemServices(info tnInfo) []model.Service {
 			Text:    fmt.Sprintf("%.2f %.2f %.2f", l1, l5, l15)}
 		if info.Cores.Set && info.Cores.V > 0 {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "per_core", Value: round2(l5 / info.Cores.V), Rule: model.RuleLoad})
-			s.Text += fmt.Sprintf(" · %.0f Kerne", info.Cores.V)
+			s.Text += " · " + model.T("monitor64.txt.cores", "n", fmt.Sprintf("%.0f", info.Cores.V))
 		}
 		if info.Uptime.Set && info.Uptime.V > 0 {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "uptime", Value: float64(int64(info.Uptime.V)), Unit: "s"})
-			s.Text += " · läuft seit " + hoursText(time.Duration(info.Uptime.V)*time.Second)
+			s.Text += " · " + model.T("monitor64.txt.up_since", "d", model.Sub(hoursText(time.Duration(info.Uptime.V)*time.Second)))
 		}
 		out = append(out, s)
 	}
@@ -738,9 +738,9 @@ func tnPoolErrors(p tnPool) tnDevErr {
 // tnPoolService: Pool mit Zustand, Belegung, Scrub und Geraetefehlern (zfs_degraded wie beim Agent: nicht ONLINE,
 // Fehler beim Scrub oder Geraetefehler auch bei ONLINE).
 func tnPoolService(p tnPool, now time.Time) model.Service {
-	s := model.Service{Key: "zfs:" + p.Name, Name: "ZFS " + p.Name, Kind: "zfs", Default: true}
+	s := model.Service{Key: "zfs:" + p.Name, Name: "ZFS " + model.Raw(p.Name), Kind: "zfs", Default: true}
 	status := strings.ToUpper(firstNonEmpty(strings.TrimSpace(p.Status), "UNKNOWN"))
-	parts := []string{status}
+	parts := []string{model.Raw(status)}
 	if p.Size.Set && p.Size.V > 0 && p.Allocated.Set {
 		tot := p.Size.V
 		free := p.Free.V
@@ -752,40 +752,40 @@ func tnPoolService(p tnPool, now time.Time) model.Service {
 		if p.Frag.Set {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "frag", Value: round2(p.Frag.V), Unit: "%"})
 		}
-		parts = append(parts, fmt.Sprintf("%s von %s frei", bytesText(free), bytesText(tot)))
+		parts = append(parts, model.T("monitor64.txt.free_of", "free", bytesText(free), "total", bytesText(tot)))
 	}
 	var bad []string
 	if status != "ONLINE" || (p.Healthy != nil && !*p.Healthy && status == "UNKNOWN") {
-		bad = append(bad, strings.TrimSpace(status+" "+shortText(p.StatusDetail)))
+		bad = append(bad, devText(strings.TrimSpace(status+" "+p.StatusDetail)))
 	}
 	if sc := p.Scan; sc != nil && strings.EqualFold(sc.Function, "SCRUB") {
 		switch strings.ToUpper(sc.State) {
 		case "SCANNING":
-			parts = append(parts, fmt.Sprintf("Scrub läuft (%.0f %%)", sc.Pct.V))
+			parts = append(parts, model.T("monitor64.txt.scrub_running", "v", fmt.Sprintf("%.0f", sc.Pct.V)))
 		case "FINISHED":
 			if sc.End != nil && !sc.End.T.IsZero() {
 				age := max(now.Sub(sc.End.T), 0)
 				s.Metrics = append(s.Metrics, model.Metric{Name: "scrub_age", Value: round2(age.Hours() / 24), Unit: "d"})
-				parts = append(parts, "letzter Scrub "+agoText(age))
+				parts = append(parts, model.T("monitor64.txt.last_scrub", "ago", model.Sub(agoText(age))))
 			}
 		case "CANCELED":
-			parts = append(parts, "Scrub abgebrochen")
+			parts = append(parts, model.T("monitor64.txt.scrub_canceled"))
 		}
 		if sc.Errors.Set && sc.Errors.V > 0 {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "scrub_errors", Value: sc.Errors.V})
-			bad = append(bad, fmt.Sprintf("Scrub: %.0f Fehler", sc.Errors.V))
+			bad = append(bad, model.T("monitor64.txt.scrub_errors", "n", fmt.Sprintf("%.0f", sc.Errors.V)))
 		}
 	}
 	if e := tnPoolErrors(p); e.sum() > 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "dev_errors", Value: e.sum()})
-		bad = append(bad, fmt.Sprintf("Gerätefehler READ %.0f WRITE %.0f CKSUM %.0f", e.read, e.write, e.cksum))
+		bad = append(bad, model.T("monitor64.txt.dev_errors", "v", fmt.Sprintf("READ %.0f WRITE %.0f CKSUM %.0f", e.read, e.write, e.cksum)))
 	}
 	if len(bad) > 0 {
 		s.Facts = append(s.Facts, model.Fact{Code: "zfs_degraded", Text: strings.Join(bad, "; ")})
 		if status == "ONLINE" {
 			parts = append(parts, strings.Join(bad, "; "))
 		} else if p.StatusDetail != "" {
-			parts = append(parts, shortText(p.StatusDetail))
+			parts = append(parts, devText(p.StatusDetail))
 		}
 	}
 	s.Text = strings.Join(parts, " · ")
@@ -886,24 +886,27 @@ func tnDiskService(key string, d tnDisk, temps map[string]float64, smart map[str
 	if m := strings.TrimSpace(d.Model); m != "" {
 		name += " (" + shortText(m) + ")"
 	}
-	s := model.Service{Key: key, Name: name, Kind: "disk", Default: true}
+	s := model.Service{Key: key, Name: model.Raw(name), Kind: "disk", Default: true}
 	var parts []string
 	if d.Size.Set && d.Size.V > 0 {
 		parts = append(parts, bytesText(d.Size.V))
 	}
 	if d.Pool != "" {
-		parts = append(parts, "Pool "+shortText(d.Pool))
+		parts = append(parts, "Pool "+devText(d.Pool))
 	}
 	if st, ok := smart[d.Name]; ok {
 		switch strings.ToUpper(st.Status) {
 		case "SUCCESS":
-			parts = append(parts, "SMART-Test ok")
+			parts = append(parts, model.T("monitor64.txt.smart_test_ok"))
 		case "FAILED":
-			t := firstNonEmpty(shortText(st.Verbose), "fehlgeschlagen")
-			parts = append(parts, "SMART-Test: "+t)
-			s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: "letzter SMART-Test (" + shortText(st.Desc) + "): " + t})
+			t := model.T("monitor64.txt.failed")
+			if v := shortText(st.Verbose); v != "" {
+				t = model.Raw(v)
+			}
+			parts = append(parts, model.T("monitor64.txt.smart_test")+": "+t)
+			s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: model.T("monitor64.txt.last_smart_test", "desc", shortText(st.Desc)) + ": " + t})
 		case "RUNNING":
-			parts = append(parts, "SMART-Test läuft")
+			parts = append(parts, model.T("monitor64.txt.smart_test_running"))
 		}
 	}
 	if t, ok := temps[d.Name]; ok {
@@ -918,12 +921,12 @@ func tnDiskService(key string, d tnDisk, temps map[string]float64, smart map[str
 		s.Metrics = append(s.Metrics, model.Metric{Name: "read_err", Value: e.read}, model.Metric{Name: "write_err", Value: e.write},
 			model.Metric{Name: "cksum_err", Value: e.cksum})
 		if e.sum() > 0 {
-			t := fmt.Sprintf("ZFS-Fehler READ %.0f WRITE %.0f CKSUM %.0f", e.read, e.write, e.cksum)
+			t := model.T("monitor64.txt.zfs_errors", "v", fmt.Sprintf("READ %.0f WRITE %.0f CKSUM %.0f", e.read, e.write, e.cksum))
 			parts = append(parts, t)
 			s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: t})
 		}
 		if e.status != "" {
-			parts = append(parts, "im Pool "+shortText(e.status))
+			parts = append(parts, model.T("monitor64.txt.in_pool", "v", shortText(e.status)))
 		}
 	}
 	s.Text = strings.Join(parts, " · ")
@@ -979,7 +982,7 @@ func tnAlertItems(list []tnAlert) []alertItem {
 
 // alertService: Dienst "alerts" mit Anzahl und Zustaenden device_warn/device_crit (TrueNAS, Unraid).
 func alertService(items []alertItem) model.Service {
-	s := model.Service{Key: "alerts", Name: "Alarme", Kind: "alerts", Default: true}
+	s := model.Service{Key: "alerts", Name: model.T("monitor64.svc.alerts"), Kind: "alerts", Default: true}
 	var warn, crit []string
 	for _, it := range items {
 		if it.crit {
@@ -991,15 +994,15 @@ func alertService(items []alertItem) model.Service {
 	s.Metrics = []model.Metric{{Name: "warn", Value: float64(len(warn))}, {Name: "crit", Value: float64(len(crit))}}
 	switch {
 	case len(warn)+len(crit) == 0:
-		s.Text = "keine offenen Alarme"
+		s.Text = model.T("monitor64.txt.no_alerts")
 	default:
-		s.Text = fmt.Sprintf("%d offen: %s", len(warn)+len(crit), strings.Join(limitList(append(append([]string{}, crit...), warn...), 3), "; "))
+		s.Text = model.T("monitor64.txt.open_n", "n", len(warn)+len(crit)) + ": " + model.Raw(strings.Join(limitList(append(append([]string{}, crit...), warn...), 3), "; "))
 	}
 	if len(crit) > 0 {
-		s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: strings.Join(limitList(crit, 3), "; ")})
+		s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: model.Raw(strings.Join(limitList(crit, 3), "; "))})
 	}
 	if len(warn) > 0 {
-		s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: strings.Join(limitList(warn, 3), "; ")})
+		s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: model.Raw(strings.Join(limitList(warn, 3), "; "))})
 	}
 	return s
 }
@@ -1008,10 +1011,10 @@ func alertService(items []alertItem) model.Service {
 func (t *TrueNAS) tasks(ctx context.Context, cl tnCaller, now time.Time, part hintPartial) []model.Service {
 	var out []model.Service
 	for _, k := range []struct{ method, kind, label string }{
-		{"replication.query", "replication", "Replikation"},
-		{"pool.snapshottask.query", "snapshot", "Snapshot-Aufgabe"},
-		{"cloudsync.query", "cloudsync", "Cloud-Sync"},
-		{"rsynctask.query", "rsync", "Rsync"},
+		{"replication.query", "replication", "monitor64.svc.task_replication"},
+		{"pool.snapshottask.query", "snapshot", "monitor64.svc.task_snapshot"},
+		{"cloudsync.query", "cloudsync", "monitor64.svc.task_cloudsync"},
+		{"rsynctask.query", "rsync", "monitor64.svc.task_rsync"},
 	} {
 		var list []tnTask
 		if err := cl.call(ctx, k.method, nil, &list); err != nil {
@@ -1032,18 +1035,18 @@ func (t *TrueNAS) tasks(ctx context.Context, cl tnCaller, now time.Time, part hi
 	return out
 }
 
-// tnTaskService: letzter Lauf ok bzw. Fehler (job_failed wie bei PBS).
+// tnTaskService: letzter Lauf ok bzw. Fehler (job_failed wie bei PBS); label ist der Schluessel des Dienstnamens.
 func tnTaskService(kind, label, id string, x tnTask, now time.Time) model.Service {
 	what := shortText(firstNonEmpty(x.Name, x.Description, x.Dataset, x.Path, id))
 	enabled := x.Enabled == nil || *x.Enabled
-	s := model.Service{Key: "job:" + kind + ":" + id, Name: label + " " + what, Kind: "job", Default: enabled}
+	s := model.Service{Key: "job:" + kind + ":" + id, Name: model.T(label, "name", what), Kind: "job", Default: enabled}
 	st := x.State
 	if st == nil {
 		st = x.Job
 	}
 	var parts []string
 	if !enabled {
-		parts = append(parts, "abgeschaltet")
+		parts = append(parts, model.T("monitor64.txt.disabled"))
 	}
 	state := ""
 	if st != nil {
@@ -1066,23 +1069,23 @@ func tnTaskService(kind, label, id string, x tnTask, now time.Time) model.Servic
 	}
 	switch state {
 	case "":
-		parts = append(parts, "noch nicht gelaufen")
+		parts = append(parts, model.T("monitor64.txt.never_ran"))
 	case "RUNNING":
-		parts = append(parts, "läuft gerade")
+		parts = append(parts, model.T("monitor64.txt.running_now"))
 	case "PENDING", "WAITING", "HOLD":
-		parts = append(parts, "wartet ("+state+")")
+		parts = append(parts, model.T("monitor64.txt.waiting", "v", state))
 	case "FINISHED", "SUCCESS":
 		s.Metrics = append(s.Metrics, model.Metric{Name: "failed", Value: 0})
-		parts = append(parts, "letzter Lauf"+when+": OK")
+		parts = append(parts, model.T("monitor64.txt.last_run")+when+": OK")
 	case "ERROR", "FAILED", "ABORTED":
-		msg := firstNonEmpty(shortText(st.Error), state)
+		msg := model.Raw(firstNonEmpty(shortText(st.Error), state))
 		s.Metrics = append(s.Metrics, model.Metric{Name: "failed", Value: 1})
-		parts = append(parts, "letzter Lauf"+when+" fehlgeschlagen: "+msg)
+		parts = append(parts, model.T("monitor64.txt.last_run")+when+" "+model.T("monitor64.txt.failed")+": "+msg)
 		if enabled {
 			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: msg})
 		}
 	default:
-		parts = append(parts, "Zustand "+shortText(state))
+		parts = append(parts, model.T("monitor64.txt.state_v", "v", shortText(state)))
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s
@@ -1139,25 +1142,22 @@ func (t *TrueNAS) guests(ctx context.Context, cl tnCaller, part hintPartial) []m
 
 // tnAppService: App als Dienst app:<name> (Art ctr); CRASHED ist eine Stoerung unabhaengig vom Soll.
 func tnAppService(name, state string, upgrade bool, version string) model.Service {
-	s := model.Service{Key: "app:" + name, Name: "App " + shortText(name), Kind: "ctr", Default: true}
+	s := model.Service{Key: "app:" + name, Name: "App " + devText(name), Kind: "ctr", Default: true}
 	run := 0.0
 	if state == "RUNNING" || state == "ACTIVE" {
 		run = 1
 	}
 	s.Metrics = []model.Metric{{Name: "running", Value: run}}
-	parts := []string{map[string]string{"RUNNING": "läuft", "ACTIVE": "läuft", "STOPPED": "gestoppt", "DEPLOYING": "wird bereitgestellt",
-		"CRASHED": "abgestürzt", "STOPPING": "wird gestoppt"}[state]}
-	if parts[0] == "" {
-		parts[0] = firstNonEmpty(shortText(state), "unbekannt")
-	}
+	parts := []string{stateText(map[string]string{"RUNNING": "monitor64.txt.running", "ACTIVE": "monitor64.txt.running", "STOPPED": "monitor64.txt.stopped",
+		"DEPLOYING": "monitor64.txt.deploying", "CRASHED": "monitor64.txt.crashed", "STOPPING": "monitor64.txt.stopping"}, state)}
 	if version != "" {
-		parts = append(parts, shortText(version))
+		parts = append(parts, devText(version))
 	}
 	if upgrade {
-		parts = append(parts, "Update verfügbar")
+		parts = append(parts, model.T("monitor64.txt.update_available"))
 	}
 	if state == "CRASHED" {
-		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: "App abgestürzt (CRASHED)"})
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: model.T("monitor64.txt.app_crashed")})
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s
@@ -1169,24 +1169,24 @@ func tnVMService(id, name, state string, autostart bool) model.Service {
 	if name != "" {
 		label = shortText(name) + " (VM " + id + ")"
 	}
-	s := model.Service{Key: "vm:" + id, Name: label, Kind: "vm", Default: true}
+	s := model.Service{Key: "vm:" + id, Name: model.Raw(label), Kind: "vm", Default: true}
 	run := 0.0
 	if state == "RUNNING" {
 		run = 1
 	}
 	s.Metrics = []model.Metric{{Name: "running", Value: run}, {Name: "locked", Value: 0}}
-	st := map[string]string{"RUNNING": "läuft", "STOPPED": "gestoppt", "SUSPENDED": "angehalten", "ERROR": "Fehler"}[state]
-	parts := []string{firstNonEmpty(st, shortText(state), "unbekannt")}
+	parts := []string{stateText(map[string]string{"RUNNING": "monitor64.txt.running", "STOPPED": "monitor64.txt.stopped",
+		"SUSPENDED": "monitor64.txt.suspended", "ERROR": "monitor64.txt.error"}, state)}
 	if autostart {
-		parts = append(parts, "soll laufen (Autostart)")
+		parts = append(parts, model.T("monitor64.txt.should_run_autostart"))
 	} else {
-		parts = append(parts, "darf aus sein")
+		parts = append(parts, model.T("monitor64.txt.may_be_off"))
 	}
 	switch {
 	case state == "ERROR":
-		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: "VM im Fehlerzustand"})
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: model.T("monitor64.txt.vm_error")})
 	case autostart && state != "RUNNING" && state != "":
-		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", soll laufen (Autostart)"})
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", " + model.T("monitor64.txt.should_run_autostart")})
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s

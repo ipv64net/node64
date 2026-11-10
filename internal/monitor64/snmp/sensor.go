@@ -47,7 +47,7 @@ func (c *Collector) collectSensors(r *round) {
 		}
 		res, err := getScalars(r.ctx, r.c, oids)
 		if err != nil {
-			r.part.add("ENTITY-MIB Namen", err, "temp:")
+			r.part.add(model.T("monitor64.txt.mib_names", "mib", "ENTITY-MIB"), err, "temp:")
 		}
 		if err == nil || c.sensorNames == nil {
 			names := map[string]string{}
@@ -88,7 +88,7 @@ func (c *Collector) collectSensors(r *round) {
 		} else if count[name] > 1 {
 			key = name + "#" + idx
 		}
-		r.out = append(r.out, model.Service{Key: "temp:" + keyPart(key), Name: "Temperatur " + name, Kind: "temp", Default: true,
+		r.out = append(r.out, model.Service{Key: "temp:" + keyPart(key), Name: model.T("monitor64.svc.temp", "name", name), Kind: "temp", Default: true,
 			Metrics: []model.Metric{{Name: "temp", Value: round2(v), Unit: "°C", Rule: model.RuleTemp}},
 			Text:    strings.Replace(fmt.Sprintf("%.1f °C", v), ".", ",", 1)})
 	}

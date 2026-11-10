@@ -158,7 +158,7 @@ func (m *Module) statusM64Detail(ctx context.Context, p *StatusPage, it *StatusI
 	if p.ShowHistory {
 		hist = now.Add(-statusHistory)
 	}
-	s := m.statusM64Sources(ctx, []string{it.Token}, module.StatusQuery{Bounds: bounds, History: hist, Now: now})[it.Token]
+	s := m.statusM64Sources(ctx, []string{it.Token}, module.StatusQuery{Lang: lang, Bounds: bounds, History: hist, Now: now})[it.Token]
 	if s == nil {
 		return nil, ErrStatusPageNotFound
 	}

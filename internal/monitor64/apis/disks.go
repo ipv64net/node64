@@ -2,6 +2,8 @@ package apis
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"net/url"
 	"sort"
 	"sync"
@@ -99,6 +101,14 @@ func (s *slowUpdates) collect(ctx context.Context, c *proxmox.Client, node strin
 	}
 	var list []aptUpdate
 	if err := c.Get(ctx, "/nodes/"+url.PathEscape(node)+"/apt/update", &list); err != nil {
+		var pe *proxmox.Error
+		if errors.As(err, &pe) && pe.Status == http.StatusForbidden {
+			// dem Token fehlt das Recht (Proxmox VE: Sys.Modify, die Rolle PVEAuditor reicht nicht): kein Teilfehler,
+			// der Dienst nennt den Grund; neuer Versuch erst nach every
+			svc := model.Service{Key: "updates", Name: "Updates", Kind: "updates", Default: true, Text: model.T("monitor64.txt.updates_forbidden")}
+			s.at, s.svc = now, &svc
+			return s.svc
+		}
 		part.add("apt/update", err, "updates")
 		if !s.at.IsZero() && now.Sub(s.at) > 4*every {
 			s.svc = nil

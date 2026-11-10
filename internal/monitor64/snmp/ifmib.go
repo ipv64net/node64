@@ -83,7 +83,7 @@ func (c *Collector) collectIF(r *round) {
 		}
 		t, err := walkColumns(r.ctx, r.c, cols, c.cfg.MaxRep)
 		if err != nil {
-			r.part.add("IF-MIB Namen", err, "if:", "bond:")
+			r.part.add(model.T("monitor64.txt.mib_names", "mib", "IF-MIB"), err, "if:", "bond:")
 			if c.ifStatic == nil {
 				return
 			}
@@ -185,9 +185,9 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 		if up && (c.seenUp[key] || len(c.seenUp) < maxSeenUp) {
 			c.seenUp[key] = true
 		}
-		name := in.name
+		name := model.Raw(in.name) // Namen vom Geraet
 		if in.alias != "" && in.alias != in.name {
-			name += " · " + in.alias
+			name += " · " + model.Raw(in.alias)
 		}
 		if speed > 0 {
 			name = fmt.Sprintf("%s (%s)", name, speedText(speed))
@@ -236,7 +236,7 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "errrate", Value: round4(math.Min(100, rate)), Unit: "%", Rule: model.RuleIfErrRate},
 				model.Metric{Name: "errors", Value: ie + oe})
 			if ie+oe > 0 {
-				parts = append(parts, fmt.Sprintf("%.0f Fehler", ie+oe))
+				parts = append(parts, model.T("monitor64.txt.errors_n", "n", fmt.Sprintf("%.0f", ie+oe)))
 			}
 		}
 		id, _, ok5 := c.delta(pre+"id", t.col(ifInDisc)[idx], r.at)
@@ -247,23 +247,23 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 		// Zustand
 		switch {
 		case admin == 2:
-			parts = append([]string{"abgeschaltet"}, parts...)
+			parts = append([]string{model.T("monitor64.txt.disabled")}, parts...)
 		case !up:
 			parts = append([]string{"down"}, parts...)
 			if admin == 1 && (oper == 2 || oper == 7) {
-				s.Facts = append(s.Facts, model.Fact{Code: FactIfDown, Text: in.name + " ohne Link"})
+				s.Facts = append(s.Facts, model.Fact{Code: FactIfDown, Text: model.T("monitor64.txt.no_link", "name", in.name)})
 			}
 		}
 		if up && speed > 0 {
 			if mx := c.maxSpeed[key]; mx > 0 && speed < mx {
-				s.Facts = append(s.Facts, model.Fact{Code: FactIfSpeedLow, Text: fmt.Sprintf("%s statt %s", speedText(speed), speedText(mx))})
-				parts = append(parts, "langsamer als zuvor ("+speedText(mx)+")")
+				s.Facts = append(s.Facts, model.Fact{Code: FactIfSpeedLow, Text: model.T("monitor64.txt.speed_instead", "now", speedText(speed), "max", speedText(mx))})
+				parts = append(parts, model.T("monitor64.txt.slower", "v", speedText(mx)))
 			}
 			c.maxSpeed[key] = math.Max(c.maxSpeed[key], speed)
 		}
 		if d, ok := num(t.col(dot3Dup)[idx]); ok && d == 2 && up {
-			s.Facts = append(s.Facts, model.Fact{Code: FactIfHalfDuplex, Text: in.name + " im Halbduplex"})
-			parts = append(parts, "Halbduplex")
+			s.Facts = append(s.Facts, model.Fact{Code: FactIfHalfDuplex, Text: model.T("monitor64.txt.half_duplex_name", "name", in.name)})
+			parts = append(parts, model.T("monitor64.txt.half_duplex"))
 		}
 		s.Text = strings.Join(parts, " · ")
 		if s.Text == "" {

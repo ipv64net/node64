@@ -165,7 +165,7 @@ func (s *sshCollector) waitSlow(t *testing.T) {
 
 func hasSecErr(rep *m64proto.Report, sec string) bool {
 	for _, e := range rep.Errors {
-		if e.Section == sec && strings.Contains(e.Error, "langsame Abfrage") {
+		if e.Section == sec && strings.Contains(e.Error, "slow_failed") {
 			return true
 		}
 	}
@@ -174,7 +174,7 @@ func hasSecErr(rep *m64proto.Report, sec string) bool {
 
 func hasSecNote(rep *m64proto.Report, sec string) bool {
 	for _, n := range rep.Notes {
-		if n.Section == sec && strings.Contains(n.Note, "langsame Abfrage") {
+		if n.Section == sec && strings.Contains(n.Note, "slow_failed") {
 			return true
 		}
 	}

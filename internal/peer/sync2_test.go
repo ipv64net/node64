@@ -478,3 +478,37 @@ func TestClusterChannels(t *testing.T) {
 		t.Fatal("area off on B: nothing may arrive")
 	}
 }
+
+// ClusterChangeErr liefert den Fehler, wenn eine Aenderung nicht ins Protokoll kam (ClusterChange warnt nur): das Modul
+// kann sie dann spaeter erneut melden, statt sie als gemeldet zu merken.
+func TestClusterChangeErr(t *testing.T) {
+	ctx := context.Background()
+	a := newNode(t, "node-a", "A", 1)
+	newProv(a)
+	if err := a.m.ClusterChangeErr(ctx, "demo", "a", "x1", false); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := a.m.syncLocal("demo", "a", "x1"); err != nil || l == nil || l.origin != "node-a" || l.deleted {
+		t.Fatalf("logged entry: %+v %v", l, err)
+	}
+	if err := a.m.ClusterChangeErr(ctx, "unknown", "a", "x1", false); err != nil {
+		t.Fatalf("unknown module is ignored: %v", err)
+	}
+	// Protokoll nicht beschreibbar (z. B. Datenbank belegt)
+	if _, err := a.m.db.Exec(`ALTER TABLE cluster_log RENAME TO cluster_log_off`); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.m.ClusterChangeErr(ctx, "demo", "a", "x2", false); err == nil {
+		t.Fatal("failed log write must be reported")
+	}
+	a.m.ClusterChange(ctx, "demo", "a", "x2", false) // ohne Rueckgabe: nur eine Warnung
+	if _, err := a.m.db.Exec(`ALTER TABLE cluster_log_off RENAME TO cluster_log`); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.m.ClusterChangeErr(ctx, "demo", "a", "x2", true); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := a.m.syncLocal("demo", "a", "x2"); err != nil || l == nil || !l.deleted {
+		t.Fatalf("entry after retry: %+v %v", l, err)
+	}
+}

@@ -346,7 +346,7 @@ func (c *collector) runOK(ctx context.Context, timeout time.Duration, name strin
 
 // execErr beschreibt einen fehlgeschlagenen Aufruf (Exit-Code und erste stderr-Zeile).
 func execErr(name string, res ExecResult) error {
-	msg := fmt.Sprintf("%s: Exit-Code %d", name, res.Code)
+	msg := name + ": " + m64proto.Hint(m64proto.HintExitCode, fmt.Sprint(res.Code))
 	if l := lines(res.Stderr); len(l) > 0 {
 		msg += ": " + l[0]
 	}
@@ -415,7 +415,7 @@ func (c *collector) statfsTimeout(ctx context.Context, st func(string) (StatFS, 
 		}()
 	} else if since := time.Since(call.start); since >= statfsLimit {
 		ca.mu.Unlock()
-		return StatFS{}, fmt.Errorf("statfs %s: haengt seit %s", p, since.Round(time.Second))
+		return StatFS{}, fmt.Errorf("statfs %s: %s", p, m64proto.Hint(m64proto.HintHung, since.Round(time.Second).String()))
 	}
 	ca.mu.Unlock()
 	t := time.NewTimer(statfsLimit - time.Since(call.start))
@@ -424,7 +424,7 @@ func (c *collector) statfsTimeout(ctx context.Context, st func(string) (StatFS, 
 	case <-call.done:
 		return call.res, call.err
 	case <-t.C:
-		return StatFS{}, fmt.Errorf("statfs %s: Zeitlimit", p)
+		return StatFS{}, fmt.Errorf("statfs %s: %s", p, m64proto.HintTimeout)
 	case <-ctx.Done():
 		return StatFS{}, ctx.Err()
 	}
@@ -432,7 +432,7 @@ func (c *collector) statfsTimeout(ctx context.Context, st func(string) (StatFS, 
 
 func (c *collector) collectDisks(ctx context.Context, r *m64proto.Report) {
 	if !c.has("iostat") {
-		addNote(r, m64proto.SecDisk, "iostat fehlt")
+		addNote(r, m64proto.SecDisk, m64proto.Hint(m64proto.HintMissing, "iostat"))
 		return
 	}
 	out, err := c.runOK(ctx, timeoutShort, "iostat", iostatArgs...)
@@ -556,12 +556,12 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 		out.errs = append(out.errs, m64proto.SectionErr{Section: m64proto.SecSmart, Error: errText(err)})
 	}
 	if !c.has("smartctl") {
-		note("smartctl fehlt")
+		note(m64proto.Hint(m64proto.HintMissing, "smartctl"))
 		return out
 	}
 	res, err := c.run(ctx, timeoutSmart, "smartctl", "--scan-open", "-j")
 	if errors.Is(err, ErrNotFound) {
-		note("smartctl fehlt")
+		note(m64proto.Hint(m64proto.HintMissing, "smartctl"))
 		return out
 	}
 	if err != nil {
@@ -573,8 +573,9 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 		fail(fmt.Errorf("smartctl --scan-open: %w", err))
 		return out
 	}
+	devs = smartDisks(devs)
 	if len(devs) == 0 {
-		note("keine Platten mit SMART gefunden")
+		note(m64proto.HintNoSmartDisks)
 		return out
 	}
 	out.smart = []m64proto.SMART{}
@@ -593,6 +594,22 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 			continue
 		}
 		out.smart = append(out.smart, m64linux.ParseSmartctl(d.Name, res.Stdout))
+	}
+	return out
+}
+
+// smartSkipRE: Eintraege aus "smartctl --scan-open", die keine Platte mit SMART sind. Optische Laufwerke (cd0)
+// melden nur "standby"; NVMe-Platten fuehrt FreeBSD ab 14 zusaetzlich ueber CAM als nda0, smartctl scheitert dort
+// ("INQUIRY failed") und liest dieselbe Platte ueber /dev/nvme0.
+var smartSkipRE = regexp.MustCompile(`^/dev/(cd|nda)[0-9]+$`)
+
+// smartDisks laesst diese Eintraege weg (sonst stuende je NVMe-Platte ein unlesbares Geraet im Bericht).
+func smartDisks(devs []m64linux.SmartDevice) []m64linux.SmartDevice {
+	out := devs[:0:0]
+	for _, d := range devs {
+		if !smartSkipRE.MatchString(d.Name) {
+			out = append(out, d)
+		}
 	}
 	return out
 }
@@ -617,13 +634,13 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	}
 	pkg := c.pkgPath()
 	if pkg == "" {
-		note("pkg nicht installiert")
+		note(m64proto.HintPkgMissing)
 		return out
 	}
 	res, err := c.run(ctx, timeoutUpdates, pkg, pkgVersionArgs...)
 	if err == nil && res.Code != 0 {
 		if pkgNoRepoRE.Match(res.Stderr) || pkgNoRepoRE.Match(res.Stdout) {
-			note("keine Paketquelle eingeschaltet")
+			note(m64proto.HintNoRepo)
 			return out
 		}
 		err = execErr("pkg version", res)
@@ -634,13 +651,13 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	}
 	u := &m64proto.Updates{Manager: mgrPkg, Pending: ParsePkgVersion(res.Stdout), Checked: c.now().Unix()}
 	if ares, err := c.run(ctx, timeoutAudit, pkg, pkgAuditArgs...); err != nil {
-		note("Sicherheitsupdates unbekannt: " + errText(err))
+		note(m64proto.HintSecUnknown + ": " + errText(err))
 	} else if n, noDB, ok := ParsePkgAudit(ares.Stdout, ares.Stderr, ares.Code); ok {
 		u.Security = n
 	} else if noDB {
-		note("pkg audit: keine Schwachstellen-Datenbank (pkg audit -F)")
+		note("pkg audit: " + m64proto.HintNoVulnDB)
 	} else {
-		note("Sicherheitsupdates unbekannt: " + errText(execErr("pkg audit", ares)))
+		note(m64proto.HintSecUnknown + ": " + errText(execErr("pkg audit", ares)))
 	}
 	out.updates = u
 	return out

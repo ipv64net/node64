@@ -56,10 +56,10 @@ func newUnraid(cfg UnraidConfig, roots *x509.CertPool) (*Unraid, error) {
 	}
 	key := strings.TrimSpace(cfg.APIKey)
 	if key == "" {
-		return nil, errors.New("API-Key fehlt")
+		return nil, errors.New(model.T("monitor64.txt.apikey_missing"))
 	}
 	if strings.ContainsAny(key, "\r\n") {
-		return nil, errors.New("API-Key ungültig")
+		return nil, errors.New(model.T("monitor64.txt.apikey_invalid"))
 	}
 	wc, err := newWebClient(t, cfg.Pin, roots)
 	if err != nil {
@@ -97,9 +97,9 @@ type gqlError struct {
 
 func (e *gqlError) Error() string {
 	if e.Code != "" {
-		return "GraphQL " + e.Code + ": " + shortText(e.Msg)
+		return "GraphQL " + devText(e.Code) + ": " + devText(e.Msg)
 	}
-	return "GraphQL: " + shortText(e.Msg)
+	return "GraphQL: " + devText(e.Msg)
 }
 
 func (e *gqlError) Unwrap() error {
@@ -153,10 +153,10 @@ func (u *Unraid) gql(ctx context.Context, query string, out any) error {
 		return &gqlError{Msg: e.Message, Code: e.Extensions.Code, schema: e.Extensions.Code == "GRAPHQL_VALIDATION_FAILED" || isSchemaMsg(e.Message)}
 	}
 	if len(env.Data) == 0 || string(env.Data) == "null" {
-		return &webError{Kind: errWebResp, Detail: "Antwort ohne data", Where: "POST /graphql"}
+		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.resp_no_data"), Where: "POST /graphql"}
 	}
 	if err := json.Unmarshal(env.Data, out); err != nil {
-		return &webError{Kind: errWebResp, Detail: "kein passendes JSON: " + shortText(err.Error()), Where: "POST /graphql"}
+		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.resp_json") + ": " + devText(err.Error()), Where: "POST /graphql"}
 	}
 	return nil
 }
@@ -225,11 +225,11 @@ func (u *Unraid) info(ctx context.Context) (urInfo, error) {
 func (u *Unraid) hint(err error) error {
 	switch {
 	case errors.Is(err, errWebAuth):
-		return fmt.Errorf("%w – API-Key prüfen (Einstellungen → Verwaltungszugriff → API-Keys)", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.ur_hint_auth"))
 	case errors.Is(err, errWebPerm):
-		return fmt.Errorf("%w – der API-Key braucht die Rolle Viewer", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.ur_hint_perm"))
 	case webAbsent(err):
-		return fmt.Errorf("%w – keine Unraid-API unter /graphql (ab Unraid 7.2 eingebaut, davor Plugin Unraid Connect)", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.ur_hint_absent"))
 	}
 	return err
 }
@@ -261,7 +261,7 @@ func (u *Unraid) Test(ctx context.Context) TestResult {
 			n++
 		}
 	}
-	res.Summary = fmt.Sprintf("Array %s, %d Platten", firstNonEmpty(arr.Array.State, "?"), n)
+	res.Summary = model.T("monitor64.txt.ur_summary", "state", firstNonEmpty(arr.Array.State, "?"), "n", n)
 	return res
 }
 
@@ -290,10 +290,22 @@ func (d urDisk) present() bool {
 }
 
 // urBad sind Zustaende einer Platte, die das Array bzw. den Pool schwaechen.
-var urBad = map[string]string{"DISK_DSBL": "deaktiviert", "DISK_NP_DSBL": "deaktiviert, fehlt", "DISK_INVALID": "ungültig",
-	"DISK_WRONG": "falsche Platte", "DISK_NP_MISSING": "fehlt", "DISK_DSBL_NEW": "deaktiviert (neu)"}
+var urBad = map[string]string{"DISK_DSBL": "monitor64.txt.disk_disabled", "DISK_NP_DSBL": "monitor64.txt.disk_disabled_missing",
+	"DISK_INVALID": "monitor64.txt.disk_invalid", "DISK_WRONG": "monitor64.txt.disk_wrong", "DISK_NP_MISSING": "monitor64.txt.disk_missing",
+	"DISK_DSBL_NEW": "monitor64.txt.disk_disabled_new"}
 
-var urStatusText = map[string]string{"DISK_OK": "ok", "DISK_NP": "leer", "DISK_NEW": "neu"}
+var urStatusText = map[string]string{"DISK_NP": "monitor64.txt.empty", "DISK_NEW": "monitor64.txt.new"}
+
+// urStatus: Zustand einer Platte als Text ("" = keiner).
+func urStatus(status string) string {
+	switch k := firstNonEmpty(urStatusText[status], urBad[status]); {
+	case status == "DISK_OK":
+		return "ok"
+	case k != "":
+		return model.T(k)
+	}
+	return devText(status)
+}
 
 // serial: Seriennummer aus der ID ("<server>:<Modell>_<Seriennummer>"); "" = nicht erkennbar.
 func (d urDisk) serial() string {
@@ -422,7 +434,7 @@ func (u *Unraid) system(ctx context.Context, in urInfo, now time.Time, add func(
 	}
 	if up := urUptime(in.Info.OS.Uptime, now); up > 0 {
 		cpu.Metrics = append(cpu.Metrics, model.Metric{Name: "uptime", Value: float64(int64(up.Seconds())), Unit: "s"})
-		parts = append(parts, "läuft seit "+hoursText(up))
+		parts = append(parts, model.T("monitor64.txt.up_since", "d", model.Sub(hoursText(up))))
 	}
 	cpu.Text = strings.Join(parts, " · ")
 	if len(cpu.Metrics) > 0 || cpu.Text != "" {
@@ -438,7 +450,7 @@ func (u *Unraid) system(ctx context.Context, in urInfo, now time.Time, add func(
 		out = append(out, model.Service{Key: "mem", Name: "RAM", Kind: "mem", Default: true,
 			Metrics: []model.Metric{{Name: "used", Value: pct(used, tot), Unit: "%", Rule: model.RuleMem, Max: tot},
 				{Name: "avail", Value: tot - used, Unit: "B"}},
-			Text: fmt.Sprintf("%s von %s frei", bytesText(tot-used), bytesText(tot))})
+			Text: model.T("monitor64.txt.free_of", "free", bytesText(tot-used), "total", bytesText(tot))})
 		if st := mm.SwapTotal.V; mm.SwapTotal.Set && st > 0 {
 			out = append(out, model.Service{Key: "swap", Name: "Swap", Kind: "swap", Default: true,
 				Metrics: []model.Metric{{Name: "used", Value: pct(min(max(mm.SwapUsed.V, 0), st), st), Unit: "%", Rule: model.RuleSwap, Max: st}}})
@@ -478,13 +490,10 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 	// Array
 	s := model.Service{Key: "raid:array", Name: "Array", Kind: "raid", Default: true}
 	state := firstNonEmpty(a.State, "UNKNOWN")
-	parts := []string{map[string]string{"STARTED": "gestartet", "STOPPED": "gestoppt"}[state]}
-	if parts[0] == "" {
-		parts[0] = shortText(state)
-	}
+	parts := []string{stateText(map[string]string{"STARTED": "monitor64.txt.started", "STOPPED": "monitor64.txt.stopped"}, state)}
 	var bad []string
 	if state != "STARTED" {
-		bad = append(bad, "Array nicht gestartet ("+shortText(state)+")")
+		bad = append(bad, model.T("monitor64.txt.array_not_started", "v", shortText(state)))
 	}
 	kb := a.Capacity.KB
 	if kb.Total.Set && kb.Total.V > 0 && kb.Used.Set {
@@ -492,7 +501,7 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 		free := max(kb.Free.V*1024, 0)
 		s.Metrics = append(s.Metrics, model.Metric{Name: "used", Value: pct(kb.Used.V*1024, tot), Unit: "%", Rule: model.RuleStore, Max: tot},
 			model.Metric{Name: "free", Value: free, Unit: "B", Max: tot})
-		parts = append(parts, fmt.Sprintf("%s von %s frei", bytesText(free), bytesText(tot)))
+		parts = append(parts, model.T("monitor64.txt.free_of", "free", bytesText(free), "total", bytesText(tot)))
 	}
 	members, active, parities := 0, 0, 0
 	for _, d := range append(append([]urDisk{}, a.Parities...), a.Disks...) {
@@ -507,21 +516,21 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 			parities++
 		}
 		if t, ok := urBad[d.Status]; ok {
-			bad = append(bad, d.Name+" "+t)
+			bad = append(bad, model.Raw(d.Name)+" "+model.T(t))
 		}
 	}
 	s.Metrics = append(s.Metrics, model.Metric{Name: "active", Value: float64(active)}, model.Metric{Name: "devices", Value: float64(members)})
-	parts = append(parts, fmt.Sprintf("%d von %d Platten ok", active, members))
+	parts = append(parts, model.T("monitor64.txt.disks_ok", "n", active, "total", members))
 	if parities == 0 {
-		parts = append(parts, "ohne Parität")
+		parts = append(parts, model.T("monitor64.txt.no_parity"))
 	}
 	if vars != nil {
 		v := vars.Vars
 		if v.Invalid.Set && v.Invalid.V > 0 && len(bad) == 0 {
-			bad = append(bad, fmt.Sprintf("%.0f Platte(n) ungültig", v.Invalid.V))
+			bad = append(bad, model.T("monitor64.txt.disks_invalid", "n", fmt.Sprintf("%.0f", v.Invalid.V)))
 		}
 		if v.Disabled.Set && v.Disabled.V > 0 && len(bad) == 0 {
-			bad = append(bad, fmt.Sprintf("%.0f Platte(n) deaktiviert", v.Disabled.V))
+			bad = append(bad, model.T("monitor64.txt.disks_disabled", "n", fmt.Sprintf("%.0f", v.Disabled.V)))
 		}
 	}
 	if len(bad) > 0 {
@@ -533,13 +542,13 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 		st := strings.ToUpper(p.Status)
 		switch {
 		case p.Running && p.Paused:
-			parts = append(parts, fmt.Sprintf("Paritätsprüfung pausiert (%.0f %%)", p.Progress.V))
+			parts = append(parts, model.T("monitor64.txt.parity_paused", "v", fmt.Sprintf("%.0f", p.Progress.V)))
 		case p.Running:
-			parts = append(parts, fmt.Sprintf("Paritätsprüfung läuft (%.0f %%)", p.Progress.V))
+			parts = append(parts, model.T("monitor64.txt.parity_running_pct", "v", fmt.Sprintf("%.0f", p.Progress.V)))
 		case st == "NEVER_RUN":
-			parts = append(parts, "Paritätsprüfung noch nie gelaufen")
+			parts = append(parts, model.T("monitor64.txt.parity_never"))
 		default:
-			txt := "letzte Paritätsprüfung"
+			txt := model.T("monitor64.txt.last_parity")
 			if p.Date != nil && !p.Date.T.IsZero() {
 				age := max(now.Sub(p.Date.T), 0)
 				s.Metrics = append(s.Metrics, model.Metric{Name: "parity_age", Value: round2(age.Hours() / 24), Unit: "d"})
@@ -548,29 +557,29 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "parity_errors", Value: max(p.Errors.V, 0)})
 			switch {
 			case st == "FAILED":
-				parts = append(parts, txt+" fehlgeschlagen")
-				s.Facts = append(s.Facts, model.Fact{Code: "parity_errors", Text: "Paritätsprüfung fehlgeschlagen"})
+				parts = append(parts, txt+" "+model.T("monitor64.txt.failed"))
+				s.Facts = append(s.Facts, model.Fact{Code: "parity_errors", Text: model.T("monitor64.txt.parity_failed")})
 			case st == "CANCELLED":
-				parts = append(parts, txt+" abgebrochen")
+				parts = append(parts, txt+" "+model.T("monitor64.txt.aborted"))
 			case p.Errors.V > 0:
-				parts = append(parts, fmt.Sprintf("%s: %.0f Fehler", txt, p.Errors.V))
-				s.Facts = append(s.Facts, model.Fact{Code: "parity_errors", Text: fmt.Sprintf("letzte Paritätsprüfung: %.0f Fehler", p.Errors.V)})
+				parts = append(parts, txt+": "+parityErrors(p.Errors.V))
+				s.Facts = append(s.Facts, model.Fact{Code: "parity_errors", Text: model.T("monitor64.txt.last_parity") + ": " + parityErrors(p.Errors.V)})
 			default:
-				parts = append(parts, txt+": 0 Fehler")
+				parts = append(parts, txt+": "+parityErrors(0))
 			}
 		}
 	} else if vars != nil && parities > 0 {
 		v := vars.Vars
 		switch {
 		case v.Resync.V > 0:
-			parts = append(parts, "Paritätsprüfung läuft")
+			parts = append(parts, model.T("monitor64.txt.parity_running"))
 		case v.Synced.Set && v.Synced.V > 0:
 			age := max(now.Sub(msTime(v.Synced.V)), 0)
 			s.Metrics = append(s.Metrics, model.Metric{Name: "parity_age", Value: round2(age.Hours() / 24), Unit: "d"},
 				model.Metric{Name: "parity_errors", Value: max(v.SyncErrs.V, 0)})
-			parts = append(parts, fmt.Sprintf("letzte Paritätsprüfung %s: %.0f Fehler", agoText(age), max(v.SyncErrs.V, 0)))
+			parts = append(parts, model.T("monitor64.txt.last_parity")+" "+agoText(age)+": "+parityErrors(max(v.SyncErrs.V, 0)))
 			if v.SyncErrs.V > 0 {
-				s.Facts = append(s.Facts, model.Fact{Code: "parity_errors", Text: fmt.Sprintf("letzte Paritätsprüfung: %.0f Fehler", v.SyncErrs.V)})
+				s.Facts = append(s.Facts, model.Fact{Code: "parity_errors", Text: model.T("monitor64.txt.last_parity") + ": " + parityErrors(v.SyncErrs.V)})
 			}
 		}
 	}
@@ -598,7 +607,7 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 		}
 		p.members = append(p.members, d)
 		if t, ok := urBad[d.Status]; ok {
-			p.bad = append(p.bad, d.Name+" "+t)
+			p.bad = append(p.bad, model.Raw(d.Name)+" "+model.T(t))
 		}
 	}
 	sort.Strings(names)
@@ -615,19 +624,19 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 		if strings.EqualFold(p.head.FSType, "zfs") {
 			kind, code = "zfs", "zfs_degraded"
 		}
-		ps := model.Service{Key: kind + ":" + n, Name: "Pool " + n, Kind: kind, Default: true}
+		ps := model.Service{Key: kind + ":" + n, Name: "Pool " + model.Raw(n), Kind: kind, Default: true}
 		var pp []string
 		if t := p.head.FSType; t != "" {
-			pp = append(pp, t)
+			pp = append(pp, model.Raw(t))
 		}
 		if h := p.head; h.FSSize.Set && h.FSSize.V > 0 && h.FSUsed.Set {
 			tot := h.FSSize.V * 1024
 			free := max(h.FSFree.V*1024, 0)
 			ps.Metrics = append(ps.Metrics, model.Metric{Name: "used", Value: pct(h.FSUsed.V*1024, tot), Unit: "%", Rule: model.RuleStore, Max: tot},
 				model.Metric{Name: "free", Value: free, Unit: "B", Max: tot})
-			pp = append(pp, fmt.Sprintf("%s von %s frei", bytesText(free), bytesText(tot)))
+			pp = append(pp, model.T("monitor64.txt.free_of", "free", bytesText(free), "total", bytesText(tot)))
 		}
-		pp = append(pp, fmt.Sprintf("%d Platte(n)", len(p.members)))
+		pp = append(pp, model.T("monitor64.txt.disks_n", "n", len(p.members)))
 		if len(p.bad) > 0 {
 			ps.Facts = append(ps.Facts, model.Fact{Code: code, Text: strings.Join(p.bad, ", ")})
 			pp = append(pp, strings.Join(p.bad, ", "))
@@ -663,23 +672,27 @@ func urArrayServices(arr urArray, vars *urVars, now time.Time) []model.Service {
 	return append(out, ds...)
 }
 
+// parityErrors: "3 Fehler" der Paritaetspruefung.
+func parityErrors(n float64) string {
+	return model.T("monitor64.txt.errors_n", "n", fmt.Sprintf("%.0f", n))
+}
+
 // urDiskService: Platte mit Zustand, Temperatur (fehlt, wenn sie schlaeft), Fehlern und Belegung.
 func urDiskService(key string, d urDisk) model.Service {
 	name := firstNonEmpty(d.Name, d.Device)
 	if d.Device != "" && d.Name != "" {
 		name += " (" + d.Device + ")"
 	}
-	s := model.Service{Key: key, Name: name, Kind: "disk", Default: true}
+	s := model.Service{Key: key, Name: model.Raw(name), Kind: "disk", Default: true}
 	var parts []string
 	if d.Size.Set && d.Size.V > 0 {
 		parts = append(parts, bytesText(d.Size.V*1024))
 	}
-	st := firstNonEmpty(urStatusText[d.Status], urBad[d.Status], shortText(d.Status))
-	if st != "" {
+	if st := urStatus(d.Status); st != "" {
 		parts = append(parts, st)
 	}
 	if t, ok := urBad[d.Status]; ok {
-		s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: "Platte " + t})
+		s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: model.T("monitor64.txt.disk_word") + " " + model.T(t)})
 	}
 	switch {
 	case d.Temp.Set && d.Temp.V > 0 && d.Temp.V < 150:
@@ -690,13 +703,13 @@ func urDiskService(key string, d urDisk) model.Service {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "temp", Value: round2(d.Temp.V), Unit: "°C", Rule: rule})
 		parts = append(parts, fmt.Sprintf("%.0f °C", d.Temp.V))
 	case d.Spinning != nil && !*d.Spinning:
-		parts = append(parts, "schläft")
+		parts = append(parts, model.T("monitor64.txt.sleeping"))
 	}
 	if d.Errors.Set && d.Errors.V >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "errors", Value: d.Errors.V})
 		if d.Errors.V > 0 {
-			parts = append(parts, fmt.Sprintf("%.0f Fehler", d.Errors.V))
-			s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: fmt.Sprintf("%.0f Lese-/Schreibfehler", d.Errors.V)})
+			parts = append(parts, model.T("monitor64.txt.errors_n", "n", fmt.Sprintf("%.0f", d.Errors.V)))
+			s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: model.T("monitor64.txt.rw_errors", "n", fmt.Sprintf("%.0f", d.Errors.V))})
 		}
 	}
 	if d.FSSize.Set && d.FSSize.V > 0 && d.FSUsed.Set && d.Type != "CACHE" && !strings.HasPrefix(d.Name, "parity") {
@@ -704,7 +717,7 @@ func urDiskService(key string, d urDisk) model.Service {
 		free := max(d.FSFree.V*1024, 0)
 		s.Metrics = append(s.Metrics, model.Metric{Name: "used", Value: pct(d.FSUsed.V*1024, tot), Unit: "%", Rule: model.RuleFS, Max: tot},
 			model.Metric{Name: "free", Value: free, Unit: "B", Max: tot})
-		parts = append(parts, fmt.Sprintf("%s frei", bytesText(free)))
+		parts = append(parts, model.T("monitor64.txt.free", "v", bytesText(free)))
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s
@@ -744,26 +757,26 @@ func (u *Unraid) containers(ctx context.Context, add func(string, error, ...stri
 		}
 		seen[name] = true
 		state := strings.ToUpper(c.State)
-		s := model.Service{Key: "ctr:" + name, Name: shortText(name), Kind: "ctr", Default: true}
+		s := model.Service{Key: "ctr:" + name, Name: devText(name), Kind: "ctr", Default: true}
 		run := 0.0
 		if state == "RUNNING" {
 			run = 1
 		}
 		s.Metrics = []model.Metric{{Name: "running", Value: run}}
-		parts := []string{firstNonEmpty(map[string]string{"RUNNING": "läuft", "EXITED": "beendet", "PAUSED": "pausiert"}[state], shortText(state), "unbekannt")}
+		parts := []string{stateText(map[string]string{"RUNNING": "monitor64.txt.running", "EXITED": "monitor64.txt.exited", "PAUSED": "monitor64.txt.paused"}, state)}
 		if c.Status != "" {
-			parts = append(parts, shortText(c.Status))
+			parts = append(parts, devText(c.Status))
 		}
 		if c.AutoStart {
-			parts = append(parts, "soll laufen (Autostart)")
+			parts = append(parts, model.T("monitor64.txt.should_run_autostart"))
 			if state != "RUNNING" && state != "PAUSED" {
-				s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", soll laufen (Autostart)"})
+				s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", " + model.T("monitor64.txt.should_run_autostart")})
 			}
 		} else {
-			parts = append(parts, "darf aus sein")
+			parts = append(parts, model.T("monitor64.txt.may_be_off"))
 		}
 		if c.Image != "" {
-			parts = append(parts, shortText(c.Image))
+			parts = append(parts, devText(c.Image))
 		}
 		s.Text = strings.Join(parts, " · ")
 		out = append(out, s)
@@ -807,16 +820,17 @@ func (u *Unraid) vms(ctx context.Context, add func(string, error, ...string)) []
 		}
 		seen[d.Name] = true
 		state := strings.ToUpper(d.State)
-		s := model.Service{Key: "vm:" + d.Name, Name: "VM " + shortText(d.Name), Kind: "vm", Default: true}
+		s := model.Service{Key: "vm:" + d.Name, Name: "VM " + devText(d.Name), Kind: "vm", Default: true}
 		run := 0.0
 		if state == "RUNNING" || state == "IDLE" {
 			run = 1
 		}
 		s.Metrics = []model.Metric{{Name: "running", Value: run}, {Name: "locked", Value: 0}}
-		s.Text = firstNonEmpty(map[string]string{"RUNNING": "läuft", "IDLE": "läuft (idle)", "PAUSED": "pausiert", "SHUTOFF": "aus",
-			"SHUTDOWN": "fährt herunter", "CRASHED": "abgestürzt", "PMSUSPENDED": "Ruhezustand"}[state], shortText(state), "unbekannt")
+		s.Text = stateText(map[string]string{"RUNNING": "monitor64.txt.running", "IDLE": "monitor64.txt.running_idle", "PAUSED": "monitor64.txt.paused",
+			"SHUTOFF": "monitor64.txt.off", "SHUTDOWN": "monitor64.txt.shutting_down", "CRASHED": "monitor64.txt.crashed",
+			"PMSUSPENDED": "monitor64.txt.sleep_state"}, state)
 		if state == "CRASHED" {
-			s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: "VM abgestürzt (CRASHED)"})
+			s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: model.T("monitor64.txt.vm_crashed")})
 		}
 		out = append(out, s)
 	}
@@ -854,7 +868,7 @@ func (u *Unraid) notifications(ctx context.Context, add func(string, error, ...s
 	}
 	n := r.N
 	w, a := max(n.Overview.Unread.Warning.V, 0), max(n.Overview.Unread.Alert.V, 0)
-	s := model.Service{Key: "alerts", Name: "Benachrichtigungen", Kind: "alerts", Default: true,
+	s := model.Service{Key: "alerts", Name: model.T("monitor64.svc.notifications"), Kind: "alerts", Default: true,
 		Metrics: []model.Metric{{Name: "unread_warning", Value: w}, {Name: "unread_alert", Value: a}}}
 	var texts []string
 	for _, x := range append(append([]note{}, n.Alerts...), n.Warnings...) {
@@ -863,14 +877,14 @@ func (u *Unraid) notifications(ctx context.Context, add func(string, error, ...s
 		}
 	}
 	if total := int(w + a); total > 0 {
-		sum := fmt.Sprintf("%d ungelesen (%.0f Alarme, %.0f Warnungen)", total, a, w)
+		sum := model.T("monitor64.txt.unread", "n", total, "a", fmt.Sprintf("%.0f", a), "w", fmt.Sprintf("%.0f", w))
 		if len(texts) > 0 {
-			sum += ": " + strings.Join(limitList(texts, 3), "; ")
+			sum += ": " + model.Raw(strings.Join(limitList(texts, 3), "; "))
 		}
 		s.Text = sum
 		s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: sum})
 	} else {
-		s.Text = "keine ungelesenen Warnungen"
+		s.Text = model.T("monitor64.txt.no_unread")
 	}
 	return s, true
 }

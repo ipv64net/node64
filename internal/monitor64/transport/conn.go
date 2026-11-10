@@ -56,6 +56,9 @@ var (
 var (
 	// ErrHostKeyChanged: der Hostschluessel weicht vom gemerkten ab (errors.Is; Details in *HostKeyError).
 	ErrHostKeyChanged = errors.New("monitor64: host key changed")
+	// ErrHostKeyUnconfirmed: Anmeldung mit Passwort, aber noch kein bestaetigter Hostschluessel (errors.Is; der
+	// angebotene Schluessel steht in *UnconfirmedKeyError). Das Passwort wurde nicht gesendet.
+	ErrHostKeyUnconfirmed = errors.New("monitor64: host key not confirmed")
 	// ErrTooLarge: die Antwort ist groesser als erlaubt.
 	ErrTooLarge = errors.New("monitor64: answer too large")
 	// ErrClosed: der Client wurde geschlossen.
@@ -79,6 +82,21 @@ func (e *HostKeyError) Error() string {
 
 // Is macht errors.Is(err, ErrHostKeyChanged) moeglich.
 func (e *HostKeyError) Is(target error) bool { return target == ErrHostKeyChanged }
+
+// UnconfirmedKeyError: der Host zeigt einen Schluessel, aber es ist noch keiner gemerkt und die Anmeldung braeuchte
+// das Passwort. Der Handshake endet vor der Anmeldung; die Oberflaeche laesst Got bestaetigen (dann als HostKey
+// mitgeben).
+type UnconfirmedKeyError struct {
+	Got     string // angebotener Fingerabdruck
+	GotType string // Art des angebotenen Schluessels
+}
+
+func (e *UnconfirmedKeyError) Error() string {
+	return fmt.Sprintf("monitor64: host key not confirmed (%s): the password is only sent after the fingerprint was confirmed", e.Got)
+}
+
+// Is macht errors.Is(err, ErrHostKeyUnconfirmed) moeglich.
+func (e *UnconfirmedKeyError) Is(target error) bool { return target == ErrHostKeyUnconfirmed }
 
 // RemoteError: der Befehl auf dem Host endete mit einem Fehler.
 type RemoteError struct {
@@ -112,11 +130,15 @@ func (e *TimeoutError) Is(target error) bool {
 
 // connConfig beschreibt eine Verbindung (gemeinsam fuer Agent und SSH ohne Agent).
 type connConfig struct {
-	addr        string
-	user        string
-	auth        []ssh.AuthMethod
-	hostKey     string
-	onHostKey   func(fingerprint string)
+	addr      string
+	user      string
+	auth      []ssh.AuthMethod
+	hostKey   string
+	onHostKey func(fingerprint string)
+	// confirmKey: Anmeldung mit Passwort. Ohne gemerkten Hostschluessel wird nicht angemeldet (*UnconfirmedKeyError):
+	// das Passwort ginge sonst an jeden, der gerade unter der Adresse antwortet. Eine Signatur mit dem Schluessel der
+	// Node kann der Gegenueber dagegen nicht weiterverwenden (TOFU bleibt dort).
+	confirmKey  bool
 	dialTimeout time.Duration
 	idleTimeout time.Duration
 	// multiKey: der Host kann mehrere Schluesselarten haben (normaler sshd); bei abweichendem Schluessel die
@@ -453,6 +475,10 @@ func (c *conn) handshake(ctx, dctx context.Context, nc net.Conn, deadline time.T
 				hkErr = errors.New("monitor64: push: host key does not match the announced fingerprint")
 				return hkErr
 			}
+			if want == "" && claim == "" && c.cfg.confirmKey {
+				hkErr = &UnconfirmedKeyError{Got: seen, GotType: key.Type()}
+				return hkErr // Abbruch vor der Anmeldung: das Passwort verlaesst die Node nicht
+			}
 			return nil
 		},
 		HostKeyAlgorithms: algos,
@@ -552,7 +578,7 @@ func (c *conn) exec(ctx context.Context, cmd string, stdin io.Reader, limit int)
 // *TimeoutError, alles andere gekuerzt und bereinigt (Texte vom Host).
 func finishErr(ctx context.Context, start time.Time, err error) error {
 	var hk *HostKeyError
-	if errors.As(err, &hk) {
+	if errors.As(err, &hk) || errors.Is(err, ErrHostKeyUnconfirmed) {
 		return err
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {

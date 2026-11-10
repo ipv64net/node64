@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/eval"
+	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/tsdb"
 )
 
@@ -312,6 +312,8 @@ type accessState struct {
 	Failures int    `json:"failures"`
 	Error    string `json:"error,omitempty"`
 	Known    bool   `json:"known"` // schon abgefragt
+	// Agent: Version und Update-Stand eines Agent-Zugangs (agentdist.go; nil bei anderen Zugaengen)
+	Agent *agentHostOut `json:"agent,omitempty"`
 }
 
 type hostDetail struct {
@@ -363,8 +365,8 @@ func (m *Module) hostDetail(ctx context.Context, uid string) (*hostDetail, error
 	if err != nil {
 		return nil, err
 	}
-	for _, a := range accessOuts(accs) {
-		as := accessState{accessOut: a, Name: accessName(a.Type)}
+	for i, a := range accessOuts(accs) {
+		as := accessState{accessOut: a, Name: accessName(a.Type), Agent: m.agentOfAccess(h, accs[i])}
 		if v != nil {
 			for _, av := range v.Accesses {
 				if av.UID == a.UID {
@@ -397,7 +399,8 @@ func (m *Module) hostDetail(ctx context.Context, uid string) (*hostDetail, error
 				l := m.levels(cfg, h, row, rk)
 				l.Metric = mt.Name
 				o.Rules = append(o.Rules, l)
-				if o.Primary < 0 {
+				// Spalte "Schwellen": die erste Messgroesse, bei einem Problem die ausloesende (schwerste Stufe)
+				if o.Primary < 0 || mt.Status.Level.Rank() > s.Metrics[o.Primary].Status.Level.Rank() {
 					o.Primary, o.Levels = i, l
 				}
 			}
@@ -557,16 +560,16 @@ func (m *Module) apiSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiSparks: GET Mini-Verlaeufe (24 Std., 48 Punkte, Mittelwerte): ohne host die CPU je Host (Kacheln), mit host
-// die erste Messgroesse mit Schwelle je Dienst (Spalte "24 Std.").
+// die erste Messgroesse mit Schwelle je Dienst (Spalte "24 Std."). Im Cluster kommen die Mini-Verlaeufe der Hosts
+// anderer Nodes von der zustaendigen Node (cluster_sparks.go; nicht erreichbar: leer).
 func (m *Module) apiSparks(w http.ResponseWriter, r *http.Request) {
-	hs := m.history()
-	out := map[string][]float64{}
-	if hs == nil {
-		writeJSON(w, http.StatusOK, out)
+	if m.history() == nil {
+		writeJSON(w, http.StatusOK, map[string][]float64{})
 		return
 	}
-	var ids, keys []string
-	if host := r.URL.Query().Get("host"); host != "" {
+	var items []sparkItem
+	host := r.URL.Query().Get("host")
+	if host != "" {
 		if v := m.viewOf(host); v != nil {
 			for _, s := range v.Services {
 				name := ""
@@ -580,7 +583,7 @@ func (m *Module) apiSparks(w http.ResponseWriter, r *http.Request) {
 					name = s.Metrics[0].Name
 				}
 				if name != "" {
-					ids, keys = append(ids, s.Key), append(keys, seriesKey(host, s.Key, name))
+					items = append(items, sparkItem{ID: s.Key, Host: host, Svc: s.Key, Metric: name})
 				}
 			}
 		}
@@ -588,28 +591,16 @@ func (m *Module) apiSparks(w http.ResponseWriter, r *http.Request) {
 		for _, v := range m.Views() {
 			for _, s := range v.Services {
 				if s.Kind == "cpu" {
-					ids, keys = append(ids, v.Host.UID), append(keys, seriesKey(v.Host.UID, s.Key, "util"))
+					items = append(items, sparkItem{ID: v.Host.UID, Host: v.Host.UID, Svc: s.Key, Metric: "util"})
 					break
 				}
 			}
 		}
 	}
-	if len(keys) == 0 {
-		writeJSON(w, http.StatusOK, out)
-		return
-	}
-	now := time.Now()
-	res, err := hs.QueryMulti(r.Context(), keys, now.Add(-24*time.Hour), now, 48)
+	out, err := m.sparks(r.Context(), host, items)
 	if err != nil {
 		m.fail(w, r, err)
 		return
-	}
-	for i, s := range res {
-		vals := make([]float64, len(s.Points))
-		for k, p := range s.Points {
-			vals[k] = p.Avg
-		}
-		out[ids[i]] = vals
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -751,7 +742,7 @@ func (m *Module) problems(r *http.Request) (problemsOut, error) {
 			continue
 		}
 		if search != "" {
-			hay := strings.ToLower(o.Host + " " + o.Name + " " + p.Key)
+			hay := strings.ToLower(o.Host + " " + m.txReq(r, o.Name) + " " + p.Key) // gesucht wird im angezeigten Namen
 			for _, a := range actors {
 				hay += " " + strings.ToLower(a.Name)
 			}
@@ -848,28 +839,14 @@ func (m *Module) apiProblemAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// txReq uebersetzt Texte des Kerns im Format "i18n:<schluessel>?k=v" fuer Ausgaben ohne Browser (CSV); die
-// Oberflaeche uebersetzt selbst (tx in monitor64.js).
+// txReq uebersetzt Texte des Kerns und der Sammler (Token "i18n:<schluessel>?k=v", auch mehrere mit festen Teilen,
+// siehe model.T) in die Sprache der Anfrage: fuer Ausgaben ohne Browser (CSV) und die Suche. Die Oberflaeche
+// uebersetzt selbst (tx in monitor64.js).
 func (m *Module) txReq(r *http.Request, s string) string {
-	rest, ok := strings.CutPrefix(s, "i18n:")
-	if !ok || m.g.T == nil {
+	if m.g.T == nil {
 		return s
 	}
-	key, query, _ := strings.Cut(rest, "?")
-	if !strings.HasPrefix(key, "monitor64.") {
-		return s
-	}
-	vals, err := url.ParseQuery(query)
-	if err != nil {
-		return s
-	}
-	var args []any
-	for k, v := range vals {
-		if len(v) > 0 {
-			args = append(args, k, v[0])
-		}
-	}
-	return m.g.T(r, key, args...)
+	return model.Translate(s, func(key string, args ...any) string { return m.g.T(r, key, args...) })
 }
 
 // csvCell schuetzt vor Formel-Einschleusung (Tabellenprogramme werten = + - @ am Anfang aus).

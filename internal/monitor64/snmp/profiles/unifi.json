@@ -22,7 +22,7 @@
       "service": "UniFi",
       "kind": "hw",
       "oid": ".1.3.6.1.4.1.41112.1.6.3.3.0",
-      "label": "Modell"
+      "label": "i18n:monitor64.snmp.model"
     },
     {
       "key": "unifi:system",
@@ -46,7 +46,7 @@
         },
         {
           "col": 9,
-          "label": "Funk"
+          "label": "i18n:monitor64.snmp.radio"
         },
         {
           "col": 4,

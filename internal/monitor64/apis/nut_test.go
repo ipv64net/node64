@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ipv64net/node64/internal/monitor64/model/modeltest"
 )
 
 // fakeUPSD ist ein upsd mit den Antworten aus testdata/nut (eine Datei je USV, Zeilen "VAR <ups> <name> "<wert>"").
@@ -149,7 +151,7 @@ func TestNUTCollect(t *testing.T) {
 	}
 	svcs, err := n.Collect(context.Background())
 	pe := partialOf(t, err)
-	if !hasPrefix(pe, "ups:garage") || !strings.Contains(pe.Error(), "DATA-STALE") {
+	if !hasPrefix(pe, "ups:garage") || !strings.Contains(deErr(pe), "DATA-STALE") {
 		t.Errorf("Teilfehler = %+v", pe)
 	}
 	if len(svcs) != 2 || hasSvc(svcs, "ups:garage") {
@@ -211,7 +213,7 @@ func TestNUTFilterAndAuth(t *testing.T) {
 		t.Errorf("Befehle = %v", cmds)
 	}
 	// Test: Version und Hinweis auf unverschluesseltes Passwort
-	r := n.Test(context.Background())
+	r := deRes(n.Test(context.Background()))
 	if !r.OK || !strings.HasPrefix(r.Version, "Network UPS Tools upsd 2.8.1") || r.Summary != "1 USV: eaton (OB DISCHRG LB RB OVER)" ||
 		!strings.Contains(r.Warning, "Passwort geht unverschlüsselt") {
 		t.Errorf("Test = %+v", r)
@@ -219,10 +221,10 @@ func TestNUTFilterAndAuth(t *testing.T) {
 	// falsches Passwort: Fehler ohne Geheimnis
 	n2, _ := NewNUT(NUTConfig{Address: f.addr(), User: "monuser", Password: "falsch-" + testSecret, TLS: NUTTLSOff})
 	_, err = n2.Collect(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "INVALID-PASSWORD") || strings.Contains(err.Error(), testSecret) {
+	if err == nil || !strings.Contains(deErr(err), "INVALID-PASSWORD") || strings.Contains(deErr(err), testSecret) {
 		t.Errorf("falsches Passwort: %v", err)
 	}
-	if r := n2.Test(context.Background()); r.OK || strings.Contains(r.Error, testSecret) {
+	if r := deRes(n2.Test(context.Background())); r.OK || strings.Contains(r.Error, testSecret) {
 		t.Errorf("Test falsches Passwort: %+v", r)
 	}
 }
@@ -234,11 +236,11 @@ func TestNUTStartTLS(t *testing.T) {
 	cfg := NUTConfig{Address: f.addr(), User: "monuser", Password: testSecret}
 	n, _ := NewNUT(cfg)
 	// ohne Pin: Zertifikat bestaetigen, nichts gesendet
-	r := n.Test(context.Background())
+	r := deRes(n.Test(context.Background()))
 	if r.OK || !r.NeedConfirm || r.Fingerprint != pin || r.Error != "" || r.CertSubject != "CN=upsd-test" {
 		t.Errorf("Test ohne Pin = %+v", r)
 	}
-	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "nicht bestätigt") {
+	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "nicht bestätigt") {
 		t.Errorf("Collect ohne Pin: %v", err)
 	}
 	for _, c := range f.commands() {
@@ -249,7 +251,7 @@ func TestNUTStartTLS(t *testing.T) {
 	// mit Pin: alles nach STARTTLS verschluesselt
 	cfg.Pin = pin
 	n, _ = NewNUT(cfg)
-	r = n.Test(context.Background())
+	r = deRes(n.Test(context.Background()))
 	if !r.OK || strings.Contains(r.Warning, "unverschlüsselt") || r.Fingerprint != pin {
 		t.Errorf("Test mit Pin = %+v", r)
 	}
@@ -265,13 +267,13 @@ func TestNUTStartTLS(t *testing.T) {
 	// falscher Pin
 	cfg.Pin = strings.Repeat("ab", 32)
 	n, _ = NewNUT(cfg)
-	if r := n.Test(context.Background()); r.OK || !strings.Contains(r.Error, "passt nicht") {
+	if r := deRes(n.Test(context.Background())); r.OK || !strings.Contains(r.Error, "passt nicht") {
 		t.Errorf("falscher Pin = %+v", r)
 	}
 	// Pflicht ohne Angebot
 	f.cert = nil
 	n, _ = NewNUT(NUTConfig{Address: f.addr(), TLS: NUTTLSRequire})
-	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "FEATURE-NOT-CONFIGURED") {
+	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "FEATURE-NOT-CONFIGURED") {
 		t.Errorf("TLS Pflicht: %v", err)
 	}
 }
@@ -280,13 +282,13 @@ func TestNUTHostile(t *testing.T) {
 	f := nutFake(t)
 	f.extra = "UPS " + strings.Repeat("x", nutMaxLine+10)
 	n, _ := NewNUT(NUTConfig{Address: f.addr(), Timeout: 5 * time.Second})
-	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "Zeile zu lang") {
+	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "Zeile zu lang") {
 		t.Errorf("lange Zeile: %v", err)
 	}
 	// ungueltiger Name vom Geraet wird nicht in Befehle uebernommen
 	f.extra = `UPS "bad name; LIST VAR x" "x"`
 	svcs, err := n.Collect(context.Background())
-	if !IsPartial(err) || len(svcs) != 2 || !strings.Contains(err.Error(), "ungültiger USV-Name") {
+	if !IsPartial(err) || len(svcs) != 2 || !strings.Contains(deErr(err), "ungültiger USV-Name") {
 		t.Errorf("ungueltiger Name: %d %v", len(svcs), err)
 	}
 	// keine Antwort: Zeitlimit
@@ -348,15 +350,15 @@ func TestNUTFields(t *testing.T) {
 }
 
 func TestNUTServiceStates(t *testing.T) {
-	s := nutService(nutUPS{Name: "u", Vars: map[string]string{"ups.status": "OL FSD", "battery.charge": "NaN", "battery.runtime": "Inf"}})
+	s := modeltest.Service("de", nutService(nutUPS{Name: "u", Vars: map[string]string{"ups.status": "OL FSD", "battery.charge": "NaN", "battery.runtime": "Inf"}}))
 	if !hasFact(s, "ups_low_battery") || hasFact(s, "ups_on_battery") || len(s.Metrics) != 1 {
 		t.Errorf("FSD/NaN = %+v", s)
 	}
-	s = nutService(nutUPS{Name: "u", Desc: "Keller", Vars: map[string]string{}})
+	s = modeltest.Service("de", nutService(nutUPS{Name: "u", Desc: "Keller", Vars: map[string]string{}}))
 	if s.Name != "USV u (Keller)" || !strings.HasPrefix(s.Text, "Status unbekannt") {
 		t.Errorf("leer = %+v", s)
 	}
-	s = nutService(nutUPS{Name: "u", Vars: map[string]string{"ups.status": "OL", "battery.charge": "150", "ups.power": "300"}})
+	s = modeltest.Service("de", nutService(nutUPS{Name: "u", Vars: map[string]string{"ups.status": "OL", "battery.charge": "150", "ups.power": "300"}}))
 	if m := mustMetric(t, s, "charge"); m.Value != 100 {
 		t.Errorf("charge > 100 = %+v", m)
 	}
@@ -380,7 +382,7 @@ func TestNUTNoDowngrade(t *testing.T) {
 			t.Fatalf("Anmeldung ohne TLS gesendet: %v", f.commands())
 		}
 	}
-	if r := n.Test(context.Background()); !r.OK || !strings.Contains(r.Warning, "Anmeldung weggelassen") {
+	if r := deRes(n.Test(context.Background())); !r.OK || !strings.Contains(r.Warning, "Anmeldung weggelassen") {
 		t.Errorf("Test auto ohne TLS = %+v", r)
 	}
 	// erst TLS, dann abgelehnt
@@ -404,7 +406,7 @@ func TestNUTNoDowngrade(t *testing.T) {
 	f.cmds = nil
 	f.mu.Unlock()
 	_, err = n.Collect(context.Background())
-	if err == nil || IsPartial(err) || !strings.Contains(err.Error(), "bisher TLS") {
+	if err == nil || IsPartial(err) || !strings.Contains(deErr(err), "bisher TLS") {
 		t.Errorf("Ablehnung nach TLS: %v", err)
 	}
 	for _, c := range f.commands() {
@@ -424,7 +426,7 @@ func TestNUTMaxBytes(t *testing.T) {
 	f.ups["big"] = b.String()
 	f.upsList = []string{"big"}
 	n, _ := NewNUT(NUTConfig{Address: f.addr(), TLS: NUTTLSOff, Timeout: 10 * time.Second})
-	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "zu groß") {
+	if _, err := n.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "zu groß") {
 		t.Errorf("6 MB angenommen: %v", err)
 	}
 }

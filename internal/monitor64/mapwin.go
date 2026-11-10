@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ipv64net/node64/internal/m64proto"
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // Zuordnung der Windows-Abschnitte des Agent-Berichts (m64win bzw. windows_exporter ueber promscrape); MapReport ruft
@@ -61,7 +62,7 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 	if len(list) == 0 {
 		return nil
 	}
-	sum := Service{Key: "winsvc", Name: "Windows-Dienste", Kind: "winsvc", Default: true}
+	sum := Service{Key: "winsvc", Name: model.T("monitor64.svc.winsvc"), Kind: "winsvc", Default: true}
 	perUser := winSvcPerUser(list)
 	var stopped []string
 	auto := 0
@@ -71,15 +72,15 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 		if w.Name == "" {
 			continue
 		}
-		name := firstNonEmpty(w.Display, w.Name)
-		s := Service{Key: "winsvc:" + w.Name, Name: name, Kind: "winsvc", Text: w.State}
+		name := model.Raw(firstNonEmpty(w.Display, w.Name)) // Namen und Zustand liefert der Host
+		s := Service{Key: "winsvc:" + w.Name, Name: name, Kind: "winsvc", Text: model.Raw(w.State)}
 		run := 0.0
 		if w.State == "running" {
 			run = 1
 		}
 		s.Metrics = []Metric{{Name: "running", Value: run}}
 		if winSvcStopped(w.State) {
-			s.Facts = append(s.Facts, Fact{Code: "winsvc_stopped", Text: fmt.Sprintf("%s (%s): %s", name, w.Name, w.State)})
+			s.Facts = append(s.Facts, Fact{Code: "winsvc_stopped", Text: fmt.Sprintf("%s (%s): %s", name, model.Raw(w.Name), model.Raw(w.State))})
 		}
 		out = append(out, s)
 		if w.StartType != "auto" || perUser[strings.ToLower(w.Name)] {
@@ -94,9 +95,9 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 	if len(stopped) > 0 {
 		list := strings.Join(limitList(stopped, 5), ", ")
 		sum.Facts = append(sum.Facts, Fact{Code: "winsvc_stopped", Text: list})
-		sum.Text = fmt.Sprintf("%d von %d automatischen Diensten gestoppt: %s", len(stopped), auto, list)
+		sum.Text = model.T("monitor64.txt.winsvc_stopped", "n", len(stopped), "total", auto, "list", list)
 	} else {
-		sum.Text = fmt.Sprintf("%d automatische Dienste, keiner gestoppt", auto)
+		sum.Text = model.T("monitor64.txt.winsvc_ok", "n", auto)
 	}
 	out[0] = sum
 	return out

@@ -32,13 +32,16 @@ var printerBits = []struct {
 	text string
 	err  bool
 }{
-	{"Papier knapp", false}, {"kein Papier", true}, {"Toner knapp", false}, {"kein Toner", true}, {"Klappe offen", true},
-	{"Papierstau", true}, {"offline", true}, {"Wartung nötig", true}, {"Papierfach fehlt", true}, {"Ausgabefach fehlt", true},
-	{"Verbrauchsmaterial fehlt", true}, {"Ausgabefach fast voll", false}, {"Ausgabefach voll", true}, {"Papierfach leer", false},
-	{"Wartung überfällig", false},
+	{"monitor64.txt.prt_paper_low", false}, {"monitor64.txt.prt_no_paper", true}, {"monitor64.txt.prt_toner_low", false},
+	{"monitor64.txt.prt_no_toner", true}, {"monitor64.txt.prt_door_open", true}, {"monitor64.txt.prt_jam", true},
+	{"monitor64.txt.prt_offline", true}, {"monitor64.txt.prt_service", true}, {"monitor64.txt.prt_tray_missing", true},
+	{"monitor64.txt.prt_output_missing", true}, {"monitor64.txt.prt_supply_missing", true}, {"monitor64.txt.prt_output_near_full", false},
+	{"monitor64.txt.prt_output_full", true}, {"monitor64.txt.prt_tray_empty", false}, {"monitor64.txt.prt_service_overdue", false},
 }
 
-var supplyTypes = map[int]string{3: "Toner", 4: "Resttoner", 5: "Tinte", 9: "Trommel", 15: "Fixiereinheit", 19: "Resttinte"}
+// supplyTypes: Name eines Verbrauchsmaterials ohne Beschreibung (prtMarkerSuppliesType).
+var supplyTypes = map[int]string{3: "monitor64.txt.sup_toner", 4: "monitor64.txt.sup_waste_toner", 5: "monitor64.txt.sup_ink",
+	9: "monitor64.txt.sup_drum", 15: "monitor64.txt.sup_fuser", 19: "monitor64.txt.sup_waste_ink"}
 
 // collectPrinter: Dienst printer (Status, Fehler), supply:<n> (Fuellstand) und tray:<n> (Papier).
 func (c *Collector) collectPrinter(r *round) {
@@ -57,26 +60,26 @@ func (c *Collector) collectPrinter(r *round) {
 		return
 	}
 	// Status
-	ps := model.Service{Key: "printer", Name: "Drucker", Kind: "printer", Default: true}
+	ps := model.Service{Key: "printer", Name: model.T("monitor64.svc.printer"), Kind: "printer", Default: true}
 	var parts, errs []string
 	if p, ok := firstVal(t.col(hrPrinterState)); ok {
 		v, _ := num(p)
 		switch v {
 		case 3:
-			parts = append(parts, "bereit")
+			parts = append(parts, model.T("monitor64.txt.prt_ready"))
 		case 4:
-			parts = append(parts, "druckt")
+			parts = append(parts, model.T("monitor64.txt.prt_printing"))
 		case 5:
-			parts = append(parts, "wärmt auf")
+			parts = append(parts, model.T("monitor64.txt.prt_warmup"))
 		}
 	}
 	if p, ok := firstVal(t.col(hrPrinterErr)); ok {
 		b := rawBytes(p)
 		for i, bit := range printerBits {
 			if i/8 < len(b) && b[i/8]&(0x80>>(i%8)) != 0 {
-				parts = append(parts, bit.text)
+				parts = append(parts, model.T(bit.text))
 				if bit.err {
-					errs = append(errs, bit.text)
+					errs = append(errs, model.T(bit.text))
 				}
 			}
 		}
@@ -87,7 +90,7 @@ func (c *Collector) collectPrinter(r *round) {
 	if p, ok := firstVal(t.col(prtLifeCount)); ok {
 		if v, ok := num(p); ok && v >= 0 {
 			ps.Metrics = append(ps.Metrics, model.Metric{Name: "pages", Value: v})
-			parts = append(parts, fmt.Sprintf("%.0f Seiten", v))
+			parts = append(parts, model.T("monitor64.txt.pages", "n", fmt.Sprintf("%.0f", v)))
 		}
 	}
 	ps.Text = strings.Join(parts, " · ")
@@ -99,7 +102,12 @@ func (c *Collector) collectPrinter(r *round) {
 			continue
 		}
 		typ, _ := num(t.col(prtSupplyType)[idx])
-		name := firstNonEmpty(text(t.col(prtSupplyDescr)[idx]), supplyTypes[int(typ)], "Verbrauchsmaterial "+idx)
+		name := model.Raw(text(t.col(prtSupplyDescr)[idx])) // Beschreibung vom Geraet, sonst die Art
+		if k, ok := supplyTypes[int(typ)]; name == "" && ok {
+			name = model.T(k)
+		} else if name == "" {
+			name = model.T("monitor64.svc.supply", "name", idx)
+		}
 		s := model.Service{Key: "supply:" + idx, Name: name, Kind: "supply", Default: true}
 		mx, _ := num(t.col(prtSupplyMax)[idx])
 		class, _ := num(t.col(prtSupplyClass)[idx])
@@ -108,14 +116,14 @@ func (c *Collector) collectPrinter(r *round) {
 			v := pct(lvl, mx)
 			s.Metrics = []model.Metric{{Name: "level", Value: v, Unit: "%", Rule: RulePrinterSupply}}
 			if class == 4 {
-				s.Text = fmt.Sprintf("noch %.0f %% Platz", v)
+				s.Text = model.T("monitor64.txt.space_left", "v", fmt.Sprintf("%.0f", v))
 			} else {
 				s.Text = fmt.Sprintf("%.0f %%", v)
 			}
 		case lvl == -3:
-			s.Text = "vorhanden"
+			s.Text = model.T("monitor64.txt.present")
 		default:
-			s.Text = "Füllstand unbekannt"
+			s.Text = model.T("monitor64.txt.level_unknown")
 		}
 		r.out = append(r.out, s)
 	}
@@ -125,9 +133,12 @@ func (c *Collector) collectPrinter(r *round) {
 		if !ok {
 			continue
 		}
-		name := firstNonEmpty(text(t.col(prtInputName)[idx]), text(t.col(prtInputDescr)[idx]), "Fach "+idx)
+		var name any = firstNonEmpty(text(t.col(prtInputName)[idx]), text(t.col(prtInputDescr)[idx])) // Name vom Geraet, sonst "Fach n"
+		if name == "" {
+			name = model.Sub(model.T("monitor64.txt.tray_n", "n", idx))
+		}
 		manual := typ == 5
-		s := model.Service{Key: "tray:" + idx, Name: "Papier " + name, Kind: "tray", Default: !manual}
+		s := model.Service{Key: "tray:" + idx, Name: model.T("monitor64.svc.tray", "name", name), Kind: "tray", Default: !manual}
 		lvl, okl := num(t.col(prtInputLevel)[idx])
 		mx, _ := num(t.col(prtInputMax)[idx])
 		switch {
@@ -136,16 +147,16 @@ func (c *Collector) collectPrinter(r *round) {
 			s.Metrics = []model.Metric{{Name: "level", Value: v, Unit: "%"}}
 			s.Text = fmt.Sprintf("%.0f %%", v)
 			if lvl == 0 && !manual {
-				s.Facts = append(s.Facts, model.Fact{Code: FactPaperEmpty, Text: name + " leer"})
-				s.Text = "leer"
+				s.Facts = append(s.Facts, model.Fact{Code: FactPaperEmpty, Text: model.T("monitor64.txt.tray_empty", "name", name)})
+				s.Text = model.T("monitor64.txt.empty")
 			}
 		case okl && lvl == 0 && !manual:
-			s.Facts = append(s.Facts, model.Fact{Code: FactPaperEmpty, Text: name + " leer"})
-			s.Text = "leer"
+			s.Facts = append(s.Facts, model.Fact{Code: FactPaperEmpty, Text: model.T("monitor64.txt.tray_empty", "name", name)})
+			s.Text = model.T("monitor64.txt.empty")
 		case okl && lvl == -3:
-			s.Text = "Papier vorhanden"
+			s.Text = model.T("monitor64.txt.paper_present")
 		default:
-			s.Text = "Füllstand unbekannt"
+			s.Text = model.T("monitor64.txt.level_unknown")
 		}
 		r.out = append(r.out, s)
 	}

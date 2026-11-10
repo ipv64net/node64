@@ -257,7 +257,8 @@ func TestCollectEmptyHost(t *testing.T) {
 			t.Errorf("unerwarteter Fehler fuer %s", s)
 		}
 	}
-	if !hasNote(r, "smart", "smartctl fehlt") || !hasNote(r, "updates", "kein Paketverwalter") || !hasNote(r, "systemd", "kein systemd") {
+	if !hasNote(r, "smart", m64proto.Hint(m64proto.HintMissing, "smartctl")) || !hasNote(r, "updates", m64proto.HintNoPkgManager) ||
+		!hasNote(r, "systemd", m64proto.HintNoSystemd) {
 		t.Fatalf("Notes %+v", r.Notes)
 	}
 	if r.Reboot == nil || r.Reboot.Required {
@@ -362,7 +363,7 @@ func TestStatfsTimeout(t *testing.T) {
 	}
 	c := newCollector(Options{Cache: NewCache()})
 	start := time.Now()
-	if _, err := c.statfsTimeout(context.Background(), st, "/mnt/nfs"); err == nil || !strings.Contains(err.Error(), "Zeitlimit") {
+	if _, err := c.statfsTimeout(context.Background(), st, "/mnt/nfs"); err == nil || !strings.Contains(err.Error(), m64proto.HintTimeout) {
 		t.Fatalf("%v", err)
 	}
 	if time.Since(start) > 2*time.Second {
@@ -371,7 +372,7 @@ func TestStatfsTimeout(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		start = time.Now()
 		_, err := c.statfsTimeout(context.Background(), st, "/mnt/nfs")
-		if err == nil || !strings.Contains(err.Error(), "haengt") || time.Since(start) > 50*time.Millisecond {
+		if err == nil || !strings.Contains(err.Error(), "{m64:hung=") || time.Since(start) > 50*time.Millisecond {
 			t.Fatalf("Runde %d: %v", i, err)
 		}
 	}

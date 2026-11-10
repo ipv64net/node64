@@ -11,10 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 	"unicode/utf16"
 
+	"github.com/ipv64net/node64/internal/m64proto"
 	"golang.org/x/sys/windows"
 )
 
@@ -74,10 +76,10 @@ func runPS(ctx context.Context, script string) ([]byte, error) {
 	cmd.WaitDelay = 5 * time.Second
 	err := cmd.Run()
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("powershell: Zeitlimit")
+		return nil, errors.New("powershell: " + m64proto.HintTimeout)
 	}
 	if out.over {
-		return nil, fmt.Errorf("powershell: Ausgabe groesser als %d Byte", maxPSOutput)
+		return nil, errors.New("powershell: " + m64proto.Hint(m64proto.HintLargerThan, strconv.Itoa(maxPSOutput)))
 	}
 	if err != nil {
 		var ee *exec.ExitError

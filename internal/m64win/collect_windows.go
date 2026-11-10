@@ -98,7 +98,7 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 	if want(m64proto.SecUpdates) || want(m64proto.SecReboot) {
 		if !ps {
 			if want(m64proto.SecUpdates) {
-				addNote(r, m64proto.SecUpdates, "PowerShell fehlt")
+				addNote(r, m64proto.SecUpdates, m64proto.Hint(m64proto.HintMissing, "PowerShell"))
 			}
 		} else if want(m64proto.SecUpdates) {
 			res := c.cache.slow(ctx, c.now, keyUpdates, m64proto.SecUpdates, m64proto.SlowUpdatesSec*time.Second, c.collectUpdates)
@@ -122,7 +122,7 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 func (c *collector) collectStorage(ctx context.Context, r *m64proto.Report, want func(string) bool, disks []m64proto.DiskIO, ps bool) {
 	if !ps {
 		if want(m64proto.SecSmart) {
-			addNote(r, m64proto.SecSmart, "PowerShell fehlt")
+			addNote(r, m64proto.SecSmart, m64proto.Hint(m64proto.HintMissing, "PowerShell"))
 		}
 		return
 	}
@@ -196,7 +196,7 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 		}
 	}
 	if err == nil {
-		err = errors.New("unbekannter Fehler")
+		err = errors.New(m64proto.HintUnknownError)
 	}
 	return slowResult{errs: []m64proto.SectionErr{{Section: m64proto.SecUpdates, Error: clip(err.Error())}}}
 }

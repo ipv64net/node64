@@ -1,16 +1,19 @@
 #!/bin/sh
-# Monitor64-Agent installieren (Linux amd64/arm64/armv7). Den Befehl mit dem Schluessel der Node zeigt Node64 im
-# Assistenten "Host hinzufuegen", z. B.:
+# Monitor64-Agent installieren (Linux amd64/arm64/armv7; FreeBSD, OPNsense, pfSense und TrueNAS CORE amd64/arm64).
+# Den Befehl mit dem Schluessel der Node zeigt Node64 im Assistenten "Host hinzufuegen", z. B.:
 #
 #   curl -fsSL https://node64.de/agent/install.sh | sh -s -- --key "ssh-ed25519 AAAA... node64@nas"
+#   fetch -o /tmp/install.sh https://node64.de/agent/install.sh && sh /tmp/install.sh --key "ssh-ed25519 AAAA..."
 #
 # Optionen: --key "<oeffentlicher Schluessel>" (Pflicht), --port 6465, --base <URL> (Ordner mit den Dateien,
 # Standard https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
 # Push-Betrieb (Host hinter NAT, VPS): --connect token@node[:6466] (auch mehrfach, z. B. Cluster) baut die Verbindung
 # zur Node selbst auf; --no-listen zusaetzlich, wenn der Agent nicht lauschen soll. Die Ziele landen in
-# /etc/monitor64-agent/connect (nur fuer root lesbar), nicht in der Befehlszeile des Dienstes.
-# Die Datei monitor64-agent-linux-<arch> wird gegen SHA256SUMS aus demselben Ordner geprueft und ruft dann
-# "monitor64-agent install" auf (Datei, Schluessel, systemd-Dienst, Fingerabdruck des Hostschluessels).
+# /etc/monitor64-agent/connect (FreeBSD: /usr/local/etc/monitor64-agent/connect; nur fuer root lesbar), nicht in der
+# Befehlszeile des Dienstes.
+# Die Datei monitor64-agent-<linux|freebsd>-<arch> wird gegen SHA256SUMS aus demselben Ordner geprueft und ruft dann
+# "monitor64-agent install" auf (Datei, Schluessel, Dienst - systemd bzw. rc.d -, Fingerabdruck des Hostschluessels).
+# Laeuft mit jeder POSIX-Shell (dash, busybox ash, /bin/sh von FreeBSD).
 # Entfernen: monitor64-agent uninstall
 set -eu
 
@@ -59,7 +62,18 @@ for c in $CONNECT; do
 done
 [ -z "$NOLISTEN" ] || [ -n "$CONNECT" ] || die "--no-listen needs --connect token@node[:port]"
 [ "$(id -u)" = 0 ] || die "please run as root (sudo sh -s -- ...)"
-[ "$(uname -s)" = Linux ] || die "only Linux is supported by this script"
+# LIB ist der Programmordner, den "monitor64-agent install" anlegt (Download dorthin, siehe unten).
+case "$(uname -s)" in
+Linux)
+	OS=linux
+	LIB=/usr/local/lib/monitor64-agent
+	;;
+FreeBSD)
+	OS=freebsd
+	LIB=/usr/local/libexec/monitor64-agent
+	;;
+*) die "only Linux and FreeBSD are supported by this script (Windows: install.ps1)" ;;
+esac
 
 case "$(uname -m)" in
 x86_64 | amd64) ARCH=amd64 ;;
@@ -67,7 +81,8 @@ aarch64 | arm64) ARCH=arm64 ;;
 armv7* | armv8l | armhf) ARCH=armv7 ;;
 *) die "unsupported architecture: $(uname -m)" ;;
 esac
-FILE="monitor64-agent-linux-$ARCH"
+[ "$OS-$ARCH" != freebsd-armv7 ] || die "unsupported architecture on FreeBSD: $(uname -m)"
+FILE="monitor64-agent-$OS-$ARCH"
 
 # Bei HTTPS keine Umleitung auf HTTP (sonst koennte jemand Datei und SHA256SUMS gemeinsam austauschen).
 case "$BASE" in
@@ -81,7 +96,6 @@ esac
 case "$BASE" in */) ;; *) BASE="$BASE/" ;; esac
 
 # Nicht unter /tmp ablegen (oft noexec): Download in den Programmordner, sonst /var/tmp.
-LIB=/usr/local/lib/monitor64-agent
 TMP=""
 if mkdir -p "$LIB" 2>/dev/null && chmod 755 "$LIB"; then
 	TMP=$(mktemp -d "$LIB/.download.XXXXXX" 2>/dev/null) || TMP=""
@@ -90,9 +104,9 @@ fi
 trap 'rm -rf "$TMP"' EXIT
 trap 'exit 1' INT TERM
 
-# fetch URL DATEI: Zeitlimits (curl: Verbindung 10 s, gesamt 300 s; wget: 10 s ohne Daten), bei HTTPS keine
-# Umleitung auf HTTP.
-fetch() {
+# download URL DATEI: Zeitlimits (curl: Verbindung 10 s, gesamt 300 s; wget und fetch: 10 s ohne Daten), bei HTTPS
+# keine Umleitung auf HTTP. FreeBSD hat ohne Pakete nur fetch(1).
+download() {
 	if command -v curl >/dev/null 2>&1; then
 		curl -fsSL --connect-timeout 10 --max-time 300 --proto "$PROTO" --proto-redir "$PROTO" -o "$2" "$1"
 	elif command -v wget >/dev/null 2>&1; then
@@ -102,23 +116,32 @@ fetch() {
 			say "redirect to plain HTTP refused"
 			return 1
 		fi
+	elif command -v fetch >/dev/null 2>&1; then
+		# fetch folgt jeder Umleitung: mit -v mitlesen ("301 redirect to http://...") und http:// ablehnen.
+		fetch -v -T 10 -o "$2" "$1" 2>"$TMP/fetch.log" || return 1
+		if [ "$PROTO" = '=https' ] && grep -qi 'redirect to http:' "$TMP/fetch.log"; then
+			say "redirect to plain HTTP refused"
+			return 1
+		fi
 	else
-		die "curl or wget is required"
+		die "curl, wget or fetch is required"
 	fi
 }
 
 say "downloading $BASE$FILE"
-fetch "$BASE$FILE" "$TMP/monitor64-agent" || die "download failed: $BASE$FILE"
-fetch "${BASE}SHA256SUMS" "$TMP/SHA256SUMS" || die "download failed: ${BASE}SHA256SUMS"
+download "$BASE$FILE" "$TMP/monitor64-agent" || die "download failed: $BASE$FILE"
+download "${BASE}SHA256SUMS" "$TMP/SHA256SUMS" || die "download failed: ${BASE}SHA256SUMS"
 
 WANT=$(awk -v f="$FILE" '$2 == f || $2 == "*" f { print $1; exit }' "$TMP/SHA256SUMS")
 [ -n "$WANT" ] || die "$FILE not listed in SHA256SUMS"
 if command -v sha256sum >/dev/null 2>&1; then
 	GOT=$(sha256sum "$TMP/monitor64-agent" | awk '{ print $1 }')
+elif command -v sha256 >/dev/null 2>&1; then
+	GOT=$(sha256 -q "$TMP/monitor64-agent") # FreeBSD
 elif command -v openssl >/dev/null 2>&1; then
 	GOT=$(openssl dgst -sha256 "$TMP/monitor64-agent" | awk '{ print $NF }')
 else
-	die "sha256sum or openssl is required"
+	die "sha256sum, sha256 or openssl is required"
 fi
 [ "$GOT" = "$WANT" ] || die "checksum mismatch for $FILE (expected $WANT, got $GOT)"
 say "checksum ok"

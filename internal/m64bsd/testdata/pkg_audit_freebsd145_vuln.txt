@@ -1,0 +1,222 @@
+curl-7.50.0 is vulnerable:
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2017-8816
+  CVE: CVE-2017-8817
+  CVE: CVE-2017-8818
+  WWW: https://vuxml.FreeBSD.org/freebsd/301a01b7-d50e-11e7-ac58-b499baebfeaf.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2023-23914
+  CVE: CVE-2023-23915
+  CVE: CVE-2023-23916
+  WWW: https://vuxml.FreeBSD.org/freebsd/be233fc6-bae7-11ed-a4fb-080027f5fec9.html
+
+  curl -- password overflow vulnerability
+  CVE: CVE-2018-14618
+  WWW: https://vuxml.FreeBSD.org/freebsd/f4d638b9-e6e5-4dbe-8c70-571dbc116174.html
+
+  cURL -- out of bounds read
+  CVE: CVE-2017-1000254
+  WWW: https://vuxml.FreeBSD.org/freebsd/ccace707-a8d8-11e7-ac58-b499baebfeaf.html
+
+  curl -- OCSP verification bypass with TLS session reuse
+  CVE: CVE-2024-0853
+  WWW: https://vuxml.FreeBSD.org/freebsd/02e33cd1-c655-11ee-8613-08002784c58d.html
+
+  curl -- expired pointer dereference vulnerability
+  CVE: CVE-2020-8231
+  WWW: https://vuxml.FreeBSD.org/freebsd/b905dff4-e227-11ea-b0ea-08002728f74c.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2019-5481
+  CVE: CVE-2019-5482
+  WWW: https://vuxml.FreeBSD.org/freebsd/9fb4e57b-d65a-11e9-8a5f-e5c82b486287.html
+
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2021-22922
+  CVE: CVE-2021-22923
+  CVE: CVE-2021-22924
+  CVE: CVE-2021-22925
+  CVE: CVE-2021-22926
+  WWW: https://vuxml.FreeBSD.org/freebsd/aa646c01-ea0d-11eb-9b84-d4c9ef517024.html
+
+  cURL -- multiple vulnerabilities
+  CVE: CVE-2016-8615
+  CVE: CVE-2016-8616
+  CVE: CVE-2016-8617
+  CVE: CVE-2016-8618
+  CVE: CVE-2016-8619
+  CVE: CVE-2016-8620
+  CVE: CVE-2016-8621
+  CVE: CVE-2016-8622
+  CVE: CVE-2016-8623
+  CVE: CVE-2016-8624
+  CVE: CVE-2016-8625
+  WWW: https://vuxml.FreeBSD.org/freebsd/765feb7d-a0d1-11e6-a881-b499baebfeaf.html
+
+  cURL -- out of bounds read
+  CVE: CVE-2017-1000257
+  WWW: https://vuxml.FreeBSD.org/freebsd/143ec3d6-b7cf-11e7-ac58-b499baebfeaf.html
+
+  curl -- Multiple vulnerabilities
+  CVE: CVE-2022-27778
+  CVE: CVE-2022-27779
+  CVE: CVE-2022-27780
+  CVE: CVE-2022-27781
+  CVE: CVE-2022-27782
+  CVE: CVE-2022-30115
+  WWW: https://vuxml.FreeBSD.org/freebsd/11e36890-d28c-11ec-a06f-d4c9ef517024.html
+
+  cURL -- Escape and unescape integer overflows
+  CVE: CVE-2016-7167
+  WWW: https://vuxml.FreeBSD.org/freebsd/b018121b-7a4b-11e6-bf52-b499baebfeaf.html
+
+  cURL -- multiple vulnerabilities
+  CVE: CVE-2018-1000300
+  CVE: CVE-2018-1000301
+  WWW: https://vuxml.FreeBSD.org/freebsd/04fe6c8d-2a34-4009-a81e-e7a7e759b5d2.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2022-32221
+  CVE: CVE-2022-35260
+  CVE: CVE-2022-42915
+  CVE: CVE-2022-42916
+  WWW: https://vuxml.FreeBSD.org/freebsd/0f99a30c-7b4b-11ed-9168-080027f5fec9.html
+
+  cURL -- multiple vulnerabilities
+  CVE: CVE-2017-1000099
+  CVE: CVE-2017-1000100
+  CVE: CVE-2017-1000101
+  WWW: https://vuxml.FreeBSD.org/freebsd/69cfa386-7cd0-11e7-867f-b499baebfeaf.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2023-27533
+  CVE: CVE-2023-27534
+  CVE: CVE-2023-27535
+  CVE: CVE-2023-27536
+  CVE: CVE-2023-27537
+  CVE: CVE-2023-27538
+  WWW: https://vuxml.FreeBSD.org/freebsd/0d7d104c-c6fb-11ed-8a4b-080027f5fec9.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2018-16839
+  CVE: CVE-2018-16840
+  CVE: CVE-2018-16842
+  WWW: https://vuxml.FreeBSD.org/freebsd/e0ab1773-07c1-46c6-9170-4c5e81c00927.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2023-28319
+  CVE: CVE-2023-28320
+  CVE: CVE-2023-28321
+  CVE: CVE-2023-28322
+  WWW: https://vuxml.FreeBSD.org/freebsd/a4f8bb03-f52f-11ed-9859-080027083a05.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2019-5435
+  CVE: CVE-2019-5436
+  WWW: https://vuxml.FreeBSD.org/freebsd/dd343a2b-7ee7-11e9-a290-8ddc52868fa9.html
+
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2022-22576
+  CVE: CVE-2022-27774
+  CVE: CVE-2022-27775
+  CVE: CVE-2022-27776
+  WWW: https://vuxml.FreeBSD.org/freebsd/92a4d881-c6cf-11ec-a06f-d4c9ef517024.html
+
+  curl -- HTTP headers eat all memory
+  CVE: CVE-2023-38039
+  WWW: https://vuxml.FreeBSD.org/freebsd/833b469b-5247-11ee-9667-080027f5fec9.html
+
+  Vulnerabilities in Curl
+  CVE: CVE-2016-5419
+  CVE: CVE-2016-5420
+  CVE: CVE-2016-5421
+  WWW: https://vuxml.FreeBSD.org/freebsd/e4bc70fc-5a2f-11e6-a1bc-589cfc0654e1.html
+
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2018-1000007
+  WWW: https://vuxml.FreeBSD.org/freebsd/0cbf0fa6-dcb7-469c-b87a-f94cffd94583.html
+
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2020-8284
+  CVE: CVE-2020-8285
+  CVE: CVE-2020-8286
+  WWW: https://vuxml.FreeBSD.org/freebsd/3c77f139-3a09-11eb-929d-d4c9ef517024.html
+
+  Curl -- Multiple vulnerabilities
+  CVE: CVE-2026-107929
+  CVE: CVE-2026-107928
+  CVE: CVE-2026-94266
+  CVE: CVE-2026-94265
+  CVE: CVE-2026-92386
+  CVE: CVE-2026-92387
+  CVE: CVE-2026-92388
+  CVE: CVE-2026-92389
+  CVE: CVE-2026-92390
+  CVE: CVE-2026-92391
+  CVE: CVE-2026-92392
+  CVE: CVE-2026-86410
+  CVE: CVE-2026-86412
+  CVE: CVE-2026-86413
+  CVE: CVE-2026-86414
+  CVE: CVE-2026-86415
+  CVE: CVE-2026-87861
+  CVE: CVE-2026-87862
+  CVE: CVE-2026-87863
+  CVE: CVE-2026-87865
+  CVE: CVE-2026-87866
+  WWW: https://vuxml.FreeBSD.org/freebsd/14dab969-c797-11f1-a6ea-8447094a420f.html
+
+  curl -- Multiple vulnerabilities
+  CVE: CVE-2025-15224
+  CVE: CVE-2025-15079
+  CVE: CVE-2025-14819
+  CVE: CVE-2025-14524
+  CVE: CVE-2025-14017
+  CVE: CVE-2025-13034
+  WWW: https://vuxml.FreeBSD.org/freebsd/086d53fa-1d47-11f1-81da-8447094a420f.html
+
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2021-22945
+  CVE: CVE-2021-22946
+  CVE: CVE-2021-22947
+  WWW: https://vuxml.FreeBSD.org/freebsd/c9221ec9-17a2-11ec-b335-d4c9ef517024.html
+
+  curl -- Automatic referer leaks credentials
+  CVE: CVE-2021-22876
+  WWW: https://vuxml.FreeBSD.org/freebsd/b1194286-958e-11eb-9c34-080027f515ea.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2018-16890
+  CVE: CVE-2019-3822
+  CVE: CVE-2019-3823
+  WWW: https://vuxml.FreeBSD.org/freebsd/714b033a-2b09-11e9-8bc3-610fd6e6cd05.html
+
+  cURL -- potential memory disclosure
+  CVE: CVE-2017-7407
+  WWW: https://vuxml.FreeBSD.org/freebsd/04f29189-1a05-11e7-bc6e-b499baebfeaf.html
+
+  cURL -- Multiple vulnerabilities
+  CVE: CVE-2022-32205
+  CVE: CVE-2022-32206
+  CVE: CVE-2022-32207
+  CVE: CVE-2022-32208
+  WWW: https://vuxml.FreeBSD.org/freebsd/ae5722a6-f5f0-11ec-856e-d4c9ef517024.html
+
+  cURL -- buffer overflow
+  CVE: CVE-2016-9586
+  WWW: https://vuxml.FreeBSD.org/freebsd/42880202-c81c-11e6-a9a5-b499baebfeaf.html
+
+  curl -- Multiple vulnerabilties
+  CVE: CVE-2026-3805
+  CVE: CVE-2026-3784
+  CVE: CVE-2026-3783
+  CVE: CVE-2026-1965
+  WWW: https://vuxml.FreeBSD.org/freebsd/1933737d-1d46-11f1-81da-8447094a420f.html
+
+  curl -- multiple vulnerabilities
+  CVE: CVE-2020-8169
+  CVE: CVE-2020-8177
+  WWW: https://vuxml.FreeBSD.org/freebsd/6bff5ca6-b61a-11ea-aef4-08002728f74c.html
+
+34 problem(s) in 1 package(s) found.

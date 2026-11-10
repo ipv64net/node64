@@ -15,15 +15,15 @@ func (c *Collector) collectCustom(r *round) {
 	}
 	res, err := getScalars(r.ctx, r.c, oids)
 	if err != nil {
-		r.part.add("eigene OIDs", err, "oid:")
+		r.part.add(model.T("monitor64.txt.custom_oids"), err, "oid:")
 		return
 	}
 	r.at = c.now() // Messzeitpunkt der Zaehler
 	for _, co := range c.cfg.Custom {
-		s := model.Service{Key: "oid:" + co.OID, Name: co.Name, Kind: "oid", Default: true}
+		s := model.Service{Key: "oid:" + co.OID, Name: model.Raw(co.Name), Kind: "oid", Default: true}
 		p, ok := res[co.OID]
 		if !ok {
-			s.Text = "kein Wert"
+			s.Text = model.T("monitor64.txt.no_value")
 			r.out = append(r.out, s)
 			continue
 		}
@@ -44,7 +44,7 @@ func (c *Collector) collectCustom(r *round) {
 				s.Metrics = []model.Metric{{Name: "value", Value: v, Unit: co.Unit, Rule: co.Rule}}
 				s.Text = valueText(v, co.Unit)
 			} else {
-				s.Text = text(p) // Text-Wert: nur Anzeige
+				s.Text = model.Raw(text(p)) // Text-Wert: nur Anzeige
 			}
 		}
 		r.out = append(r.out, s)

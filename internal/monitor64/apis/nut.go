@@ -77,7 +77,8 @@ type NUT struct {
 	roots *x509.CertPool // nil = System-CA (Tests)
 	mu    sync.Mutex
 	// tlsSeen: upsd hat schon einmal STARTTLS angenommen; lehnt er es danach ab (Modus auto), ist das ein Fehler
-	// statt eines stillen Wechsels auf Klartext (Downgrade durch einen Angreifer im Netz)
+	// statt eines stillen Wechsels auf Klartext (Downgrade durch einen Angreifer im Netz). Der Kern merkt es sich
+	// ueber Neustarts (Remembered/Remember)
 	tlsSeen atomic.Bool
 }
 
@@ -89,27 +90,27 @@ func NewNUT(cfg NUTConfig) (*NUT, error) {
 	}
 	pin, ok := proxmox.NormalizePin(cfg.Pin)
 	if !ok {
-		return nil, errors.New("Fingerabdruck muss 64 Hex-Zeichen haben (SHA-256)")
+		return nil, errors.New(model.T("monitor64.txt.pin_format"))
 	}
 	switch cfg.TLS {
 	case NUTTLSAuto, NUTTLSRequire:
 	case NUTTLSOff:
 		if pin != "" {
-			return nil, errors.New("Fingerabdruck nur mit TLS")
+			return nil, errors.New(model.T("monitor64.txt.pin_tls"))
 		}
 	default:
-		return nil, fmt.Errorf("unbekannter TLS-Modus %q", cfg.TLS)
+		return nil, errors.New(model.T("monitor64.txt.tls_mode_unknown", "v", cfg.TLS))
 	}
 	for _, u := range cfg.UPS {
 		if !nutReName.MatchString(u) {
-			return nil, fmt.Errorf("ungültiger USV-Name %q", u)
+			return nil, errors.New(model.T("monitor64.txt.ups_name_invalid", "v", u))
 		}
 	}
 	if strings.ContainsAny(cfg.User, "\r\n\x00") || strings.ContainsAny(cfg.Password, "\r\n\x00") {
-		return nil, errors.New("Benutzer und Passwort dürfen keine Zeilenumbrüche enthalten")
+		return nil, errors.New(model.T("monitor64.txt.cred_newline"))
 	}
 	if cfg.Password != "" && strings.TrimSpace(cfg.User) == "" {
-		return nil, errors.New("Passwort ohne Benutzer")
+		return nil, errors.New(model.T("monitor64.txt.pw_without_user"))
 	}
 	return &NUT{cfg: cfg, addr: net.JoinHostPort(host, port), host: host, pin: pin}, nil
 }
@@ -124,7 +125,7 @@ func nutAddr(raw string) (string, string, error) {
 	}
 	s = strings.TrimRight(s, "/")
 	if s == "" {
-		return "", "", errors.New("keine Adresse angegeben")
+		return "", "", errors.New(model.T("monitor64.txt.addr_missing"))
 	}
 	if a, err := netip.ParseAddr(s); err == nil {
 		return a.String(), nutDefaultPort, nil
@@ -135,10 +136,10 @@ func nutAddr(raw string) (string, string, error) {
 	}
 	host = strings.Trim(host, "[]")
 	if host == "" || strings.ContainsAny(host, " /@?#") {
-		return "", "", fmt.Errorf("ungültige Adresse %q", raw)
+		return "", "", errors.New(model.T("monitor64.txt.addr_invalid", "addr", raw))
 	}
 	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
-		return "", "", fmt.Errorf("ungültiger Port in %q", raw)
+		return "", "", errors.New(model.T("monitor64.txt.port_invalid", "addr", raw))
 	}
 	return strings.ToLower(host), port, nil
 }
@@ -151,6 +152,25 @@ func (n *NUT) timeout() time.Duration {
 }
 
 func (n *NUT) secrets() []string { return []string{n.cfg.Password} }
+
+// Remembered liefert, was sich der Kern ueber Neustarts merkt (Laufzeitstand des Zugangs): "tls:<adresse>", sobald
+// upsd einmal STARTTLS angenommen hat (tlsSeen).
+func (n *NUT) Remembered() []string {
+	if n.tlsSeen.Load() {
+		return []string{"tls:" + n.addr}
+	}
+	return nil
+}
+
+// Remember uebernimmt den gemerkten Stand nach einem Neustart: upsd unter dieser Adresse hat schon TLS gesprochen,
+// eine spaetere Ablehnung von STARTTLS bleibt ein Fehler. Ein Stand fuer eine andere Adresse gilt nicht.
+func (n *NUT) Remember(keys []string) {
+	for _, k := range keys {
+		if k == "tls:"+n.addr {
+			n.tlsSeen.Store(true)
+		}
+	}
+}
 
 // Queries nennt die Befehle ("Was wird abgefragt?").
 func (n *NUT) Queries() []string {
@@ -180,18 +200,18 @@ func (c *nutConn) send(cmd string) error {
 func (c *nutConn) line() (string, error) {
 	c.lines++
 	if c.lines > nutMaxLines {
-		return "", errors.New("zu viele Zeilen")
+		return "", errors.New(model.T("monitor64.txt.too_many_lines"))
 	}
 	b, err := c.r.ReadSlice('\n')
 	if errors.Is(err, bufio.ErrBufferFull) {
-		return "", errors.New("Zeile zu lang")
+		return "", errors.New(model.T("monitor64.txt.line_too_long"))
 	}
 	if err != nil {
 		return "", err
 	}
 	c.bytes += len(b)
 	if c.bytes > nutMaxBytes {
-		return "", errors.New("Antwort zu groß")
+		return "", errors.New(model.T("monitor64.txt.resp_too_large"))
 	}
 	return strings.TrimRight(string(b), "\r\n"), nil
 }
@@ -216,17 +236,18 @@ type nutErr struct{ Code string }
 
 func (e *nutErr) Error() string {
 	if t, ok := nutErrText[e.Code]; ok {
-		return e.Code + " (" + t + ")"
+		return e.Code + " (" + model.T(t) + ")"
 	}
-	return "ERR " + shortText(e.Code)
+	return "ERR " + model.Raw(shortText(e.Code))
 }
 
+// nutErrText: Erklaerung zu den Fehlercodes von upsd.
 var nutErrText = map[string]string{
-	"ACCESS-DENIED": "kein Zugriff – LISTEN/ACL in upsd.conf bzw. Benutzer prüfen", "UNKNOWN-UPS": "USV unbekannt",
-	"DATA-STALE": "keine aktuellen Daten vom Treiber", "DRIVER-NOT-CONNECTED": "Treiber läuft nicht",
-	"INVALID-PASSWORD": "Passwort falsch", "INVALID-USERNAME": "Benutzer unbekannt", "USERNAME-REQUIRED": "Benutzer fehlt",
-	"PASSWORD-REQUIRED": "Passwort fehlt", "FEATURE-NOT-CONFIGURED": "TLS in upsd nicht eingerichtet",
-	"FEATURE-NOT-SUPPORTED": "upsd ohne TLS gebaut",
+	"ACCESS-DENIED": "monitor64.txt.nut_access_denied", "UNKNOWN-UPS": "monitor64.txt.nut_unknown_ups",
+	"DATA-STALE": "monitor64.txt.nut_data_stale", "DRIVER-NOT-CONNECTED": "monitor64.txt.nut_driver_down",
+	"INVALID-PASSWORD": "monitor64.txt.nut_bad_password", "INVALID-USERNAME": "monitor64.txt.nut_bad_user",
+	"USERNAME-REQUIRED": "monitor64.txt.nut_user_required", "PASSWORD-REQUIRED": "monitor64.txt.nut_pw_required",
+	"FEATURE-NOT-CONFIGURED": "monitor64.txt.nut_tls_unconfigured", "FEATURE-NOT-SUPPORTED": "monitor64.txt.nut_tls_unsupported",
 }
 
 // list liest eine Liste "BEGIN LIST <what>" … "END LIST <what>" und liefert die Zeilen dazwischen.
@@ -236,7 +257,7 @@ func (c *nutConn) list(what string, max int) ([][]string, error) {
 		return nil, err
 	}
 	if l != "BEGIN LIST "+what {
-		return nil, fmt.Errorf("unerwartete Antwort %q", shortText(l))
+		return nil, errors.New(model.T("monitor64.txt.resp_unexpected", "v", shortText(l)))
 	}
 	var out [][]string
 	for {
@@ -313,7 +334,7 @@ func (n *NUT) open(ctx context.Context) (*nutConn, TestResult, error) {
 		switch {
 		case err == nil:
 			if c.r.Buffered() > 0 {
-				return fail(errors.New("Daten vor dem TLS-Handshake"))
+				return fail(errors.New(model.T("monitor64.txt.data_before_tls")))
 			}
 			tc := tls.Client(raw, &tls.Config{InsecureSkipVerify: true, ServerName: n.host, MinVersion: tls.VersionTLS12})
 			if err := tc.HandshakeContext(ctx); err != nil {
@@ -330,14 +351,14 @@ func (n *NUT) open(ctx context.Context) (*nutConn, TestResult, error) {
 				// Zertifikat nicht bestaetigt bzw. anders als gemerkt: nichts weiter senden
 				_ = tc.Close()
 				if r.NeedConfirm {
-					return nil, res, errors.New("Zertifikat von upsd nicht bestätigt – Fingerabdruck " + r.Fingerprint + " im Zugang bestätigen")
+					return nil, res, errors.New(model.T("monitor64.txt.nut_cert_unconfirmed", "fp", r.Fingerprint))
 				}
 				return nil, res, errors.New(r.Error)
 			}
 			c.c, c.r, c.tls = tc, bufio.NewReaderSize(tc, nutMaxLine), true
 			n.tlsSeen.Store(true)
 		case errors.As(err, &ne) && !need && n.tlsSeen.Load():
-			return fail(fmt.Errorf("STARTTLS: %w – upsd hat bisher TLS gesprochen; bietet er es nicht mehr an, im Zugang TLS auf aus stellen", err))
+			return fail(fmt.Errorf("STARTTLS: %w – %s", err, model.T("monitor64.txt.nut_tls_gone")))
 		case errors.As(err, &ne) && !need:
 			// upsd ohne TLS (nicht eingerichtet bzw. nicht gebaut): unverschluesselt weiter, aber ohne Anmeldung –
 			// das Passwort geht nur bei ausdruecklich abgeschaltetem TLS im Klartext (zum Lesen ist keine noetig)
@@ -395,7 +416,7 @@ func (n *NUT) fetch(c *nutConn, part *partial) ([]nutUPS, error) {
 		}
 		name := f[1]
 		if !nutReName.MatchString(name) {
-			part.add("LIST UPS", fmt.Errorf("ungültiger USV-Name %q übersprungen", shortText(name)))
+			part.add("LIST UPS", errors.New(model.T("monitor64.txt.ups_name_skipped", "v", shortText(name))))
 			continue
 		}
 		if len(want) > 0 && !want[name] {
@@ -403,7 +424,7 @@ func (n *NUT) fetch(c *nutConn, part *partial) ([]nutUPS, error) {
 		}
 		seen[name] = true
 		if len(out) >= nutMaxUPS {
-			part.add("LIST UPS", fmt.Errorf("mehr als %d USVs, Rest übersprungen", nutMaxUPS))
+			part.add("LIST UPS", errors.New(model.T("monitor64.txt.ups_too_many", "n", nutMaxUPS)))
 			break
 		}
 		u := nutUPS{Name: name, Vars: map[string]string{}}
@@ -479,13 +500,13 @@ func (n *NUT) Test(ctx context.Context) TestResult {
 	for _, u := range list {
 		names = append(names, u.Name+" ("+firstNonEmpty(u.Vars["ups.status"], "?")+")")
 	}
-	res.Summary = fmt.Sprintf("%d USV", len(list))
+	res.Summary = model.T("monitor64.txt.ups_count", "n", len(list))
 	if len(names) > 0 {
-		res.Summary += ": " + strings.Join(limitList(names, 5), ", ")
+		res.Summary += ": " + model.Raw(strings.Join(limitList(names, 5), ", "))
 	}
 	var warn []string
 	if len(list) == 0 {
-		warn = append(warn, "upsd nennt keine USV")
+		warn = append(warn, model.T("monitor64.txt.nut_no_ups"))
 	}
 	if pe := part.result(); pe != nil {
 		warn = append(warn, pe.Error())
@@ -493,22 +514,37 @@ func (n *NUT) Test(ctx context.Context) TestResult {
 	if !c.tls {
 		switch {
 		case c.noLogin && n.cfg.User != "":
-			warn = append(warn, "unverschlüsselt (upsd ohne STARTTLS) – Anmeldung weggelassen, damit das Passwort nicht im Klartext durchs Netz geht (zum Lesen nicht nötig)")
+			warn = append(warn, model.T("monitor64.txt.nut_plain_nologin"))
 		case n.cfg.Password != "":
-			warn = append(warn, "Passwort geht unverschlüsselt an upsd (kein STARTTLS) – zum Lesen braucht upsd keine Anmeldung")
+			warn = append(warn, model.T("monitor64.txt.nut_plain_password"))
 		default:
-			warn = append(warn, "unverschlüsselt (upsd ohne STARTTLS)")
+			warn = append(warn, model.T("monitor64.txt.nut_plain"))
 		}
 	}
 	res.Warning = strings.Join(warn, "; ")
 	return res
 }
 
-// nutStatusText: Woerter aus ups.status.
-var nutStatusText = map[string]string{"OL": "Netzbetrieb", "OB": "auf Batterie", "LB": "Batterie schwach", "HB": "Batterie voll",
-	"RB": "Batterie ersetzen", "CHRG": "lädt", "DISCHRG": "entlädt", "BYPASS": "Bypass", "CAL": "Kalibrierung", "OFF": "aus",
-	"OVER": "Überlast", "TRIM": "senkt Spannung", "BOOST": "hebt Spannung", "FSD": "Zwangsabschaltung", "ALARM": "Alarm",
-	"WAIT": "Treiber startet", "TEST": "Selbsttest"}
+// nutStatusText: Woerter aus ups.status (BYPASS und ALARM heissen in beiden Sprachen gleich).
+var nutStatusText = map[string]string{"OL": "monitor64.txt.ups_online", "OB": "monitor64.txt.ups_on_battery", "LB": "monitor64.txt.ups_low_battery",
+	"HB": "monitor64.txt.ups_high_battery", "RB": "monitor64.txt.ups_replace_battery", "CHRG": "monitor64.txt.ups_charging",
+	"DISCHRG": "monitor64.txt.ups_discharging", "CAL": "monitor64.txt.ups_calibrating", "OFF": "monitor64.txt.ups_off",
+	"OVER": "monitor64.txt.ups_overload", "TRIM": "monitor64.txt.ups_trim", "BOOST": "monitor64.txt.ups_boost", "FSD": "monitor64.txt.ups_fsd_short",
+	"WAIT": "monitor64.txt.ups_wait", "TEST": "monitor64.txt.ups_selftest"}
+
+// nutStatusWord: ein Wort aus ups.status als Text.
+func nutStatusWord(f string) string {
+	switch f {
+	case "BYPASS":
+		return "Bypass"
+	case "ALARM":
+		return "Alarm"
+	}
+	if k, ok := nutStatusText[f]; ok {
+		return model.T(k)
+	}
+	return model.Raw(shortText(f))
+}
 
 // nutNum liest eine Variable als Zahl (fehlt, kein Wert, NaN/Inf: false).
 func nutNum(vars map[string]string, names ...string) (float64, bool) {
@@ -525,24 +561,24 @@ func nutNum(vars map[string]string, names ...string) (float64, bool) {
 	return 0, false
 }
 
-// minutesText: Restlaufzeit ("23 Min.", "1 Std. 5 Min.").
+// minutesText: Restlaufzeit ("23 Min.", "1 Std. 5 Min."; uebersetzbar, als Parameter mit model.Sub).
 func minutesText(sec float64) string {
 	m := int(sec / 60)
 	if m >= 60 {
-		return fmt.Sprintf("%d Std. %d Min.", m/60, m%60)
+		return model.T("monitor64.txt.dur_h_min", "h", m/60, "m", m%60)
 	}
-	return fmt.Sprintf("%d Min.", m)
+	return model.T("monitor64.txt.dur_min", "n", m)
 }
 
 // nutService baut den Dienst einer USV.
 func nutService(u nutUPS) model.Service {
 	v := u.Vars
-	name := "USV " + u.Name
+	name := model.T("monitor64.svc.ups", "name", u.Name)
 	if m := strings.TrimSpace(strings.TrimSpace(firstNonEmpty(v["device.mfr"], v["ups.mfr"])) + " " +
 		strings.TrimSpace(firstNonEmpty(v["device.model"], v["ups.model"]))); m != "" {
-		name += " (" + shortText(m) + ")"
+		name += " (" + model.Raw(shortText(m)) + ")"
 	} else if u.Desc != "" && u.Desc != "Unavailable" {
-		name += " (" + u.Desc + ")"
+		name += " (" + model.Raw(u.Desc) + ")"
 	}
 	s := model.Service{Key: "ups:" + u.Name, Name: name, Kind: "ups", Default: true}
 	flags := map[string]bool{}
@@ -553,13 +589,13 @@ func nutService(u nutUPS) model.Service {
 			continue
 		}
 		flags[f] = true
-		words = append(words, firstNonEmpty(nutStatusText[f], shortText(f)))
+		words = append(words, nutStatusWord(f))
 	}
 	var parts []string
 	if len(words) > 0 {
 		parts = append(parts, strings.Join(words, ", "))
 	} else {
-		parts = append(parts, "Status unbekannt")
+		parts = append(parts, model.T("monitor64.txt.status_unknown"))
 	}
 	onBat := 0.0
 	if flags["OB"] {
@@ -570,16 +606,16 @@ func nutService(u nutUPS) model.Service {
 	if hasCharge {
 		charge = min(max(charge, 0), 100)
 		s.Metrics = append(s.Metrics, model.Metric{Name: "charge", Value: round2(charge), Unit: "%"})
-		parts = append(parts, fmt.Sprintf("Ladung %.0f %%", charge))
+		parts = append(parts, model.T("monitor64.txt.charge", "v", fmt.Sprintf("%.0f", charge)))
 	}
 	runtime, hasRun := nutNum(v, "battery.runtime")
 	if hasRun && runtime >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "runtime", Value: round2(runtime), Unit: "s", Rule: ruleUPSRuntime})
-		parts = append(parts, "Restlaufzeit "+minutesText(runtime))
+		parts = append(parts, model.T("monitor64.txt.runtime", "v", model.Sub(minutesText(runtime))))
 	}
 	if load, ok := nutNum(v, "ups.load"); ok && load >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "load", Value: round2(load), Unit: "%"})
-		parts = append(parts, fmt.Sprintf("Last %.0f %%", load))
+		parts = append(parts, model.T("monitor64.txt.load_pct", "v", fmt.Sprintf("%.0f", load)))
 	}
 	if p, ok := nutNum(v, "ups.realpower", "ups.power"); ok && p >= 0 {
 		unit := "W"
@@ -590,24 +626,24 @@ func nutService(u nutUPS) model.Service {
 	}
 	if in, ok := nutNum(v, "input.voltage"); ok && in >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "input_voltage", Value: round2(in), Unit: "V"})
-		parts = append(parts, fmt.Sprintf("Eingang %.0f V", in))
+		parts = append(parts, model.T("monitor64.txt.input_v", "v", fmt.Sprintf("%.0f", in)))
 	}
 	if t, ok := nutNum(v, "ups.temperature", "battery.temperature"); ok && t > -40 && t < 150 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "temp", Value: round2(t), Unit: "°C", Rule: model.RuleTemp})
 		parts = append(parts, fmt.Sprintf("%.0f °C", t))
 	}
 	if a := strings.TrimSpace(v["ups.alarm"]); a != "" {
-		parts = append(parts, "Alarm: "+shortText(a))
+		parts = append(parts, "Alarm: "+model.Raw(shortText(a)))
 	}
 	if r := strings.TrimSpace(v["ups.test.result"]); r != "" && !strings.EqualFold(r, "No test initiated") {
-		parts = append(parts, "Selbsttest: "+shortText(r))
+		parts = append(parts, model.T("monitor64.txt.ups_selftest")+": "+model.Raw(shortText(r)))
 	}
 	batt := ""
 	if hasCharge {
-		batt = fmt.Sprintf("Ladung %.0f %%", charge)
+		batt = model.T("monitor64.txt.charge", "v", fmt.Sprintf("%.0f", charge))
 	}
 	if hasRun && runtime >= 0 {
-		batt = strings.TrimPrefix(batt+", Restlaufzeit "+minutesText(runtime), ", ")
+		batt = strings.TrimPrefix(batt+", "+model.T("monitor64.txt.runtime", "v", model.Sub(minutesText(runtime))), ", ")
 	}
 	withBatt := func(t string) string {
 		if batt != "" {
@@ -616,21 +652,21 @@ func nutService(u nutUPS) model.Service {
 		return t
 	}
 	if flags["OB"] {
-		s.Facts = append(s.Facts, model.Fact{Code: "ups_on_battery", Text: withBatt("auf Batterie")})
+		s.Facts = append(s.Facts, model.Fact{Code: "ups_on_battery", Text: withBatt(model.T("monitor64.txt.ups_on_battery"))})
 	}
 	switch {
 	case flags["FSD"]:
-		s.Facts = append(s.Facts, model.Fact{Code: "ups_low_battery", Text: withBatt("Zwangsabschaltung (FSD)")})
+		s.Facts = append(s.Facts, model.Fact{Code: "ups_low_battery", Text: withBatt(model.T("monitor64.txt.ups_fsd"))})
 	case flags["LB"]:
-		s.Facts = append(s.Facts, model.Fact{Code: "ups_low_battery", Text: withBatt("Batterie schwach")})
+		s.Facts = append(s.Facts, model.Fact{Code: "ups_low_battery", Text: withBatt(model.T("monitor64.txt.ups_low_battery"))})
 	}
 	if flags["RB"] {
-		s.Facts = append(s.Facts, model.Fact{Code: "ups_replace_battery", Text: "Batterie ersetzen"})
+		s.Facts = append(s.Facts, model.Fact{Code: "ups_replace_battery", Text: model.T("monitor64.txt.ups_replace_battery")})
 	}
 	if flags["OVER"] {
-		t := "Überlast"
+		t := model.T("monitor64.txt.ups_overload")
 		if load, ok := nutNum(v, "ups.load"); ok {
-			t += fmt.Sprintf(" (Last %.0f %%)", load)
+			t += " (" + model.T("monitor64.txt.load_pct", "v", fmt.Sprintf("%.0f", load)) + ")"
 		}
 		s.Facts = append(s.Facts, model.Fact{Code: "ups_overload", Text: t})
 	}

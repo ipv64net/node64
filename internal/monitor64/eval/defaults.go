@@ -7,6 +7,7 @@ const (
 	KindCPUUtil       = "cpu.util"       // CPU-Auslastung in %
 	KindLoadCore      = "load.core"      // Load je Kern
 	KindMemUsed       = "mem.used"       // RAM belegt in %
+	KindGuestMem      = "guest.mem"      // RAM einer VM aus Sicht des Hypervisors in % (zaehlt den Cache des Gastes mit)
 	KindSwapUsed      = "swap.used"      // Swap belegt in %
 	KindFSUsed        = "fs.used"        // Dateisystem belegt in % (oder GB frei)
 	KindStoreUsed     = "store.used"     // Datastore/Pool belegt in % (oder GB frei)
@@ -111,6 +112,7 @@ func Defaults() Table {
 		KindStoreUsed:     num(L(80), L(90), Up, 0, DefaultHyst),
 		KindFSTrendDays:   num(L(7), L(2), Down, 0, 1),
 		KindMemUsed:       num(L(80), L(90), Up, 5*m, DefaultHyst),
+		KindGuestMem:      num(LOff(), LOff(), Up, 5*m, DefaultHyst), // nur Anzeige: der Wert enthaelt den Cache des Gastes
 		KindSwapUsed:      num(L(50), L(80), Up, 5*m, DefaultHyst),
 		KindCPUUtil:       num(L(90), L(95), Up, 15*m, DefaultHyst),
 		KindLoadCore:      num(L(2), L(4), Up, 15*m, 0.2),

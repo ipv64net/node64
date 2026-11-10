@@ -130,7 +130,7 @@ func TestParseWebAddr(t *testing.T) {
 	} {
 		got, err := parseWebAddr(c.in, c.def, "", c.http)
 		if c.err != "" {
-			if err == nil || !strings.Contains(err.Error(), c.err) {
+			if err == nil || !strings.Contains(deErr(err), c.err) {
 				t.Errorf("%q: Fehler %v, erwartet %q", c.in, err, c.err)
 			}
 			continue
@@ -173,23 +173,23 @@ func TestWebClientLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	var s string
-	if err := c.get(context.Background(), "/big", &s); err == nil || !strings.Contains(err.Error(), "zu groß") {
+	if err := c.get(context.Background(), "/big", &s); err == nil || !strings.Contains(deErr(err), "zu groß") {
 		t.Errorf("big: %v", err)
 	}
-	if err := c.get(context.Background(), "/redir", &s); err == nil || !strings.Contains(err.Error(), "Weiterleitung nach https://elsewhere/") {
+	if err := c.get(context.Background(), "/redir", &s); err == nil || !strings.Contains(deErr(err), "Weiterleitung nach https://elsewhere/") {
 		t.Errorf("redir: %v", err)
 	}
 	err = c.get(context.Background(), "/err", &s)
-	if err == nil || !strings.Contains(err.Error(), "HTTP 500 (kaputt zweite Zeile) bei GET /err") {
+	if err == nil || !strings.Contains(deErr(err), "HTTP 500 (kaputt zweite Zeile) bei GET /err") {
 		t.Errorf("err: %v", err)
 	}
 	if err := c.get(context.Background(), "/gql", &s); !gqlSchema(err) {
 		t.Errorf("gql: %v", err)
 	}
-	if err := c.get(context.Background(), "/auth", &s); !webAuthErr(err) || !strings.Contains(err.Error(), "401") {
+	if err := c.get(context.Background(), "/auth", &s); !webAuthErr(err) || !strings.Contains(deErr(err), "401") {
 		t.Errorf("auth: %v", err)
 	}
-	if err := c.get(context.Background(), "/notjson", &s); err == nil || !strings.Contains(err.Error(), "kein passendes JSON") {
+	if err := c.get(context.Background(), "/notjson", &s); err == nil || !strings.Contains(deErr(err), "kein passendes JSON") {
 		t.Errorf("notjson: %v", err)
 	}
 	if err := c.get(context.Background(), "/missing", &s); !webAbsent(err) {

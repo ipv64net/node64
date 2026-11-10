@@ -16,28 +16,28 @@
   "scalars": [
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.1.1.1.0",
-      "label": "Modell"
+      "label": "i18n:monitor64.snmp.model"
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.4.1.1.0",
       "text": {
-        "1": "Status unbekannt",
-        "2": "Netzbetrieb",
-        "3": "auf Batterie",
+        "1": "i18n:monitor64.txt.status_unknown",
+        "2": "i18n:monitor64.txt.ups_online",
+        "3": "i18n:monitor64.txt.ups_on_battery",
         "4": "Smart Boost",
-        "5": "Ruhezustand",
-        "6": "Software-Bypass",
-        "7": "aus",
-        "8": "neu startend",
-        "9": "Hardware-Bypass",
-        "10": "Bypass (Fehler)",
-        "11": "Schlaf bis Strom",
+        "5": "i18n:monitor64.snmp.ups_sleep",
+        "6": "i18n:monitor64.snmp.sw_bypass",
+        "7": "i18n:monitor64.txt.off",
+        "8": "i18n:monitor64.snmp.rebooting",
+        "9": "i18n:monitor64.snmp.hw_bypass",
+        "10": "i18n:monitor64.snmp.bypass_fault",
+        "11": "i18n:monitor64.snmp.sleep_until_power",
         "12": "Smart Trim"
       },
       "fact": {
@@ -45,12 +45,12 @@
         "when": [
           3
         ],
-        "text": "auf Batterie"
+        "text": "i18n:monitor64.txt.ups_on_battery"
       }
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.1.0",
       "metric": "charge",
@@ -60,7 +60,7 @@
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.3.0",
       "metric": "runtime",
@@ -71,7 +71,7 @@
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.4.2.3.0",
       "metric": "load",
@@ -81,7 +81,7 @@
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.2.0",
       "metric": "battery_temp",
@@ -92,7 +92,7 @@
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.3.2.1.0",
       "metric": "input_v",
@@ -103,7 +103,7 @@
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.2.2.4.0",
       "fact": {
@@ -111,12 +111,12 @@
         "when": [
           2
         ],
-        "text": "Batterie tauschen"
+        "text": "i18n:monitor64.snmp.replace_battery"
       }
     },
     {
       "key": "ups",
-      "service": "USV",
+      "service": "i18n:monitor64.svc.ups_plain",
       "kind": "ups",
       "oid": ".1.3.6.1.4.1.318.1.1.1.2.1.1.0",
       "fact": {
@@ -125,7 +125,7 @@
           3,
           4
         ],
-        "text": "Batterie schwach"
+        "text": "i18n:monitor64.txt.ups_low_battery"
       }
     }
   ]

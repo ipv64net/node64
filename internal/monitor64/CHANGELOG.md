@@ -37,3 +37,18 @@
   mit bevorzugter und Ersatz-Nodes, Übernahme nach 2 min und Rückgabe nach 5 min stabil, Mehrheitsregel bei
   getrennten Teilen, gemeinsamer Cluster-Schlüssel (Agents werden automatisch umgestellt, „Schlüssel wechseln“),
   Gesamtübersicht „überwacht von“, Verlauf live von der überwachenden Node, Traps an die zuständige Node.
+- Menüpunkt „Agent“: Die Node hält die signierten Agent-Dateien bereit (Download auch für Hosts ohne Internet), zeigt
+  Installationsbefehle und Agent-Versionen und aktualisiert Agents automatisch (je Host abschaltbar, „Jetzt
+  aktualisieren“).
+- Agent unter FreeBSD, OPNsense, pfSense und TrueNAS CORE per `install.sh` installierbar (rc.d-Dienst, Push-Betrieb).
+- Dienstnamen, Zustands- und Fehlertexte in Deutsch und Englisch (auch in Meldungen, CSV und auf Statusseiten).
+- Cluster: Mini-Verläufe auch für Hosts anderer Nodes; Karte „Hosts ohne überwachende Node“ (zuweisen/entfernen);
+  offene Traps bleiben bei einer Übernahme offen; Änderungen gehen nach einem Schreibfehler im Cluster-Protokoll
+  nicht verloren. Statusseiten: Zeiten, in denen Monitor64 nicht lief, zählen weder als Störung noch als beobachtet.
+- Sicherheit: Bei SSH mit Passwort geht das Passwort erst an den Host, nachdem der Fingerabdruck seines
+  Hostschlüssels bestätigt wurde (Verbindungstest und nach „Hostschlüssel verwerfen“).
+- Aus dem Klicktest: RAM von Proxmox-VMs hat eine eigene Regel ohne Standardschwelle (der Wert enthält den Cache
+  des Gastes); fehlt dem Proxmox-Token das Recht für Updates, steht das am Dienst statt als Teilfehler; neue Hosts
+  und Zugänge werden sofort abgefragt, neu auftauchende Dienste sofort angeboten; Pseudo-Dateisysteme (SNMP) und
+  Datei-Mounts (node_exporter im Container) entfallen; Host-Kacheln sind echte Links; Texte ohne Plural-Fehler.
+- Windows-Agent: Dienste mit Starttyp Automatisch, die seit dem Booten nie gestartet wurden, zählen nicht als gestoppt.

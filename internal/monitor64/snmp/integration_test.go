@@ -62,7 +62,7 @@ func TestIntegrationAgent(t *testing.T) {
 		check("v2c", Config{Secret: Secret{Community: comm}}, 2)
 		check("v1", Config{Version: "1", Secret: Secret{Community: comm}}, 2)
 		c, _ := New(Config{Address: target, Secret: Secret{Community: comm + "-falsch"}, Timeout: 500 * time.Millisecond, Retries: -1})
-		if _, err := c.Collect(context.Background()); err == nil || strings.Contains(err.Error(), comm) {
+		if _, err := c.Collect(context.Background()); err == nil || strings.Contains(deErr(err), comm) {
 			t.Errorf("falsche Community: %v", err)
 		}
 		c.Close()
@@ -81,7 +81,7 @@ func TestIntegrationAgent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := c.Collect(context.Background()); err == nil || strings.Contains(err.Error(), "falsches-passwort") {
+			if _, err := c.Collect(context.Background()); err == nil || strings.Contains(deErr(err), "falsches-passwort") {
 				t.Errorf("v3 %s falsches Passwort: %v", f[0], err)
 			}
 			c.Close()

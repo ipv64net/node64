@@ -8,7 +8,7 @@ import (
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
-var errFormat = errors.New("unbekanntes Format")
+var errFormat = errors.New(m64proto.HintFormat)
 
 // ParseStat liest /proc/stat: Summenzeile "cpu" und Zahl der Kerne ("cpu0", "cpu1", ...).
 func ParseStat(b []byte) (*m64proto.CPU, error) {

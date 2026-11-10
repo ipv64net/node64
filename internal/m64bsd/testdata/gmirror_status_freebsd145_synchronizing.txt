@@ -1,0 +1,3 @@
+      Name    Status  Components
+mirror/gm0  DEGRADED  vtbd0 (ACTIVE)
+                      vtbd1 (SYNCHRONIZING, 57%)

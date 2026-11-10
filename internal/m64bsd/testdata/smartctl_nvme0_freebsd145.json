@@ -1,0 +1,184 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      5
+    ],
+    "pre_release": false,
+    "svn_revision": "5714",
+    "platform_info": "FreeBSD 14.5-RELEASE-p2 amd64",
+    "build_info": "(local build)",
+    "argv": [
+      "smartctl",
+      "-j",
+      "-a",
+      "-n",
+      "standby",
+      "-d",
+      "nvme",
+      "/dev/nvme0"
+    ],
+    "exit_status": 0
+  },
+  "local_time": {
+    "time_t": 1794297279,
+    "asctime": "Tue Nov 10 07:54:39 2026    "
+  },
+  "device": {
+    "name": "/dev/nvme0",
+    "info_name": "/dev/nvme0",
+    "type": "nvme",
+    "protocol": "NVMe"
+  },
+  "model_name": "QEMU NVMe Ctrl",
+  "serial_number": "M64NVME0001",
+  "firmware_version": "11.0.3",
+  "nvme_pci_vendor": {
+    "id": 6966,
+    "subsystem_id": 6900
+  },
+  "nvme_ieee_oui_identifier": 5395456,
+  "nvme_controller_id": 0,
+  "nvme_version": {
+    "string": "1.4",
+    "value": 66560
+  },
+  "nvme_number_of_namespaces": 256,
+  "smart_support": {
+    "available": true,
+    "enabled": true
+  },
+  "nvme_firmware_update_capabilities": {
+    "value": 3,
+    "slots": 1,
+    "first_slot_is_read_only": true,
+    "activiation_without_reset": false,
+    "multiple_update_detection": false,
+    "other": 0
+  },
+  "nvme_optional_admin_commands": {
+    "value": 299,
+    "security_send_receive": true,
+    "format_nvm": true,
+    "firmware_download": false,
+    "namespace_management": true,
+    "self_test": false,
+    "directives": true,
+    "mi_send_receive": false,
+    "virtualization_management": false,
+    "doorbell_buffer_config": true,
+    "get_lba_status": false,
+    "command_and_feature_lockdown": false,
+    "other": 0
+  },
+  "nvme_optional_nvm_commands": {
+    "value": 1885,
+    "compare": true,
+    "write_uncorrectable": false,
+    "dataset_management": true,
+    "write_zeroes": true,
+    "save_select_feature_nonzero": true,
+    "reservations": false,
+    "timestamp": true,
+    "verify": false,
+    "copy": true,
+    "other": 1536
+  },
+  "nvme_log_page_attributes": {
+    "value": 7,
+    "smart_health_per_namespace": true,
+    "commands_effects_log": true,
+    "extended_get_log_page_cmd": true,
+    "telemetry_log": false,
+    "persistent_event_log": false,
+    "supported_log_pages_log": false,
+    "telemetry_data_area_4": false,
+    "other": 0
+  },
+  "nvme_maximum_data_transfer_pages": 128,
+  "nvme_composite_temperature_threshold": {
+    "warning": 70,
+    "critical": 100
+  },
+  "temperature": {
+    "op_limit_max": 70,
+    "critical_limit_max": 100,
+    "current": 50
+  },
+  "nvme_namespaces": [
+    {
+      "id": 4294967295,
+      "features": {
+        "value": 0,
+        "thin_provisioning": false,
+        "na_fields": false,
+        "dealloc_or_unwritten_block_error": false,
+        "uid_reuse": false,
+        "np_fields": false,
+        "other": 0
+      }
+    }
+  ],
+  "nvme_power_states": [
+    {
+      "non_operational_state": false,
+      "relative_read_latency": 0,
+      "relative_read_throughput": 0,
+      "relative_write_latency": 0,
+      "relative_write_throughput": 0,
+      "entry_latency_us": 16,
+      "exit_latency_us": 4,
+      "max_power": {
+        "value": 2500,
+        "scale": 2,
+        "units_per_watt": 100
+      }
+    }
+  ],
+  "smart_status": {
+    "passed": true,
+    "nvme": {
+      "value": 0
+    }
+  },
+  "nvme_smart_health_information_log": {
+    "nsid": -1,
+    "critical_warning": 0,
+    "temperature": 50,
+    "available_spare": 0,
+    "available_spare_threshold": 0,
+    "percentage_used": 0,
+    "data_units_read": 10,
+    "data_units_written": 4,
+    "host_reads": 598,
+    "host_writes": 184,
+    "controller_busy_time": 0,
+    "power_cycles": 0,
+    "power_on_hours": 0,
+    "unsafe_shutdowns": 0,
+    "media_errors": 0,
+    "num_err_log_entries": 0,
+    "warning_temp_time": 0,
+    "critical_comp_time": 0
+  },
+  "spare_available": {
+    "current_percent": 0,
+    "threshold_percent": 0
+  },
+  "endurance_used": {
+    "current_percent": 0
+  },
+  "power_cycle_count": 0,
+  "power_on_time": {
+    "hours": 0
+  },
+  "nvme_error_information_log": {
+    "size": 1,
+    "read": 1,
+    "unread": 0
+  }
+}

@@ -7,6 +7,7 @@ const (
 	RuleCPU       = "cpu.util"
 	RuleLoad      = "load.core"
 	RuleMem       = "mem.used"
+	RuleGuestMem  = "guest.mem" // RAM einer VM aus Sicht des Hypervisors (mit Cache des Gastes)
 	RuleSwap      = "swap.used"
 	RuleFS        = "fs.used"
 	RuleStore     = "store.used"

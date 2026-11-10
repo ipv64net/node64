@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/model/modeltest"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
@@ -170,11 +171,29 @@ func fixture(t *testing.T, name string) string {
 	return strings.TrimSpace(string(b))
 }
 
+// de ist der deutsche Text, den ein Betrachter sieht (Namen, Texte und Fehler der Sammler sind uebersetzbar).
+func de(s string) string { return modeltest.DE(s) }
+
+// deErr: deutscher Text eines Fehlers ("" bei nil).
+func deErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return de(err.Error())
+}
+
+// deRes: Ergebnis von "Verbindung testen" mit deutschen Texten.
+func deRes(r TestResult) TestResult {
+	r.Error, r.Warning, r.Summary = de(r.Error), de(r.Warning), de(r.Summary)
+	return r
+}
+
+// svcByKey liefert den Dienst mit deutschen Texten.
 func svcByKey(t *testing.T, l []model.Service, key string) model.Service {
 	t.Helper()
 	for _, s := range l {
 		if s.Key == key {
-			return s
+			return modeltest.Service("de", s)
 		}
 	}
 	keys := make([]string, 0, len(l))

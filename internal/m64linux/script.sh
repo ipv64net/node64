@@ -1,6 +1,8 @@
 # Monitor64: Abfrage ohne Agent (Node64). Nur lesende Befehle, laeuft mit BusyBox ash, dash und bash.
 # Aufruf: sh -s -- [smart] [updates]
 # Ausgabe in Abschnitten: Zeile "<<<m64:NAME>>>", danach der Inhalt. Was es nicht gibt, fehlt einfach.
+# Hinweise und Fehler, die das Skript selbst formuliert, stehen als Code "{m64:...}" im Text (m64proto.Hint): die Node
+# zeigt sie in der Sprache des Betrachters.
 #   file:PFAD   Inhalt einer Datei (/proc/...)
 #   attr        Zeilen "PFAD<TAB>WERT" fuer einzeilige Dateien aus /sys (WERT 1 = vorhanden bzw. Symlink-Ziel);
 #               "PFAD.hex<TAB>HEX" fuer Binaerdateien (vpd_pg80)
@@ -65,13 +67,13 @@ m64_try() {
 	m64_o=$(m64_run TERM "$m64_t" "$@" 2>/dev/null)
 	m64_rc=$?
 	if m64_timedout "$m64_rc"; then
-		m64_e="$m64_n: Zeitlimit"
+		m64_e="$m64_n: {m64:timeout}"
 		return 1
 	fi
 	for m64_c in $m64_ok; do
 		[ "$m64_rc" = "$m64_c" ] && return 0
 	done
-	m64_e="$m64_n: Exit-Code $m64_rc"
+	m64_e="$m64_n: {m64:exit_code=$m64_rc}"
 	return 1
 }
 m64_out() {
@@ -155,10 +157,10 @@ case $m64_r in
 		m64_sec df_i
 		m64_out
 		;;
-	2) m64_err fs "df -i: Zeitlimit" ;;
+	2) m64_err fs "df -i: {m64:timeout}" ;;
 	esac
 	;;
-2) m64_err fs "df: Zeitlimit" ;;
+2) m64_err fs "df: {m64:timeout}" ;;
 esac
 
 m64_sec attr
@@ -216,7 +218,7 @@ if m64_have zpool; then
 	m64_o=$(m64_run TERM 5 zpool list -Hp -o name,size,alloc,free,frag,health 2>/dev/null)
 	m64_rc=$?
 	if m64_timedout "$m64_rc"; then
-		m64_err zfs "zpool: Zeitlimit"
+		m64_err zfs "zpool: {m64:timeout}"
 	else
 		m64_sec zpool_list
 		m64_out
@@ -227,7 +229,7 @@ if m64_have zpool; then
 		if [ -n "$m64_o" ]; then
 			m64_o=$(m64_run TERM 5 zpool status 2>/dev/null)
 			if m64_timedout "$?"; then
-				m64_err zfs "zpool: Zeitlimit"
+				m64_err zfs "zpool: {m64:timeout}"
 			else
 				m64_sec zpool_status
 				m64_out
@@ -291,7 +293,7 @@ if [ "$m64_updates" = 1 ]; then
 				m64_sec "updates_sec:$m64_mgr"
 				m64_out
 			else
-				m64_note updates "Sicherheitsupdates unbekannt: $m64_e"
+				m64_note updates "{m64:sec_unknown}: $m64_e"
 			fi
 		else
 			m64_err updates "$m64_e"
@@ -305,7 +307,7 @@ if [ "$m64_updates" = 1 ]; then
 				m64_sec updates_sec:zypper
 				m64_out
 			else
-				m64_note updates "Sicherheitsupdates unbekannt: $m64_e"
+				m64_note updates "{m64:sec_unknown}: $m64_e"
 			fi
 		else
 			m64_err updates "$m64_e"
@@ -339,7 +341,7 @@ if [ "$m64_updates" = 1 ]; then
 			m64_err updates "$m64_e"
 		fi
 	else
-		m64_note updates "kein Paketverwalter erkannt"
+		m64_note updates "{m64:no_pkg_manager}"
 	fi
 fi
 
@@ -367,18 +369,18 @@ if [ "$m64_smart" = 1 ]; then
 		fi
 	}
 	if [ -z "$m64_sc" ]; then
-		m64_note smart "smartctl fehlt"
+		m64_note smart "{m64:missing=smartctl}"
 	elif [ "$m64_root" = 0 ] && ! m64_have sudo; then
-		m64_note smart "sudo fehlt"
+		m64_note smart "{m64:missing=sudo}"
 	elif ! m64_smartctl 10 -V >/dev/null 2>&1; then
-		m64_note smart "sudo -n smartctl nicht erlaubt"
+		m64_note smart "{m64:sudo_denied=smartctl}"
 	else
 		m64_list=$(m64_smartctl 20 --scan-open 2>/dev/null)
 		m64_rc=$?
 		if [ -z "$m64_list" ] && m64_timedout "$m64_rc"; then
-			m64_err smart "smartctl --scan-open: Zeitlimit"
+			m64_err smart "smartctl --scan-open: {m64:timeout}"
 		elif [ -z "$m64_list" ]; then
-			m64_note smart "keine Platten mit SMART gefunden"
+			m64_note smart "{m64:no_smart_disks}"
 		else
 			m64_c=0
 			printf '%s\n' "$m64_list" | while read -r m64_dev m64_dd m64_typ _; do
@@ -398,7 +400,7 @@ if [ "$m64_smart" = 1 ]; then
 				m64_out
 				# smartctl schreibt JSON erst am Ende: abgebrochen = leer (Exit-Code allein ist ein Bitfeld)
 				if [ -z "$m64_o" ] && m64_timedout "$m64_rc"; then
-					m64_err "smart:$m64_dev" "smartctl: Zeitlimit"
+					m64_err "smart:$m64_dev" "smartctl: {m64:timeout}"
 				fi
 			done
 		fi

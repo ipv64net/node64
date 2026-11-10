@@ -758,7 +758,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	if p.ShowHistory {
 		m64Hist = now.Add(-statusHistory)
 	}
-	m64 := m.statusM64Sources(ctx, m64src, module.StatusQuery{Bounds: bounds, History: m64Hist, Ahead: statusMaintAhead, Now: now})
+	m64 := m.statusM64Sources(ctx, m64src, module.StatusQuery{Lang: lang, Bounds: bounds, History: m64Hist, Ahead: statusMaintAhead, Now: now})
 	for _, tok := range m64src {
 		s := m64[tok]
 		if s == nil {

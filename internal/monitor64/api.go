@@ -349,11 +349,13 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 	hk := strings.TrimSpace(in.HostKey)
 	switch {
 	case hk == "reset" && !isNew:
-		a.HostKey = "" // naechster Kontakt merkt den neuen Schluessel (wie hostkey-reset)
+		a.HostKey = "" // naechster Kontakt merkt den neuen Schluessel (wie hostkey-reset; mit Passwort erst nach Bestaetigung)
 	case !reFP.MatchString(hk):
 		return false, errBad("hostkey")
 	case isNew:
 		a.HostKey = hk
+	case a.HostKey == "" && hk != "":
+		a.HostKey = hk // noch keiner gemerkt: der in der Oberflaeche bestaetigte Fingerabdruck (SSH mit Passwort)
 	}
 	if in.Enabled != nil {
 		a.Enabled = *in.Enabled
@@ -470,6 +472,7 @@ func (m *Module) apiHostCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "host.create", h.Name, fmt.Sprintf("uid=%s address=%s accesses=%d adopted=%d", h.UID, h.Address, len(accs), len(in.Adopt)))
 	m.ReloadHost(ctx, h.UID)
+	m.repoll(h.UID) // erste Werte sofort, nicht erst zum naechsten Takt
 	writeJSON(w, http.StatusCreated, map[string]any{"uid": h.UID})
 }
 
@@ -595,6 +598,7 @@ func (m *Module) apiAccessCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "access.create", h.Name, "type="+a.Type+" uid="+a.UID)
 	m.ReloadHost(ctx, h.UID)
+	m.repoll(h.UID) // neuer Zugang: gleich abfragen
 	writeJSON(w, http.StatusCreated, accessOuts([]*Access{a})[0])
 }
 
@@ -622,6 +626,7 @@ func (m *Module) apiAccessUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "access.update", a.HostUID, fmt.Sprintf("type=%s uid=%s secret_changed=%t hostkey_reset=%t", a.Type, a.UID, !keep, strings.TrimSpace(in.HostKey) == "reset"))
 	m.ReloadHost(ctx, a.HostUID)
+	m.repoll(a.HostUID) // geaenderter Zugang: gleich abfragen
 	writeJSON(w, http.StatusOK, accessOuts([]*Access{a})[0])
 }
 
@@ -726,6 +731,11 @@ func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 	svcs, err := col.collect(ctx)
 	res.Ms = time.Since(start).Milliseconds()
 	res.Fingerprint = a.HostKey
+	var uk *transport.UnconfirmedKeyError
+	if errors.As(err, &uk) { // SSH mit Passwort: erst den Fingerabdruck bestaetigen lassen, dann anmelden
+		res.Fingerprint, res.NeedConfirm = uk.Got, true
+		return res
+	}
 	if err != nil {
 		res.Error = err.Error()
 	}

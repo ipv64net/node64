@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/apis"
+	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
@@ -34,10 +35,10 @@ const (
 // Fehler der Abfrage.
 var (
 	// ErrUnconfirmed: Zertifikat nicht vertrauenswuerdig und kein Pin – erst Fingerabdruck bestaetigen.
-	ErrUnconfirmed = errors.New("Zertifikat nicht bestätigt – Fingerabdruck prüfen und übernehmen")
-	ErrPinMismatch = errors.New("Zertifikat geändert – Fingerabdruck passt nicht zum gespeicherten")
-	ErrAuth        = errors.New("Anmeldung abgelehnt – Benutzer/Passwort bzw. Token prüfen")
-	ErrNoMetrics   = errors.New("keine Prometheus-Metriken in der Antwort – Adresse/Pfad prüfen (Standard /metrics)")
+	ErrUnconfirmed = errors.New(model.T("monitor64.txt.pm_unconfirmed"))
+	ErrPinMismatch = errors.New(model.T("monitor64.txt.pm_pin_mismatch"))
+	ErrAuth        = errors.New(model.T("monitor64.txt.pm_auth"))
+	ErrNoMetrics   = errors.New(model.T("monitor64.txt.pm_no_metrics"))
 )
 
 // certInfo ist das zuletzt gesehene Zertifikat (fuer Test).
@@ -62,7 +63,7 @@ type fetcher struct {
 func NormalizeURL(s string, defPort int) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return "", errors.New("Adresse fehlt")
+		return "", errors.New(model.T("monitor64.txt.addr_required"))
 	}
 	bare := !strings.Contains(s, "://")
 	if bare {
@@ -70,18 +71,18 @@ func NormalizeURL(s string, defPort int) (string, error) {
 	}
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" || u.Hostname() == "" {
-		return "", fmt.Errorf("ungültige Adresse %q", clip(s, 200))
+		return "", errors.New(model.T("monitor64.txt.addr_invalid", "addr", clip(s, 200)))
 	}
 	if u.User != nil {
-		return "", errors.New("Zugangsdaten nicht in die Adresse schreiben (Benutzer und Passwort bzw. Token gehören in die Zugangsdaten)")
+		return "", errors.New(model.T("monitor64.txt.pm_cred_in_url"))
 	}
 	u.Scheme = strings.ToLower(u.Scheme)
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", fmt.Errorf("nur http:// oder https:// (nicht %q)", u.Scheme)
+		return "", errors.New(model.T("monitor64.txt.pm_scheme", "v", u.Scheme))
 	}
 	if p := u.Port(); p != "" {
 		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
-			return "", fmt.Errorf("ungültiger Port %q", p)
+			return "", errors.New(model.T("monitor64.txt.port_invalid_v", "v", p))
 		}
 	} else if bare && defPort > 0 {
 		u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(defPort))
@@ -101,7 +102,7 @@ func newFetcher(rawURL, user, secret, pin string, timeout time.Duration, maxBody
 	}
 	pin, ok := proxmox.NormalizePin(pin)
 	if !ok {
-		return nil, errors.New("Fingerabdruck muss 64 Hex-Zeichen haben (SHA-256)")
+		return nil, errors.New(model.T("monitor64.txt.pin_format"))
 	}
 	f := &fetcher{url: rawURL, maxBody: maxBody}
 	switch {
@@ -179,21 +180,21 @@ func (f *fetcher) fetch(ctx context.Context) ([]byte, error) {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		return nil, fmt.Errorf("%w (HTTP %d)", ErrAuth, resp.StatusCode)
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
-		return nil, fmt.Errorf("HTTP %d – Weiterleitungen werden nicht verfolgt, Adresse direkt eintragen", resp.StatusCode)
+		return nil, fmt.Errorf("HTTP %d – %s", resp.StatusCode, model.T("monitor64.txt.pm_redirect"))
 	case resp.StatusCode == http.StatusNotFound:
-		return nil, errors.New("HTTP 404 – Pfad prüfen (Standard /metrics)")
+		return nil, errors.New("HTTP 404 – " + model.T("monitor64.txt.pm_404"))
 	case resp.StatusCode != http.StatusOK:
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	if strings.Contains(ct, "protobuf") {
-		return nil, errors.New("Antwort im Protobuf-Format – nur das Textformat wird unterstützt")
+		return nil, errors.New(model.T("monitor64.txt.pm_protobuf"))
 	}
 	var r io.Reader = io.LimitReader(resp.Body, int64(f.maxBody)+1)
 	if strings.EqualFold(strings.TrimSpace(resp.Header.Get("Content-Encoding")), "gzip") {
 		gz, err := gzip.NewReader(r)
 		if err != nil {
-			return nil, fmt.Errorf("gzip: %v", err)
+			return nil, errors.New("gzip: " + model.RawErr(err))
 		}
 		defer gz.Close()
 		r = io.LimitReader(gz, int64(f.maxBody)+1) // Grenze nach dem Entpacken (gzip-Bombe)
@@ -203,7 +204,7 @@ func (f *fetcher) fetch(ctx context.Context) ([]byte, error) {
 		return nil, netError(ctx, err)
 	}
 	if len(b) > f.maxBody {
-		return nil, fmt.Errorf("%w (mehr als %d MB)", ErrTooLarge, f.maxBody>>20)
+		return nil, fmt.Errorf("%w (%s)", ErrTooLarge, model.T("monitor64.txt.more_than", "n", fmt.Sprintf("%d MB", f.maxBody>>20)))
 	}
 	return b, nil
 }
@@ -216,13 +217,13 @@ func netError(ctx context.Context, err error) error {
 	case errors.Is(err, ErrPinMismatch):
 		return ErrPinMismatch
 	case errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded:
-		return errors.New("Zeitlimit – keine Antwort")
+		return errors.New(model.T("monitor64.txt.pm_timeout"))
 	case errors.Is(err, context.Canceled):
 		return context.Canceled
 	}
 	var ne net.Error
 	if errors.As(err, &ne) && ne.Timeout() {
-		return errors.New("Zeitlimit – keine Antwort")
+		return errors.New(model.T("monitor64.txt.pm_timeout"))
 	}
 	var ue *url.Error
 	if errors.As(err, &ue) {
@@ -230,7 +231,7 @@ func netError(ctx context.Context, err error) error {
 	}
 	var oe *net.OpError
 	if errors.As(err, &oe) && oe.Op == "dial" && oe.Err != nil {
-		return fmt.Errorf("nicht erreichbar (%s)", clip(oe.Err.Error(), 120))
+		return errors.New(model.T("monitor64.txt.web_net") + " (" + model.Raw(clip(oe.Err.Error(), 120)) + ")")
 	}
-	return errors.New(clip(err.Error(), 200))
+	return errors.New(model.Raw(clip(err.Error(), 200)))
 }

@@ -65,7 +65,26 @@ func TestSSHClientRun(t *testing.T) {
 
 func TestSSHClientPassword(t *testing.T) {
 	fs := startFakeSSH(t, nil, "geheim", echoScript)
-	c, err := NewSSHClient(SSHConfig{Addr: fs.addr, User: "root", Password: "geheim"})
+	fp := Fingerprint(fs.hk.PublicKey())
+	// ohne bestaetigten Hostschluessel: Abbruch vor der Anmeldung, das Passwort kommt nie beim Server an, nichts
+	// wird gemerkt
+	before := fakePwTries.Load()
+	learned := ""
+	un, err := NewSSHClient(SSHConfig{Addr: fs.addr, User: "root", Password: "geheim", OnHostKey: func(s string) { learned = s }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer un.Close()
+	_, err = un.Run(ctx(t), "x")
+	var uk *UnconfirmedKeyError
+	if !errors.As(err, &uk) || !errors.Is(err, ErrHostKeyUnconfirmed) || uk.Got != fp {
+		t.Fatalf("unconfirmed key: %v", err)
+	}
+	if n := fakePwTries.Load() - before; n != 0 || learned != "" || un.HostKey() != "" {
+		t.Fatalf("password sent to unconfirmed host: tries=%d learned=%q", n, learned)
+	}
+	// bestaetigt: Anmeldung mit Passwort
+	c, err := NewSSHClient(SSHConfig{Addr: fs.addr, User: "root", Password: "geheim", HostKey: fp})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +92,10 @@ func TestSSHClientPassword(t *testing.T) {
 	if _, err := c.Run(ctx(t), "x"); err != nil {
 		t.Fatal(err)
 	}
-	bad, _ := NewSSHClient(SSHConfig{Addr: fs.addr, User: "root", Password: "falsch"})
+	if fakePwTries.Load() == before {
+		t.Fatal("no password login after confirmation")
+	}
+	bad, _ := NewSSHClient(SSHConfig{Addr: fs.addr, User: "root", Password: "falsch", HostKey: fp})
 	defer bad.Close()
 	if _, err := bad.Run(ctx(t), "x"); err == nil {
 		t.Fatal("wrong password accepted")

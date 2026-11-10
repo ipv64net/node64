@@ -150,7 +150,7 @@ func ParseSmartctl(dev string, b []byte) m64proto.SMART {
 	var j smartJSON
 	t := strings.TrimSpace(string(b))
 	if !strings.HasPrefix(t, "{") {
-		s.Error = "keine JSON-Ausgabe (smartctl < 7?)"
+		s.Error = m64proto.HintNoJSON
 		if l := lines([]byte(t)); len(l) > 0 {
 			s.Error += ": " + clip(l[0])
 		}
@@ -266,13 +266,13 @@ func ParseSmartctl(dev string, b []byte) m64proto.SMART {
 	if s.Passed == nil {
 		switch {
 		case j.SmartSupport != nil && j.SmartSupport.Available != nil && !*j.SmartSupport.Available:
-			s.Error = "SMART nicht verfuegbar"
+			s.Error = m64proto.HintSmartUnavail
 		case j.SmartSupport != nil && j.SmartSupport.Enabled != nil && !*j.SmartSupport.Enabled:
-			s.Error = "SMART ausgeschaltet"
+			s.Error = m64proto.HintSmartDisabled
 		case firstErr != "":
 			s.Error = clip(firstErr)
 		case j.Smartctl.ExitStatus&3 != 0:
-			s.Error = "Geraet nicht lesbar"
+			s.Error = m64proto.HintDevUnreadable
 		}
 	}
 	return s

@@ -76,7 +76,7 @@ func NewDocker(cfg DockerConfig) (*Docker, error) {
 		host = proxmox.DefaultDockerHost()
 	}
 	if !proxmox.ValidDockerHost(host) {
-		return nil, fmt.Errorf("ungültige Docker-Adresse %q (unix://, tcp://, http(s):// oder ssh://)", host)
+		return nil, errors.New(model.T("monitor64.txt.docker_addr_invalid", "addr", host))
 	}
 	cfg.Host = host
 	p := proxmox.NewDockerPoller(slog.New(slog.DiscardHandler), cfg.system(), nil)
@@ -118,13 +118,13 @@ func (d *Docker) Test(ctx context.Context) TestResult {
 	defer cancel()
 	pr := proxmox.DockerProbe(ctx, d.cfg.system())
 	sec := d.cfg.secrets()
-	res := TestResult{OK: pr.OK, Error: scrub(pr.Error, sec...), Warning: scrub(pr.Warning, sec...), Fingerprint: pr.Fingerprint,
+	res := TestResult{OK: pr.OK, Error: model.Raw(scrub(pr.Error, sec...)), Warning: model.Raw(scrub(pr.Warning, sec...)), Fingerprint: pr.Fingerprint,
 		Trusted: pr.Trusted, NeedConfirm: pr.NeedConfirm}
 	if pr.Info != nil {
 		res.Version, res.Node = pr.Info.Version, pr.Info.Name
 	}
 	if pr.OK {
-		res.Summary = fmt.Sprintf("%d Container, %d laufen", pr.Containers, pr.Running)
+		res.Summary = model.T("monitor64.txt.containers_running", "n", pr.Containers, "run", pr.Running)
 	}
 	return res
 }
@@ -138,9 +138,9 @@ func (d *Docker) Collect(ctx context.Context) ([]model.Service, error) {
 	sec := d.cfg.secrets()
 	snap := d.poll.Poll(ctx)
 	if !snap.OK {
-		return nil, errors.New(scrub(snap.Error, sec...))
+		return nil, errors.New(model.Raw(scrub(snap.Error, sec...)))
 	}
-	part := &partial{secrets: sec}
+	part := &partial{secrets: sec, foreign: true}
 	now := d.now()
 	d.fetchPolicies(ctx, now, snap.Resources, part)
 	out := make([]model.Service, 0, len(snap.Resources))
@@ -242,19 +242,30 @@ func shouldRun(policy string, r *proxmox.Resource) bool {
 	return false
 }
 
-var dockerStatusText = map[string]string{"running": "läuft", "exited": "beendet", "paused": "pausiert", "restarting": "startet neu",
-	"created": "angelegt", "dead": "tot", "removing": "wird entfernt"}
+var dockerStatusText = map[string]string{"running": "monitor64.txt.running", "exited": "monitor64.txt.exited", "paused": "monitor64.txt.paused",
+	"restarting": "monitor64.txt.restarting", "created": "monitor64.txt.created", "dead": "monitor64.txt.dead", "removing": "monitor64.txt.removing"}
+
+// dockerStatus: Zustand eines Containers als Text (unbekannte Zustaende roh).
+func dockerStatus(status string) string {
+	if k, ok := dockerStatusText[status]; ok {
+		return model.T(k)
+	}
+	if status != "" {
+		return model.Raw(status)
+	}
+	return model.T("monitor64.txt.unknown")
+}
 
 // containerService: ein Container als Dienst ctr:<name>.
 func (d *Docker) containerService(r *proxmox.Resource) model.Service {
-	s := model.Service{Key: "ctr:" + r.Name, Name: r.Name, Kind: "ctr", Default: !r.Excluded()}
+	s := model.Service{Key: "ctr:" + r.Name, Name: model.Raw(r.Name), Kind: "ctr", Default: !r.Excluded()}
 	running := r.Status == "running"
 	run := 0.0
 	if running {
 		run = 1
 	}
 	s.Metrics = append(s.Metrics, model.Metric{Name: "running", Value: run}, model.Metric{Name: "restarts", Value: float64(r.Restarts)})
-	parts := []string{firstNonEmpty(dockerStatusText[r.Status], r.Status, "unbekannt")}
+	parts := []string{dockerStatus(r.Status)}
 	switch {
 	case r.Status == "exited" && r.OOMKilled:
 		parts[0] += " (OOM)"
@@ -263,18 +274,18 @@ func (d *Docker) containerService(r *proxmox.Resource) model.Service {
 	}
 	// Health nur bei laufenden Containern (inspect behaelt nach dem Stoppen den letzten Stand)
 	if r.Health != "" && running {
-		parts = append(parts, r.Health)
+		parts = append(parts, model.Raw(r.Health))
 	}
 	if r.Health == "unhealthy" && running {
 		s.Facts = append(s.Facts, model.Fact{Code: "ctr_unhealthy", Text: "Healthcheck unhealthy"})
 	}
 	if r.Detail == proxmox.DockerRestarting && running {
-		parts = append(parts, "Neustart-Schleife")
+		parts = append(parts, model.T("monitor64.txt.restart_loop"))
 	}
 	prev, had := d.restarts[r.Name]
 	same := had && prev.id == r.ContainerID
 	if (same && r.Restarts > prev.restarts) || r.Restarted {
-		parts = append(parts, fmt.Sprintf("neu gestartet (%d Neustarts)", r.Restarts))
+		parts = append(parts, model.T("monitor64.txt.restarted_n", "n", r.Restarts))
 	}
 	// stats nicht abrufbar: der Poller laesst CPU, RAM und Raten auf 0 (MaxCPU 0) – dann keine Messgroessen statt
 	// falscher Nullwerte
@@ -306,17 +317,17 @@ func (d *Docker) containerService(r *proxmox.Resource) model.Service {
 	pol, known := d.policies[r.Name]
 	switch {
 	case !known:
-		parts = append(parts, "Soll-Zustand unbekannt")
+		parts = append(parts, model.T("monitor64.txt.target_unknown"))
 	case shouldRun(pol.policy, r):
-		parts = append(parts, "soll laufen (Neustart-Richtlinie "+pol.policy+")")
+		parts = append(parts, model.T("monitor64.txt.should_run_policy", "v", pol.policy))
 		if !running && r.Status != "paused" {
-			s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", soll laufen (Neustart-Richtlinie " + pol.policy + ")"})
+			s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: parts[0] + ", " + model.T("monitor64.txt.should_run_policy", "v", pol.policy)})
 		}
 	default:
-		parts = append(parts, "darf aus sein (Neustart-Richtlinie "+pol.policy+")")
+		parts = append(parts, model.T("monitor64.txt.may_be_off_policy", "v", pol.policy))
 	}
 	if r.Image != "" {
-		parts = append(parts, r.Image)
+		parts = append(parts, model.Raw(r.Image))
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s

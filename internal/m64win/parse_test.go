@@ -130,7 +130,7 @@ func TestDriveCalls(t *testing.T) {
 	}
 	t1 := time.Now()
 	_, err = waitDrive[int](ctx, c.startDrive("fs X:", hang), "X:", 50*time.Millisecond)
-	if !errors.Is(err, errDriveTimeout) || !strings.Contains(err.Error(), "haengt seit") || time.Since(t1) > 20*time.Millisecond {
+	if !errors.Is(err, errDriveTimeout) || !strings.Contains(err.Error(), "{m64:hung=") || time.Since(t1) > 20*time.Millisecond {
 		t.Fatalf("haengt: %v nach %s", err, time.Since(t1))
 	}
 	// andere Laufwerke laufen weiter
@@ -249,12 +249,12 @@ func TestSvcWanted(t *testing.T) {
 	}{
 		{"auto laeuft", svcInfo{startType: svcAutoStart, state: svcRunning}, true},
 		{"auto gestoppt", svcInfo{startType: svcAutoStart, state: svcStopped, exitCode: 1067}, true},
-		{"auto nie gestartet", svcInfo{startType: svcAutoStart, state: svcStopped, exitCode: 1077}, true},
 		{"auto sauber beendet", svcInfo{startType: svcAutoStart, state: svcStopped}, true},
 		{"verzoegert sauber beendet", svcInfo{startType: svcAutoStart, delayed: true, state: svcStopped}, false},
 		{"verzoegert mit Fehler", svcInfo{startType: svcAutoStart, delayed: true, state: svcStopped, exitCode: 1066, specific: 3}, true},
 		{"verzoegert laeuft", svcInfo{startType: svcAutoStart, delayed: true, state: svcRunning}, true},
 		{"Trigger", svcInfo{startType: svcAutoStart, triggers: 2, state: svcStopped, exitCode: 1067}, false},
+		{"nie gestartet", svcInfo{startType: svcAutoStart, state: svcStopped, exitCode: exitNeverStarted}, false},
 		{"manuell", svcInfo{startType: 3, state: svcStopped}, false},
 		{"deaktiviert", svcInfo{startType: 4}, false},
 	} {
@@ -333,7 +333,7 @@ func TestParseStorageUser(t *testing.T) {
 	if len(res.smart) != 2 || res.smart[0].Error != "" || res.smart[0].Passed == nil || res.smart[0].TempC != nil || len(res.errs) != 0 {
 		t.Fatalf("res = %+v", res)
 	}
-	if len(res.notes) != 1 || res.notes[0].Section != m64proto.SecSmart || !strings.Contains(res.notes[0].Note, "Administratorrechte") {
+	if len(res.notes) != 1 || res.notes[0].Section != m64proto.SecSmart || !strings.Contains(res.notes[0].Note, m64proto.HintCountersUnreadable) {
 		t.Fatalf("notes = %+v", res.notes)
 	}
 }
@@ -350,7 +350,7 @@ func TestParseStorageErrors(t *testing.T) {
 		t.Fatalf("errs = %+v %v", res.errs, err)
 	}
 	res, _ = ParseStorage([]byte(`{"disks":[],"vdisks":[],"errors":[]}`))
-	if len(res.notes) != 1 || res.notes[0].Note != "keine Platten gefunden" || res.smart == nil {
+	if len(res.notes) != 1 || res.notes[0].Note != m64proto.HintNoDisks || res.smart == nil {
 		t.Fatalf("leer = %+v", res)
 	}
 	// PowerShell 5.1: Liste mit einem Element als Einzelwert

@@ -29,6 +29,7 @@ type StatusTarget struct {
 // StatusQuery beschreibt, was eine Statusseite braucht.
 type StatusQuery struct {
 	Sources []string
+	Lang    string        // Sprache fuer Namen aus der Quelle ("" = Standard der Quelle)
 	Bounds  []time.Time   // Grenzen der Balken (aufsteigend, Balken i = Bounds[i]..Bounds[i+1]); weniger als 2 = keine Balken
 	History time.Time     // Stoerungen, die nach diesem Zeitpunkt noch liefen (leer = keine)
 	Ahead   time.Duration // Wartungen: laufende und die bis Now+Ahead beginnenden

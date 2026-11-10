@@ -79,6 +79,7 @@ func NewSSHClient(cfg SSHConfig) (*SSHClient, error) {
 		auth:        auth,
 		hostKey:     cfg.HostKey,
 		onHostKey:   cfg.OnHostKey,
+		confirmKey:  cfg.Password != "",
 		dialTimeout: cfg.DialTimeout,
 		idleTimeout: cfg.IdleTimeout,
 	})}, nil

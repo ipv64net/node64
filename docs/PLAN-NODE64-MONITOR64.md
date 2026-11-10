@@ -120,11 +120,25 @@ Leitlinie: **einfach und übersichtlich** – lieber wenige klare Regeln als vie
   Deinstallation `monitor64-agent uninstall`. Alternativ kommt alles von der Node selbst
   (`http(s)://<node>/monitor64/agent/…`): sie lädt die Dateien beim ersten Bedarf von GitHub/node64.de, prüft die
   Signatur und hält sie vor – so geht es auch für Hosts ohne Internet.
+- **Verteilung (gebaut 2026-11-10, entschieden 2026-11-09/10):** Die Dateien liegen unter
+  `https://ipv64.net/node64/agent/` (Standard-Quelle der Node, Ordner `node64` wie die Selbst-Updates) und
+  `https://node64.de/agent/` (Ausweichquelle); für Tests per `NODE64_MONITOR64_AGENT_URL` überschreibbar. Ablage:
+  `agents.json` (Version, Dateien je Plattform mit Größe und SHA-256) + `agents.json.sig` (signiert wie das Manifest
+  der Selbst-Updates), `<version>/monitor64-agent-<os>-<arch>[.exe]` + `.update.json` (signierte Kopfzeile),
+  `install.sh`, `install.ps1`, `SHA256SUMS`; Plattformen Linux amd64/arm64/armv7, Windows amd64, FreeBSD
+  amd64/arm64. Der Agent hat eine eigene Version (`cmd/monitor64-agent/VERSION`). Die Node holt das Verzeichnis beim
+  ersten Bedarf und alle 6 h, lädt Dateien erst bei Bedarf nach `<data>/monitor64/agent/`, prüft SHA-256 und
+  Signatur und bietet sie ohne Anmeldung unter `/monitor64/agent/<datei>` an (`install.sh --base …`,
+  `install.ps1 -Base …`). Eigener Menüpunkt **Agent**: verfügbare Version, Downloads, Installationsbefehle für
+  Linux/Windows/FreeBSD (Quelle „Internet“ oder „diese Node“ – dieselbe Auswahl im Assistenten), Schlüssel der Node,
+  Hosts mit Agent-Version und Update-Stand. Einzelheiten und Release-Ablauf: `MONITOR64-AGENT-RELEASE.md`.
 - **Updates automatisch** (Standard an, je Host abschaltbar; entschieden 2026-11-09): Erscheint ein neuer Agent,
-  schiebt die Node ihn über die bestehende Verbindung (Host braucht kein Internet), höchstens einige Hosts
-  gleichzeitig. Der Agent prüft die Signatur (ed25519, Release-Schlüssel eingebaut), tauscht sich aus und startet
-  neu; bei Fehler bleibt die alte Datei. Im Verlauf steht „Agent 0.3 → 0.4 (System)“; Knopf „jetzt aktualisieren“
-  bleibt für Hosts mit abgeschaltetem Automatismus.
+  schiebt die Node ihn über die bestehende Verbindung (Host braucht kein Internet), höchstens 2 Hosts
+  gleichzeitig, nie während einer Abfragerunde desselben Hosts, im Cluster nur die zuständige Node. Der Agent prüft
+  die Signatur (ed25519, Release-Schlüssel eingebaut), tauscht sich aus und startet neu; bei Fehler bleibt die alte
+  Datei, die Node zeigt den Fehler am Zugang und versucht es frühestens nach 6 h erneut. Im Verlauf steht
+  „Agent 0.3 → 0.4 (System)“; Knopf „jetzt aktualisieren“ (Seite Agent) bleibt für Hosts mit abgeschaltetem
+  Automatismus.
 
 ### SSH ohne Agent
 
@@ -439,14 +453,20 @@ Monitor64 liest nur, führt nichts aus und gibt keine Geheimnisse heraus.
   Schlüssel nur im Release-Prozess (GitHub-Actions-Secret); **kein Downgrade** (Version muss steigen); bei Fehler
   bleibt die alte Datei. **Schlüssel (entschieden 2026-11-09):** derselbe Release-Schlüssel wie für die
   Selbst-Updates von Node64 (`internal/selfupdate/keys.go`, Secret `NODE64_SIGNING_KEY`); signiert wird mit
-  `node64-release agent-sign` (Kopfzeile `<datei>.update.json`). Der Release-Ablauf für die Agent-Dateien kommt mit
-  der Freigabe.
+  `node64-release agent-sign` (Kopfzeile `<datei>.update.json`), das Verzeichnis `agents.json` mit
+  `node64-release sign`. Die Node prüft beides, bevor sie eine Datei ablegt, ausliefert oder verteilt (Signatur des
+  Verzeichnisses, SHA-256 und Signatur der Kopfzeile; nur HTTPS, Größengrenzen, keine Weiterleitung auf fremde
+  Hosts, kein älteres Verzeichnis als das gespeicherte). Release-Ablauf: `MONITOR64-AGENT-RELEASE.md`.
 - systemd-Härtung (`ProtectSystem=strict`, `ProtectHome`, `NoNewPrivileges`, `PrivateTmp`, nur nötige
   Schreibpfade). Windows: Dienst als LocalSystem (für Speicher-/Update-Abfragen nötig), Datei nur für Admins
   schreibbar.
 - Installationsweg: Standard über HTTPS (GitHub, node64.de). Von der Node nur über HTTPS empfohlen; über HTTP mit
   deutlichem Hinweis. Download-Pfad `/monitor64/agent/` liefert nur signierte Dateien und das Skript, nur bei
-  eingeschaltetem Modul, mit Ratenbegrenzung.
+  eingeschaltetem Modul, mit Ratenbegrenzung (je IP durch den Kern, dazu höchstens 8 Downloads gleichzeitig); nur
+  feste Dateinamen aus dem signierten Verzeichnis. **Grenze:** Die Prüfsumme im Skript schützt nur vor defekten
+  Downloads – über HTTP kann jemand zwischen Host und Node Skript, Datei und `SHA256SUMS` gemeinsam austauschen.
+  Über HTTPS muss der Host dem Zertifikat der Node vertrauen (selbst signiert: Download bricht ab). Die Oberfläche
+  sagt das beim Befehl.
 
 **Node als Empfänger**
 - Größengrenzen: Agent-Antwort max. 4 MB, SSH-Ausgabe max. 4 MB, Trap max. 64 KB; Zeitlimits je Abfrage.
@@ -607,11 +627,21 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   Millisekunden, Push-Fehlalarm nach Neustart, fehlende Entwarnung im Ablauf, abgetrennte Node meldete vor Klärung
   der Mehrheit, Node-Name im Verlauf, Hinweis bei lokalen Zugängen. Nicht echt getestet (nur Tests im Prozess): Trap
   an nicht zuständige Node, „Schlüssel wechseln“.
-- Offene Punkte aus den Teilberichten: Release-Ablauf für Agent-Dateien (bauen, `agent-sign`, auf node64.de/GitHub,
-  Download über die Node) kommt mit der Freigabe – Schlüssel entschieden (der von Node64);
-  Ruhezeit-Prüfung für Erinnerungen (Dispatcher exportieren); Dienstnamen/-texte aus Mapper/m64linux noch deutsch
-  (i18n); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit ändern
-  (`tsdb.SetRetention`); FreeBSD/Windows-Agent Phase 2/3.
+- 2026-11-10 (Runde 3): Agent-Verteilung über die Node (Menüpunkt „Agent“, signiertes Verzeichnis `agents.json`,
+  Download ohne Anmeldung, automatische Updates; Ablauf in `docs/MONITOR64-AGENT-RELEASE.md`), Installation unter
+  FreeBSD/OPNsense/pfSense/TrueNAS CORE (echt getestet auf FreeBSD 14.5 in einer VM), Dienstnamen und Texte
+  übersetzbar (de/en, `model.T`), bekannte Lücken im Cluster und auf den Statusseiten geschlossen. Klicktest in
+  Chrome auf 8091 (Funde F1–F16 behoben), Fund der Sicherheitsprüfung behoben (SSH-Passwort erst nach bestätigtem
+  Hostschlüssel). **Lasttest** auf agentbox: 100 echte Agents (800 Dienste) kosten rund 26 MB RAM und unter 0,5 %
+  eines Kerns; mit zusätzlich 1.000 Schein-Hosts 90–112 MB RAM (stabil über 20 min) und rund 1 % eines Kerns.
+  **Windows-Agent echt** auf Windows 11 im Vordergrund (Push-Betrieb): Werte stimmen; Funde behoben (nie gestartete
+  Automatik-Dienste, „Updates“ erst nach der stündlichen Erkennung).
+- Offene Punkte: Windows-Agent als Dienst über `install.ps1` und Ende-zu-Ende-Test der signierten Updates stehen
+  noch aus; OPNsense, pfSense und TrueNAS CORE nur nachgestellt; Ruhezeit-Prüfung für Erinnerungen (Dispatcher
+  exportieren); vor der Umstellung auf übersetzbare Namen erkannte Dienste behalten ihren deutschen Namen (der
+  gespeicherte Name geht vor); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit
+  ändern (`tsdb.SetRetention`). Rollout: Node vor den Agents aktualisieren (neue Agents senden Hinweis-Codes, die
+  eine ältere Node roh zeigt).
 
 **Phase 0 – Gerüst**
 Modul `internal/monitor64` mit Schalter `NODE64_MONITOR64`, aus = nichts läuft; Tabellen beim ersten Einschalten;

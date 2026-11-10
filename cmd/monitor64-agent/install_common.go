@@ -1,4 +1,4 @@
-//go:build linux || windows
+//go:build linux || windows || freebsd
 
 package main
 
@@ -14,7 +14,7 @@ import (
 	"github.com/ipv64net/node64/internal/m64agent"
 )
 
-// Gemeinsame Helfer fuer install unter Linux und Windows.
+// Gemeinsame Helfer fuer install unter Linux, Windows und FreeBSD.
 
 func say(format string, a ...any) { fmt.Printf("monitor64-agent: "+format+"\n", a...) }
 

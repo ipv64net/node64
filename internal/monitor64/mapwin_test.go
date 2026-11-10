@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ipv64net/node64/internal/m64proto"
+	"github.com/ipv64net/node64/internal/monitor64/model/modeltest"
 )
 
 func TestMapWinSvc(t *testing.T) {
@@ -33,8 +34,11 @@ func TestMapWinSvc(t *testing.T) {
 	if v, _ := metric(sum, "auto"); v != 5 {
 		t.Fatalf("auto = %v", v)
 	}
-	if !strings.Contains(sum.Text, "SQL Server (MSSQLSERVER)") || strings.Contains(sum.Text, "Google") || !strings.Contains(sum.Facts[0].Text, "Druckwarteschlange") {
-		t.Fatalf("Text = %q / %q", sum.Text, sum.Facts[0].Text)
+	// Texte sind uebersetzbar: geprueft wird, was ein Betrachter sieht
+	if txt := modeltest.DE(sum.Text); txt != "2 von 5 automatischen Diensten gestoppt: SQL Server (MSSQLSERVER), Druckwarteschlange" ||
+		modeltest.EN(sum.Text) != "2 of 5 automatic services stopped: SQL Server (MSSQLSERVER), Druckwarteschlange" ||
+		!strings.Contains(sum.Facts[0].Text, "Druckwarteschlange") || modeltest.DE(sum.Name) != "Windows-Dienste" || modeltest.EN(sum.Name) != "Windows services" {
+		t.Fatalf("Text = %q / %q / %q", sum.Text, sum.Facts[0].Text, sum.Name)
 	}
 	// einzelne Dienste: nur auf Wunsch uebernommen, gestoppt mit Fact (auch der Updater, wenn ausdruecklich uebernommen)
 	sql := svcBy(out, "winsvc:MSSQLSERVER")
@@ -56,7 +60,8 @@ func TestMapWinSvc(t *testing.T) {
 
 	// alles laeuft: kein Fact
 	ok := mapWinSvc([]m64proto.WinService{{Name: "Dhcp", State: "running", StartType: "auto"}})
-	if hasFact(&ok[0], "winsvc_stopped") || ok[0].Text != "1 automatische Dienste, keiner gestoppt" {
+	if hasFact(&ok[0], "winsvc_stopped") || modeltest.DE(ok[0].Text) != "1 automatische Dienste, keiner gestoppt" ||
+		modeltest.EN(ok[0].Text) != "1 automatic services, none stopped" {
 		t.Fatalf("%+v", ok[0])
 	}
 }
@@ -74,7 +79,7 @@ func TestMapWindowsReport(t *testing.T) {
 	if v, ok := metric(svcBy(out, "cpu"), "util"); !ok || v != 20 {
 		t.Fatalf("cpu util = %v %v", v, ok)
 	}
-	if fs := svcBy(out, "fs:C:"); fs == nil || fs.Name != "Laufwerk C:" {
+	if fs := svcBy(out, "fs:C:"); fs == nil || modeltest.DE(fs.Name) != "Laufwerk C:" || modeltest.EN(fs.Name) != "Drive C:" {
 		t.Fatalf("fs = %+v", fs)
 	}
 	d := svcBy(out, "disk:S1")

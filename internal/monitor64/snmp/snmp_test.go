@@ -12,13 +12,26 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/model/modeltest"
 )
 
+// de ist der deutsche Text, den ein Betrachter sieht (Namen, Texte und Fehler des Sammlers sind uebersetzbar).
+func de(s string) string { return modeltest.DE(s) }
+
+// deErr: deutscher Text eines Fehlers ("" bei nil).
+func deErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return de(err.Error())
+}
+
+// svcByKey liefert den Dienst mit deutschen Texten.
 func svcByKey(t testing.TB, l []model.Service, key string) model.Service {
 	t.Helper()
 	for _, s := range l {
 		if s.Key == key {
-			return s
+			return modeltest.Service("de", s)
 		}
 	}
 	var keys []string
@@ -547,11 +560,11 @@ func TestTotalFailureScrubbed(t *testing.T) {
 	c.dial = func() (conn, error) { return nil, errors.New("dial: community geheim-community abgelehnt") }
 	c.resetConn()
 	_, err = c.Collect(context.Background())
-	if err == nil || strings.Contains(err.Error(), "geheim-community") {
+	if err == nil || strings.Contains(deErr(err), "geheim-community") {
 		t.Fatalf("Geheimnis im Fehler: %v", err)
 	}
 	res := c.Test(context.Background())
-	if res.OK || strings.Contains(res.Error, "geheim") || !strings.Contains(res.Warning, "v3 empfohlen") {
+	if res.OK || strings.Contains(res.Error, "geheim") || !strings.Contains(de(res.Warning), "v3 empfohlen") {
 		t.Fatalf("Test: %+v", res)
 	}
 }
@@ -708,7 +721,7 @@ func TestConfig(t *testing.T) {
 		t.Fatalf("Secret Text: %+v", got)
 	}
 	v3, _ := New(Config{Address: "h", Version: "3", User: "u", AuthProto: "MD5", PrivProto: "DES", Secret: Secret{AuthPass: "12345678", PrivPass: "12345678"}})
-	if w := v3.warning(); !strings.Contains(w, "MD5") || !strings.Contains(w, "DES") {
+	if w := de(v3.warning()); !strings.Contains(w, "MD5") || !strings.Contains(w, "DES") {
 		t.Fatalf("Warnung: %q", w)
 	}
 }
@@ -826,7 +839,7 @@ func TestUDPAgent(t *testing.T) {
 	defer c.Close()
 	start := time.Now()
 	_, err := c.Collect(context.Background())
-	if err == nil || strings.Contains(err.Error(), "falsch-geheim") || time.Since(start) > 5*time.Second {
+	if err == nil || strings.Contains(deErr(err), "falsch-geheim") || time.Since(start) > 5*time.Second {
 		t.Fatalf("falsche Community: %v (%v)", err, time.Since(start))
 	}
 }

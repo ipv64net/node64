@@ -2,10 +2,11 @@ package notify
 
 import (
 	"encoding/json"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // Meldungen von Monitor64 (Plan docs/PLAN-NODE64-MONITOR64.md, "Benachrichtigung"): eine Meldung je Host und Runde
@@ -162,35 +163,22 @@ func (d *Dispatcher) monitorSummary(lang string, a Alert) string {
 	return strings.Join(parts, "; ")
 }
 
-// tx uebersetzt Texte von Monitor64 im Format "i18n:<schluessel>?k=v&..." in die Sprache des Kanals (Werte
-// "since"/"at" als RFC3339 werden als Datum/Uhrzeit formatiert); andere Texte bleiben unveraendert.
+// tx uebersetzt Texte von Monitor64 in die Sprache des Kanals: Token "i18n:<schluessel>?k=v&...", auch mehrere mit
+// festen Teilen dazwischen ("ONLINE · i18n:monitor64.txt.free?v=3+GB", siehe model.T). Werte "since"/"at" als RFC3339
+// werden als Datum/Uhrzeit formatiert; andere Texte bleiben unveraendert.
 func (d *Dispatcher) tx(lang, s string) string {
-	rest, ok := strings.CutPrefix(s, "i18n:")
-	if !ok {
-		return s
-	}
-	key, query, _ := strings.Cut(rest, "?")
-	if !strings.HasPrefix(key, "monitor64.") {
-		return s
-	}
-	vals, err := url.ParseQuery(query)
-	if err != nil {
-		return s
-	}
-	var args []any
-	for k, v := range vals {
-		val := ""
-		if len(v) > 0 {
-			val = v[0]
-		}
-		if k == "since" || k == "at" {
-			if t, err := time.Parse(time.RFC3339, val); err == nil {
-				val = d.i18n.FormatDateTime(lang, t, d.location(0))
+	return model.Translate(s, func(key string, args ...any) string {
+		for i := 0; i+1 < len(args); i += 2 {
+			if k := args[i]; k == "since" || k == "at" {
+				if v, ok := args[i+1].(string); ok {
+					if t, err := time.Parse(time.RFC3339, v); err == nil {
+						args[i+1] = d.i18n.FormatDateTime(lang, t, d.location(0))
+					}
+				}
 			}
 		}
-		args = append(args, k, val)
-	}
-	return d.i18n.T(lang, key, args...)
+		return d.i18n.T(lang, key, args...)
+	})
 }
 
 // explodeMonitor teilt Monitor64-Meldungen mit mehreren Zeilen fuer die Sammelmeldung in je eine Meldung je Dienst

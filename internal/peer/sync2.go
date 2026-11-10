@@ -80,8 +80,16 @@ func (m *Manager) registerSync2(mux *http.ServeMux) {
 // ClusterChange meldet eine Aenderung eines Eintrags (Hook des Moduls, auch bei Uebernahmen von anderen Nodes:
 // die Herkunft steht dann in ctx, siehe ClusterOrigin).
 func (m *Manager) ClusterChange(ctx context.Context, module, item, id string, deleted bool) {
+	if err := m.ClusterChangeErr(ctx, module, item, id, deleted); err != nil {
+		m.d.Log.Warn("cluster change not logged", "module", module, "item", item, "err", err)
+	}
+}
+
+// ClusterChangeErr wie ClusterChange, liefert aber den Fehler, wenn die Aenderung nicht ins Protokoll kam (z. B.
+// Datenbank belegt): das Modul meldet sie dann spaeter erneut, statt sie als gemeldet zu merken (Monitor64).
+func (m *Manager) ClusterChangeErr(ctx context.Context, module, item, id string, deleted bool) error {
 	if id == "" || m.provider(module) == nil {
-		return
+		return nil
 	}
 	origin, at, ok := ClusterOrigin(ctx)
 	if !ok {
@@ -90,11 +98,14 @@ func (m *Manager) ClusterChange(ctx context.Context, module, item, id string, de
 		m.pull.s2.due, m.pull.s2.tries = nil, nil
 		m.pull.s2.mu.Unlock()
 	}
-	if changed, err := m.logSync(module, item, id, deleted, origin, at); err != nil {
-		m.d.Log.Warn("cluster change not logged", "module", module, "item", item, "err", err)
-	} else if changed {
+	changed, err := m.logSync(module, item, id, deleted, origin, at)
+	if err != nil {
+		return err
+	}
+	if changed {
 		m.pokeSoon()
 	}
+	return nil
 }
 
 type syncLocal struct {

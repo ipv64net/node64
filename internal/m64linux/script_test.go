@@ -83,7 +83,7 @@ func TestScriptDebian(t *testing.T) {
 	if r.Reboot == nil || r.Reboot.Required {
 		t.Fatalf("reboot %+v", r.Reboot)
 	}
-	if len(r.SMART) != 1 || r.SMART[0].Error != "SMART nicht verfuegbar" {
+	if len(r.SMART) != 1 || r.SMART[0].Error != m64proto.HintSmartUnavail {
 		t.Fatalf("smart %+v", r.SMART)
 	}
 	if len(r.Bonds) != 0 || len(r.RAID) != 0 || len(r.ZFS) != 0 {
@@ -100,8 +100,8 @@ func TestScriptBusyBox(t *testing.T) {
 	if mountsOf(r.FS) != "/" || r.CPU == nil || len(r.Net) == 0 || len(r.Disks) != 1 {
 		t.Fatalf("%+v", r)
 	}
-	// systemctl war nicht im PATH; kein Paketverwalter
-	if r.Systemd != nil || !hasNote(r, "systemd", "kein systemd") || !hasNote(r, "updates", "kein Paketverwalter") {
+	// systemctl war nicht im PATH; kein Paketverwalter (Aufzeichnung mit dem frueheren deutschen Text: bleibt lesbar)
+	if r.Systemd != nil || !hasNote(r, "systemd", m64proto.HintNoSystemd) || !hasNote(r, "updates", "kein Paketverwalter") {
 		t.Fatalf("Notes %+v", r.Notes)
 	}
 }
@@ -196,7 +196,7 @@ func TestScriptUnraid(t *testing.T) {
 	if strings.Join(disks, " ") != "sda sdb sdc sdd nvme0n1" || r.Disks[3].Serial != "WX61A1234567" || r.Disks[0].Serial != "" {
 		t.Fatalf("disk %v", disks)
 	}
-	if r.Systemd != nil || !hasNote(r, "systemd", "kein systemd") || !hasNote(r, "updates", "kein Paketverwalter") {
+	if r.Systemd != nil || !hasNote(r, "systemd", m64proto.HintNoSystemd) || !hasNote(r, "updates", "kein Paketverwalter") {
 		t.Fatalf("notes %+v", r.Notes)
 	}
 	if len(r.Bonds) != 1 || r.Bonds[0].Members[0].Name != "eth0" {
@@ -210,7 +210,7 @@ func TestScriptUnraid(t *testing.T) {
 	for _, s := range r.SMART {
 		sm[s.Device] = s
 	}
-	if sm["/dev/sda"].Error != "SMART nicht verfuegbar" || sm["/dev/sdb"].Error != SmartErrStandby || sm["/dev/sdb"].Serial != "WWZ1ABCD" {
+	if sm["/dev/sda"].Error != m64proto.HintSmartUnavail || sm["/dev/sdb"].Error != SmartErrStandby || sm["/dev/sdb"].Serial != "WWZ1ABCD" {
 		t.Fatalf("smart %+v", r.SMART)
 	}
 	if c := sm["/dev/sdc"]; *c.Pending != 8 || *c.Uncorrectable != 8 || *c.Reallocated != 16 || !*c.Passed || c.WearPercentUsed != nil {
@@ -286,7 +286,7 @@ func TestParseScriptOutputLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasNote(r, "script", "unvollstaendig") || len(r.SMART) != 0 {
+	if !hasNote(r, "script", m64proto.HintIncomplete) || len(r.SMART) != 0 {
 		t.Fatalf("%+v", r)
 	}
 	// viele Abschnitte und lange Zeilen bleiben begrenzt
@@ -429,7 +429,7 @@ func TestScriptErrSections(t *testing.T) {
 	// zpool list mit Exit-Code und unlesbarer Ausgabe: Fehler wie beim Agent
 	out = "\n<<<m64:start>>>\n1\n\n<<<m64:zpool_list>>>\nkaputt\n\n<<<m64:zpool_list_rc>>>\n1\n\n<<<m64:end>>>\n"
 	r, _ = ParseScriptOutput([]byte(out), testNow)
-	if !hasErr(r, "zfs", "zpool list: Exit-Code 1") || r.ZFS != nil {
+	if !hasErr(r, "zfs", "zpool list: {m64:exit_code=1}") || r.ZFS != nil {
 		t.Fatalf("%+v", r.Errors)
 	}
 	// ohne Pools und ohne Ausgabe (Modul nicht geladen): still
@@ -510,7 +510,7 @@ func TestScriptHostileOutput(t *testing.T) {
 func TestScriptTimeoutsAndCommands(t *testing.T) {
 	for _, want := range []string{"m64_run TERM 90", "m64_smartctl 20 -j -a -n standby", "m64_run KILL 5 df",
 		"m64_run TERM 5 zpool list", "m64_run TERM 5 zpool status", `m64_try "systemctl --failed" 0 5 systemctl`,
-		"apt-get -s -o Debug::NoLocking=1 dist-upgrade", `m64_err "smart:$m64_dev" "smartctl: Zeitlimit"`,
+		"apt-get -s -o Debug::NoLocking=1 dist-upgrade", `m64_err "smart:$m64_dev" "smartctl: {m64:timeout}"`,
 		"sed 's/^<<<m64:/ <<<m64:/'", "-x nfs4", "vpd_pg80", "/dev/disk/by-id/"} {
 		if !strings.Contains(Script, want) {
 			t.Errorf("fehlt: %s", want)

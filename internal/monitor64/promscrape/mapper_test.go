@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/monitor64"
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/model/modeltest"
 	"github.com/ipv64net/node64/internal/monitor64/promscrape"
 )
 
@@ -43,10 +45,11 @@ func read(t *testing.T, name string) string {
 	return string(b)
 }
 
+// byKey: Dienste nach Schluessel, mit deutschen Texten (Namen und Texte sind uebersetzbar).
 func byKey(svcs []model.Service) map[string]model.Service {
 	out := map[string]model.Service{}
 	for _, s := range svcs {
-		out[s.Key] = s
+		out[s.Key] = modeltest.Service("de", s)
 	}
 	return out
 }
@@ -222,5 +225,65 @@ func TestLiveNodeExporter(t *testing.T) {
 	}
 	if _, ok := by["mem"]; !ok {
 		t.Error("mem fehlt")
+	}
+}
+
+// Ein Exporter darf ueber keinen Label-Wert (Geraet, Einhaengepunkt, Sensor, Dienstname) ein eigenes Token
+// einschleusen: an jeden Label-Wert wird ein Token gehaengt, danach darf kein Dienst es enthalten.
+func TestNoInjection(t *testing.T) {
+	const evil = "i18n:monitor64.state.crit"
+	re := regexp.MustCompile(`(\w+)="([^"]*)"`)
+	for _, name := range []string{"node_exporter-1.12.1.txt", "windows_exporter-0.32.txt"} {
+		text := re.ReplaceAllStringFunc(read(t, name), func(m string) string {
+			p := re.FindStringSubmatch(m)
+			switch p[1] {
+			case "mode", "le", "quantile", "state", "status", "start_mode": // steuern die Auswertung
+				return m
+			}
+			return p[1] + `="` + p[2] + " " + evil + `"`
+		})
+		srv := httptest.NewServer(&bodyServer{body: text})
+		c, err := promscrape.New(promscrape.Config{URL: srv.URL, Map: monitor64.MapReport,
+			Metrics: []promscrape.CustomMetric{{Name: "node_filesystem_avail_bytes", Labels: map[string]string{}, Title: evil}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var svcs []model.Service
+		for i := 0; i < 2; i++ { // zweite Runde: Raten
+			if svcs, err = c.Collect(context.Background()); err != nil && len(svcs) == 0 {
+				t.Fatalf("%s: %v", name, err)
+			}
+		}
+		res := c.Test(context.Background())
+		srv.Close()
+		if len(svcs) < 8 {
+			t.Fatalf("%s: nur %d Dienste", name, len(svcs))
+		}
+		seen := false
+		check := func(what, s string) {
+			seen = seen || strings.Contains(s, "monitor64.state")
+			for _, k := range model.Keys(s) {
+				if k == "monitor64.state.crit" {
+					t.Errorf("%s: %s enthaelt ein Token des Exporters: %q", name, what, s)
+				}
+			}
+			if strings.Contains(modeltest.DE(s), "Kritisch") {
+				t.Errorf("%s: %s uebersetzt den Text des Exporters: %q", name, what, modeltest.DE(s))
+			}
+		}
+		for _, s := range svcs {
+			check(s.Key+" Name", s.Name)
+			check(s.Key+" Text", s.Text)
+			for _, f := range s.Facts {
+				check(s.Key+" Fact", f.Text)
+			}
+		}
+		if err != nil {
+			check("Fehler", err.Error())
+		}
+		check("Test", res.Error+" "+res.Warning+" "+res.Summary)
+		if !seen {
+			t.Errorf("%s: der Text des Exporters kommt in keinem Dienst an", name)
+		}
 	}
 }

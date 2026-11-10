@@ -268,7 +268,8 @@ func (m *Module) clusterRefreshIdle() {
 
 // adoptState: diese Node meldet den Host jetzt (wieder). Hat eine andere Node juenger gemeldet, macht diese Node mit
 // deren Gedaechtnis der Meldungen weiter (nichts doppelt melden) und, wenn deren Stand juenger ist als der eigene, mit
-// deren Laufzeitstand (Tracker: Dauer und Zustand laufen weiter). Ein zu alter Stand (stateMaxAge) gilt nicht mehr:
+// deren Laufzeitstand (Tracker: Dauer und Zustand laufen weiter; offene SNMP-Traps bleiben offen). Ein zu alter Stand
+// (stateMaxAge) gilt nicht mehr:
 // sonst meldete diese Node laengst Erledigtes erneut bzw. entwarnte dafuer. rt.mu gehalten.
 func (m *Module) adoptState(ctx context.Context, rt *hostRT) {
 	self := m.clusterSelf()
@@ -318,6 +319,9 @@ func (m *Module) adoptState(ctx context.Context, rt *hostRT) {
 			tmp.initMaps()
 			rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = tmp.Trackers, tmp.Kinds, tmp.Failures, tmp.Missing, tmp.Provider
 			rt.Rising, rt.Local, rt.Trend = tmp.Rising, tmp.Local, tmp.Trend
+			if m.traps != nil && trapAccess(rt) != "" { // offene Traps der bisher zustaendigen Node weiterfuehren (traps_cluster.go)
+				m.traps.adopt(rt.host.UID, tmp.Traps, best.At)
+			}
 		}
 	}
 	rt.dirty = true
@@ -338,7 +342,16 @@ func (m *Module) clusterRole(ctx context.Context, rt *hostRT) (int, string) {
 		rt.dirty = true // Rolle neu: Zustand gleich speichern und an den Cluster melden
 	}
 	if role == roleIdle && had && prev == roleReport {
-		m.publishFinal(ctx, rt) // abgeben: letzten Stand (Gedaechtnis der Meldungen) der neuen Node mitgeben
+		if m.traps != nil && rt.Traps != nil { // Traps seit der letzten Runde gehen mit
+			if snap := m.traps.snapshot(rt.host.UID, false); snap != nil {
+				rt.Traps = snap
+			}
+		}
+		m.publishFinal(ctx, rt) // abgeben: letzten Stand (Gedaechtnis der Meldungen, offene Traps) der neuen Node mitgeben
+	}
+	if role == roleIdle && (!had || prev != roleIdle) && m.traps != nil && m.traps.handedOver(rt.host.UID) {
+		// offene Traps fuehrt die zustaendige Node (auch ein nach dem Start wiederhergestellter Stand gilt nicht mehr)
+		rt.Traps, rt.dirty = m.traps.snapshot(rt.host.UID, false), true
 	}
 	if role == roleReport && (!had || prev != roleReport) && active {
 		m.adoptState(ctx, rt)

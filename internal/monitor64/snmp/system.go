@@ -2,7 +2,6 @@ package snmp
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
@@ -41,7 +40,7 @@ func (c *Collector) querySystem(r *round) (sysInfo, error) {
 		return sysInfo{}, err
 	}
 	if len(res) == 0 {
-		return sysInfo{}, errors.New("keine Antwort auf die System-Gruppe")
+		return sysInfo{}, errors.New(model.T("monitor64.txt.snmp_no_system"))
 	}
 	si := sysInfo{descr: text(res[oidSysDescr]), name: text(res[oidSysName])}
 	if p, ok := res[oidSysObjectID]; ok {
@@ -97,30 +96,30 @@ func (c *Collector) uptimeService(r *round) (model.Service, bool) {
 	if !c.sys.known {
 		return model.Service{}, false
 	}
-	s := model.Service{Key: "uptime", Name: "Laufzeit", Kind: "uptime", Default: true,
+	s := model.Service{Key: "uptime", Name: model.T("monitor64.svc.uptime"), Kind: "uptime", Default: true,
 		Metrics: []model.Metric{{Name: "uptime", Value: float64(int64(c.sys.uptime / time.Second)), Unit: "s"}},
-		Text:    "läuft seit " + durText(c.sys.uptime)}
+		Text:    model.T("monitor64.txt.up_since", "d", model.Sub(durText(c.sys.uptime)))}
 	if !c.sys.restartAt.IsZero() && r.now.Sub(c.sys.restartAt) < DefaultRestartHold {
-		s.Facts = append(s.Facts, model.Fact{Code: FactRestarted, Text: "Neustart erkannt (Laufzeit " + durText(c.sys.uptime) + ")"})
-		s.Text += " · Neustart erkannt"
+		s.Facts = append(s.Facts, model.Fact{Code: FactRestarted, Text: model.T("monitor64.txt.restart_detected_up", "d", model.Sub(durText(c.sys.uptime)))})
+		s.Text += " · " + model.T("monitor64.txt.restart_detected")
 	}
 	return s, true
 }
 
-// durText: "5 Min.", "3 Std.", "4 Tage 2 Std.".
+// durText: "5 Min.", "3 Std.", "4 Tagen 2 Std." (uebersetzbar, als Parameter mit model.Sub).
 func durText(d time.Duration) string {
 	switch {
 	case d < time.Hour:
-		return fmt.Sprintf("%d Min.", int(d/time.Minute))
+		return model.T("monitor64.txt.dur_min", "n", int(d/time.Minute))
 	case d < 48*time.Hour:
-		return fmt.Sprintf("%d Std.", int(d/time.Hour))
+		return model.T("monitor64.txt.dur_h", "n", int(d/time.Hour))
 	}
 	days := int(d / (24 * time.Hour))
 	h := int((d % (24 * time.Hour)) / time.Hour)
 	if h == 0 {
-		return fmt.Sprintf("%d Tagen", days)
+		return model.T("monitor64.txt.since_days", "n", days)
 	}
-	return fmt.Sprintf("%d Tagen %d Std.", days, h)
+	return model.T("monitor64.txt.since_days_h", "n", days, "h", h)
 }
 
 // ctr ist ein Zaehlerstand der vorigen Runde.

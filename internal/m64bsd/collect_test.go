@@ -289,7 +289,7 @@ func TestCollectEmptyHost(t *testing.T) {
 	for _, n := range r.Notes {
 		notes[n.Section] = n.Note
 	}
-	if notes[m64proto.SecSmart] != "smartctl fehlt" || notes[m64proto.SecUpdates] != "pkg nicht installiert" || notes[m64proto.SecDisk] != "iostat fehlt" {
+	if notes[m64proto.SecSmart] != "{m64:missing=smartctl}" || notes[m64proto.SecUpdates] != m64proto.HintPkgMissing || notes[m64proto.SecDisk] != "{m64:missing=iostat}" {
 		t.Fatalf("notes: %+v", r.Notes)
 	}
 	if r.Reboot != nil || r.CPU != nil || r.Uptime != 0 {
@@ -307,7 +307,7 @@ func TestCollectUpdatesTrueNAS(t *testing.T) {
 	}}
 	has := func(n string) bool { return n == "/usr/local/sbin/pkg" }
 	r := Collect(context.Background(), Options{Sections: []string{m64proto.SecUpdates}, Exec: ex.exec, Has: has, Sysctl: fakeSysctl{}.fn(), Cache: NewCache()})
-	if r.Updates != nil || len(r.Errors) != 0 || len(r.Notes) != 1 || r.Notes[0].Note != "keine Paketquelle eingeschaltet" {
+	if r.Updates != nil || len(r.Errors) != 0 || len(r.Notes) != 1 || r.Notes[0].Note != m64proto.HintNoRepo {
 		t.Fatalf("%+v", r)
 	}
 	// Katalog fehlt: Fehler (Abschnitt Unbekannt), ohne Schwachstellen-DB: Hinweis
@@ -319,7 +319,7 @@ func TestCollectUpdatesTrueNAS(t *testing.T) {
 	ex.out["/usr/local/sbin/pkg version -U -R -l <"] = ExecResult{}
 	ex.out["/usr/local/sbin/pkg audit"] = ExecResult{Stderr: []byte("pkg: vulnxml file /var/db/pkg/vuln.xml does not exist. Try running 'pkg audit -F' first\n"), Code: 1}
 	r = Collect(context.Background(), Options{Sections: []string{m64proto.SecUpdates}, Exec: ex.exec, Has: has, Sysctl: fakeSysctl{}.fn(), Cache: NewCache()})
-	if r.Updates == nil || r.Updates.Pending != 0 || len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Note, "Schwachstellen-Datenbank") {
+	if r.Updates == nil || r.Updates.Pending != 0 || len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Note, m64proto.HintNoVulnDB) {
 		t.Fatalf("ohne vuln.xml: %+v", r)
 	}
 	if ex.called("/usr/sbin/pkg") || ex.called("pkg ") {

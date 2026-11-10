@@ -61,7 +61,7 @@ type PBS struct {
 func NewPBS(cfg PBSConfig) (*PBS, error) {
 	c, err := proxmox.NewClient(cfg.system())
 	if err != nil {
-		return nil, scrubErr(err, cfg.Secret)
+		return nil, foreignErr(err, cfg.Secret)
 	}
 	return &PBS{cfg: cfg, client: c, now: time.Now, groups: map[string][]pbsGroup{}, jobLast: map[string]pbsJob{}}, nil
 }
@@ -85,12 +85,12 @@ func (p *PBS) Test(ctx context.Context) TestResult {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
 	pr := proxmox.Probe(ctx, p.cfg.system())
-	res := TestResult{OK: pr.OK, Error: scrub(pr.Error, p.cfg.Secret), Version: pr.Version,
-		Warning: scrub(pr.PermWarning, p.cfg.Secret), Fingerprint: pr.CertSHA256, CertSubject: pr.CertSubject,
+	res := TestResult{OK: pr.OK, Error: model.Raw(scrub(pr.Error, p.cfg.Secret)), Version: pr.Version,
+		Warning: model.Raw(scrub(pr.PermWarning, p.cfg.Secret)), Fingerprint: pr.CertSHA256, CertSubject: pr.CertSubject,
 		Trusted: pr.CertTrusted, NeedConfirm: pr.NeedConfirm}
 	if pr.OK {
 		res.Node = pbsNode
-		res.Summary = fmt.Sprintf("%d Datastores", pr.Datastores)
+		res.Summary = model.T("monitor64.txt.datastores", "n", pr.Datastores)
 	}
 	return res
 }
@@ -138,10 +138,10 @@ func (p *PBS) Collect(ctx context.Context) ([]model.Service, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
 	now := p.now()
-	part := &partial{secrets: []string{p.cfg.Secret}}
+	part := &partial{secrets: []string{p.cfg.Secret}, foreign: true}
 	var ns nodeStatus
 	if err := p.client.Get(ctx, "/nodes/"+pbsNode+"/status", &ns); err != nil {
-		return nil, scrubErr(err, p.cfg.Secret)
+		return nil, foreignErr(err, p.cfg.Secret)
 	}
 	out := nodeServices(ns)
 	if svc := p.updates.collect(ctx, p.client, pbsNode, now, p.cfg.UpdatesEvery, part); svc != nil {
@@ -171,26 +171,27 @@ func (p *PBS) Collect(ctx context.Context) ([]model.Service, error) {
 }
 
 func (p *PBS) datastoreService(u pbsUsage) model.Service {
-	s := model.Service{Key: "ds:" + u.Store, Name: "Datastore " + u.Store, Kind: "ds", Default: true}
+	s := model.Service{Key: "ds:" + u.Store, Name: "Datastore " + model.Raw(u.Store), Kind: "ds", Default: true}
 	var parts []string
 	switch {
 	case strings.TrimSpace(u.Error) != "":
-		parts = append(parts, "Fehler: "+strings.TrimSpace(u.Error))
-		s.Facts = append(s.Facts, model.Fact{Code: "store_inactive", Text: "Datastore " + u.Store + ": " + strings.TrimSpace(u.Error)})
+		msg := model.Raw(strings.TrimSpace(u.Error))
+		parts = append(parts, model.T("monitor64.txt.error")+": "+msg)
+		s.Facts = append(s.Facts, model.Fact{Code: "store_inactive", Text: s.Name + ": " + msg})
 	case u.Mount == "notmounted":
-		parts = append(parts, "nicht eingehängt (Wechseldatenträger)")
+		parts = append(parts, model.T("monitor64.txt.not_mounted_removable"))
 	case u.Total > 0:
 		tot := float64(u.Total)
 		s.Metrics = []model.Metric{{Name: "used", Value: pct(float64(u.Used), tot), Unit: "%", Rule: model.RuleStore, Max: tot},
 			{Name: "free", Value: float64(u.Avail), Unit: "B", Max: tot}}
-		parts = append(parts, fmt.Sprintf("%s von %s frei", bytesText(float64(u.Avail)), bytesText(tot)))
+		parts = append(parts, model.T("monitor64.txt.free_of", "free", bytesText(float64(u.Avail)), "total", bytesText(tot)))
 	}
 	if g, ok := p.groups[u.Store]; ok {
 		snaps := 0
 		for _, x := range g {
 			snaps += int(x.Count)
 		}
-		parts = append(parts, fmt.Sprintf("%d Gruppen, %d Snapshots", len(g), snaps))
+		parts = append(parts, model.T("monitor64.txt.groups_snaps", "n", len(g), "s", snaps))
 	}
 	if u.Backend == "s3" {
 		parts = append(parts, "S3")
@@ -211,7 +212,7 @@ func (p *PBS) fetchGroups(ctx context.Context, use []pbsUsage, part *partial) {
 		}
 		g, err := p.storeGroups(ctx, u.Store)
 		if err != nil {
-			part.add("groups "+u.Store, err, "backup:"+u.Store+"/")
+			part.add("groups "+model.Raw(u.Store), err, "backup:"+u.Store+"/")
 			if old, ok := p.groups[u.Store]; ok {
 				next[u.Store] = old
 			}
@@ -285,10 +286,10 @@ func (p *PBS) backupServices(now time.Time) []model.Service {
 				name += " " + c
 			}
 			name += " (" + where + ")"
-			s := model.Service{Key: key, Name: name, Kind: "backup", Default: true,
+			s := model.Service{Key: key, Name: model.Raw(name), Kind: "backup", Default: true,
 				Metrics: []model.Metric{{Name: "count", Value: float64(g.Count)}}}
 			if g.Last <= 0 {
-				s.Text = "noch kein Backup"
+				s.Text = model.T("monitor64.txt.no_backup")
 				out = append(out, s)
 				continue
 			}
@@ -297,10 +298,10 @@ func (p *PBS) backupServices(now time.Time) []model.Service {
 				age = 0
 			}
 			s.Metrics = append(s.Metrics, model.Metric{Name: "age", Value: round2(age.Hours()), Unit: "h"})
-			s.Text = fmt.Sprintf("letztes Backup %s · %.0f Snapshots", agoText(age), float64(g.Count))
+			s.Text = model.T("monitor64.txt.last_backup", "ago", model.Sub(agoText(age))) + " · " + model.T("monitor64.txt.snapshots", "n", fmt.Sprintf("%.0f", float64(g.Count)))
 			if age > maxAge {
 				s.Facts = append(s.Facts, model.Fact{Code: "backup_old",
-					Text: fmt.Sprintf("letztes Backup %s (Grenze %s)", agoText(age), hoursText(maxAge))})
+					Text: model.T("monitor64.txt.last_backup_limit", "ago", model.Sub(agoText(age)), "limit", model.Sub(hoursText(maxAge)))})
 			}
 			s.Default = age < staleAfter // lange ohne Backup: wohl eine alte Gruppe, beim Erkennen nicht vorgewaehlt
 			out = append(out, s)
@@ -397,7 +398,7 @@ func (p *PBS) gcJobs(ctx context.Context, now time.Time, use []pbsUsage, part *p
 				p.gcUntil, p.gcPerDS = now.Add(optionalRetry), false
 				return nil, true
 			}
-			part.add("gc-job-status "+u.Store, err, "job:gc:"+u.Store)
+			part.add("gc-job-status "+model.Raw(u.Store), err, "job:gc:"+u.Store)
 			ok = false
 			continue
 		}
@@ -407,28 +408,30 @@ func (p *PBS) gcJobs(ctx context.Context, now time.Time, use []pbsUsage, part *p
 	return out, ok
 }
 
-var jobNames = map[string]string{"verify": "Verify-Job", "prune": "Prune-Job", "sync": "Sync-Job", "gc": "Garbage Collection"}
+// jobNames: Dienstname je Job-Art ("Verify-Job {name}").
+var jobNames = map[string]string{"verify": "monitor64.svc.job_verify", "prune": "monitor64.svc.job_prune", "sync": "monitor64.svc.job_sync",
+	"gc": "monitor64.svc.job_gc"}
 
 // jobService: letzter Lauf ok bzw. Fehler (job_failed); WARNINGS zaehlt als gelaufen, "unknown" (abgebrochen, z. B.
 // durch einen Neustart des PBS) als Fehler (die Regel job.failed warnt).
 func jobService(kind, id string, j pbsJob, now time.Time) model.Service {
-	name := jobNames[kind] + " " + id
+	name := model.T(jobNames[kind], "name", id)
 	if kind != "gc" && j.Store != "" {
-		name += " (" + j.Store + ")"
+		name += " (" + model.Raw(j.Store) + ")"
 	}
 	s := model.Service{Key: "job:" + kind + ":" + id, Name: name, Kind: "job", Default: !j.Disable}
 	state := strings.TrimSpace(j.State)
 	var parts []string
 	if j.running && !j.Disable {
-		parts = append(parts, "läuft gerade")
+		parts = append(parts, model.T("monitor64.txt.running_now"))
 	}
 	switch {
 	case j.Disable:
-		parts = append(parts, "abgeschaltet")
+		parts = append(parts, model.T("monitor64.txt.disabled"))
 	case j.running && j.End <= 0 && state == "":
 		// erster bekannter Lauf: noch kein Ergebnis (keine Messgroesse)
 	case j.End <= 0 && state == "":
-		parts = append(parts, "noch nicht gelaufen")
+		parts = append(parts, model.T("monitor64.txt.never_ran"))
 	default:
 		when := ""
 		if j.End > 0 {
@@ -442,19 +445,20 @@ func jobService(kind, id string, j pbsJob, now time.Time) model.Service {
 			v = 1
 		}
 		s.Metrics = append(s.Metrics, model.Metric{Name: "failed", Value: v})
+		last := model.T("monitor64.txt.last_run")
 		switch {
 		case ok:
-			parts = append(parts, "letzter Lauf"+when+": "+firstNonEmpty(state, "OK"))
+			parts = append(parts, last+when+": "+model.Raw(firstNonEmpty(state, "OK")))
 		case strings.EqualFold(state, "unknown"):
-			parts = append(parts, "letzter Lauf"+when+" abgebrochen (unknown)")
-			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: "abgebrochen (unknown)"})
+			parts = append(parts, last+when+" "+model.T("monitor64.txt.aborted_unknown"))
+			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: model.T("monitor64.txt.aborted_unknown")})
 		default:
-			parts = append(parts, "letzter Lauf"+when+" fehlgeschlagen: "+state)
-			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: state})
+			parts = append(parts, last+when+" "+model.T("monitor64.txt.failed")+": "+model.Raw(state))
+			s.Facts = append(s.Facts, model.Fact{Code: "job_failed", Text: model.Raw(state)})
 		}
 	}
 	if j.Sched != "" {
-		parts = append(parts, "Zeitplan "+j.Sched)
+		parts = append(parts, model.T("monitor64.txt.schedule", "v", j.Sched))
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s

@@ -141,9 +141,9 @@ func durTextSec(v float64) string {
 	case v < 120:
 		return fmt.Sprintf("%.0f s", v)
 	case v < 7200:
-		return fmt.Sprintf("%.0f Min.", v/60)
+		return model.T("monitor64.txt.dur_min", "n", fmt.Sprintf("%.0f", v/60))
 	}
-	return fmt.Sprintf("%.0f Std.", v/3600)
+	return model.T("monitor64.txt.dur_h", "n", fmt.Sprintf("%.0f", v/3600))
 }
 
 func limitList(l []string, n int) []string {

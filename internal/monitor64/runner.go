@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,17 +28,11 @@ type collector interface {
 	close()
 }
 
-// accessName ist der Anzeigename eines Zugangs ("Zugang SSH").
+// accessName ist der Anzeigename eines Zugangs je Art ("SSH", "Proxmox VE", "Docker-API"); uebersetzbar, die Texte
+// stehen unter monitor64.access.*.
 func accessName(typ string) string {
-	switch typ {
-	case "agent":
-		return "Agent"
-	case "ssh":
-		return "SSH"
-	case "snmp":
-		return "SNMP"
-	case "prom":
-		return "Prometheus"
+	if validAccessType(typ) {
+		return model.T("monitor64.access." + typ)
 	}
 	return "API"
 }
@@ -241,8 +234,9 @@ type hostRT struct {
 	Local    map[string]localState    `json:"local,omitempty"`    // eigene Skripte: letzter Zustand
 	Trend    map[string]trendState    `json:"trend,omitempty"`    // Fuellstand -> letzte Trendrechnung
 	Traps    *hostTraps               `json:"traps,omitempty"`    // SNMP-Traps (Kopie fuer den Neustart)
-	SeenUp   map[string][]string      `json:"seen_up,omitempty"`  // SNMP: Ports, die schon verbunden waren (je Zugang)
+	SeenUp   map[string][]string      `json:"seen_up,omitempty"`  // merkbarer Zustand der Sammler je Zugang (memo: SNMP-Ports mit Link, NUT TLS)
 	LastDisc time.Time                `json:"last_disc,omitzero"`
+	known    map[string]bool          // bei der Erkennung schon gesehene Dienste (nur im Speicher)
 	dirty    bool
 
 	viewMu         sync.Mutex // eigene Sperre: die Oberflaeche wartet nicht auf eine laufende Abfrage
@@ -319,16 +313,14 @@ const (
 	staleKindAfter = 7 * 24 * time.Hour // Messgroesse so lange nicht geliefert: Tracker vergessen
 )
 
-// i18nText baut einen uebersetzbaren Text ("i18n:<schluessel>?k=v"); Oberflaeche und Meldungen uebersetzen ihn.
+// i18nText baut einen uebersetzbaren Text ("i18n:<schluessel>?k=v"); Oberflaeche und Meldungen uebersetzen ihn
+// (model.T; Werte sind fertige Texte und werden nicht uebersetzt).
 func i18nText(key string, kv ...string) string {
-	if len(kv) == 0 {
-		return "i18n:" + key
+	args := make([]any, len(kv))
+	for i, v := range kv {
+		args[i] = v
 	}
-	q := url.Values{}
-	for i := 0; i+1 < len(kv); i += 2 {
-		q.Set(kv[i], kv[i+1])
-	}
-	return "i18n:" + key + "?" + q.Encode()
+	return model.T(key, args...)
 }
 
 // finiteMetrics entfernt nicht endliche Werte (NaN, Inf) – Daten von Hosts sind nicht vertrauenswuerdig.
@@ -355,6 +347,15 @@ func shortErr(err error) string {
 		s = string([]rune(s)[:300]) + "…"
 	}
 	return s
+}
+
+// accessErrText: Fehler eines Zugangs fuer die Anzeige. Wartet ein Passwort-Zugang auf die Bestaetigung des
+// Hostschluessels, steht dort, was zu tun ist (statt des Textes aus dem Transport).
+func accessErrText(err error) string {
+	if errors.Is(err, transport.ErrHostKeyUnconfirmed) {
+		return i18nText("monitor64.detail.hostkey_unconfirmed")
+	}
+	return shortErr(err)
 }
 
 // poll ist eine Abfragerunde eines Hosts (vom Planer aufgerufen).
@@ -401,7 +402,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			err = errors.New(a.err)
 		} else {
 			svcs, err = a.col.collect(ctx)
-			if keys, ch := seenUpChanged(a.col, rt.SeenUp[a.row.UID]); ch {
+			if keys, ch := memoChanged(a.col, rt.SeenUp[a.row.UID]); ch { // merkbarer Zustand des Sammlers (snmpaccess.go)
 				if rt.SeenUp == nil {
 					rt.SeenUp = map[string][]string{}
 				}
@@ -416,7 +417,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		} else if err != nil && len(svcs) == 0 {
 			rt.Failures[a.row.UID]++
 			failedAcc[a.row.UID] = true
-			av.Error = shortErr(err)
+			av.Error = accessErrText(err)
 		} else {
 			rt.Failures[a.row.UID] = 0
 			av.OK = true
@@ -445,10 +446,18 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	hres0 := eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs})
 	reachable := !hres0.Unreachable && len(found) > 0
 
-	// 2. Dienste erkennen (beim ersten Mal und stuendlich); nie automatisch uebernehmen. Nicht vorgeschlagene (Default
-	// false, z. B. einzelne Windows-Dienste, gestoppte Gaeste) kommen als "ignoriert" dazu, damit sie spaeter uebernommen
-	// werden koennen, ohne die Liste der neuen Dienste zu fuellen (UpsertDiscovered).
-	if reachable && role == roleReport && (rt.LastDisc.IsZero() || now.Sub(rt.LastDisc) >= discoverEvery) {
+	// 2. Dienste erkennen (beim ersten Mal, stuendlich und sobald ein bisher nicht gesehener Dienst auftaucht, z. B.
+	// "Updates", wenn der Agent die erste Suche erst nach der ersten Abfrage fertig hat); nie automatisch uebernehmen.
+	// Nicht vorgeschlagene (Default false, z. B. einzelne Windows-Dienste, gestoppte Gaeste) kommen als "ignoriert" dazu,
+	// damit sie spaeter uebernommen werden koennen, ohne die Liste der neuen Dienste zu fuellen (UpsertDiscovered).
+	newKey := false
+	for k := range found {
+		if !rt.known[k] {
+			newKey = true
+			break
+		}
+	}
+	if reachable && role == roleReport && (rt.LastDisc.IsZero() || now.Sub(rt.LastDisc) >= discoverEvery || newKey) {
 		offer := make([]model.Service, 0, len(found))
 		for _, g := range found {
 			offer = append(offer, g.svc)
@@ -458,6 +467,12 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			m.log.Warn("monitor64: discover", "host", h.Name, "err", err)
 		}
 		rt.LastDisc, rt.dirty = now, true
+		if rt.known == nil {
+			rt.known = make(map[string]bool, len(found))
+		}
+		for k := range found { // waechst nur: ein flackernder Dienst loest keine Erkennung je Runde aus
+			rt.known[k] = true
+		}
 	}
 	rows, err := m.store.Services(dbctx, h.UID)
 	if err != nil {
@@ -703,7 +718,10 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		res := eval.ServiceState(ms)
 		sv.State, sv.ShowOnly = res.State, res.ShowOnly || r.Report == "show"
 		if res.Cause >= 0 && sv.Cause == "" {
-			sv.Cause = describe(ms[res.Cause])
+			c := ms[res.Cause]
+			kind := rt.Kinds[r.Key+"|"+c.Name] // Regel-Art der Messgroesse (leer bei Zustandsregeln: der Name ist die Art)
+			free := kind != "" && eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind).Mode == eval.ModeFree
+			sv.Cause = describe(c, kind, free)
 		}
 		views = append(views, sv)
 		states = append(states, res.State)
@@ -726,7 +744,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		e := eval.Resolve(cfg.std, cfg.overrides, ref, eval.HostLevel{}, eval.KindAccessFailed)
 		tr := rt.tracker(key+"|state:"+eval.KindAccessFailed, iv)
 		st := tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(failing)})
-		name := i18nText("monitor64.detail.access", "name", av.Name)
+		name := model.T("monitor64.detail.access", "name", model.Sub(av.Name))
 		acked := open[key] != nil && open[key].Acked
 		if st.State != eval.OK {
 			views = append(views, SvcView{Key: key, Name: name, Kind: "access", State: st.State, Cause: av.Error, Adopted: 1, Acked: acked})
@@ -878,18 +896,51 @@ func (m *Module) trendMetric(ctx context.Context, rt *hostRT, hostUID, svcKey st
 	return []model.Metric{{Name: "trend_days", Value: math.Round(ts.Days*10) / 10, Unit: "d", Rule: eval.KindFSTrendDays}}
 }
 
-// describe formuliert die ausloesende Messgroesse (uebersetzbar: "util 91 (Schwelle 90)").
-func describe(ms eval.MetricStatus) string {
+// describe formuliert die ausloesende Messgroesse uebersetzbar mit Bezeichnung, Wert und Schwelle samt Einheit
+// ("RAM belegt 92 % (Schwelle 90 %)"). kind ist die Regel-Art der Messgroesse (leer = der Name ist die Art, bei
+// Zustandsregeln), free der Modus "GB frei" (Wert und Schwelle in GB frei).
+func describe(ms eval.MetricStatus, kind string, free bool) string {
 	st := ms.Status
-	if st.Threshold.Off {
-		return ms.Name
+	rk, known := ruleKindOf(firstNonEmpty(kind, ms.Name))
+	label := model.Sub(model.Raw(ms.Name))
+	if known {
+		label = model.Sub(model.T("monitor64.kind." + kindKey(rk.Kind)))
 	}
-	return i18nText("monitor64.detail.threshold", "metric", ms.Name, "value", fmtNum(st.Value), "limit", fmtNum(st.Threshold.V))
+	if st.Threshold.Off {
+		return string(label)
+	}
+	if free {
+		return model.T("monitor64.detail.threshold_free", "value", shortNum(st.Value), "limit", shortNum(st.Threshold.V))
+	}
+	val := func(v float64) model.Sub {
+		if rk.Factor > 0 {
+			v /= rk.Factor
+		}
+		switch rk.Unit {
+		case "":
+			return model.Sub(shortNum(v))
+		case "days", "min":
+			return model.Sub(shortNum(v) + " " + model.T("monitor64.unit."+rk.Unit))
+		}
+		return model.Sub(shortNum(v) + " " + rk.Unit)
+	}
+	return model.T("monitor64.detail.threshold", "metric", label, "value", val(st.Value), "limit", val(st.Threshold.V))
 }
 
-func fmtNum(v float64) string {
-	s := strconv.FormatFloat(v, 'f', 2, 64)
-	return strings.TrimRight(strings.TrimRight(s, "0"), ".") // sprachneutral (Punkt); Texte werden uebersetzt angezeigt
+// shortNum rundet fuer Texte: ab 10 ganze Zahlen, darunter eine, unter 1 zwei Nachkommastellen (sprachneutral).
+func shortNum(v float64) string {
+	d := 0
+	switch a := math.Abs(v); {
+	case a < 1:
+		d = 2
+	case a < 10:
+		d = 1
+	}
+	s := strconv.FormatFloat(v, 'f', d, 64)
+	if d > 0 {
+		s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	}
+	return s
 }
 
 func (rt *hostRT) tracker(key string, iv time.Duration) *eval.Tracker {

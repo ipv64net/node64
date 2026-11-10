@@ -181,7 +181,7 @@ func TestRedfishBasic(t *testing.T) {
 	if n := f.count("GET /redfish/v1/Chassis/1U/Thermal"); n != 2 {
 		t.Errorf("Thermal %d mal abgefragt", n)
 	}
-	res := r.Test(context.Background())
+	res := deRes(r.Test(context.Background()))
 	if !res.OK || res.Version != "Contoso Contoso BMC 2000 Redfish 1.15.0" || res.Node != "web483" || res.Summary != "Contoso 3500 (an)" {
 		t.Errorf("Test = %+v", res)
 	}
@@ -189,7 +189,7 @@ func TestRedfishBasic(t *testing.T) {
 	cfg.Password = "falsch-" + testSecret
 	r2, _ := NewRedfish(cfg)
 	_, err = r2.Collect(context.Background())
-	if err == nil || strings.Contains(err.Error(), testSecret) || !strings.Contains(err.Error(), "Benutzer und Passwort prüfen") {
+	if err == nil || strings.Contains(deErr(err), testSecret) || !strings.Contains(deErr(err), "Benutzer und Passwort prüfen") {
 		t.Errorf("falsches Passwort: %v", err)
 	}
 }
@@ -224,7 +224,7 @@ func TestRedfishSession(t *testing.T) {
 	// falsches Passwort bei der Anmeldung
 	cfg.Password = "falsch-" + testSecret
 	r2, _ := NewRedfish(cfg)
-	res := r2.Test(context.Background())
+	res := deRes(r2.Test(context.Background()))
 	if res.OK || strings.Contains(res.Error, testSecret) || !strings.Contains(res.Error, "401") {
 		t.Errorf("Test falsches Passwort = %+v", res)
 	}
@@ -235,7 +235,7 @@ func TestRedfishConfirmAndPartial(t *testing.T) {
 	pin := cfg.Pin
 	cfg.Pin = ""
 	r, _ := NewRedfish(cfg)
-	res := r.Test(context.Background())
+	res := deRes(r.Test(context.Background()))
 	if res.OK || !res.NeedConfirm || res.Fingerprint != pin {
 		t.Errorf("ohne Pin = %+v", res)
 	}
@@ -252,7 +252,7 @@ func TestRedfishConfirmAndPartial(t *testing.T) {
 	r, _ = NewRedfish(cfg)
 	svcs, err := r.Collect(context.Background())
 	pe := partialOf(t, err)
-	if !hasPrefix(pe, "psu:") || !hasPrefix(pe, "power") || !hasPrefix(pe, "raid:1/") || !strings.Contains(pe.Error(), "internal error") {
+	if !hasPrefix(pe, "psu:") || !hasPrefix(pe, "power") || !hasPrefix(pe, "raid:1/") || !strings.Contains(deErr(pe), "internal error") {
 		t.Errorf("Teilfehler = %+v", pe)
 	}
 	if !hasSvc(svcs, "raid:1/1") || hasSvc(svcs, "raid:1/2") || hasSvc(svcs, "power:1U") || !hasSvc(svcs, "temp:1U/CPU2 Temp") {
@@ -307,7 +307,7 @@ func TestRedfishTempThresholds(t *testing.T) {
 	}
 	// ohne Wert bei Zustand OK (Server aus): Dienst ohne Messgroesse statt "verschwunden"
 	it, ok = rfTempItem("1", "Y", "", optF{}, set(75), optF{}, optF{}, rfStatus{State: "Enabled", Health: "OK"})
-	if !ok || len(it.svc.Metrics) != 0 || len(it.svc.Facts) != 0 || !strings.HasPrefix(it.svc.Text, "kein Messwert") {
+	if !ok || len(it.svc.Metrics) != 0 || len(it.svc.Facts) != 0 || !strings.HasPrefix(de(it.svc.Text), "kein Messwert") {
 		t.Errorf("ohne Wert, Zustand OK = %+v %v", it.svc, ok)
 	}
 	if _, ok := rfTempItem("1", "Y", "", optF{}, optF{}, optF{}, optF{}, rfStatus{}); !ok {

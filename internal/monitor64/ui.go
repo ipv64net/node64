@@ -44,6 +44,10 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /monitor64/notify", page(m.pageNotify))
 	mux.Handle("GET /monitor64/settings", page(m.pageSettings))
 	mux.Handle("GET /monitor64/new", page(m.pageNew))
+	mux.Handle("GET /monitor64/agent", page(m.pageAgent))
+	// Agent-Dateien fuer Hosts (curl bzw. irm): ohne Anmeldung, nur bei eingeschaltetem Modul, nur gepruefte Dateien
+	// aus dem signierten Verzeichnis (agentdist.go). Die Ratenbegrenzung je IP macht der Kern.
+	mux.Handle("GET /monitor64/agent/{file}", g.Enabled(http.HandlerFunc(m.serveAgentFile)))
 	mux.Handle("GET /monitor64/monitor64.js", page(m.serveAsset(bundleJS, "text/javascript; charset=utf-8")))
 	mux.Handle("GET /monitor64/monitor64.css", page(m.serveAsset(bundleCSS, "text/css; charset=utf-8")))
 
@@ -106,6 +110,11 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/monitor64/hosts/{uid}/traps", api(m.apiHostTraps))
 	mux.Handle("POST /api/monitor64/hosts/{uid}/traps/reset", api(m.apiHostTrapsReset))
 	m.clusterRoutes(mux, api) // Cluster (cluster_api.go)
+
+	mux.Handle("GET /api/monitor64/agent", api(m.apiAgent))
+	mux.Handle("POST /api/monitor64/agent/refresh", api(m.apiAgentRefresh))
+	mux.Handle("PUT /api/monitor64/hosts/{uid}/agent", api(m.apiAgentAuto))
+	mux.Handle("POST /api/monitor64/hosts/{uid}/agent/update", api(m.apiAgentUpdate))
 }
 
 // statusView ist der technische Stand (Planer, Verlauf, Lastgenerator) – unter Einstellungen.
@@ -174,6 +183,7 @@ func (m *Module) tabs(ctx context.Context, active string) []tab {
 		{Path: "/monitor64/maintenance", Icon: "bi-cone-striped", TitleKey: "monitor64.tab.maint"},
 		{Path: "/monitor64/rules", Icon: "bi-sliders", TitleKey: "monitor64.tab.rules"},
 		{Path: "/monitor64/notify", Icon: "bi-bell", TitleKey: "monitor64.tab.notify"},
+		{Path: "/monitor64/agent", Icon: "bi-download", TitleKey: "monitor64.tab.agent"},
 		{Path: "/monitor64/settings", Icon: "bi-gear", TitleKey: "monitor64.tab.settings"}}
 	for i := range t {
 		t[i].Active = t[i].Path == active
@@ -494,6 +504,8 @@ func (m *Module) pageNew(w http.ResponseWriter, r *http.Request) {
 	d.JS["port"] = d.Port
 	d.JS["interval"] = m.defaultInterval(ctx)
 	d.JS["targets"] = m.targets(ctx)
+	// Quelle der Agent-Dateien fuer den Installationsbefehl (dieselbe Auswahl wie auf der Seite Agent)
+	d.JS["agent"] = m.agentCmdInfo()
 	if s := m.clusterSnapshot(); s.Active { // Assistent: bevorzugte Node und Ersatz-Nodes waehlbar
 		d.JS["cluster"] = map[string]any{"active": true, "self": s.Self, "nodes": m.clusterNodes(ctx, s)}
 	}

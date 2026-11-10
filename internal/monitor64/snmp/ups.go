@@ -25,10 +25,11 @@ const (
 )
 
 // Bekannte Alarme (upsWellKnownAlarms); ohne Eintrag: nur Hinweis, kein Alarm-Fact.
-var upsAlarms = map[int]string{1: "Batterie defekt", 5: "Temperatur", 6: "Eingang gestört", 7: "Ausgang gestört", 8: "Überlast",
-	9: "Bypass", 10: "Bypass gestört", 13: "Ladegerät defekt", 14: "Ausgang aus", 15: "USV aus", 16: "Lüfter", 17: "Sicherung",
-	18: "Allgemeiner Fehler", 19: "Selbsttest fehlgeschlagen", 20: "Kommunikation verloren", 22: "Abschaltung angekündigt",
-	23: "Abschaltung steht bevor"}
+var upsAlarms = map[int]string{1: "monitor64.txt.upsa_battery_bad", 5: "monitor64.txt.upsa_temp", 6: "monitor64.txt.upsa_input_bad",
+	7: "monitor64.txt.upsa_output_bad", 8: "monitor64.txt.ups_overload", 9: "monitor64.txt.upsa_bypass", 10: "monitor64.txt.upsa_bypass_bad",
+	13: "monitor64.txt.upsa_charger", 14: "monitor64.txt.upsa_output_off", 15: "monitor64.txt.upsa_ups_off", 16: "monitor64.txt.upsa_fan",
+	17: "monitor64.txt.upsa_fuse", 18: "monitor64.txt.upsa_general", 19: "monitor64.txt.upsa_test_failed", 20: "monitor64.txt.upsa_comm_lost",
+	22: "monitor64.txt.upsa_shutdown_pending", 23: "monitor64.txt.upsa_shutdown_imminent"}
 
 // collectUPS: Dienst ups (Ladung, Restlaufzeit, Last; auf Batterie, Batterie schwach, Alarme).
 func (c *Collector) collectUPS(r *round) {
@@ -48,12 +49,12 @@ func (c *Collector) collectUPS(r *round) {
 	}
 	t, err := walkColumns(r.ctx, r.c, []string{upsOutLoad, upsInVoltage, upsAlarmDescr}, c.cfg.MaxRep)
 	if err != nil {
-		r.part.add("UPS-MIB Tabellen", err, "ups")
+		r.part.add(model.T("monitor64.txt.mib_tables", "mib", "UPS-MIB"), err, "ups")
 	}
 	name := strings.TrimSpace(text(res[upsManufacturer]) + " " + text(res[upsModel]))
-	s := model.Service{Key: "ups", Name: "USV", Kind: "ups", Default: true}
+	s := model.Service{Key: "ups", Name: model.T("monitor64.svc.ups_plain"), Kind: "ups", Default: true}
 	if name != "" {
-		s.Name = "USV " + name
+		s.Name = model.T("monitor64.svc.ups", "name", name)
 	}
 	var parts []string
 	src, _ := num(res[upsOutSource])
@@ -61,29 +62,29 @@ func (c *Collector) collectUPS(r *round) {
 	onBatt := src == 5 || (src == 0 && okSecs && secs > 0)
 	switch src {
 	case 3:
-		parts = append(parts, "Netzbetrieb")
+		parts = append(parts, model.T("monitor64.txt.ups_online"))
 	case 4:
 		parts = append(parts, "Bypass")
 	case 5:
-		parts = append(parts, "auf Batterie")
+		parts = append(parts, model.T("monitor64.txt.ups_on_battery"))
 	case 6, 7:
-		parts = append(parts, "Netzbetrieb (Spannung geregelt)")
+		parts = append(parts, model.T("monitor64.txt.ups_online_avr"))
 	}
 	if onBatt {
-		txt := "auf Batterie"
+		txt := model.T("monitor64.txt.ups_on_battery")
 		if okSecs && secs > 0 {
-			txt += " seit " + durTextSec(secs)
+			txt = model.T("monitor64.txt.ups_on_battery_since", "d", model.Sub(durTextSec(secs)))
 		}
 		s.Facts = append(s.Facts, model.Fact{Code: factUPSOnBattery, Text: txt})
 	}
 	s.Metrics = append(s.Metrics, model.Metric{Name: "on_battery", Value: b2f(onBatt)})
 	if v, ok := num(res[upsCharge]); ok && v >= 0 && v <= 100 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "charge", Value: v, Unit: "%"})
-		parts = append(parts, fmt.Sprintf("Ladung %.0f %%", v))
+		parts = append(parts, model.T("monitor64.txt.charge", "v", fmt.Sprintf("%.0f", v)))
 	}
 	if v, ok := num(res[upsMinutesLeft]); ok && v >= 0 && v < 100000 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "runtime", Value: v * 60, Unit: "s", Rule: RuleUPSRuntime})
-		parts = append(parts, "Restlaufzeit "+durTextSec(v*60))
+		parts = append(parts, model.T("monitor64.txt.runtime", "v", model.Sub(durTextSec(v*60))))
 	}
 	if t != nil {
 		load := -1.0
@@ -94,7 +95,7 @@ func (c *Collector) collectUPS(r *round) {
 		}
 		if load >= 0 {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "load", Value: load, Unit: "%"})
-			parts = append(parts, fmt.Sprintf("Last %.0f %%", load))
+			parts = append(parts, model.T("monitor64.txt.load_pct", "v", fmt.Sprintf("%.0f", load)))
 		}
 		for _, idx := range t.rows() {
 			if v, ok := num(t.col(upsInVoltage)[idx]); ok && v >= 0 && v < 1000 {
@@ -115,7 +116,7 @@ func (c *Collector) collectUPS(r *round) {
 				continue
 			}
 			if a, ok := upsAlarms[int(oo[len(wk)])]; ok {
-				alarms = append(alarms, a)
+				alarms = append(alarms, model.T(a))
 			}
 		}
 		if len(alarms) > 0 {
@@ -128,11 +129,11 @@ func (c *Collector) collectUPS(r *round) {
 	}
 	switch st, _ := num(res[upsBattStatus]); st {
 	case 3:
-		s.Facts = append(s.Facts, model.Fact{Code: FactUPSBatteryLow, Text: "Batterie schwach"})
-		parts = append(parts, "Batterie schwach")
+		s.Facts = append(s.Facts, model.Fact{Code: FactUPSBatteryLow, Text: model.T("monitor64.txt.ups_low_battery")})
+		parts = append(parts, model.T("monitor64.txt.ups_low_battery"))
 	case 4:
-		s.Facts = append(s.Facts, model.Fact{Code: FactUPSBatteryLow, Text: "Batterie erschöpft"})
-		parts = append(parts, "Batterie erschöpft")
+		s.Facts = append(s.Facts, model.Fact{Code: FactUPSBatteryLow, Text: model.T("monitor64.txt.ups_depleted")})
+		parts = append(parts, model.T("monitor64.txt.ups_depleted"))
 	}
 	s.Text = strings.Join(parts, " · ")
 	r.out = append(r.out, s)

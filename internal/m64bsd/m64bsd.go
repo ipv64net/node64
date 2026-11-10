@@ -32,7 +32,7 @@ const (
 	maxItems = 512 // Eintraege je Abschnitt (Dateisysteme, Schnittstellen, Platten, Sensoren ...)
 )
 
-var errFormat = errors.New("unbekanntes Format")
+var errFormat = errors.New(m64proto.HintFormat)
 
 // Texte, Fehler und Zeilen wie im Linux-Sammler (gemeinsame Helfer, keine Kopien).
 func clip(s string) string                             { return m64linux.Clip(s) }

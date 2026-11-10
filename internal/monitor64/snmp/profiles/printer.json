@@ -10,10 +10,10 @@
   "scalars": [
     {
       "key": "printer",
-      "service": "Drucker",
+      "service": "i18n:monitor64.svc.printer",
       "kind": "printer",
       "oid": ".1.3.6.1.2.1.43.5.1.1.17.1",
-      "label": "Seriennummer"
+      "label": "i18n:monitor64.snmp.serial"
     }
   ]
 }

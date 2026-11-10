@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -45,7 +46,7 @@ type Match struct {
 // Target ist der Dienst, in den ein Wert geht.
 type Target struct {
 	Key     string `json:"key"`               // Dienst-Schluessel, z. B. "ups" oder "disk:{name}"
-	Service string `json:"service,omitempty"` // Anzeigename (Platzhalter wie key)
+	Service string `json:"service,omitempty"` // Anzeigename (Platzhalter wie key; fester Text oder Token, siehe profText)
 	Kind    string `json:"kind"`              // Dienst-Art (if, fs, disk, raid, temp, ups ...)
 	Default *bool  `json:"default,omitempty"` // beim Erkennen vorgeschlagen (Standard: ja)
 }
@@ -293,7 +294,7 @@ func (t *Target) validate(table bool) error {
 	if len(t.Service) > 64 {
 		return errors.New("service zu lang")
 	}
-	return nil
+	return validText("service", fill(t.Service, "x", "1"))
 }
 
 func (v *Value) validate(table bool) error {
@@ -318,12 +319,18 @@ func (v *Value) validate(table bool) error {
 	if (v.Min != nil && !finite(*v.Min)) || (v.Max != nil && !finite(*v.Max)) {
 		return errors.New("ungueltiges min/max")
 	}
-	if len(v.Label) > 32 {
+	if len(v.Label) > 48 {
 		return errors.New("label zu lang")
+	}
+	if err := validText("label", v.Label); err != nil {
+		return err
 	}
 	for k, t := range v.Text {
 		if len(k) > 64 || len(t) > 64 {
 			return errors.New("text-Eintrag zu lang")
+		}
+		if err := validText("text", t); err != nil {
+			return err
 		}
 	}
 	if f := v.Fact; f != nil {
@@ -341,6 +348,9 @@ func (v *Value) validate(table bool) error {
 		}
 		if len(f.Text) > 64 {
 			return errors.New("fact.text zu lang")
+		}
+		if err := validText("fact.text", f.Text); err != nil {
+			return err
 		}
 	}
 	if pc := v.Pct; pc != nil {
@@ -449,7 +459,7 @@ func (c *Collector) selectProfiles(r *round) {
 			for _, p := range cand {
 				pre = append(pre, p.keyPrefixes()...)
 			}
-			r.part.add("Profil-Erkennung", err, pre...)
+			r.part.add(model.T("monitor64.txt.profile_detect"), err, pre...)
 			if c.profiles != nil {
 				return // bisherige Auswahl behalten (Zeitpunkt bleibt: naechste Runde neu versuchen)
 			}
@@ -501,7 +511,7 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 			if t.Default != nil {
 				def = *t.Default
 			}
-			a = &acc{s: model.Service{Key: key, Name: firstNonEmpty(fill(t.Service, name, index), key), Kind: t.Kind, Default: def}}
+			a = &acc{s: model.Service{Key: key, Name: firstNonEmpty(profText(t.Service, name, index), model.Raw(key)), Kind: t.Kind, Default: def}}
 			accs[key] = a
 			order = append(order, key)
 		}
@@ -527,7 +537,7 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 		}
 		res, err := getScalars(r.ctx, r.c, list)
 		if err != nil {
-			r.part.add("Profil "+p.Name, err, p.keyPrefixes()...)
+			r.part.add(model.T("monitor64.txt.profile", "name", p.Name), err, p.keyPrefixes()...)
 			return
 		}
 		r.at = c.now() // Messzeitpunkt der Zaehler
@@ -567,7 +577,7 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 		sort.Strings(cols)
 		tab, err := walkColumns(r.ctx, r.c, cols, c.cfg.MaxRep)
 		if err != nil {
-			r.part.add(fmt.Sprintf("Profil %s Tabelle %d", p.Name, ti+1), err, keyPrefix(t.Key))
+			r.part.add(model.T("monitor64.txt.profile_table", "name", p.Name, "n", ti+1), err, keyPrefix(t.Key))
 			continue
 		}
 		r.at = c.now()
@@ -624,7 +634,7 @@ func (c *Collector) applyValue(r *round, a *acc, v Value, p pdu, look func(strin
 	if okNum && ((v.Min != nil && f < *v.Min) || (v.Max != nil && f > *v.Max)) {
 		return // ungueltiger Wert (z. B. -1 = nicht unterstuetzt)
 	}
-	display := raw
+	display := model.Raw(raw) // Rohwert vom Geraet; Texte aus dem Profil sind fester Text oder Token
 	if t, ok := v.Text[raw]; ok {
 		display = t
 	} else if okNum {
@@ -642,7 +652,7 @@ func (c *Collector) applyValue(r *round, a *acc, v Value, p pdu, look func(strin
 			if m, ok := pctMetric(v, look); ok {
 				a.s.Metrics = append(a.s.Metrics, m...)
 				if !v.Hide {
-					a.parts = append(a.parts, fmt.Sprintf("%.0f %% belegt", m[0].Value))
+					a.parts = append(a.parts, model.T("monitor64.txt.used_pct", "v", fmt.Sprintf("%.0f", m[0].Value)))
 				}
 			}
 		case v.Counter:
@@ -669,7 +679,7 @@ func (c *Collector) applyValue(r *round, a *acc, v Value, p pdu, look func(strin
 		a.parts = append(a.parts, display)
 	}
 	if v.Label != "" && raw != "" {
-		a.parts = append(a.parts, v.Label+" "+raw)
+		a.parts = append(a.parts, v.Label+" "+model.Raw(raw))
 	}
 	if fd := v.Fact; fd != nil && factHit(fd, f, okNum, raw) {
 		txt := fd.Text
@@ -754,6 +764,26 @@ func pctMetric(v Value, look func(string) (pdu, bool)) ([]model.Metric, bool) {
 
 func fill(tpl, name, index string) string {
 	return strings.NewReplacer("{name}", name, "{index}", index).Replace(tpl)
+}
+
+// profText fuellt die Platzhalter eines Anzeigetexts aus dem Profil. Der Text ist entweder fest ("ZFS {name}") oder
+// ein Token ("i18n:monitor64.svc.disk?name={name}", uebersetzbar); im Token werden die Werte als Parameter kodiert.
+func profText(tpl, name, index string) string {
+	name, index = model.Raw(name), model.Raw(index)
+	if strings.HasPrefix(tpl, "i18n:") {
+		name, index = url.QueryEscape(name), url.QueryEscape(index)
+	}
+	return fill(tpl, name, index)
+}
+
+// validText prueft einen Anzeigetext aus dem Profil: fester Text oder genau ein Token.
+func validText(field, s string) error {
+	if strings.Contains(s, "i18n:") {
+		if _, ok := model.Key(s); !ok {
+			return fmt.Errorf("%s: %q ist kein gueltiges Token (i18n:monitor64.<schluessel>?name=wert)", field, s)
+		}
+	}
+	return nil
 }
 
 // keyPrefix: Schluessel bis zum ersten Platzhalter ("disk:{name}" -> "disk:").

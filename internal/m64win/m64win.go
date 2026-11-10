@@ -55,8 +55,9 @@ const (
 )
 
 // NoteReading steht in Notes (SMART, Updates), solange der erste Lauf im Hintergrund noch nicht fertig ist
-// (gleicher Text wie m64linux.NoteReading).
-const NoteReading = "wird gelesen"
+// (gleicher Code wie m64linux.NoteReading). Hinweise und Fehlerteile, die der Sammler selbst formuliert, sind Codes
+// (m64proto.Hint): die Node zeigt sie in der Sprache des Betrachters.
+const NoteReading = m64proto.HintReading
 
 // Schluessel im Cache.
 const (
@@ -204,7 +205,7 @@ func (c *Cache) slow(ctx context.Context, now func() time.Time, key, sec string,
 // ---- Laufwerks- und Plattenaufrufe mit Zeitlimit ----
 
 // errDriveTimeout: ein Laufwerks- bzw. Plattenaufruf kam nicht rechtzeitig zurueck (kein Fehler des Laufwerks).
-var errDriveTimeout = errors.New("Zeitlimit")
+var errDriveTimeout = errors.New(m64proto.HintTimeout)
 
 // driveCall ist ein laufender Aufruf fuer ein Laufwerk bzw. eine Platte.
 type driveCall struct {
@@ -253,7 +254,7 @@ func waitDrive[T any](ctx context.Context, call *driveCall, key string, limit ti
 		select {
 		case <-call.done:
 		default:
-			return zero, fmt.Errorf("%s: %w, haengt seit %s", key, errDriveTimeout, time.Since(call.start).Round(time.Second))
+			return zero, fmt.Errorf("%s: %w, %s", key, errDriveTimeout, m64proto.Hint(m64proto.HintHung, time.Since(call.start).Round(time.Second).String()))
 		}
 	} else {
 		t := time.NewTimer(rest)
@@ -539,6 +540,8 @@ const (
 	svcAutoStart = 2
 	svcStopped   = 1
 	svcRunning   = 4
+
+	exitNeverStarted = 1077 // ERROR_SERVICE_NEVER_STARTED: seit dem Booten kein Startversuch
 )
 
 // svcState liefert den Zustand als Text.
@@ -574,9 +577,14 @@ type svcInfo struct {
 
 // svcWanted: in den Bericht kommen Dienste mit Starttyp Automatisch, deren Zustand etwas aussagt. Dienste mit
 // Trigger-Start laufen nur bei Bedarf (gestoppt ist normal) und fehlen; ebenso Dienste mit verzoegertem Start, die
-// sich sauber beendet haben (Exit-Code 0, z. B. Update-Dienste von Browsern) - laufen sie, stehen sie drin.
+// sich sauber beendet haben (Exit-Code 0, z. B. Update-Dienste von Browsern) - laufen sie, stehen sie drin. Dienste,
+// die seit dem Booten nie gestartet wurden (nach dem Booten installiert: Start erst mit dem naechsten Neustart),
+// sind kein Ausfall und fehlen ebenfalls.
 func svcWanted(s svcInfo) bool {
 	if s.startType != svcAutoStart || s.triggers > 0 {
+		return false
+	}
+	if s.state == svcStopped && s.exitCode == exitNeverStarted {
 		return false
 	}
 	if s.delayed && s.state == svcStopped && s.exitCode == 0 && s.specific == 0 {
@@ -781,7 +789,7 @@ func ParseStorage(b []byte) (slowResult, error) {
 	var out slowResult
 	var ps psStorage
 	if err := json.Unmarshal(b, &ps); err != nil {
-		return out, fmt.Errorf("Ausgabe nicht lesbar: %w", err)
+		return out, fmt.Errorf("%s: %w", m64proto.HintUnreadable, err)
 	}
 	if ps.Fatal != "" {
 		return out, errors.New(clip(string(ps.Fatal)))
@@ -844,10 +852,10 @@ func ParseStorage(b []byte) (slowResult, error) {
 		out.smart = append(out.smart, s)
 	}
 	if counterErr != "" {
-		note(m64proto.SecSmart, "Zuverlaessigkeitszaehler nicht lesbar (Administratorrechte noetig?): "+counterErr)
+		note(m64proto.SecSmart, m64proto.HintCountersUnreadable+": "+counterErr)
 	}
 	if len(ps.Disks) == 0 && len(out.errs) == 0 {
-		note(m64proto.SecSmart, "keine Platten gefunden")
+		note(m64proto.SecSmart, m64proto.HintNoDisks)
 	}
 	for _, v := range ps.VDisks {
 		if len(out.raid) >= maxItems {
@@ -914,13 +922,13 @@ type psUpdates struct {
 func ParseUpdates(b []byte, now time.Time) (*m64proto.Updates, bool, error) {
 	var ps psUpdates
 	if err := json.Unmarshal(b, &ps); err != nil {
-		return nil, false, fmt.Errorf("Ausgabe nicht lesbar: %w", err)
+		return nil, false, fmt.Errorf("%s: %w", m64proto.HintUnreadable, err)
 	}
 	if ps.Fatal != "" {
 		return nil, false, errors.New(clip("Windows Update: " + string(ps.Fatal)))
 	}
 	if !ps.Pending.ok {
-		return nil, false, errors.New("Windows Update: keine Anzahl geliefert")
+		return nil, false, errors.New("Windows Update: " + m64proto.HintNoCount)
 	}
 	u := &m64proto.Updates{Manager: "windows", Pending: int(min(ps.Pending.v, 1e6)), Checked: now.Unix()}
 	if ps.Security.ok {

@@ -149,7 +149,7 @@ func MergeZpoolStatus(pools []m64proto.ZPool, st map[string]ZpoolStatus) {
 		}
 		errs := s.Errors
 		if d := s.DevErrors; d != [3]uint64{} {
-			dev := fmt.Sprintf("Geraetefehler READ %d WRITE %d CKSUM %d", d[0], d[1], d[2])
+			dev := m64proto.Hint(m64proto.HintDevErrors, fmt.Sprintf("READ %d WRITE %d CKSUM %d", d[0], d[1], d[2]))
 			if errs == "" {
 				errs = dev
 			} else {

@@ -21,15 +21,15 @@
       "kind": "hw",
       "oid": ".1.3.6.1.4.1.6574.1.1.0",
       "text": {
-        "1": "System normal",
-        "2": "System fehlerhaft"
+        "1": "i18n:monitor64.snmp.system_ok",
+        "2": "i18n:monitor64.snmp.system_bad"
       },
       "fact": {
         "code": "hw_failed",
         "ok": [
           1
         ],
-        "text": "Systemstatus fehlerhaft"
+        "text": "i18n:monitor64.snmp.system_failed"
       }
     },
     {
@@ -38,15 +38,15 @@
       "kind": "hw",
       "oid": ".1.3.6.1.4.1.6574.1.3.0",
       "text": {
-        "1": "Netzteil ok",
-        "2": "Netzteil fehlerhaft"
+        "1": "i18n:monitor64.snmp.psu_ok",
+        "2": "i18n:monitor64.snmp.psu_failed"
       },
       "fact": {
         "code": "hw_failed",
         "ok": [
           1
         ],
-        "text": "Netzteil fehlerhaft"
+        "text": "i18n:monitor64.snmp.psu_failed"
       }
     },
     {
@@ -55,15 +55,15 @@
       "kind": "hw",
       "oid": ".1.3.6.1.4.1.6574.1.4.1.0",
       "text": {
-        "1": "Lüfter ok",
-        "2": "Lüfter fehlerhaft"
+        "1": "i18n:monitor64.snmp.fan_ok",
+        "2": "i18n:monitor64.snmp.fan_failed"
       },
       "fact": {
         "code": "hw_failed",
         "ok": [
           1
         ],
-        "text": "Systemlüfter fehlerhaft"
+        "text": "i18n:monitor64.snmp.sys_fan_failed"
       }
     },
     {
@@ -76,7 +76,7 @@
         "ok": [
           1
         ],
-        "text": "CPU-Lüfter fehlerhaft"
+        "text": "i18n:monitor64.snmp.cpu_fan_failed"
       }
     },
     {
@@ -84,7 +84,7 @@
       "service": "Synology System",
       "kind": "hw",
       "oid": ".1.3.6.1.4.1.6574.1.5.1.0",
-      "label": "Modell"
+      "label": "i18n:monitor64.snmp.model"
     },
     {
       "key": "syno:system",
@@ -99,7 +99,7 @@
       "kind": "hw",
       "oid": ".1.3.6.1.4.1.6574.1.5.4.0",
       "text": {
-        "1": "Update verfügbar",
+        "1": "i18n:monitor64.txt.update_available",
         "2": "",
         "3": "",
         "4": "",
@@ -108,7 +108,7 @@
     },
     {
       "key": "temp:system",
-      "service": "Temperatur System",
+      "service": "i18n:monitor64.svc.temp?name=System",
       "kind": "temp",
       "oid": ".1.3.6.1.4.1.6574.1.2.0",
       "metric": "temp",
@@ -121,14 +121,14 @@
   "tables": [
     {
       "key": "disk:{name}",
-      "service": "Platte {name}",
+      "service": "i18n:monitor64.svc.disk?name={name}",
       "kind": "disk",
       "oid": ".1.3.6.1.4.1.6574.2.1.1",
       "name_col": 2,
       "columns": [
         {
           "col": 3,
-          "label": "Modell"
+          "label": "i18n:monitor64.snmp.model"
         },
         {
           "col": 6,
@@ -142,10 +142,10 @@
           "col": 5,
           "text": {
             "1": "Normal",
-            "2": "Initialisiert",
-            "3": "Nicht initialisiert",
-            "4": "Systempartition defekt",
-            "5": "Abgestürzt"
+            "2": "i18n:monitor64.snmp.initialized",
+            "3": "i18n:monitor64.snmp.not_initialized",
+            "4": "i18n:monitor64.snmp.syspart_failed",
+            "5": "i18n:monitor64.snmp.crashed"
           },
           "fact": {
             "code": "smart_failed",
@@ -153,16 +153,16 @@
               4,
               5
             ],
-            "text": "Platte defekt"
+            "text": "i18n:monitor64.snmp.disk_failed"
           }
         },
         {
           "col": 13,
           "text": {
-            "1": "Gesund",
-            "2": "Warnung",
-            "3": "Kritisch",
-            "4": "Ausfallend"
+            "1": "i18n:monitor64.snmp.healthy",
+            "2": "i18n:monitor64.snmp.warning",
+            "3": "i18n:monitor64.snmp.critical",
+            "4": "i18n:monitor64.snmp.failing"
           },
           "fact": {
             "code": "smart_failed",
@@ -170,7 +170,7 @@
               3,
               4
             ],
-            "text": "Gesundheitsstatus kritisch"
+            "text": "i18n:monitor64.snmp.health_critical"
           }
         },
         {
@@ -181,7 +181,7 @@
           "fact": {
             "code": "smart_sectors",
             "above": 0,
-            "text": "fehlerhafte Sektoren"
+            "text": "i18n:monitor64.snmp.bad_sectors"
           }
         },
         {
@@ -199,7 +199,7 @@
     },
     {
       "key": "raid:{name}",
-      "service": "Speicherpool {name}",
+      "service": "i18n:monitor64.svc.storage_pool?name={name}",
       "kind": "raid",
       "oid": ".1.3.6.1.4.1.6574.3.1.1",
       "name_col": 2,
@@ -208,18 +208,18 @@
           "col": 3,
           "text": {
             "1": "Normal",
-            "2": "Reparatur",
+            "2": "i18n:monitor64.snmp.repairing",
             "3": "Migration",
-            "4": "Erweiterung",
-            "5": "Löschen",
-            "6": "Erstellen",
-            "7": "Synchronisierung",
-            "8": "Paritätsprüfung",
-            "9": "Zusammenbau",
-            "10": "Abbruch",
-            "11": "Beeinträchtigt",
-            "12": "Abgestürzt",
-            "13": "Datenbereinigung"
+            "4": "i18n:monitor64.snmp.expanding",
+            "5": "i18n:monitor64.snmp.deleting",
+            "6": "i18n:monitor64.snmp.creating",
+            "7": "i18n:monitor64.snmp.syncing",
+            "8": "i18n:monitor64.snmp.parity_check",
+            "9": "i18n:monitor64.snmp.assembling",
+            "10": "i18n:monitor64.snmp.canceling",
+            "11": "i18n:monitor64.snmp.degraded",
+            "12": "i18n:monitor64.snmp.crashed",
+            "13": "i18n:monitor64.snmp.scrubbing"
           },
           "fact": {
             "code": "raid_degraded",
@@ -227,7 +227,7 @@
               11,
               12
             ],
-            "text": "Speicherpool beeinträchtigt"
+            "text": "i18n:monitor64.snmp.pool_degraded"
           }
         },
         {

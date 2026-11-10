@@ -3,6 +3,7 @@ package promscrape
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,6 +120,10 @@ func nodeMem(m *Metrics) *m64proto.Mem {
 	return &m64proto.Mem{Total: u64(total), Available: min(u64(avail), u64(total)), SwapTotal: u64(st), SwapFree: min(u64(sf), u64(st))}
 }
 
+// fileMount: Dateien, die Docker in einen Container einhaengt (node_exporter im Container saehe sonst "/etc/hosts"
+// als Dateisystem der Platte des Hosts).
+var fileMount = map[string]bool{"/etc/hosts": true, "/etc/hostname": true, "/etc/resolv.conf": true}
+
 // nodeFS: echte Dateisysteme (Filter wie beim Agent), je Geraet nur der kuerzeste Mount (Bind-Mounts, Subvolumes).
 func nodeFS(m *Metrics) []m64proto.FS {
 	key := func(s *Sample) string {
@@ -135,7 +140,7 @@ func nodeFS(m *Metrics) []m64proto.FS {
 	for _, s := range m.Get("node_filesystem_size_bytes") {
 		k := key(&s)
 		mt := m64linux.Mount{Device: s.Label("device"), Mount: s.Label("mountpoint"), Type: s.Label("fstype")}
-		if mt.Mount == "" || m64linux.SkipMount(mt) || s.Label("device_error") != "" || devErr[k] > 0 {
+		if mt.Mount == "" || m64linux.SkipMount(mt) || fileMount[mt.Mount] || s.Label("device_error") != "" || devErr[k] > 0 {
 			continue
 		}
 		if !finite(s.Value) || s.Value <= 0 {
@@ -309,7 +314,7 @@ func nodeBonds(m *Metrics, names map[string]bool) []m64proto.Bond {
 			if i <= act {
 				mii = "up"
 			}
-			b.Members = append(b.Members, m64proto.BondSlave{Name: fmt.Sprintf("Mitglied %d", i), MII: mii})
+			b.Members = append(b.Members, m64proto.BondSlave{Name: m64proto.Hint(m64proto.HintMember, strconv.Itoa(i)), MII: mii})
 		}
 		out = append(out, b)
 		if len(out) >= maxItems {

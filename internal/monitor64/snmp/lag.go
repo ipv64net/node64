@@ -2,7 +2,6 @@ package snmp
 
 import (
 	"encoding/hex"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -80,7 +79,7 @@ func (c *Collector) collectLAG(r *round) {
 		if in, ok := c.ifStatic[id]; ok {
 			name = in.name
 		}
-		s := model.Service{Key: "bond:" + keyPart(name), Name: name + " (LACP)", Kind: "bond", Default: true}
+		s := model.Service{Key: "bond:" + keyPart(name), Name: model.Raw(name) + " (LACP)", Kind: "bond", Default: true}
 		up := 0
 		var down []string
 		partners := map[string][]string{}
@@ -95,10 +94,11 @@ func (c *Collector) collectLAG(r *round) {
 			}
 		}
 		s.Metrics = []model.Metric{{Name: "members_up", Value: float64(up)}, {Name: "members", Value: float64(len(ms))}}
-		s.Text = fmt.Sprintf("%d von %d aktiv", up, len(ms))
+		s.Text = model.T("monitor64.txt.active_of", "n", up, "total", len(ms))
 		if len(down) > 0 {
-			s.Facts = append(s.Facts, model.Fact{Code: factBondDown, Text: strings.Join(limitList(down, 5), ", ") + " down"})
-			s.Text += " – " + strings.Join(limitList(down, 5), ", ") + " down"
+			list := model.Raw(strings.Join(limitList(down, 5), ", "))
+			s.Facts = append(s.Facts, model.Fact{Code: factBondDown, Text: list + " down"})
+			s.Text += " – " + list + " down"
 		}
 		if len(partners) > 1 { // aktive Mitglieder sprechen mit verschiedenen Partnern bzw. Schluesseln
 			var minor []string
@@ -117,8 +117,9 @@ func (c *Collector) collectLAG(r *round) {
 				}
 			}
 			sort.Strings(minor)
-			s.Facts = append(s.Facts, model.Fact{Code: factLACPMismatch, Text: strings.Join(limitList(minor, 5), ", ") + " mit anderem LACP-Partner"})
-			s.Text += " – LACP passt nicht (" + strings.Join(limitList(minor, 5), ", ") + ")"
+			list := strings.Join(limitList(minor, 5), ", ")
+			s.Facts = append(s.Facts, model.Fact{Code: factLACPMismatch, Text: model.T("monitor64.txt.lacp_other_partner", "list", list)})
+			s.Text += " – " + model.T("monitor64.txt.lacp_mismatch", "list", list)
 		}
 		r.out = append(r.out, s)
 	}

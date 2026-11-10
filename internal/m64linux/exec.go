@@ -76,7 +76,7 @@ func DefaultExec(ctx context.Context, name string, args ...string) (ExecResult, 
 		res.Code = cmd.ProcessState.ExitCode()
 	}
 	if ctx.Err() != nil {
-		return res, fmt.Errorf("%s: Zeitlimit", name)
+		return res, fmt.Errorf("%s: %s", name, m64proto.HintTimeout)
 	}
 	var ee *exec.ExitError
 	if err != nil && !errors.As(err, &ee) {

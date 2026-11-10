@@ -166,7 +166,7 @@ func (c *Collector) addSeenUp(keys []string) {
 func (cfg *Config) normalize() error {
 	host, port := splitHostPort(cfg.Address)
 	if host == "" {
-		return errors.New("Adresse fehlt")
+		return errors.New(model.T("monitor64.txt.addr_required"))
 	}
 	if cfg.Port <= 0 {
 		cfg.Port = port
@@ -175,7 +175,7 @@ func (cfg *Config) normalize() error {
 		cfg.Port = DefaultPort
 	}
 	if cfg.Port > 65535 {
-		return errors.New("ungueltiger Port")
+		return errors.New(model.T("monitor64.txt.port_bad"))
 	}
 	cfg.Address = host
 	switch strings.ToLower(strings.TrimPrefix(cfg.Version, "v")) {
@@ -186,11 +186,11 @@ func (cfg *Config) normalize() error {
 	case "3":
 		cfg.Version = "3"
 	default:
-		return fmt.Errorf("unbekannte SNMP-Version %q", cfg.Version)
+		return errors.New(model.T("monitor64.txt.snmp_version", "v", cfg.Version))
 	}
 	if cfg.Version == "3" {
 		if cfg.User == "" {
-			return errors.New("v3-Benutzer fehlt")
+			return errors.New(model.T("monitor64.txt.snmp_v3_user"))
 		}
 		lvl, err := parseLevel(cfg.Level)
 		if err != nil {
@@ -202,7 +202,7 @@ func (cfg *Config) normalize() error {
 				return err
 			}
 			if len(cfg.Secret.AuthPass) < 8 {
-				return errors.New("v3-Passwort (Authentifizierung) zu kurz (mindestens 8 Zeichen)")
+				return errors.New(model.T("monitor64.txt.snmp_auth_short"))
 			}
 		}
 		if lvl == "authPriv" {
@@ -210,11 +210,11 @@ func (cfg *Config) normalize() error {
 				return err
 			}
 			if len(cfg.Secret.PrivPass) < 8 {
-				return errors.New("v3-Passwort (Verschluesselung) zu kurz (mindestens 8 Zeichen)")
+				return errors.New(model.T("monitor64.txt.snmp_priv_short"))
 			}
 		}
 	} else if cfg.Secret.Community == "" {
-		return errors.New("Community fehlt")
+		return errors.New(model.T("monitor64.txt.snmp_community"))
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
@@ -235,17 +235,17 @@ func (cfg *Config) normalize() error {
 		cfg.RoundTimeout = DefaultRoundTimeout
 	}
 	if len(cfg.Custom) > maxCustom {
-		return fmt.Errorf("hoechstens %d eigene OIDs", maxCustom)
+		return errors.New(model.T("monitor64.txt.snmp_custom_max", "n", maxCustom))
 	}
 	for i, co := range cfg.Custom {
 		if err := co.validate(); err != nil {
-			return fmt.Errorf("eigene OID %d: %w", i+1, err)
+			return fmt.Errorf("%s: %w", model.T("monitor64.txt.snmp_custom_n", "n", i+1), err)
 		}
 		cfg.Custom[i].OID = normOID(co.OID)
 	}
 	for _, id := range cfg.Profiles {
 		if ProfileByID(id) == nil {
-			return fmt.Errorf("unbekanntes Profil %q", id)
+			return errors.New(model.T("monitor64.txt.snmp_profile_unknown", "v", id))
 		}
 	}
 	return nil
@@ -260,7 +260,7 @@ func parseLevel(s string) (string, error) {
 	case "noauthnopriv", "noauth":
 		return "noAuthNoPriv", nil
 	}
-	return "", fmt.Errorf("unbekannte v3-Stufe %q", s)
+	return "", errors.New(model.T("monitor64.txt.snmp_level", "v", s))
 }
 
 func authProto(s string) (gosnmp.SnmpV3AuthProtocol, error) {
@@ -278,7 +278,7 @@ func authProto(s string) (gosnmp.SnmpV3AuthProtocol, error) {
 	case "MD5":
 		return gosnmp.MD5, nil
 	}
-	return gosnmp.NoAuth, fmt.Errorf("unbekanntes v3-Authentifizierungsverfahren %q", s)
+	return gosnmp.NoAuth, errors.New(model.T("monitor64.txt.snmp_auth_proto", "v", s))
 }
 
 func privProto(s string) (gosnmp.SnmpV3PrivProtocol, error) {
@@ -296,7 +296,7 @@ func privProto(s string) (gosnmp.SnmpV3PrivProtocol, error) {
 	case "DES":
 		return gosnmp.DES, nil
 	}
-	return gosnmp.NoPriv, fmt.Errorf("unbekanntes v3-Verschluesselungsverfahren %q", s)
+	return gosnmp.NoPriv, errors.New(model.T("monitor64.txt.snmp_priv_proto", "v", s))
 }
 
 // USM baut die v3-Sicherheitsparameter (auch fuer den Trap-Empfaenger).
@@ -328,19 +328,19 @@ func USM(user, level, auth, priv string, sec Secret) (*gosnmp.UsmSecurityParamet
 
 func (co CustomOID) validate() error {
 	if normOID(co.OID) == "" {
-		return fmt.Errorf("ungueltige OID %q", co.OID)
+		return errors.New(model.T("monitor64.txt.oid_invalid", "v", co.OID))
 	}
 	if strings.TrimSpace(co.Name) == "" || len(co.Name) > maxTextLen {
-		return errors.New("Name fehlt oder zu lang")
+		return errors.New(model.T("monitor64.txt.name_missing"))
 	}
 	if !validUnit(co.Unit) {
-		return fmt.Errorf("unbekannte Einheit %q", co.Unit)
+		return errors.New(model.T("monitor64.txt.unit_unknown", "v", co.Unit))
 	}
 	if co.Rule != "" && !validRule(co.Rule) {
-		return fmt.Errorf("unbekannte Regel-Art %q", co.Rule)
+		return errors.New(model.T("monitor64.txt.rule_unknown", "v", co.Rule))
 	}
 	if !finite(co.Factor) {
-		return errors.New("ungueltiger Faktor")
+		return errors.New(model.T("monitor64.txt.factor_invalid"))
 	}
 	return nil
 }
@@ -659,16 +659,16 @@ func (c *Collector) Discover(ctx context.Context) (*Discovery, error) {
 func (c *Collector) warning() string {
 	var w []string
 	if c.cfg.Version != "3" {
-		w = append(w, "Community unverschlüsselt – v3 empfohlen")
+		w = append(w, model.T("monitor64.txt.snmp_warn_community"))
 	} else {
 		if strings.EqualFold(c.cfg.AuthProto, "MD5") && c.cfg.Level != "noAuthNoPriv" {
-			w = append(w, "MD5 ist veraltet – SHA-256 empfohlen")
+			w = append(w, model.T("monitor64.txt.snmp_warn_md5"))
 		}
 		if strings.EqualFold(c.cfg.PrivProto, "DES") && c.cfg.Level == "authPriv" {
-			w = append(w, "DES ist veraltet – AES empfohlen")
+			w = append(w, model.T("monitor64.txt.snmp_warn_des"))
 		}
 		if c.cfg.Level == "noAuthNoPriv" {
-			w = append(w, "v3 ohne Authentifizierung")
+			w = append(w, model.T("monitor64.txt.snmp_warn_noauth"))
 		}
 	}
 	return strings.Join(w, " · ")
@@ -677,7 +677,7 @@ func (c *Collector) warning() string {
 func summary(d *Discovery, svcs []model.Service) string {
 	var parts []string
 	for _, p := range d.Profiles {
-		parts = append(parts, p.Name)
+		parts = append(parts, model.Raw(p.Name))
 	}
 	count := map[string]int{}
 	for _, s := range svcs {
@@ -687,18 +687,18 @@ func summary(d *Discovery, svcs []model.Service) string {
 		switch n := count[kind]; n {
 		case 0:
 		case 1:
-			parts = append(parts, "1 "+one)
+			parts = append(parts, model.T(one))
 		default:
-			parts = append(parts, fmt.Sprintf("%d %s", n, many))
+			parts = append(parts, model.T(many, "n", n))
 		}
 	}
-	add("if", "Port", "Ports")
-	add("fs", "Dateisystem", "Dateisysteme")
-	add("temp", "Temperatur", "Temperaturen")
-	add("disk", "Platte", "Platten")
-	add("supply", "Verbrauchsmaterial", "Verbrauchsmaterialien")
+	add("if", "monitor64.txt.sum_port", "monitor64.txt.sum_ports")
+	add("fs", "monitor64.txt.sum_fs", "monitor64.txt.sum_fss")
+	add("temp", "monitor64.txt.sum_temp", "monitor64.txt.sum_temps")
+	add("disk", "monitor64.txt.sum_disk", "monitor64.txt.sum_disks")
+	add("supply", "monitor64.txt.sum_supply", "monitor64.txt.sum_supplies")
 	if count["ups"] > 0 {
-		parts = append(parts, "USV")
+		parts = append(parts, model.T("monitor64.svc.ups_plain"))
 	}
 	return strings.Join(parts, " · ")
 }

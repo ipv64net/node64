@@ -8,8 +8,10 @@
 // Teil der Abfragen fehl, liefert Collect die uebrigen Dienste und einen *PartialError (der Kern macht daraus die
 // Warnung "Zugang API"); ohne Dienste ist der Fehler ein normaler Fehler (Zugang antwortet nicht).
 //
-// Texte (Service.Name, Service.Text) vorerst deutsch wie im Mapper. Geheimnisse (Token-Secret, Schluessel) stehen
-// nie in Fehlertexten.
+// Texte (Service.Name, Service.Text, Facts, eigene Fehlertexte) sind uebersetzbar (model.T); Eigennamen und
+// Fehlertexte vom Geraet bzw. aus fremden Clients stehen als Parameter im Token oder laufen durch model.Raw.
+// Geheimnisse (Token-Secret, Schluessel) stehen nie in Fehlertexten; freie Fehlertexte sind deshalb feste Teile und
+// nie Parameter (scrub findet sie sonst nicht).
 package apis
 
 import (
@@ -18,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -89,7 +92,7 @@ func (e *PartialError) Error() string {
 		more = fmt.Sprintf(" (+%d)", len(l)-maxPartErrors)
 		l = l[:maxPartErrors]
 	}
-	return fmt.Sprintf("%d Teilabfrage(n) fehlgeschlagen: %s%s", len(e.Errs), strings.Join(l, "; "), more)
+	return model.T("monitor64.txt.partial", "n", len(e.Errs)) + ": " + strings.Join(l, "; ") + more
 }
 
 // IsPartial sagt, ob err nur ein Teilfehler ist (Dienste sind trotzdem gueltig).
@@ -104,6 +107,7 @@ type partial struct {
 	errs     []string
 	prefixes map[string]bool
 	secrets  []string
+	foreign  bool // Fehler stammen aus fremden Clients (internal/proxmox): Text entschaerfen (model.Raw)
 }
 
 // add merkt einen Teilfehler; prefixes sind die Schluessel-Praefixe der Dienste, die dadurch fehlen koennen.
@@ -111,7 +115,11 @@ func (p *partial) add(what string, err error, prefixes ...string) {
 	if err == nil {
 		return
 	}
-	msg := scrub(what+": "+err.Error(), p.secrets...)
+	text := err.Error()
+	if p.foreign {
+		text = model.Raw(text)
+	}
+	msg := scrub(what+": "+text, p.secrets...)
 	p.mu.Lock()
 	p.errs = append(p.errs, msg)
 	for _, pre := range prefixes {
@@ -143,9 +151,20 @@ func scrub(s string, secrets ...string) string {
 	for _, sec := range secrets {
 		if len(sec) >= 4 {
 			s = strings.ReplaceAll(s, sec, "***")
+			if q := url.QueryEscape(sec); q != sec { // als Parameter eines Tokens kodiert
+				s = strings.ReplaceAll(s, q, "***")
+			}
 		}
 	}
 	return s
+}
+
+// foreignErr: Fehler eines fremden Clients (internal/proxmox) ohne Geheimnisse und entschaerft (nil bleibt nil).
+func foreignErr(err error, secrets ...string) error {
+	if err == nil {
+		return nil
+	}
+	return errors.New(model.Raw(scrub(err.Error(), secrets...)))
 }
 
 // scrubErr: Fehler ohne Geheimnisse (nil bleibt nil).
@@ -339,25 +358,37 @@ func mbitText(v float64) string {
 	return strings.Replace(fmt.Sprintf("%.1f Mbit/s", v), ".", ",", 1)
 }
 
-// agoText: "vor 5 Min.", "vor 3 Std.", "vor 4 Tagen".
+// agoText: "vor 5 Min.", "vor 3 Std.", "vor 4 Tagen" (uebersetzbar).
 func agoText(d time.Duration) string {
 	switch {
 	case d < time.Minute:
-		return "gerade eben"
+		return model.T("monitor64.txt.ago_now")
 	case d < time.Hour:
-		return fmt.Sprintf("vor %d Min.", int(d/time.Minute))
+		return model.T("monitor64.txt.ago_min", "n", int(d/time.Minute))
 	case d < 48*time.Hour:
-		return fmt.Sprintf("vor %d Std.", int(d/time.Hour))
+		return model.T("monitor64.txt.ago_h", "n", int(d/time.Hour))
 	}
-	return fmt.Sprintf("vor %d Tagen", int(d/(24*time.Hour)))
+	return model.T("monitor64.txt.ago_days", "n", int(d/(24*time.Hour)))
 }
 
-// hoursText: Dauer in Stunden bzw. Tagen ("26 Std.", "3 Tage").
+// hoursText: Dauer in Stunden bzw. Tagen ("26 Std.", "3 Tage"; uebersetzbar, als Parameter mit model.Sub).
 func hoursText(d time.Duration) string {
 	if d < 48*time.Hour {
-		return fmt.Sprintf("%d Std.", int(d/time.Hour))
+		return model.T("monitor64.txt.dur_h", "n", int(d/time.Hour))
 	}
-	return fmt.Sprintf("%d Tage", int(d/(24*time.Hour)))
+	return model.T("monitor64.txt.dur_days", "n", int(d/(24*time.Hour)))
+}
+
+// stateText: Zustand eines Gasts bzw. einer Aufgabe als Text; keys ordnet bekannte Zustaende ihrem Text zu,
+// unbekannte bleiben roh (leer = "unbekannt").
+func stateText(keys map[string]string, state string) string {
+	if k, ok := keys[state]; ok {
+		return model.T(k)
+	}
+	if s := shortText(state); s != "" {
+		return model.Raw(s)
+	}
+	return model.T("monitor64.txt.unknown")
 }
 
 // Queries nennt die API-Pfade eines Sammlers im Klartext ("Was wird abgefragt?" im Host).

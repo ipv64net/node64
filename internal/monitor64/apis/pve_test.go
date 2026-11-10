@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
+	"github.com/ipv64net/node64/internal/monitor64/model/modeltest"
 )
 
 // pveFake: Proxmox VE 8 mit drei Nodes (pve3 offline), Abfrage auf pve1.
@@ -272,10 +273,10 @@ func TestPVEPartialAndErrors(t *testing.T) {
 	if err == nil || !IsPartial(err) {
 		t.Fatalf("erwartet PartialError, got %v", err)
 	}
-	if strings.Contains(err.Error(), testSecret) {
+	if strings.Contains(deErr(err), testSecret) {
 		t.Fatal("Secret im Fehlertext")
 	}
-	if !strings.Contains(err.Error(), "storage") || !strings.Contains(err.Error(), "Gast-Config (1)") {
+	if !strings.Contains(deErr(err), "storage") || !strings.Contains(deErr(err), "Gast-Config (1)") {
 		t.Errorf("Teilfehler = %v", err)
 	}
 	// F6-K2: betroffene Schluessel-Praefixe (Gast-Config laesst keinen Dienst fehlen)
@@ -312,7 +313,7 @@ func TestPVEPartialAndErrors(t *testing.T) {
 	if err == nil || IsPartial(err) || svcs != nil {
 		t.Fatalf("401: svcs=%d err=%v", len(svcs), err)
 	}
-	if strings.Contains(err.Error(), testSecret) || !strings.Contains(err.Error(), "401") {
+	if strings.Contains(deErr(err), testSecret) || !strings.Contains(deErr(err), "401") {
 		t.Errorf("401-Fehler = %v", err)
 	}
 }
@@ -344,7 +345,7 @@ func TestPVETestAndNodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := p.Test(context.Background())
+	res := deRes(p.Test(context.Background()))
 	if !res.OK || res.Error != "" || res.Version != "8.3.0" || res.Cluster != "homelab" || res.Node != "pve1" {
 		t.Fatalf("Test = %+v", res)
 	}
@@ -363,7 +364,7 @@ func TestPVETestAndNodes(t *testing.T) {
 	bad := cfg
 	bad.Node = "pve9"
 	pb, _ := NewPVE(bad)
-	if r := pb.Test(context.Background()); r.OK || !strings.Contains(r.Error, "pve9") {
+	if r := deRes(pb.Test(context.Background())); r.OK || !strings.Contains(r.Error, "pve9") {
 		t.Errorf("falscher Node: %+v", r)
 	}
 
@@ -375,7 +376,7 @@ func TestPVETestAndNodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := pn.Test(context.Background())
+	r := deRes(pn.Test(context.Background()))
 	if r.OK || !r.NeedConfirm || r.Fingerprint != cfg.Pin {
 		t.Errorf("ohne Pin: %+v", r)
 	}
@@ -396,7 +397,7 @@ func TestPVEConfigErrors(t *testing.T) {
 		t.Error("ohne Adresse angenommen")
 	}
 	_, err := NewPVE(PVEConfig{Addresses: []string{"https://pve:8006"}, TokenID: "a@pve!b", Secret: testSecret, Pin: "xyz"})
-	if err == nil || strings.Contains(err.Error(), testSecret) {
+	if err == nil || strings.Contains(deErr(err), testSecret) {
 		t.Errorf("falscher Pin: %v", err)
 	}
 }
@@ -415,7 +416,7 @@ func TestParseSmartTemps(t *testing.T) {
 	if d.critWarn == nil || *d.critWarn != 4 || *d.temp != 72 || *d.wearUsed != 101 {
 		t.Errorf("nvme = %+v", d)
 	}
-	s := diskService("disk:X1", diskEntry{DevPath: "/dev/nvme1n1", Type: "nvme", Serial: "X1"}, &d, false, map[string]uint64{})
+	s := modeltest.Service("de", diskService("disk:X1", diskEntry{DevPath: "/dev/nvme1n1", Type: "nvme", Serial: "X1"}, &d, false, map[string]uint64{}))
 	if !hasFact(s, "smart_failed") {
 		t.Errorf("NVMe-Warnung ohne smart_failed: %+v", s)
 	}
@@ -426,11 +427,11 @@ func TestParseSmartTemps(t *testing.T) {
 }
 
 func TestUpdatesSecurity(t *testing.T) {
-	s := updatesService([]aptUpdate{{Package: "libssl3", Origin: "Debian", Label: "Debian-Security"}, {Package: "vim", Origin: "Debian"}})
+	s := modeltest.Service("de", updatesService([]aptUpdate{{Package: "libssl3", Origin: "Debian", Label: "Debian-Security"}, {Package: "vim", Origin: "Debian"}}))
 	if m := mustMetric(t, s, "security"); m.Value != 1 || !hasFact(s, "updates_security") {
 		t.Errorf("updates = %+v", s)
 	}
-	if s := updatesService(nil); s.Text != "keine ausstehend" || len(s.Facts) != 0 {
+	if s := modeltest.Service("de", updatesService(nil)); s.Text != "keine ausstehend" || len(s.Facts) != 0 {
 		t.Errorf("keine Updates = %+v", s)
 	}
 }
@@ -507,7 +508,7 @@ func TestParseSmartPBSNVMeJSON(t *testing.T) {
 		d.mediaE == nil || *d.mediaE != 3 {
 		t.Fatalf("parseSmart = %+v", d)
 	}
-	s := diskService("disk:N1", diskEntry{Name: "nvme0n1", DiskType: "nvme", Serial: "N1"}, &d, false, map[string]uint64{})
+	s := modeltest.Service("de", diskService("disk:N1", diskEntry{Name: "nvme0n1", DiskType: "nvme", Serial: "N1"}, &d, false, map[string]uint64{}))
 	if !hasFact(s, "smart_failed") || !hasFact(s, "smart_sectors") || mustMetric(t, s, "wear").Value != 100 || mustMetric(t, s, "media_err").Value != 3 {
 		t.Errorf("NVMe (JSON-Schluessel) = %+v", s)
 	}
@@ -688,7 +689,7 @@ func TestPVENodeFixed(t *testing.T) {
 	cfg := PVEConfig{Addresses: []string{addrA, addrB}, TokenID: "monitor64@pve!node64", Secret: testSecret, Pin: pin}
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	p := newTestPVE(t, cfg, &now)
-	if res := p.Test(context.Background()); !res.OK || res.Node != "pve1" || p.Node() != "pve1" {
+	if res := deRes(p.Test(context.Background())); !res.OK || res.Node != "pve1" || p.Node() != "pve1" {
 		t.Fatalf("Test = %+v, Node() = %q", res, p.Node())
 	}
 	sa.setDown(true)

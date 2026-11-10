@@ -250,7 +250,7 @@ func TestUnraidOldAPI(t *testing.T) {
 	if !hasSvc(svcs, "vm:Debian") || !hasSvc(svcs, "alerts") {
 		t.Errorf("Dienste = %+v", svcs)
 	}
-	r := u.Test(context.Background())
+	r := deRes(u.Test(context.Background()))
 	if !r.OK || r.Version != "6.12.13" || r.Node != "Tower" || r.Summary != "Array STARTED, 7 Platten" || !strings.Contains(r.Warning, "unverschlüsselt") {
 		t.Errorf("Test = %+v", r)
 	}
@@ -264,18 +264,18 @@ func TestUnraidErrors(t *testing.T) {
 	u.now = urNow
 	svcs, err := u.Collect(context.Background())
 	pe := partialOf(t, err)
-	if !hasPrefix(pe, "ctr:") || !hasPrefix(pe, "vm:") || !strings.Contains(pe.Error(), "Rolle Viewer") || !hasSvc(svcs, "raid:array") {
+	if !hasPrefix(pe, "ctr:") || !hasPrefix(pe, "vm:") || !strings.Contains(deErr(pe), "Rolle Viewer") || !hasSvc(svcs, "raid:array") {
 		t.Errorf("Teilfehler = %v", pe)
 	}
 	u2, _ := NewUnraid(UnraidConfig{Address: srv.URL, APIKey: "falsch-" + testSecret})
-	if _, err := u2.Collect(context.Background()); err == nil || strings.Contains(err.Error(), testSecret) || !strings.Contains(err.Error(), "API-Key prüfen") {
+	if _, err := u2.Collect(context.Background()); err == nil || strings.Contains(deErr(err), testSecret) || !strings.Contains(deErr(err), "API-Key prüfen") {
 		t.Errorf("falscher Key: %v", err)
 	}
 	// kein /graphql (alte Version ohne API)
 	srv404 := httptest.NewServer(http.NotFoundHandler())
 	defer srv404.Close()
 	u3, _ := NewUnraid(UnraidConfig{Address: srv404.URL, APIKey: testSecret})
-	if r := u3.Test(context.Background()); r.OK || !strings.Contains(r.Error, "Unraid Connect") {
+	if r := deRes(u3.Test(context.Background())); r.OK || !strings.Contains(r.Error, "Unraid Connect") {
 		t.Errorf("ohne API = %+v", r)
 	}
 	for _, c := range []UnraidConfig{{Address: "tower"}, {Address: "ftp://tower", APIKey: "x"}, {Address: "http://tower", APIKey: "x", Pin: strings.Repeat("a", 64)}} {
@@ -289,7 +289,7 @@ func TestUnraidHTTPS(t *testing.T) {
 	f := &fakeUnraid{t: t}
 	addr, pin := tlsServer(t, f)
 	u, _ := NewUnraid(UnraidConfig{Address: addr, APIKey: testSecret})
-	if r := u.Test(context.Background()); r.OK || !r.NeedConfirm || r.Fingerprint != pin {
+	if r := deRes(u.Test(context.Background())); r.OK || !r.NeedConfirm || r.Fingerprint != pin {
 		t.Errorf("ohne Pin = %+v", r)
 	}
 	f.mu.Lock()
@@ -299,7 +299,7 @@ func TestUnraidHTTPS(t *testing.T) {
 		t.Error("Key vor der Bestaetigung gesendet")
 	}
 	u, _ = NewUnraid(UnraidConfig{Address: addr, APIKey: testSecret, Pin: pin})
-	if r := u.Test(context.Background()); !r.OK || r.Version != "7.2.0 (API 4.25.2)" || r.Warning != "" {
+	if r := deRes(u.Test(context.Background())); !r.OK || r.Version != "7.2.0 (API 4.25.2)" || r.Warning != "" {
 		t.Errorf("mit Pin = %+v", r)
 	}
 }

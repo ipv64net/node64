@@ -34,7 +34,7 @@
 				<div class="card-body small">
 					<div>{{.T "monitor64.st.agent_port" "port" $s.Port}}{{if $s.Fingerprint}} · {{.T "monitor64.st.node_key"}} <code id="m64-fp">{{$s.Fingerprint}}</code> <button class="btn btn-sm btn-link p-0" type="button" data-copy-target="#m64-pubkey"><i class="bi bi-clipboard"></i> {{.T "monitor64.copy"}}</button>{{end}}</div>
 					{{if $s.PublicKey}}<div class="cmd mt-2" id="m64-pubkey">{{$s.PublicKey}}</div>{{end}}
-					<div class="mt-2">{{.T "monitor64.st.agent_download"}}</div>
+					<div class="mt-2">{{.T "monitor64.st.agent_download"}} <a href="/monitor64/agent" id="m64-agent-link">{{.T "monitor64.tab.agent"}}</a></div>
 				</div>
 			</div>
 		</div>

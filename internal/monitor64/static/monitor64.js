@@ -64,7 +64,7 @@ var DEVSPEC = {
 	unraid: { url: 'http://{a}', user: false, extra: [] },
 	redfish: { url: 'https://{a}', user: true, extra: ['session'] }
 };
-function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', addr || '10.0.0.10'); }
+function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', addr || '10.0.0.21'); }
 // Texte je Art und Feld (ausgeschrieben, damit die Pruefung der Texte sie findet)
 function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish') }[t]; }
 function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish') }[t]; }
@@ -128,10 +128,10 @@ function snmpFields(p, get, stored) {
 	var at = function (x) { return ' id="' + id(x) + '"' + (p === 'w' ? ' data-w="s_' + x + '"' : ''); };
 	var lab = function (x, t) { return '<label class="form-label" for="' + id(x) + '">' + esc(t) + '</label>'; };
 	var sel = function (x, list, txt) { return '<select class="form-select"' + at(x) + '>' + list.map(function (v) { return '<option value="' + esc(v) + '"' + (v === get(x) ? ' selected' : '') + '>' + esc(txt ? txt(v) : v) + '</option>'; }).join('') + '</select>'; };
-	var pass = function (x, t) { return lab(x, t) + '<input class="form-control" type="password" autocomplete="new-password" maxlength="256"' + at(x) + (p === 'w' ? ' value="' + esc(get(x)) + '"' : '') + (stored ? ' placeholder="' + esc(L('acc.secret_keep')) + '"' : '') + '>'; };
+	var pass = function (x, t) { return lab(x, t) + '<input class="form-control" type="password" autocomplete="new-password" maxlength="256"' + at(x) + (p === 'w' ? ' value="' + esc(get(x)) + '"' : '') + (stored && (x === 'community') === (get('version') !== '3') ? ' placeholder="' + esc(L('acc.secret_keep')) + '"' : '') + '>'; }; // Platzhalter nur beim Geheimnis der gespeicherten Version
 	var txt = function (x, t, attrs) { return lab(x, t) + '<input class="form-control"' + at(x) + ' value="' + esc(get(x)) + '"' + (attrs || '') + '>'; };
 	var open = get('context') || get('engine') || get('custom');
-	return '<div class="col-md-6">' + lab('version', L('acc.snmp_version')) + sel('version', ['2c', '1', '3'], function (v) { return 'SNMP v' + v; }) + '</div>' +
+	return '<div class="col-md-6">' + lab('version', L('acc.snmp_version')) + sel('version', ['3', '2c', '1'], function (v) { return 'SNMP v' + v; }) + '</div>' +
 		'<div class="col-md-6">' + txt('port', L('acc.port'), ' type="number" min="1" max="65535" placeholder="161"') + '</div>' +
 		'<div class="col-md-6" data-snmp="c">' + pass('community', L('acc.snmp_community')) + '</div>' +
 		'<div class="col-12 small text-warning-emphasis" data-snmp="c"><i class="bi bi-unlock"></i> ' + esc(L('acc.snmp_warn_v2c')) + '</div>' +
@@ -203,19 +203,28 @@ function numIn(v) {
 	var s = String(+Number(v).toPrecision(12));
 	return LOC === 'de-DE' ? s.replace('.', ',') : s;
 }
-// tx uebersetzt Texte des Kerns: "i18n:monitor64.detail.vanished?since=2026-11-09T10:00:00Z" (auch mitten im
-// Text, z. B. "SSH: i18n:..."). Werte sind URL-kodiert; since/at sind Zeitpunkte und werden formatiert.
-var reI18n = /i18n:([a-z0-9_.]+)(\?[^\s;]*)?/g;
-function tx(s) {
+// tx uebersetzt Texte des Kerns und der Sammler (wie model.Translate in Go): Token
+// "i18n:monitor64.detail.vanished?since=2026-11-09T10:00:00Z", auch mehrere mit festen Teilen dazwischen
+// ("ONLINE · i18n:monitor64.txt.free?v=3+GB"). Werte sind URL-kodiert; since/at sind Zeitpunkte und werden
+// formatiert, ein Wert mit Token wird mit uebersetzt. Nur Schluessel unter monitor64. zaehlen; das Ergebnis enthaelt
+// keine Token mehr (txRaw entschaerft den Rest). Der Aufrufer escaped danach wie bisher.
+var reI18n = /i18n:([a-z0-9_]+(?:\.[a-z0-9_]+)*)(?:\?([A-Za-z0-9%+=&_.~-]*))?/g;
+function txRaw(s) { return s.replace(/i18n:(?=[a-z0-9_])/g, 'i18n: '); }
+function tx(s, depth) {
 	if (s === undefined || s === null) { return ''; }
 	s = String(s);
 	if (s.indexOf('i18n:') < 0) { return s; }
+	depth = depth > 0 ? depth : 0;
+	if (depth > 4) { return txRaw(s); }
 	return s.replace(reI18n, function (all, key, q) {
-		var k = key.indexOf('monitor64.') === 0 ? key.slice(10) : key, a = {};
+		if (key.indexOf('monitor64.') !== 0) { return txRaw(all); }
+		var k = key.slice(10), a = {}, vals = [];
 		if (q) {
-			try { new URLSearchParams(q.slice(1)).forEach(function (v, n) { a[n] = (n === 'since' || n === 'at') && toDate(v) ? fmtTime(v) : tx(v); }); } catch (e) { a = {}; }
+			try {
+				new URLSearchParams(q).forEach(function (v, n) { a[n] = (n === 'since' || n === 'at') && toDate(v) ? fmtTime(v) : tx(v, depth + 1); vals.push(a[n]); });
+			} catch (e) { return txRaw(all); }
 		}
-		if (!TX[k]) { return Object.keys(a).length ? k + ' (' + Object.keys(a).map(function (n) { return a[n]; }).join(', ') + ')' : k; }
+		if (!TX[k]) { return vals.length ? k + ' (' + vals.join(', ') + ')' : k; }
 		return L(k, a);
 	});
 }
@@ -376,6 +385,49 @@ function clNote(ref, selfName) {
 	return !ref.here && !ref.reporting ? L('cluster.note.remote_measure', { n: n }) : '';
 }
 function clRole(r) { return { report: L('cluster.role.report'), measure: L('cluster.role.measure'), idle: L('cluster.role.idle') }[r] || r || ''; }
+// clOrphans: Hinweis-Karte der Uebersicht "Hosts ohne ueberwachende Node" (ihre Node gehoert nicht mehr zum Cluster):
+// dieser Node zuweisen oder entfernen, einzeln und alle - nie automatisch. list: [{uid, name, address, reason,
+// node_name}], reload: Stand danach neu laden.
+var clOrphReload = null;
+function clOrphans(list, reload) {
+	var box = $('#m64-orphans');
+	if (!box) { return; }
+	clOrphReload = reload;
+	list = list || [];
+	var sig = JSON.stringify(list);
+	if (box.dataset.sig === sig) { return; } // unveraendert: nicht neu zeichnen (gesperrter Knopf und Fokus bleiben)
+	box.dataset.sig = sig;
+	if (!box.dataset.bound) {
+		box.dataset.bound = '1';
+		box.addEventListener('click', function (ev) { var b = ev.target.closest('[data-orph]'); if (b) { ev.stopPropagation(); clOrphAct(b); } });
+	}
+	if (!list.length) { box.innerHTML = ''; return; }
+	box.innerHTML = '<div class="card border-warning mb-3"><div class="card-header d-flex flex-wrap align-items-center gap-2 py-2"><span class="fw-semibold"><i class="bi bi-diagram-3"></i> ' + esc(L('cluster.orph_title', { n: list.length })) + '</span>' +
+		'<span class="ms-auto d-flex flex-wrap gap-2"><button class="btn btn-sm btn-outline-primary" type="button" data-orph="assign"><i class="bi bi-box-arrow-in-down"></i> ' + esc(L('cluster.orph_assign_all')) + '</button>' +
+		'<button class="btn btn-sm btn-outline-danger" type="button" data-orph="remove" data-n="' + list.length + '"><i class="bi bi-trash"></i> ' + esc(L('cluster.orph_remove_all')) + '</button></span></div>' +
+		'<div class="card-body small py-2"><div class="text-body-secondary">' + esc(L('cluster.orph_hint')) + '</div><div class="list-group list-group-flush mt-1">' + list.map(function (o) {
+			var why = o.reason === 'no_candidate' ? L('cluster.orph_no_candidate', { n: o.node_name || o.node }) : L('cluster.orph_node_gone', { n: o.node_name || o.node });
+			return '<div class="list-group-item px-0 d-flex flex-wrap align-items-center gap-2"><div class="me-auto min-w-0"><a class="fw-semibold" href="/monitor64/host/' + encodeURIComponent(o.uid) + '">' + esc(o.name) + '</a>' + (o.address ? ' <span class="text-body-secondary">' + esc(o.address) + '</span>' : '') +
+				'<div class="text-body-secondary">' + esc(why) + '</div></div>' +
+				'<button class="btn btn-sm btn-outline-primary" type="button" data-orph="assign" data-uid="' + esc(o.uid) + '">' + esc(L('cluster.orph_assign')) + '</button>' +
+				'<button class="btn btn-sm btn-outline-danger" type="button" data-orph="remove" data-uid="' + esc(o.uid) + '" data-name="' + esc(o.name) + '">' + esc(L('cluster.orph_remove')) + '</button></div>';
+		}).join('') + '</div></div></div>';
+}
+function clOrphAct(btn) {
+	var act = btn.dataset.orph === 'remove' ? 'remove' : 'assign', uid = btn.dataset.uid || '';
+	function run() {
+		return api('POST', '/api/monitor64/cluster/orphans/' + act, uid ? { uids: [uid] } : { all: true }).then(function (r) {
+			toast(act === 'remove' ? L('cluster.orph_removed_toast', { n: r.done }) : L('cluster.orph_assigned_toast', { n: r.done }));
+			return clOrphReload ? clOrphReload() : null;
+		});
+	}
+	if (act === 'remove') { // entfernen nur nach Bestaetigung (einzeln und alle)
+		confirmBox(uid ? L('cluster.orph_remove') : L('cluster.orph_remove_all'), uid ? L('cluster.orph_remove_confirm', { n: btn.dataset.name || '' }) : L('cluster.orph_remove_all_confirm', { n: btn.dataset.n || '' }),
+			uid ? L('cluster.orph_remove') : L('cluster.orph_remove_all'), function () { return run().catch(fail); });
+		return;
+	}
+	lock(btn, run).catch(fail);
+}
 // Schwellen (eval.Effective: Zahl oder "off")
 function lim(x) { return x === 'off' || x === undefined || x === null ? null : x; }
 function durLabel(sec) {
@@ -442,15 +494,15 @@ function pageOverview() {
 		if (note) { body += '<div class="small text-body-secondary mt-2" data-cl-note><i class="bi bi-diagram-3"></i> ' + esc(note) + '</div>'; }
 		var extra = '';
 		if (h.new) { extra += ' <span class="badge text-bg-primary" title="' + esc(L('ov.new_services', { n: h.new })) + '">' + esc(L('ov.new_short', { n: h.new })) + '</span>'; }
-		return '<div class="col-12 col-sm-6 col-xl-4 col-xxl-3"><div class="card host-tile s-' + esc(st) + (h.maint ? ' s-maint' : '') + (h.paused ? ' s-paused' : '') + '" data-host="' + esc(h.uid) + '" role="link" tabindex="0"><div class="card-body">' +
+		return '<div class="col-12 col-sm-6 col-xl-4 col-xxl-3"><a class="card host-tile text-reset text-decoration-none s-' + esc(st) + (h.maint ? ' s-maint' : '') + (h.paused ? ' s-paused' : '') + '" href="' + esc(hostURL(h.uid)) + '" data-host="' + esc(h.uid) + '"><div class="card-body">' +
 			'<div class="d-flex align-items-center gap-2"><i class="bi ' + esc(h.icon) + ' text-body-secondary"></i><span class="host-name">' + esc(h.name) + '</span>' + extra + '<span class="ms-auto">' + foot + '</span></div>' +
 			'<div class="host-kind">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + (h.address ? ' · ' + esc(h.address) : '') + (ref ? ' · ' + clBy(ref, CLV.self_name) : '') + '</div>' +
-			'<div class="mt-1">' + (h.tags || []).map(tag).join('') + '</div>' + body + '</div></div></div>';
+			'<div class="mt-1">' + (h.tags || []).map(tag).join('') + '</div>' + body + '</div></a></div>';
 	}
 	function row(h) {
 		var st = hostState(h), ref = clRef(h), note = clNote(ref, CLV.self_name);
 		if (ref && (ref.note === 'owner_unreachable' || ref.note === 'no_data')) { st = 'unknown'; }
-		return '<tr data-host="' + esc(h.uid) + '" class="clickable"><td><span class="st-dot st-' + esc(st) + '"></span></td><td class="fw-semibold">' + esc(h.name) + '<div class="small text-body-secondary fw-normal">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + (ref ? ' · ' + clBy(ref, CLV.self_name) : '') + '</div>' +
+		return '<tr data-host="' + esc(h.uid) + '" class="clickable"><td><span class="st-dot st-' + esc(st) + '"></span></td><td class="fw-semibold"><a class="text-reset text-decoration-none" href="' + esc(hostURL(h.uid)) + '">' + esc(h.name) + '</a><div class="small text-body-secondary fw-normal">' + esc(((D.host_kind_labels || {})[h.kind] || [h.kind])[0] || '') + (ref ? ' · ' + clBy(ref, CLV.self_name) : '') + '</div>' +
 			(note ? '<div class="small text-body-secondary fw-normal">' + esc(note) + '</div>' : '') + '</td>' +
 			'<td class="d-none d-md-table-cell small">' + esc(h.address) + '</td><td class="d-none d-lg-table-cell">' + (h.tags || []).map(tag).join('') + '</td>' +
 			'<td class="svc-val">' + (h.has_cpu ? fmtNum(h.cpu, 0) + ' %' : '–') + '</td><td class="svc-val">' + (h.has_ram ? fmtNum(h.ram, 0) + ' %' : '–') + '</td>' +
@@ -460,7 +512,7 @@ function pageOverview() {
 		var title = p.unreach ? L('ov.unreachable') : tx(p.name);
 		var icon = p.maint ? '<i class="bi bi-cone-striped text-body-secondary" title="' + esc(L('ov.maint')) + '"></i>' : '<span class="st-dot ' + (p.acked ? 'st-ack' : 'st-' + esc(p.state === 'unreachable' ? 'unknown' : p.state)) + '" title="' + esc(stLabel(p.state)) + '"></span>';
 		return '<div class="prob-row' + (p.acked ? ' acked' : '') + '" data-host="' + esc(p.host_uid) + '" data-key="' + esc(p.key) + '" role="link" tabindex="0">' + icon +
-			'<div class="prob-main"><div class="prob-title">' + esc(p.host) + ' · ' + esc(title) + '</div><div class="prob-sub">' + esc(tx(p.detail)) + '</div></div>' +
+			'<div class="prob-main"><a class="prob-title d-block text-reset text-decoration-none" href="' + esc(hostURL(p.host_uid, p.key)) + '" tabindex="-1">' + esc(p.host) + ' · ' + esc(title) + '</a><div class="prob-sub">' + esc(tx(p.detail)) + '</div></div>' +
 			'<span class="prob-since d-none d-sm-inline">' + (p.acked ? '<i class="bi bi-check2"></i> ' + esc(L('ov.acked')) : esc(since(p.since))) + '</span>' +
 			'<button class="btn btn-sm btn-outline-secondary" type="button" data-ack="' + (p.acked ? 'unack' : 'ack') + '" title="' + esc(p.acked ? L('ov.unack') : L('ov.ack_hint')) + '" aria-label="' + esc(p.acked ? L('ov.unack') : L('ov.ack')) + '"><i class="bi ' + (p.acked ? 'bi-arrow-counterclockwise' : 'bi-check2') + '"></i></button></div>';
 	}
@@ -513,12 +565,12 @@ function pageOverview() {
 		$('#m64-hosts').innerHTML = html;
 		$('#m64-empty').classList.toggle('d-none', data.hosts.length > 0);
 		$('#m64-filter').classList.toggle('d-none', data.hosts.length === 0);
+		clOrphans(CLV.orphans, function () { return api('GET', '/api/monitor64/cluster/views').then(function (v) { CLV = v || CLV; render(); refresh(); }); }); // Cluster: verwaiste Hosts
 	}
+	function hostURL(uid, key) { return '/monitor64/host/' + encodeURIComponent(uid) + (key ? '#svc=' + encodeURIComponent(key) : ''); }
 	function go(el) {
 		if (el.dataset.goto) { location.href = el.dataset.goto; return; }
-		var url = '/monitor64/host/' + encodeURIComponent(el.dataset.host);
-		if (el.dataset.key) { url += '#svc=' + encodeURIComponent(el.dataset.key); }
-		location.href = url;
+		location.href = hostURL(el.dataset.host, el.dataset.key);
 	}
 	root.addEventListener('click', function (ev) {
 		var b = ev.target.closest('[data-ack]');
@@ -537,6 +589,7 @@ function pageOverview() {
 		if (g) { OV.group = g.dataset.groupAll ? null : g.dataset.group; store('groupsel', JSON.stringify(OV.group)); render(); return; }
 		var v = ev.target.closest('[data-view]');
 		if (v) { OV.view = v.dataset.view; store('view', OV.view); render(); return; }
+		if (ev.target.closest('a[href]')) { return; } // echte Links oeffnet der Browser (auch im neuen Tab)
 		var t = ev.target.closest('[data-host],[data-goto]');
 		if (t && t.closest('#m64')) { go(t); }
 	});
@@ -798,7 +851,7 @@ function pageHost() {
 		var html = H.accesses.map(function (a) {
 			return '<div class="list-group-item d-flex flex-wrap align-items-center gap-2 access-row" data-acc="' + esc(a.uid) + '">' + accState(a) + '<div class="me-auto min-w-0"><div class="fw-semibold">' + esc(accLabel(a.type)) + (a.enabled ? '' : ' <span class="badge text-bg-secondary">' + esc(L('host.acc_off')) + '</span>') + '</div>' +
 				'<div class="small text-body-secondary text-truncate">' + esc(accSummary(a)) + (a.hostkey ? ' · ' + esc(L('acc.hostkey')) + ' <code>' + esc(a.hostkey) + '</code>' : '') + '</div>' +
-				(a.error ? '<div class="small text-danger-emphasis">' + esc(tx(a.error)) + '</div>' : '') + '</div>' +
+				(a.error ? '<div class="small text-danger-emphasis">' + esc(tx(a.error)) + '</div>' : '') + agentAccLine(a.agent) + '</div>' +
 				'<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" data-acc-act="test"><i class="bi bi-plug"></i> ' + esc(L('acc.test')) + '</button>' +
 				'<button class="btn btn-outline-secondary" type="button" data-acc-act="edit" title="' + esc(L('acc.edit')) + '" aria-label="' + esc(L('acc.edit')) + '"><i class="bi bi-pencil"></i></button>' +
 				(a.hostkey ? '<button class="btn btn-outline-secondary" type="button" data-acc-act="hostkey" title="' + esc(L('acc.hostkey_reset')) + '" aria-label="' + esc(L('acc.hostkey_reset')) + '"><i class="bi bi-key"></i></button>' : '') +
@@ -856,6 +909,7 @@ function pageHost() {
 		function prefShow() { // die bevorzugte Node ist keine Ersatz-Node
 			var pref = $('#m64-cl-pref', body).value;
 			$$('#m64-cl-backs [data-cl-node]', body).forEach(function (d) { var x = $('input', d), on = d.dataset.clNode === pref; x.disabled = on; if (on) { x.checked = false; } d.classList.toggle('opacity-50', on); });
+			$$('#m64-cl-reach-res [data-cl-add]', body).forEach(function (b) { b.classList.toggle('d-none', b.dataset.clAdd === pref); }); // kein Vorschlag fuer die bevorzugte Node
 		}
 		$('#m64-cl-pref', body).onchange = prefShow;
 		prefShow();
@@ -1123,7 +1177,7 @@ function pageHost() {
 				'<div class="small text-body-secondary"><i class="bi bi-magic"></i> ' + esc(L('sd.soll_hint')) + '</div></div>';
 		}
 		html += '<details class="mt-3"><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2">' +
-			'<div class="mb-2"><label class="form-label small mb-0" for="m64-sd-name">' + esc(L('sd.display_name')) + '</label><input class="form-control form-control-sm" id="m64-sd-name" maxlength="200" value="' + esc(s.custom_name || '') + '" placeholder="' + esc(svcName(s)) + '"></div>' +
+			'<div class="mb-2"><label class="form-label small mb-0" for="m64-sd-name">' + esc(L('sd.display_name')) + '</label><input class="form-control form-control-sm" id="m64-sd-name" maxlength="200" value="' + esc(tx(s.custom_name || '')) + '" placeholder="' + esc(svcName(s)) + '"></div>' +
 			'<div class="small text-body-secondary mt-1">' + esc(L('sd.access_info', { a: tx(s.via || '') || '–', i: fmtDur(H.host.interval_sec) })) + '</div><div class="small text-body-tertiary">' + esc(s.key) + '</div></div></details>';
 		var canAck = st !== 'ok' && s.since;
 		html += '<div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-primary btn-sm" type="button" data-sd="save">' + esc(L('save')) + '</button>' +
@@ -1160,7 +1214,7 @@ function pageHost() {
 		function save() {
 			var req = { key: s.key };
 			var nm = $('#m64-sd-name', body).value.trim();
-			if (nm !== (s.custom_name || '')) { req.name = nm; }
+			if (nm !== tx(s.custom_name || '')) { req.name = nm; } // angezeigt wird der uebersetzte Name: unveraendert = nicht senden
 			var so = $('[name=m64-sd-soll]:checked', body);
 			if (so && so.value !== (s.soll || '')) { req.soll = so.value; }
 			var changes = {}, bad = false;
@@ -1252,7 +1306,7 @@ function pageHost() {
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + (c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
 			'<div class="col-md-8" data-af="ssh prom nut truenas redfish"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
-			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.10:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
+			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.21:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
 			'<div class="col-md-6" data-af="pve"><label class="form-label" for="m64-af-node">' + esc(L('new.node')) + '</label><input class="form-control" id="m64-af-node" maxlength="64" value="' + esc(c.node || '') + '"></div>' +
 			devFields(c, 'af') +
@@ -1267,7 +1321,7 @@ function pageHost() {
 	function accessShow(body) {
 		var t = $('#m64-af-type', body).value;
 		$$('[data-af]', body).forEach(function (x) { x.classList.toggle('d-none', x.dataset.af.split(' ').indexOf(t) < 0); });
-		$('#m64-af-url', body).placeholder = DEVAPI.indexOf(t) >= 0 ? devURL(t, H.host.address) : t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.10') + ':' + (t === 'pbs' ? 8007 : 8006);
+		$('#m64-af-url', body).placeholder = DEVAPI.indexOf(t) >= 0 ? devURL(t, H.host.address) : t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.21') + ':' + (t === 'pbs' ? 8007 : 8006);
 		$('#m64-af-shint', body).textContent = DEVAPI.indexOf(t) >= 0 ? devSecretHint(t) : L('acc.secret_hint');
 		snmpShow(body, 'af');
 	}
@@ -1309,9 +1363,11 @@ function pageHost() {
 	// accessDialog: Zugang anlegen (a = null) bzw. aendern, mit "Verbindung testen" und Bestaetigung des Fingerabdrucks.
 	function accessDialog(a) {
 		var au = a ? '/api/monitor64/access/' + encodeURIComponent(a.uid) : '';
+		var hk = ''; // in diesem Dialog bestaetigter Hostschluessel (SSH mit Passwort)
 		var body = modal(a ? L('acc.edit') + ' · ' + accLabel(a.type) : L('host.access_add'), accessForm(a), [{ label: L('cancel') }, { label: L('acc.test'), click: function () {
 			var res = $('#m64-af-res', body), acc;
 			try { acc = accessFromForm(body, a); } catch (e) { res.innerHTML = '<span class="text-danger">' + esc(e.message) + '</span>'; return null; }
+			if (acc.type === 'ssh' && (hk || (a && a.hostkey))) { acc.hostkey = hk || a.hostkey; }
 			var tq = accessTestReq(a, acc);
 			if (!tq) { // gespeichertes Geheimnis gibt es nur zur gespeicherten Konfiguration
 				res.innerHTML = '<span class="text-warning-emphasis">' + esc(L('acc.save_first')) + '</span>';
@@ -1322,6 +1378,7 @@ function pageHost() {
 			return p.then(function (r) { res.innerHTML = testHTML(r); }).catch(function (e) { res.innerHTML = '<span class="text-danger">' + esc(tx(e.message)) + '</span>'; });
 		} }, { label: L('save'), cls: 'btn-primary', click: function (close) {
 			var acc = accessFromForm(body, a);
+			if (hk && acc.type === 'ssh') { acc.hostkey = hk; }
 			if (a) { delete acc.type; }
 			return api(a ? 'PUT' : 'POST', a ? au : '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/access', acc).then(function () { close(); toast(L('acc.saved_toast')); return reload(); });
 		} }], true);
@@ -1331,6 +1388,11 @@ function pageHost() {
 		body.addEventListener('click', function (ev) {
 			var fb = ev.target.closest('[data-fp-confirm]');
 			if (!fb) { return; }
+			if ((a ? a.type : $('#m64-af-type', body).value) === 'ssh') { // SSH mit Passwort: Hostschluessel bestaetigt
+				hk = fb.dataset.fpConfirm;
+				$('#m64-af-res', body).innerHTML = '<span class="small text-body-secondary">' + esc(L('acc.hostkey_set')) + '</span>';
+				return;
+			}
 			$('#m64-af-pin', body).value = fb.dataset.fpConfirm;
 			$('#m64-af-res', body).innerHTML = '<span class="small text-body-secondary">' + esc(L('acc.pin_set')) + '</span>';
 		});
@@ -1430,8 +1492,9 @@ function pageHost() {
 						var fb = mb && $('[data-fp-confirm]', mb);
 						if (fb) {
 							fb.onclick = function () {
-								var cfg = Object.assign({}, acc.config || {}, { pin: fb.dataset.fpConfirm });
-								lock(fb, function () { return api('PUT', au, { config: cfg }).then(function () { return api('POST', au + '/test'); }).then(function (r2) { mb.innerHTML = '<div>' + testHTML(r2) + '</div>'; return reload(); }); }).catch(fail);
+								// SSH mit Passwort: der bestaetigte Fingerabdruck wird der Hostschluessel (erst danach geht das Passwort raus)
+								var put = acc.type === 'ssh' ? { config: acc.config || {}, hostkey: fb.dataset.fpConfirm } : { config: Object.assign({}, acc.config || {}, { pin: fb.dataset.fpConfirm }) };
+								lock(fb, function () { return api('PUT', au, put).then(function () { return api('POST', au + '/test'); }).then(function (r2) { mb.innerHTML = '<div>' + testHTML(r2) + '</div>'; return reload(); }); }).catch(fail);
 							};
 						}
 					});
@@ -1483,7 +1546,9 @@ function pageHost() {
 	renderAll();
 	buildCharts();
 	loadSparks();
-	if (location.hash.indexOf('#svc=') === 0) { openDetail(decodeURIComponent(location.hash.slice(5))); }
+	function openHash() { if (location.hash.indexOf('#svc=') === 0) { openDetail(decodeURIComponent(location.hash.slice(5))); } }
+	openHash();
+	window.addEventListener('hashchange', openHash); // Link auf einen Dienst derselben Seite (kein Neuladen)
 	setInterval(function () { if (!document.hidden && !detailFor && !(modalEl && modalEl.classList.contains('show'))) { reload().catch(failQuiet); } }, 15000);
 	setInterval(function () { if (!document.hidden) { loadSparks(); } }, 300000);
 }
@@ -1574,7 +1639,7 @@ function pageProblems() {
 			var how = open ? (acked ? '<span class="text-primary small"><i class="bi bi-check2-square"></i> ' + esc(L('ov.acked')) + '</span> ' + who(p.ack.by) : '<span class="text-body-secondary">' + esc(L('pb.open_state')) + '</span>') :
 				(p.how === 'maint' ? '<i class="bi bi-cone-striped"></i> ' + esc(L('pb.maint')) : p.how === 'handover' ? '<span class="text-body-secondary"><i class="bi bi-diagram-3"></i> ' + esc(L('how.handover')) + '</span>' : who(p.closed_by));
 			var name = p.key ? tx(p.name) : L('ov.unreachable');
-			html += '<tr data-row="' + esc(p.uid) + '" tabindex="0"><td>' + badge + '</td><td><span class="fw-semibold">' + esc(p.host) + '</span>' + (p.host_gone ? ' <span class="badge text-bg-light">' + esc(L('pb.host_gone')) + '</span>' : '') + ' · ' + esc(name) + maxSt + '</td><td class="d-none d-md-table-cell small">' + esc(fmtTime(p.opened)) + '</td><td class="d-none d-sm-table-cell small">' + esc(fmtDur(p.duration)) + '</td><td class="small">' + how + '</td><td class="d-none d-lg-table-cell small text-body-secondary">' + esc(p.channels.join(', ') || '–') + '</td></tr>';
+			html += '<tr data-row="' + esc(p.uid) + '" tabindex="0"><td>' + badge + '</td><td><span class="fw-semibold">' + esc(p.host) + '</span>' + (p.host_gone ? ' <span class="badge text-bg-light">' + esc(L('pb.host_gone')) + '</span>' : '') + ' · ' + esc(name) + maxSt + '</td><td class="d-none d-md-table-cell small">' + esc(fmtTime(p.opened)) + '</td><td class="d-none d-sm-table-cell small">' + esc(fmtDur(p.duration)) + '</td><td class="small">' + how + '</td><td class="d-none d-lg-table-cell small text-body-secondary">' + esc(p.channels.map(function (c) { return c === 'default' ? L('nf.default') : c; }).join(', ') || '–') + '</td></tr>';
 			if (PB.open === p.uid) { html += '<tr class="pb-detail"><td colspan="6" id="m64-pb-detail"><span class="spinner-border spinner-border-sm"></span></td></tr>'; }
 		});
 		if (!PB.list.length) { html = '<tr><td colspan="6" class="text-center text-body-secondary p-4">' + esc(L('pb.none')) + '</td></tr>'; }
@@ -2135,7 +2200,7 @@ function pageNew() {
 		var k = kind(), t = k ? k.access : 'agent', cfg = {}, out = { type: t, config: cfg, secret: '' };
 		if (t === 'agent' && WZ.port) { cfg.port = parseInt(WZ.port, 10) || 0; }
 		if (t === 'agent' && WZ.mode === 'push') { cfg.mode = 'push'; cfg.token = WZ.token; delete cfg.port; }
-		if (t === 'ssh') { cfg.user = WZ.user; cfg.smart = WZ.smart; if (WZ.port) { cfg.port = parseInt(WZ.port, 10) || 0; } if (WZ.usePw) { out.secret = WZ.password; } }
+		if (t === 'ssh') { cfg.user = WZ.user; cfg.smart = WZ.smart; if (WZ.port) { cfg.port = parseInt(WZ.port, 10) || 0; } if (WZ.usePw) { out.secret = WZ.password; } if (WZ.hostkey) { out.hostkey = WZ.hostkey; } }
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = WZ.url; cfg.pin = WZ.pin; }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = WZ.token_id; out.secret = WZ.token_secret; }
 		if (t === 'docker') { out.secret = WZ.docker_secret; }
@@ -2178,14 +2243,11 @@ function pageNew() {
 			html = '<div class="row g-3"><div class="col-md-6">' + field('name', L('f.name'), WZ.name, ' data-w="name" maxlength="100" placeholder="nas02"') + '</div><div class="col-md-6">' + field('addr', L('f.address'), WZ.address, ' data-w="address" maxlength="253" placeholder="10.0.0.21"') + '</div>';
 			if (k.access === 'agent') {
 				var push = WZ.mode === 'push', tgt = pushTarget(WZ.token, WZ.pushNode || location.hostname, WZ.pushPort || 6466);
-				// Windows: TLS 1.2 einschalten, bevor irm laedt (Server 2016 bietet sonst nur TLS 1.0/1.1 an)
-				var cmd = WZ.kind === 'windows' ? '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; ' +
-					'& ([scriptblock]::Create((irm https://node64.de/agent/install.ps1))) -Key "' + key + '"' + (push ? ' -Connect "' + tgt + '" -NoListen' : '') :
-					WZ.kind === 'freebsd' ? L('new.bsd_cmd', { k: key }) + (push ? '\n' + L('push.bsd_cmd', { t: tgt }) : '') :
-					'curl -fsSL https://node64.de/agent/install.sh | sudo sh -s -- \\\n  --key "' + key + '"' + (push ? ' \\\n  --connect \'' + tgt + '\' --no-listen' : '');
-				html += '<div class="col-md-6"><label class="form-label" for="m64-w-mode">' + esc(L('push.mode_label')) + '</label><select class="form-select" id="m64-w-mode" data-w="mode"><option value=""' + (push ? '' : ' selected') + '>' + esc(L('push.mode_pull')) + '</option><option value="push"' + (push ? ' selected' : '') + '>' + esc(L('push.mode_push')) + '</option></select></div>' +
+				// Befehl je System (agentCmd); Quelle der Dateien - Internet oder diese Node - wie auf der Seite Agent
+				var src = agentSrc(), cmd = agentCmd(WZ.kind === 'windows' || WZ.kind === 'freebsd' ? WZ.kind : 'linux', agentBase(src), key, push ? tgt : '');
+				html +='<div class="col-md-6"><label class="form-label" for="m64-w-mode">' + esc(L('push.mode_label')) + '</label><select class="form-select" id="m64-w-mode" data-w="mode"><option value=""' + (push ? '' : ' selected') + '>' + esc(L('push.mode_pull')) + '</option><option value="push"' + (push ? ' selected' : '') + '>' + esc(L('push.mode_push')) + '</option></select></div>' +
 					(push ? '<div class="col-md-6">' + field('pnode', L('push.node_addr'), WZ.pushNode, ' data-w="pushNode" maxlength="253"') + '</div>' : '') +
-					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(push && !WZ.token ? '…' : cmd) + '</div>' +
+					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.agent_step1')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(push && !WZ.token ? '…' : cmd) + '</div>' + agentSrcHTML(src) +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(push ? L('push.hint', { port: WZ.pushPort || 6466 }) : L('new.agent_safe', { p: D.port || 6465 })) + '</div></div>' +
 					(push ? '<div class="col-12 small">' + esc(L('push.test_after')) + '</div>' :
 					'<div class="col-12"><div class="form-label">' + esc(L('new.agent_step2')) + '</div><div class="small">' + esc(L('new.agent_fp')) + '</div></div>' +
@@ -2204,7 +2266,7 @@ function pageNew() {
 					'<input class="form-control form-control-sm mt-1' + (WZ.usePw ? '' : ' d-none') + '" type="password" id="m64-w-pass" data-w="password" autocomplete="new-password" aria-label="' + esc(L('acc.secret')) + '" value="' + esc(WZ.password) + '"></div></div></details></div>';
 			} else if (k.access === 'pve' || k.access === 'pbs') {
 				var port = k.access === 'pve' ? 8006 : 8007;
-				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="https://' + esc(WZ.address || '10.0.0.10') + ':' + port + '"') + '</div>' +
+				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="https://' + esc(WZ.address || '10.0.0.21') + ':' + port + '"') + '</div>' +
 					'<div class="col-md-6">' + field('tid', L('new.token_id'), WZ.token_id, ' data-w="token_id" maxlength="128" placeholder="' + (k.access === 'pve' ? 'monitor@pve!node64' : 'monitor@pbs!node64') + '"') + '</div>' +
 					'<div class="col-md-6">' + field('tsec', L('new.token_secret'), WZ.token_secret, ' data-w="token_secret" type="password" autocomplete="new-password"') + '</div>' +
 					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.token_cmd')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(k.access === 'pve' ?
@@ -2273,6 +2335,7 @@ function pageNew() {
 		if (md) { md.onchange = function () { collect(); if (WZ.mode === 'push' && !WZ.token) { pushTok(); } render(); }; }
 		var pn = $('#m64-w-pnode');
 		if (pn) { pn.onchange = function () { collect(); render(); }; }
+		agentSrcBind(function () { collect(); render(); }); // Quelle der Agent-Dateien geaendert: Befehl neu
 		var t = $('#m64-w-test');
 		if (t) { t.onclick = function () { lock(t, testConn); }; }
 		snmpShow($('#m64-wizard'), 'w');
@@ -2326,11 +2389,11 @@ function pageNew() {
 	}
 	$('#m64-wizard').addEventListener('click', function (ev) {
 		var t = ev.target.closest('[data-kind]');
-		if (t && !t.classList.contains('disabled')) { WZ.kind = t.dataset.kind; WZ.test = null; render(); return; }
+		if (t && !t.classList.contains('disabled')) { WZ.kind = t.dataset.kind; WZ.test = null; WZ.hostkey = ''; render(); return; }
 		var fp = ev.target.closest('[data-fp-confirm]');
-		if (fp) { // Fingerabdruck bestaetigt: als Pin uebernehmen und erneut testen
+		if (fp) { // Fingerabdruck bestaetigt: als Pin (API) bzw. Hostschluessel (SSH mit Passwort) uebernehmen und erneut testen
 			collect();
-			WZ.pin = fp.dataset.fpConfirm;
+			if (kind() && kind().access === 'ssh') { WZ.hostkey = fp.dataset.fpConfirm; } else { WZ.pin = fp.dataset.fpConfirm; }
 			WZ.test = null;
 			render();
 			var tb = $('#m64-w-test');
@@ -2349,7 +2412,9 @@ function pageNew() {
 	// Adresse, Port oder Zugangsdaten geaendert: altes Testergebnis (Dienste, Fingerabdruck) verwerfen
 	$('#m64-wizard').addEventListener('input', function (ev) {
 		var w = ev.target.dataset && ev.target.dataset.w;
-		if (WZ.step !== 2 || !w || CONN.indexOf(w) < 0 || !WZ.test) { return; }
+		if (WZ.step !== 2 || !w || CONN.indexOf(w) < 0) { return; }
+		WZ.hostkey = ''; // ein bestaetigter Hostschluessel gilt nur fuer genau dieses Ziel
+		if (!WZ.test) { return; }
 		WZ.test = null;
 		WZ.adopt = {};
 		WZ.nodes = {};
@@ -2402,7 +2467,164 @@ function pageNew() {
 	render();
 }
 
-var PAGES = { overview: pageOverview, host: pageHost, problems: pageProblems, maint: pageMaint, rules: pageRules, notify: pageNotify, settings: pageSettings, 'new': pageNew };
+// ---------- Agent ----------
+// Quelle der Agent-Dateien fuer die Installationsbefehle: Internet (ipv64.net) oder diese Node (Hosts ohne Internet;
+// die Node liefert unter /monitor64/agent/ nur Dateien aus, deren Signatur sie geprueft hat). Die Wahl gilt fuer die
+// Seite Agent und den Assistenten und wird im Browser gemerkt.
+var AG = D.agent || {}, agentSrcMem = null;
+function agentSrc() {
+	if (agentSrcMem) { return agentSrcMem; }
+	var s = { mode: 'net', node: '' };
+	try { s.mode = localStorage.getItem('m64-agent-src') === 'node' ? 'node' : 'net'; s.node = localStorage.getItem('m64-agent-node') || ''; } catch (e) { s.mode = 'net'; }
+	if (!s.node) { s.node = location.origin; }
+	return s;
+}
+// agentNodeURL: Adresse der Node fuer den Befehl (nur Schema, Host und Port; sonst die Adresse dieser Seite).
+function agentNodeURL(v) {
+	v = String(v || '').trim().replace(/\/+$/, '');
+	if (v && !/^https?:\/\//i.test(v)) { v = 'http://' + v; }
+	return /^https?:\/\/[0-9A-Za-z.\-_:\[\]%]+$/i.test(v) ? v : location.origin;
+}
+function agentBase(s) { return s.mode === 'node' ? agentNodeURL(s.node) + '/monitor64/agent/' : (AG.internet || 'https://ipv64.net/node64/agent/'); }
+function agentHost(u) { var m = /^https?:\/\/([^\/]+)/i.exec(u || ''); return m ? m[1] : (u || ''); }
+// agentCmd: Installationsbefehl je System (linux, windows, freebsd). base = Ordner mit den Dateien (Schraegstrich am
+// Ende), push = token@node:port im Push-Betrieb. Skript und Dateien kommen immer aus demselben Ordner (--base).
+function agentCmd(os, base, key, push) {
+	if (os === 'windows') {
+		// TLS 1.2 einschalten, bevor irm laedt (Server 2016 bietet sonst nur TLS 1.0/1.1 an)
+		return '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; ' +
+			'& ([scriptblock]::Create((irm ' + base + 'install.ps1))) -Base "' + base + '" -Key "' + key + '"' + (push ? ' -Connect "' + push + '" -NoListen' : '');
+	}
+	var opts = ' \\\n  --base ' + base + ' \\\n  --key "' + key + '"' + (push ? ' \\\n  --connect \'' + push + '\' --no-listen' : '');
+	if (os === 'freebsd') { return 'fetch -o /tmp/install.sh ' + base + 'install.sh && sh /tmp/install.sh' + opts; }
+	return 'curl -fsSL ' + base + 'install.sh | sudo sh -s --' + opts;
+}
+// agentSrcHTML: Auswahl der Quelle mit Hinweis, was der Weg schuetzt und was nicht.
+function agentSrcHTML(s) {
+	var node = s.mode === 'node', base = agentBase(s), warn = false, hint;
+	if (!node) {
+		hint = L('agent.hint_net', { h: agentHost(base) });
+	} else if (/^http:/i.test(base)) {
+		hint = L('agent.hint_node_http');
+		warn = true;
+	} else {
+		hint = AG.http_port ? L('agent.hint_node_https', { u: 'http://' + location.hostname + ':' + AG.http_port }) : L('agent.hint_node_https_only');
+	}
+	return '<div class="row g-2 mt-1"><div class="col-sm-5"><label class="form-label small mb-1" for="m64-ag-srcmode">' + esc(L('agent.src_label')) + '</label><select class="form-select form-select-sm" id="m64-ag-srcmode">' +
+		'<option value="net"' + (node ? '' : ' selected') + '>' + esc(L('agent.src_net', { h: agentHost(AG.internet || 'ipv64.net') })) + '</option><option value="node"' + (node ? ' selected' : '') + '>' + esc(L('agent.src_node')) + '</option></select></div>' +
+		(node ? '<div class="col-sm-7"><label class="form-label small mb-1" for="m64-ag-srcnode">' + esc(L('agent.node_addr')) + '</label><input class="form-control form-control-sm" id="m64-ag-srcnode" maxlength="253" spellcheck="false" autocomplete="off" value="' + esc(agentNodeURL(s.node)) + '"></div>' : '') + '</div>' +
+		'<div class="small mt-1 ' + (warn ? 'text-warning-emphasis' : 'text-body-secondary') + '" id="m64-ag-srchint"><i class="bi ' + (warn ? 'bi-exclamation-triangle' : 'bi-info-circle') + '"></i> ' + esc(hint) + '</div>';
+}
+// agentSrcBind: Aenderung der Auswahl merken und cb aufrufen (zeichnet Befehl und Auswahl neu).
+function agentSrcBind(cb) {
+	var md = $('#m64-ag-srcmode'), nd = $('#m64-ag-srcnode');
+	function save() {
+		var cur = agentSrc();
+		agentSrcMem = { mode: md.value === 'node' ? 'node' : 'net', node: nd ? agentNodeURL(nd.value) : cur.node };
+		try { localStorage.setItem('m64-agent-src', agentSrcMem.mode); localStorage.setItem('m64-agent-node', agentSrcMem.node); } catch (e) { /* ohne Speicher gilt die Wahl nur fuer diese Ansicht */ }
+		cb();
+	}
+	if (md) { md.onchange = save; }
+	if (nd) { nd.onchange = save; }
+}
+// agentAccLine: Version und Update-Stand des Agents an seinem Zugang (Host-Seite).
+function agentAccLine(g) {
+	if (!g || (!g.version && !g.error && !g.busy)) { return ''; }
+	var t = g.version ? L('agent.acc_version', { v: g.version }) : L('agent.title');
+	if (g.busy) { t += ' · ' + L('agent.st_busy'); } else if (g.state === 'pending') { t += ' · ' + L('agent.st_pending', { l: g.latest || '' }); } else if (g.state === 'current') { t += ' · ' + L('agent.st_current'); }
+	return '<div class="small text-body-secondary" data-acc-agent><a class="text-reset" href="/monitor64/agent">' + esc(t) + '</a></div>' +
+		(g.error ? '<div class="small text-danger-emphasis">' + esc(L('agent.failed', { t: fmtTime(g.tried), e: tx(g.error) })) + '</div>' : '');
+}
+// Seite Agent: verfuegbare Version und Downloads von der Node, Installationsbefehl, Hosts mit ihrer Agent-Version.
+function pageAgent() {
+	var A = AG, osSel = $('#m64-ag-os'), refreshBtn = $('#m64-ag-refresh');
+	try { var os = localStorage.getItem('m64-agent-os'); if (os && osSel && /^(linux|windows|freebsd)$/.test(os)) { osSel.value = os; } } catch (e) { /* Standard: Linux */ }
+	function renderInstall() {
+		var src = agentSrc();
+		$('#m64-ag-cmd').textContent = agentCmd(osSel.value, agentBase(src), A.public_key || L('new.no_key'), '');
+		$('#m64-ag-src').innerHTML = agentSrcHTML(src);
+		agentSrcBind(renderInstall);
+	}
+	function renderSource() {
+		var s = A.source || {}, html;
+		if (!A.running) { setHTML($('#m64-ag-source'), '<span class="text-body-secondary">' + esc(L('not_running')) + '</span>'); return; }
+		html = A.version ? '<div class="fs-5 fw-semibold">' + esc(L('agent.version', { v: A.version })) + '</div>' + (toDate(A.date) ? '<div class="text-body-secondary">' + esc(L('agent.released', { d: fmtDay(toDate(A.date), true) })) + '</div>' : '') :
+			'<div class="text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(L('agent.none')) + '</div>';
+		html += '<div class="text-body-secondary mt-2">' + esc(toDate(s.ok) ? L('agent.src_ok', { t: fmtTime(s.ok), s: agentHost(s.source) }) : A.version ? L('agent.src_stored') : L('agent.src_never')) + '</div>';
+		if (s.error) { html += '<div class="text-danger-emphasis mt-1"><i class="bi bi-exclamation-triangle"></i> ' + esc(L('agent.src_err', { t: fmtTime(s.checked), e: s.error })) + '</div>'; }
+		html += '<div class="text-body-secondary mt-1">' + esc(L('agent.src_from', { s: (s.bases || []).map(agentHost).join(', ') })) + '</div>';
+		setHTML($('#m64-ag-source'), html);
+	}
+	function fileRow(f, cached) {
+		return '<tr><td><a href="/monitor64/agent/' + encodeURIComponent(f.name) + '" download>' + esc(f.name) + '</a>' + (cached ? ' <i class="bi bi-check-circle text-success" title="' + esc(L('agent.cached')) + '"></i>' : '') + '</td>' +
+			'<td class="text-end text-nowrap">' + esc(fmtBytes(f.size)) + '</td><td class="d-none d-sm-table-cell"><code title="' + esc(f.sha256 || '') + '">' + esc(String(f.sha256 || '').slice(0, 12)) + '…</code></td></tr>';
+	}
+	function renderFiles() {
+		var rows = (A.files || []).map(function (f) { return fileRow(f, f.cached); }).concat((A.scripts || []).map(function (f) { return fileRow(f, false); }));
+		if (rows.length) { rows.push('<tr><td colspan="3"><a href="/monitor64/agent/SHA256SUMS">SHA256SUMS</a> <span class="text-body-secondary">· ' + esc(L('agent.files_hint')) + '</span></td></tr>'); }
+		setHTML($('#m64-ag-files'), rows.join('') || '<tr><td colspan="3" class="text-body-secondary">' + esc(L('agent.none')) + '</td></tr>');
+	}
+	function stateHTML(h) {
+		var html;
+		if (h.busy) { html = '<span class="spinner-border spinner-border-sm"></span> ' + esc(L('agent.st_busy')); }
+		else if (h.state === 'current') { html = stBadge('ok', L('agent.st_current')); }
+		else if (h.state === 'pending') { html = stBadge('warn', L('agent.st_pending', { l: h.latest || '' })) + (toDate(h.next) && toDate(h.next) > new Date() ? ' <span class="small text-body-secondary">' + esc(L('agent.next_try', { t: fmtTime(h.next) })) + '</span>' : ''); }
+		else if (h.state === 'nofile') { html = stBadge('unknown', L('agent.st_nofile', { p: h.platform || '' })); }
+		else if (h.state === 'elsewhere') { html = '<span class="small text-body-secondary"><i class="bi bi-diagram-3"></i> ' + esc(L('agent.st_elsewhere', { n: h.node || '' })) + '</span>'; }
+		else if (h.state === 'off') { html = '<span class="small text-body-secondary">' + esc(L('host.acc_off')) + '</span>'; }
+		else { html = stBadge('unknown', L('agent.st_unknown')); }
+		return html + (h.error && !h.busy ? '<div class="small text-danger-emphasis mt-1">' + esc(L('agent.failed', { t: fmtTime(h.tried), e: tx(h.error) })) + '</div>' : '');
+	}
+	function renderHosts() {
+		var rows = (A.hosts || []).map(function (h) {
+			var can = !h.busy && A.version && (h.state === 'pending' || h.state === 'unknown');
+			return '<tr data-ag-host="' + esc(h.uid) + '"><td><a href="/monitor64/host/' + encodeURIComponent(h.uid) + '">' + esc(h.name) + '</a>' + (h.push ? ' <span class="badge text-bg-light">Push</span>' : '') + '</td>' +
+				'<td class="text-nowrap">' + esc(h.version || '–') + (h.platform ? ' <span class="small text-body-tertiary">' + esc(h.platform) + '</span>' : '') + '</td><td>' + stateHTML(h) + '</td>' +
+				'<td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" data-ag-auto' + (h.auto ? ' checked' : '') + ' aria-label="' + esc(L('f.autoupdate')) + '" title="' + esc(L('f.autoupdate')) + '"></div></td>' +
+				'<td class="text-end">' + (can ? '<button class="btn btn-sm btn-outline-primary text-nowrap" type="button" data-ag-update><i class="bi bi-arrow-up-circle"></i> ' + esc(L('agent.update_now')) + '</button>' : '') + '</td></tr>';
+		});
+		setHTML($('#m64-ag-hosts'), rows.join('') || '<tr><td colspan="5" class="small text-body-secondary">' + esc(L('agent.no_hosts')) + '</td></tr>');
+	}
+	function renderEvents() {
+		var rows = (A.events || []).map(function (e) {
+			return '<div class="d-flex align-items-center gap-2 px-3 py-2 border-top small"><i class="bi bi-arrow-up-circle text-success"></i><div class="me-auto"><span class="fw-semibold">' + esc(e.host || '–') + '</span> · ' + esc(tx(e.text || '')) +
+				' <span class="text-body-secondary">(' + esc(whoTxt(e.actor)) + ')</span></div><span class="text-body-secondary text-nowrap">' + esc(fmtTime(e.at)) + '</span></div>';
+		});
+		setHTML($('#m64-ag-events'), rows.join('') || '<div class="p-3 small text-body-secondary">' + esc(L('agent.no_events')) + '</div>');
+	}
+	function render() {
+		renderSource();
+		renderFiles();
+		renderHosts();
+		renderEvents();
+		var fp = $('#m64-ag-fp');
+		if (fp) { fp.textContent = A.fingerprint || ''; }
+	}
+	function take(r) { A = r; AG = r; render(); }
+	function load() { return api('GET', '/api/monitor64/agent').then(take); }
+	function refresh() { return lock(refreshBtn, function () { return api('POST', '/api/monitor64/agent/refresh').then(take); }); }
+	if (osSel) { osSel.onchange = function () { try { localStorage.setItem('m64-agent-os', osSel.value); } catch (e) { /* nur diese Ansicht */ } renderInstall(); }; }
+	if (refreshBtn) { refreshBtn.onclick = function () { refresh().then(function () { toast((A.source || {}).error ? L('agent.refresh_failed') : L('agent.refresh_ok'), !!(A.source || {}).error); }).catch(fail); }; }
+	root.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-ag-update]');
+		if (!b) { return; }
+		var uid = b.closest('[data-ag-host]').dataset.agHost;
+		lock(b, function () {
+			return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/agent/update').then(function () { toast(L('agent.update_started')); return load(); });
+		}).catch(fail);
+	});
+	root.addEventListener('change', function (ev) {
+		if (!ev.target.matches || !ev.target.matches('[data-ag-auto]')) { return; }
+		var uid = ev.target.closest('[data-ag-host]').dataset.agHost, on = ev.target.checked;
+		api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/agent', { autoupdate: on }).then(function () { toast(on ? L('agent.auto_on') : L('agent.auto_off')); return load(); }).catch(function (e) { ev.target.checked = !on; fail(e); });
+	});
+	renderInstall();
+	render();
+	if (A.running && A.due) { refresh().catch(failQuiet); } // erster Aufruf bzw. Stand aelter als 6 h: Verzeichnis holen
+	setInterval(function () { if (!document.hidden && A.running) { load().catch(failQuiet); } }, 5000);
+}
+
+var PAGES = { overview: pageOverview, host: pageHost, problems: pageProblems, maint: pageMaint, rules: pageRules, notify: pageNotify, settings: pageSettings, 'new': pageNew, agent: pageAgent };
 var fn = PAGES[root.dataset.m64Page];
 if (fn) { fn(); }
 })();

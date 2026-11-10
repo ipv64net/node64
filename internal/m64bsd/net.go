@@ -195,7 +195,11 @@ func ParseIfconfig(b []byte) []IfConfig {
 		key, val, _ := strings.Cut(t, " ")
 		switch key {
 		case "ether":
-			if f := strings.Fields(val); len(f) > 0 && macRE.MatchString(f[0]) {
+			if f := strings.Fields(val); len(f) > 0 && macRE.MatchString(f[0]) && cur.MAC == "" {
+				cur.MAC = f[0]
+			}
+		case "hwaddr": // Mitglied eines lagg: ether ist die Adresse des Verbunds, hwaddr die eigene
+			if f := strings.Fields(val); len(f) > 0 && macRE.MatchString(f[0]) && f[0] != "00:00:00:00:00:00" {
 				cur.MAC = f[0]
 			}
 		case "status:":

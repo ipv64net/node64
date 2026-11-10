@@ -110,6 +110,7 @@ type Module struct {
 	start  time.Time
 
 	cl clusterRT // Cluster (cluster*.go)
+	ad agentRT   // Agent-Verteilung und automatische Updates (agentdist*.go)
 }
 
 // New legt das Modul an (laeuft erst nach Start).
@@ -189,12 +190,16 @@ func (m *Module) Start(ctx context.Context) error {
 	m.cl.mu.Lock()
 	m.cl.started, m.cl.roles = m.cl.clock(), nil // nach dem Start: Stand der anderen abholen, Rollen neu bestimmen
 	m.cl.mu.Unlock()
-	m.wg.Add(4)
+	m.uptimeMark(ctx, time.Now()) // Laufzeit: lief das Modul laenger nicht, steht die Zeit als Luecke (Statusseiten, uptime.go)
+	m.wg.Add(5)
+	go func() { defer m.wg.Done(); m.uptimeLoop(life) }()
 	go func() { defer m.wg.Done(); sched.Run(life) }()
 	go func() { defer m.wg.Done(); m.housekeeping(life) }()
 	go func() { defer m.wg.Done(); m.trapLoop(life) }()
 	go func() { defer m.wg.Done(); m.clusterLoop(life) }()
 	m.kickTraps() // Trap-Empfaenger nur, wenn ein SNMP-Zugang Traps nutzt
+	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.agentLoop(life) }() // Agent-Dateien und automatische Updates (agentdist_update.go)
 
 	if n, _ := strconv.Atoi(os.Getenv(EnvLoadGen)); n > 0 {
 		lg := newLoadGen(n, sched, ser)

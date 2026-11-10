@@ -128,7 +128,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 	if a.Secret != "" {
 		s, err := m.box.Decrypt(a.Secret)
 		if err != nil {
-			return nil, errors.New("Zugangsdaten nicht lesbar")
+			return nil, errors.New(i18nText("monitor64.detail.secret_unreadable"))
 		}
 		secret = s
 	}
@@ -454,7 +454,7 @@ func (s *sshCollector) runSlow(args []string, doSmart, doUpd bool, done chan str
 func (p *slowPart) update(rep *m64proto.Report, errText, sec string, at time.Time) {
 	p.notes, p.errs = nil, nil
 	if rep == nil {
-		msg := "langsame Abfrage fehlgeschlagen: " + errText
+		msg := m64proto.Hint(m64proto.HintSlowFailed) + ": " + errText
 		if p.ok.IsZero() {
 			p.errs = append(p.errs, m64proto.SectionErr{Section: sec, Error: msg})
 		} else {

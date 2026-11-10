@@ -9,6 +9,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // Monitor64 auf den Statusseiten (Plan "Statusseiten (entschieden 2026-11-09)"): Healthchecks fragt ueber
@@ -25,6 +26,14 @@ import (
 // die des Dienstes und "nicht erreichbar" des Hosts. Wartungszeit zaehlt nicht (wie bei den Checks), ebenso die Zeit
 // vor dem Anlegen des Hosts und die Zeit, in der er pausiert war (weder gestoert noch beobachtet). Wiederkehrende
 // Fenster ohne Beginn wirken erst ab ihrer letzten Aenderung (nicht rueckwirkend auf die ganze Historie).
+//
+// Ebenso zaehlt die Zeit nicht, in der Monitor64 nicht lief (Modul aus, Node aus, Neustart ab 5 min; Luecken je Node
+// in m64_gaps, uptime.go): ein offenes Problem laeuft in dieser Zeit nicht als Stoerung weiter, und sie gilt nicht als
+// beobachtete gute Zeit. Im Cluster zaehlt fuer einen Host nur die Zeit, in der keine seiner Nodes lief (zustaendige,
+// bevorzugte und Ersatz-Nodes nach heutigem Stand - eine Ersatz-Node uebernimmt nach wenigen Minuten). Grenzen: die
+// Luecke einer anderen Node kommt erst an, wenn sie wieder laeuft (bis dahin zeigt der Host "unbekannt", die Balken
+// zaehlen die Zeit noch); frueher eingetragene Nodes des Hosts und eine Ersatz-Node, die mangels Mehrheit nicht
+// uebernehmen durfte, bleiben unberuecksichtigt.
 
 var _ module.StatusFeed = (*Module)(nil)
 
@@ -86,8 +95,18 @@ func validStatusUID(s string) bool {
 	return true
 }
 
-// statusSvcName ist der Name eines Dienstes in der Auswahl und auf der Seite.
-func statusSvcName(r *ServiceRow) string { return firstNonEmpty(r.Name, r.Key) }
+// statusSvcName ist der Name eines Dienstes in der Auswahl und auf der Seite, uebersetzt nach lang ("" = Deutsch;
+// erkannte Namen sind Token, siehe model.T).
+func (m *Module) statusSvcName(r *ServiceRow, lang string) string {
+	name := firstNonEmpty(r.Name, r.Key)
+	if m.g.Translate == nil {
+		return name
+	}
+	if lang == "" {
+		lang = "de"
+	}
+	return model.Translate(name, func(key string, args ...any) string { return m.g.Translate(lang, key, args...) })
+}
 
 // statusAddable: Dienste, die man einzeln aufnehmen kann (uebernommen, keine Zugaenge, Schluessel passt in die Quelle).
 func statusAddable(r *ServiceRow) bool {
@@ -118,10 +137,10 @@ func (m *Module) StatusTargets(ctx context.Context) ([]module.StatusTarget, erro
 		out = append(out, module.StatusTarget{Source: StatusSourceHost(h.UID), Host: h.Name, Group: h.Group, Paused: h.Paused})
 		list := byHost[h.UID]
 		sort.SliceStable(list, func(i, j int) bool {
-			return strings.ToLower(statusSvcName(list[i])) < strings.ToLower(statusSvcName(list[j]))
+			return strings.ToLower(m.statusSvcName(list[i], "")) < strings.ToLower(m.statusSvcName(list[j], ""))
 		})
 		for _, r := range list {
-			out = append(out, module.StatusTarget{Source: StatusSourceService(h.UID, r.Key), Host: h.Name, Name: statusSvcName(r), Group: h.Group, Paused: h.Paused})
+			out = append(out, module.StatusTarget{Source: StatusSourceService(h.UID, r.Key), Host: h.Name, Name: m.statusSvcName(r, ""), Group: h.Group, Paused: h.Paused})
 		}
 	}
 	return out, nil
@@ -174,6 +193,23 @@ func spanSubtract(a, b []tspan) []tspan {
 		}
 		if cur.to.After(cur.from) {
 			out = append(out, cur)
+		}
+	}
+	return out
+}
+
+// spanIntersect: Zeitraeume, die in a und in b liegen (beide verschmolzen und sortiert).
+func spanIntersect(a, b []tspan) []tspan {
+	var out []tspan
+	for i, j := 0, 0; i < len(a) && j < len(b); {
+		lo, hi := statusLater(a[i].from, b[j].from), statusEarlier(a[i].to, b[j].to)
+		if hi.After(lo) {
+			out = append(out, tspan{lo, hi})
+		}
+		if a[i].to.Before(b[j].to) {
+			i++
+		} else {
+			j++
 		}
 	}
 	return out
@@ -518,11 +554,57 @@ func statusNoState(v *HostView) bool {
 	return v.View == eval.ViewUnknown && len(v.Services) == 0
 }
 
-// statusHostData ist, was alle Eintraege eines Hosts teilen (Wartungen, Pausen).
+// statusHostData ist, was alle Eintraege eines Hosts teilen (Wartungen, Pausen, Laufzeit-Luecken).
 type statusHostData struct {
 	maint []tspan
-	off   []tspan // Wartung und Pause (zaehlen nicht als beobachtet)
+	off   []tspan // Wartung, Pause und Zeiten ohne laufendes Monitor64 (zaehlen nicht als beobachtet)
 	list  []module.StatusMaint
+}
+
+// statusGaps liefert je Node die Zeitraeume seit from, in denen Monitor64 dort nicht lief (m64_gaps, verschmolzen).
+func (m *Module) statusGaps(ctx context.Context, from, now time.Time) (map[string][]tspan, error) {
+	rows, err := m.st.Reader().QueryContext(ctx, `SELECT node_id, from_at, to_at FROM m64_gaps WHERE to_at >= ? AND from_at <= ?`, ts(from), ts(now))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]tspan{}
+	for rows.Next() {
+		var node, a, b string
+		if err := rows.Scan(&node, &a, &b); err != nil {
+			return nil, err
+		}
+		if s := (tspan{parseTS(a), statusEarlier(parseTS(b), now)}); !s.from.IsZero() && s.to.After(s.from) {
+			out[node] = append(out[node], s)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for node, spans := range out {
+		out[node] = spanUnion(spans)
+	}
+	return out, nil
+}
+
+// statusHostGaps: Zeitraeume, in denen keine Node den Host ueberwachen konnte - Monitor64 lief auf keiner seiner
+// Nodes (zustaendige, bevorzugte, Ersatz-Nodes). Ohne Cluster ist das die Luecke dieser Node.
+func statusHostGaps(h *Host, self string, gaps map[string][]tspan) []tspan {
+	if len(gaps) == 0 {
+		return nil
+	}
+	nodes := candidatesOf(h, self)
+	if o := ownerOf(h, self); !slices.Contains(nodes, o) {
+		nodes = append(nodes, o)
+	}
+	out := gaps[nodes[0]]
+	for _, n := range nodes[1:] {
+		if len(out) == 0 {
+			break
+		}
+		out = spanIntersect(out, gaps[n])
+	}
+	return out
 }
 
 // statusLoad laedt nur die gefragten Hosts und Dienste (jeder Abruf einer oeffentlichen Seite fragt hier an).
@@ -729,12 +811,17 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 	loc := m.location()
 	probs := map[string][]*statusProblem{}
 	pauses := map[string][]tspan{}
+	gaps := map[string][]tspan{}
+	self := m.clusterSelf()
 	histMaint := cfg.maint
 	if !from.IsZero() && from.Before(now) {
 		if probs, err = m.statusProblems(ctx, hostUIDs, from, now); err != nil {
 			return nil, err
 		}
 		if pauses, err = m.statusPauses(ctx, hosts, now); err != nil {
+			return nil, err
+		}
+		if gaps, err = m.statusGaps(ctx, from, now); err != nil {
 			return nil, err
 		}
 		if histMaint, err = m.statusHistoryMaint(ctx, cfg.maint, now); err != nil {
@@ -765,7 +852,7 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 			}
 		}
 		d.maint = spanUnion(spans)
-		d.off = spanUnion(append(slices.Clone(d.maint), pauses[h.UID]...))
+		d.off = spanUnion(append(append(slices.Clone(d.maint), pauses[h.UID]...), statusHostGaps(h, self, gaps)...))
 		hd[h.UID] = d
 		return d
 	}
@@ -781,7 +868,7 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 			if row == nil {
 				continue
 			}
-			src.Name = h.Name + " – " + statusSvcName(row)
+			src.Name = h.Name + " – " + m.statusSvcName(row, q.Lang)
 		}
 		inMaint, _ := eval.InMaintenance(cfg.maint, now, hostRef(h), loc)
 		v := m.statusHostView(h.UID)
@@ -826,7 +913,7 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 			}
 		}
 		created := h.CreatedAt
-		skip := spanUnion(append([]tspan{{time.Time{}, created}}, d.off...)) // Wartung, Pause und vor dem Anlegen zaehlen nicht
+		skip := spanUnion(append([]tspan{{time.Time{}, created}}, d.off...)) // Wartung, Pause, Zeit ohne Monitor64 und vor dem Anlegen zaehlen nicht
 		downAll := spanSubtract(spanUnion(downs), skip)
 		warnAll := spanSubtract(spanSubtract(spanUnion(warns), downAll), skip)
 		unreach = spanUnion(unreach)
@@ -850,7 +937,7 @@ func (m *Module) StatusSources(ctx context.Context, q module.StatusQuery) (map[s
 			src.Bars = append(src.Bars, bar)
 		}
 
-		// Stoerungen (gestoerte Zeitraeume ohne Wartung und Pause), neueste zuerst
+		// Stoerungen (gestoerte Zeitraeume ohne Wartung, Pause und Zeit ohne Monitor64), neueste zuerst
 		if !q.History.IsZero() {
 			for i := len(downAll) - 1; i >= 0 && len(src.Incidents) < statusMaxIncidents; i-- {
 				s := downAll[i]

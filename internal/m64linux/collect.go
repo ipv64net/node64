@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,8 +32,10 @@ var (
 	statfsLimit    = timeoutStatfs
 )
 
-// NoteReading steht in Notes (SMART, Updates), solange der erste Lauf im Hintergrund noch nicht fertig ist.
-const NoteReading = "wird gelesen"
+// NoteReading steht in Notes (SMART, Updates), solange der erste Lauf im Hintergrund noch nicht fertig ist. Hinweise
+// und Fehlerteile, die der Sammler selbst formuliert, sind Codes (m64proto.Hint): die Node zeigt sie in der Sprache
+// des Betrachters.
+const NoteReading = m64proto.HintReading
 
 // ExecResult ist das Ergebnis eines Programmaufrufs.
 type ExecResult struct {
@@ -46,7 +49,7 @@ type ExecResult struct {
 type ExecFunc func(ctx context.Context, name string, args ...string) (ExecResult, error)
 
 // ErrNotFound: Programm nicht vorhanden.
-var ErrNotFound = errors.New("Programm fehlt")
+var ErrNotFound = errors.New(m64proto.HintNotFound)
 
 // Options steuern Collect.
 type Options struct {
@@ -286,7 +289,7 @@ func (c *collector) run(ctx context.Context, timeout time.Duration, name string,
 
 // execErr beschreibt einen fehlgeschlagenen Aufruf (Exit-Code und erste stderr-Zeile).
 func execErr(name string, res ExecResult) error {
-	msg := fmt.Sprintf("%s: Exit-Code %d", name, res.Code)
+	msg := name + ": " + m64proto.Hint(m64proto.HintExitCode, strconv.Itoa(res.Code))
 	if l := lines(res.Stderr); len(l) > 0 {
 		msg += ": " + l[0]
 	}
@@ -340,7 +343,7 @@ func (c *collector) statfsTimeout(ctx context.Context, st func(string) (StatFS, 
 		}()
 	} else if since := time.Since(call.start); since >= statfsLimit {
 		ca.mu.Unlock()
-		return StatFS{}, fmt.Errorf("statfs %s: haengt seit %s", p, since.Round(time.Second))
+		return StatFS{}, fmt.Errorf("statfs %s: %s", p, m64proto.Hint(m64proto.HintHung, since.Round(time.Second).String()))
 	}
 	ca.mu.Unlock()
 	t := time.NewTimer(statfsLimit - time.Since(call.start))
@@ -349,7 +352,7 @@ func (c *collector) statfsTimeout(ctx context.Context, st func(string) (StatFS, 
 	case <-call.done:
 		return call.res, call.err
 	case <-t.C:
-		return StatFS{}, fmt.Errorf("statfs %s: Zeitlimit", p)
+		return StatFS{}, fmt.Errorf("statfs %s: %s", p, m64proto.HintTimeout)
 	case <-ctx.Done():
 		return StatFS{}, ctx.Err()
 	}
@@ -383,7 +386,7 @@ func (c *collector) collectZFS(ctx context.Context, r *m64proto.Report) {
 
 func (c *collector) collectSystemd(ctx context.Context, r *m64proto.Report) {
 	if !c.src.Exists("/run/systemd/system") || !c.has("systemctl") {
-		addNote(r, m64proto.SecSystemd, "kein systemd")
+		addNote(r, m64proto.SecSystemd, m64proto.HintNoSystemd)
 		return
 	}
 	failed, err := c.run(ctx, timeoutShort, "systemctl", "--failed", "--no-legend", "--plain")
@@ -430,12 +433,12 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 		out.errs = append(out.errs, m64proto.SectionErr{Section: m64proto.SecSmart, Error: errText(err)})
 	}
 	if !c.has("smartctl") {
-		note("smartctl fehlt")
+		note(m64proto.Hint(m64proto.HintMissing, "smartctl"))
 		return out
 	}
 	res, err := c.run(ctx, timeoutSmart, "smartctl", "--scan-open", "-j")
 	if errors.Is(err, ErrNotFound) {
-		note("smartctl fehlt")
+		note(m64proto.Hint(m64proto.HintMissing, "smartctl"))
 		return out
 	}
 	if err != nil {
@@ -448,7 +451,7 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 		return out
 	}
 	if len(devs) == 0 {
-		note("keine Platten mit SMART gefunden")
+		note(m64proto.HintNoSmartDisks)
 		return out
 	}
 	out.smart = []m64proto.SMART{}
@@ -504,7 +507,7 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	}
 	mgr := detectMgr(c.has)
 	if mgr == "" {
-		out.notes = append(out.notes, m64proto.SectionNote{Section: m64proto.SecUpdates, Note: "kein Paketverwalter erkannt"})
+		out.notes = append(out.notes, m64proto.SectionNote{Section: m64proto.SecUpdates, Note: m64proto.HintNoPkgManager})
 		return out
 	}
 	// ok sagt, welche Exit-Codes eine gueltige Liste bedeuten
@@ -560,7 +563,7 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 			}
 		}
 		if !c.has("apt-get") {
-			fail(errors.New("apt-check: keine Auswertung moeglich"))
+			fail(errors.New("apt-check: " + m64proto.HintNotParsable))
 			return out
 		}
 		mgr, list = mgrApt, aptCall // apt-check kaputt: apt-get
@@ -575,7 +578,7 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 		if b, err := runCall(sec); err == nil {
 			sb = b
 		} else {
-			out.notes = append(out.notes, m64proto.SectionNote{Section: m64proto.SecUpdates, Note: clip("Sicherheitsupdates unbekannt: " + errText(err))})
+			out.notes = append(out.notes, m64proto.SectionNote{Section: m64proto.SecUpdates, Note: clip(m64proto.HintSecUnknown + ": " + errText(err))})
 		}
 	}
 	u, err := ParseUpdates(mgr, lb, sb)

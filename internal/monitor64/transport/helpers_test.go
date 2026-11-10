@@ -84,6 +84,9 @@ func (p *proxy) dropAll() {
 	p.conns = nil
 }
 
+// fakePwTries zaehlt die Passwort-Anmeldungen, die bei einem fakeSSH ankamen.
+var fakePwTries atomic.Int32
+
 // fakeSSH ist ein kleiner SSH-Server fuer Tests des SSHClient und der Groessengrenzen.
 type fakeSSH struct {
 	addr string
@@ -106,6 +109,7 @@ func startFakeSSH(t *testing.T, allowed ssh.PublicKey, password string, h fakeHa
 	}
 	if password != "" {
 		cfg.PasswordCallback = func(_ ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
+			fakePwTries.Add(1)
 			if string(pw) == password {
 				return nil, nil
 			}

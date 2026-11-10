@@ -1,0 +1,54 @@
+{{define "content"}}
+{{template "m64-top" .}}
+<div id="m64" data-m64-page="agent">
+	<div class="d-flex align-items-center mb-3"><h1 class="h3 mb-0 me-auto">{{.T "monitor64.agent.title"}}</h1><button class="btn btn-outline-secondary btn-sm" type="button" id="m64-ag-refresh"><i class="bi bi-arrow-clockwise"></i> {{.T "monitor64.agent.refresh"}}</button></div>
+	<p class="text-body-secondary small">{{.T "monitor64.agent.intro"}}</p>
+	<div class="row g-3">
+		<div class="col-xl-7">
+			<div class="card mb-3" id="m64-ag-install">
+				<div class="card-header fw-semibold">{{.T "monitor64.agent.install"}}</div>
+				<div class="card-body">
+					<div class="row g-2 mb-3">
+						<div class="col-sm-5"><label class="form-label small mb-1" for="m64-ag-os">{{.T "monitor64.agent.system"}}</label>
+							<select class="form-select form-select-sm" id="m64-ag-os"><option value="linux">Linux</option><option value="windows">Windows</option><option value="freebsd">FreeBSD</option></select></div>
+					</div>
+					<div class="form-label d-flex align-items-center">{{.T "monitor64.agent.cmd"}}<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-ag-cmd"><i class="bi bi-clipboard"></i> {{.T "monitor64.copy"}}</button></div>
+					<div class="cmd" id="m64-ag-cmd"></div>
+					<div id="m64-ag-src"></div>
+					<div class="small mt-3">{{.T "monitor64.agent.after"}} <a href="/monitor64/new">{{.T "monitor64.agent.to_wizard"}}</a></div>
+				</div>
+			</div>
+			<div class="card mb-3" id="m64-ag-key">
+				<div class="card-header fw-semibold d-flex align-items-center">{{.T "monitor64.agent.node_key"}}{{if .Data.PublicKey}}<button class="btn btn-sm btn-link ms-auto p-0 fw-normal" type="button" data-copy-target="#m64-ag-pubkey"><i class="bi bi-clipboard"></i> {{.T "monitor64.copy"}}</button>{{end}}</div>
+				<div class="card-body small">
+					{{if .Data.PublicKey}}<div class="cmd" id="m64-ag-pubkey">{{.Data.PublicKey}}</div>{{end}}
+					<div class="text-body-secondary mt-2">{{.T "monitor64.agent.node_key_hint"}} <code id="m64-ag-fp"></code></div>
+				</div>
+			</div>
+		</div>
+		<div class="col-xl-5">
+			<div class="card mb-3" id="m64-ag-version">
+				<div class="card-header fw-semibold">{{.T "monitor64.agent.available"}}</div>
+				<div class="card-body small" id="m64-ag-source"></div>
+				<div class="table-responsive"><table class="table table-sm mb-0 align-middle small" data-nosort>
+					<thead><tr><th>{{.T "monitor64.agent.col_file"}}</th><th class="text-end">{{.T "monitor64.agent.col_size"}}</th><th class="d-none d-sm-table-cell">SHA-256</th></tr></thead>
+					<tbody id="m64-ag-files"></tbody>
+				</table></div>
+			</div>
+		</div>
+	</div>
+	<div class="card mb-3">
+		<div class="card-header fw-semibold">{{.T "monitor64.agent.hosts"}}</div>
+		<div class="table-responsive"><table class="table mb-0 align-middle" data-nosort>
+			<thead><tr><th>{{.T "monitor64.agent.col_host"}}</th><th>{{.T "monitor64.agent.col_version"}}</th><th>{{.T "monitor64.col.status"}}</th><th>{{.T "monitor64.agent.col_auto"}}</th><th></th></tr></thead>
+			<tbody id="m64-ag-hosts"></tbody>
+		</table></div>
+	</div>
+	<div class="card">
+		<div class="card-header fw-semibold">{{.T "monitor64.agent.history"}}</div>
+		<div id="m64-ag-events"></div>
+	</div>
+</div>
+{{template "m64-bottom" .}}
+{{end}}
+{{define "scripts"}}{{template "m64-scripts" .}}{{end}}

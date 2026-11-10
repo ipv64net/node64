@@ -14,6 +14,9 @@ import (
 // Abbildung eines Berichts (Agent bzw. SSH ohne Agent) auf Dienste und Messgroessen (Plan "Kernmodell").
 // Zaehler werden hier in Raten umgerechnet (aus dem vorigen Bericht); Ueberlauf bzw. Neustart des Hosts
 // (Zaehler kleiner als vorher) ergibt fuer diese Runde keinen Wert statt eines Sprungs.
+//
+// Namen und Texte sind uebersetzbar (model.T); Eigennamen vom Host stehen als Parameter im Token oder laufen durch
+// model.Raw, Hinweise des Agents durch hostText.
 
 // Typen aus dem Paket model (gemeinsam mit den API-Sammlern).
 type (
@@ -43,6 +46,10 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 	if cur == nil {
 		return nil
 	}
+	cur.Localize(hostText) // Abschnittsfehler und Hinweise (zeigt der Zugang)
+	for i := range cur.Errors {
+		cur.Errors[i].Section = model.Raw(cur.Errors[i].Section) // der Name des Abschnitts steht vor dem Fehlertext
+	}
 	dt := 0.0
 	if prev != nil && cur.Time > prev.Time {
 		dt = float64(cur.Time-prev.Time) / 1000
@@ -64,7 +71,7 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		used := float64(m.Total-min(m.Available, m.Total)) / float64(m.Total) * 100
 		out = append(out, Service{Key: "mem", Name: "RAM", Kind: "mem", Default: true,
 			Metrics: []Metric{{Name: "used", Value: round2(used), Unit: "%", Rule: RuleMem, Max: float64(m.Total)}, {Name: "avail", Value: float64(m.Available), Unit: "B"}},
-			Text:    fmt.Sprintf("%s von %s frei", bytesText(m.Available), bytesText(m.Total))})
+			Text:    model.T("monitor64.txt.free_of", "free", bytesText(m.Available), "total", bytesText(m.Total))})
 		if m.SwapTotal > 0 {
 			su := float64(m.SwapTotal-min(m.SwapFree, m.SwapTotal)) / float64(m.SwapTotal) * 100
 			out = append(out, Service{Key: "swap", Name: "Swap", Kind: "swap", Default: true,
@@ -86,34 +93,35 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		out = append(out, mapZFS(z))
 	}
 	for _, t := range cur.Temps {
-		out = append(out, Service{Key: "temp:" + t.Name, Name: "Temperatur " + firstNonEmpty(t.Label, t.Name), Kind: "temp", Default: true,
+		out = append(out, Service{Key: "temp:" + t.Name, Name: model.T("monitor64.svc.temp", "name", firstNonEmpty(t.Label, t.Name)), Kind: "temp", Default: true,
 			Metrics: []Metric{{Name: "temp", Value: round2(t.C), Unit: "°C", Rule: RuleTemp}}})
 	}
 	if s := cur.Systemd; s != nil {
-		sv := Service{Key: "systemd", Name: "systemd-Dienste", Kind: "systemd", Default: true,
+		sv := Service{Key: "systemd", Name: model.T("monitor64.svc.systemd"), Kind: "systemd", Default: true,
 			Metrics: []Metric{{Name: "failed", Value: float64(len(s.Failed))}}}
 		if len(s.Failed) > 0 {
-			sv.Facts = append(sv.Facts, Fact{Code: "systemd_failed", Text: strings.Join(limitList(s.Failed, 5), ", ")})
-			sv.Text = fmt.Sprintf("%d fehlgeschlagen: %s", len(s.Failed), strings.Join(limitList(s.Failed, 5), ", "))
+			list := strings.Join(limitList(s.Failed, 5), ", ")
+			sv.Facts = append(sv.Facts, Fact{Code: "systemd_failed", Text: model.Raw(list)})
+			sv.Text = model.T("monitor64.txt.failed_list", "n", len(s.Failed), "list", list)
 		} else {
-			sv.Text = "keine fehlgeschlagen"
+			sv.Text = model.T("monitor64.txt.none_failed")
 		}
 		out = append(out, sv)
 	}
 	if u := cur.Updates; u != nil {
 		sv := Service{Key: "updates", Name: "Updates", Kind: "updates", Default: true,
 			Metrics: []Metric{{Name: "pending", Value: float64(u.Pending)}, {Name: "security", Value: float64(u.Security)}},
-			Text:    fmt.Sprintf("%d verfügbar, %d Sicherheitsupdates", u.Pending, u.Security)}
+			Text:    model.T("monitor64.txt.updates", "n", u.Pending, "sec", u.Security)}
 		if u.Security > 0 {
-			sv.Facts = append(sv.Facts, Fact{Code: "updates_security", Text: fmt.Sprintf("%d Sicherheitsupdates", u.Security)})
+			sv.Facts = append(sv.Facts, Fact{Code: "updates_security", Text: model.T("monitor64.txt.security_updates", "n", u.Security)})
 		}
 		out = append(out, sv)
 	}
 	if r := cur.Reboot; r != nil {
-		sv := Service{Key: "reboot", Name: "Neustart nötig", Kind: "reboot", Default: true, Text: "nein"}
+		sv := Service{Key: "reboot", Name: model.T("monitor64.svc.reboot"), Kind: "reboot", Default: true, Text: model.T("monitor64.txt.no")}
 		if r.Required {
-			sv.Text = "ja"
-			sv.Facts = append(sv.Facts, Fact{Code: "reboot_required", Text: strings.Join(limitList(r.Packages, 5), ", ")})
+			sv.Text = model.T("monitor64.txt.yes")
+			sv.Facts = append(sv.Facts, Fact{Code: "reboot_required", Text: hostText(strings.Join(limitList(r.Packages, 5), ", "))})
 		}
 		out = append(out, sv)
 	}
@@ -139,7 +147,7 @@ func mapCPU(prev, cur *m64proto.CPU) (Service, bool) {
 	}
 	s := Service{Key: "cpu", Name: "CPU", Kind: "cpu", Default: true}
 	if cur.Cores > 0 {
-		s.Text = fmt.Sprintf("%d Kerne", cur.Cores)
+		s.Text = model.T("monitor64.txt.cores", "n", cur.Cores)
 	}
 	if cur.Util != nil { // fertiger Wert (Windows, SNMP)
 		s.Metrics = append(s.Metrics, Metric{Name: "util", Value: round2(*cur.Util), Unit: "%", Rule: RuleCPU})
@@ -169,13 +177,13 @@ func mapCPU(prev, cur *m64proto.CPU) (Service, bool) {
 }
 
 func mapFS(f m64proto.FS) Service {
-	s := Service{Key: "fs:" + f.Mount, Name: "Dateisystem " + f.Mount, Kind: "fs", Default: true}
+	s := Service{Key: "fs:" + f.Mount, Name: model.T("monitor64.svc.fs", "name", f.Mount), Kind: "fs", Default: true}
 	// ZFS-Datasets von Gaesten (Proxmox subvol-/vm-) nicht von selbst anbieten – die Gaeste sind eigene Dienste
 	if f.Type == "zfs" && (strings.Contains(f.Mount, "/subvol-") || strings.Contains(f.Mount, "/vm-") || strings.Contains(f.Mount, "/basevol-")) {
 		s.Default = false
 	}
 	if len(f.Mount) == 2 && f.Mount[1] == ':' { // Windows-Laufwerk
-		s.Name = "Laufwerk " + f.Mount
+		s.Name = model.T("monitor64.svc.drive", "name", f.Mount)
 	}
 	if f.Total > 0 {
 		used := float64(f.Used) / float64(f.Used+f.Avail) * 100 // wie df: Anteil am fuer Benutzer Nutzbaren
@@ -185,13 +193,13 @@ func mapFS(f m64proto.FS) Service {
 		s.Metrics = append(s.Metrics,
 			Metric{Name: "used", Value: round2(used), Unit: "%", Rule: RuleFS, Max: float64(f.Total)},
 			Metric{Name: "free", Value: float64(f.Avail), Unit: "B", Max: float64(f.Total)})
-		s.Text = fmt.Sprintf("%s von %s frei", bytesText(f.Avail), bytesText(f.Total))
+		s.Text = model.T("monitor64.txt.free_of", "free", bytesText(f.Avail), "total", bytesText(f.Total))
 	}
 	if f.InodesTotal > 0 {
 		s.Metrics = append(s.Metrics, Metric{Name: "inodes", Value: round2(float64(f.InodesTotal-min(f.InodesFree, f.InodesTotal)) / float64(f.InodesTotal) * 100), Unit: "%"})
 	}
 	if f.ReadOnly {
-		s.Text = strings.TrimSpace(s.Text + " · nur lesbar")
+		s.Text = model.Join(s.Text, model.T("monitor64.txt.readonly"))
 	}
 	return s
 }
@@ -210,11 +218,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 		key := "disk:" + firstNonEmpty(serial, name)
 		a, ok := byKey[key]
 		if !ok {
-			label := name
-			if model != "" {
-				label = name + " (" + model + ")"
-			}
-			a = &acc{s: Service{Key: key, Name: label, Kind: "disk", Default: true}, sortBy: name}
+			a = &acc{s: Service{Key: key, Name: diskName(name, model), Kind: "disk", Default: true}, sortBy: name}
 			byKey[key] = a
 			order = append(order, key)
 		}
@@ -292,7 +296,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 		}
 		a := get(sm.Serial, name, sm.Model)
 		if sm.Model != "" && !strings.Contains(a.s.Name, "(") {
-			a.s.Name = name + " (" + sm.Model + ")"
+			a.s.Name = diskName(name, sm.Model)
 		}
 		a.smart = sm
 	}
@@ -309,14 +313,14 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			sm := a.smart
 			var parts []string
 			if sm.Error != "" {
-				parts = append(parts, "SMART nicht lesbar")
-				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_unreadable", Text: sm.Error})
+				parts = append(parts, model.T("monitor64.txt.smart_unreadable"))
+				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_unreadable", Text: hostText(sm.Error)})
 			} else if sm.Passed != nil {
 				if *sm.Passed {
 					parts = append(parts, "SMART ok")
 				} else {
 					parts = append(parts, "SMART FAILED")
-					a.s.Facts = append(a.s.Facts, Fact{Code: "smart_failed", Text: "Gesamtstatus FAILED"})
+					a.s.Facts = append(a.s.Facts, Fact{Code: "smart_failed", Text: model.T("monitor64.txt.smart_overall_failed")})
 				}
 			}
 			if sm.TempC != nil {
@@ -329,7 +333,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			}
 			if sm.WearPercentUsed != nil {
 				a.s.Metrics = append(a.s.Metrics, Metric{Name: "wear", Value: round2(*sm.WearPercentUsed), Unit: "%", Rule: RuleWear})
-				parts = append(parts, fmt.Sprintf("Verschleiß %.0f %%", *sm.WearPercentUsed))
+				parts = append(parts, model.T("monitor64.txt.wear", "v", fmt.Sprintf("%.0f", *sm.WearPercentUsed)))
 			}
 			sectors := uint64(0)
 			for _, v := range []*uint64{sm.Reallocated, sm.Pending, sm.Uncorrectable} {
@@ -352,14 +356,14 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 				if p, ok := prevSmart[firstNonEmpty(sm.Serial, sm.Device)]; ok && p.Pending != nil && sm.Pending != nil && *p.Pending < *sm.Pending {
 					code = "smart_sectors_rising" // nur steigende ausstehende Sektoren (Plan)
 				}
-				a.s.Facts = append(a.s.Facts, Fact{Code: code, Text: fmt.Sprintf("%d umgelegte/ausstehende Sektoren", sectors)})
-				parts = append(parts, fmt.Sprintf("%d Sektoren", sectors))
+				a.s.Facts = append(a.s.Facts, Fact{Code: code, Text: model.T("monitor64.txt.sectors_bad", "n", sectors)})
+				parts = append(parts, model.T("monitor64.txt.sectors", "n", sectors))
 			}
 			if sm.MediaErrors != nil && *sm.MediaErrors > 0 {
-				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_sectors", Text: fmt.Sprintf("%d Medienfehler", *sm.MediaErrors)})
+				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_sectors", Text: model.T("monitor64.txt.media_errors", "n", *sm.MediaErrors)})
 			}
 			if sm.CriticalWarning != nil && *sm.CriticalWarning != 0 {
-				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_failed", Text: fmt.Sprintf("NVMe-Warnung 0x%x", *sm.CriticalWarning)})
+				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_failed", Text: model.T("monitor64.txt.nvme_warning", "v", fmt.Sprintf("0x%x", *sm.CriticalWarning))})
 			}
 			a.s.Text = strings.Join(parts, " · ")
 		}
@@ -391,9 +395,9 @@ func mapNet(prev, cur *m64proto.Report, dt float64) []Service {
 		if n.Kind == "virtual" || n.Name == "lo" {
 			continue
 		}
-		s := Service{Key: "if:" + n.Name, Name: n.Name, Kind: "if", Default: n.Up}
+		s := Service{Key: "if:" + n.Name, Name: model.Raw(n.Name), Kind: "if", Default: n.Up}
 		if n.SpeedMbit > 0 {
-			s.Name = fmt.Sprintf("%s (%s)", n.Name, speedText(n.SpeedMbit))
+			s.Name = fmt.Sprintf("%s (%s)", model.Raw(n.Name), speedText(n.SpeedMbit))
 		}
 		state := "down"
 		if n.Up {
@@ -426,7 +430,7 @@ func mapNet(prev, cur *m64proto.Report, dt float64) []Service {
 					s.Metrics = append(s.Metrics, Metric{Name: "drops", Value: float64(rd)})
 				}
 				if re+te > 0 {
-					s.Text = strings.TrimSpace(s.Text + fmt.Sprintf(" · %d Fehler", re+te))
+					s.Text = model.Join(s.Text, model.T("monitor64.txt.errors_n", "n", re+te))
 				}
 			}
 		}
@@ -441,7 +445,7 @@ func mapNet(prev, cur *m64proto.Report, dt float64) []Service {
 }
 
 func mapBond(b m64proto.Bond) Service {
-	s := Service{Key: "bond:" + b.Name, Name: b.Name, Kind: "bond", Default: true}
+	s := Service{Key: "bond:" + b.Name, Name: model.Raw(b.Name), Kind: "bond", Default: true}
 	up := 0
 	var down []string
 	for _, m := range b.Members {
@@ -453,13 +457,14 @@ func mapBond(b m64proto.Bond) Service {
 	}
 	lacp := strings.Contains(strings.ToLower(b.Mode), "802.3ad")
 	if lacp {
-		s.Name = b.Name + " (LACP)"
+		s.Name = model.Raw(b.Name) + " (LACP)"
 	}
 	s.Metrics = []Metric{{Name: "members_up", Value: float64(up)}, {Name: "members", Value: float64(len(b.Members))}}
-	s.Text = fmt.Sprintf("%d von %d aktiv", up, len(b.Members))
+	s.Text = model.T("monitor64.txt.active_of", "n", up, "total", len(b.Members))
 	if len(down) > 0 {
-		s.Facts = append(s.Facts, Fact{Code: "bond_member_down", Text: strings.Join(down, ", ") + " down"})
-		s.Text += " – " + strings.Join(down, ", ") + " down"
+		list := hostText(strings.Join(down, ", ")) // Namen vom Host; ohne Namen "Mitglied n" (Prometheus)
+		s.Facts = append(s.Facts, Fact{Code: "bond_member_down", Text: list + " down"})
+		s.Text += " – " + list + " down"
 	}
 	if lacp && b.AggregateID > 0 {
 		var other []string
@@ -469,17 +474,17 @@ func mapBond(b m64proto.Bond) Service {
 			}
 		}
 		if len(other) > 0 {
-			s.Facts = append(s.Facts, Fact{Code: "lacp_mismatch", Text: strings.Join(other, ", ") + " in anderem Aggregator"})
-			s.Text += " – LACP passt nicht (" + strings.Join(other, ", ") + ")"
+			s.Facts = append(s.Facts, Fact{Code: "lacp_mismatch", Text: model.T("monitor64.txt.lacp_other_agg", "list", model.Sub(hostText(strings.Join(other, ", "))))})
+			s.Text += " – " + model.T("monitor64.txt.lacp_mismatch", "list", model.Sub(hostText(strings.Join(other, ", "))))
 		}
 	}
 	return s
 }
 
 func mapRAID(r m64proto.RAID) Service {
-	s := Service{Key: "raid:" + r.Name, Name: "RAID " + r.Name, Kind: "raid", Default: true,
+	s := Service{Key: "raid:" + r.Name, Name: "RAID " + model.Raw(r.Name), Kind: "raid", Default: true,
 		Metrics: []Metric{{Name: "active", Value: float64(r.Active)}, {Name: "devices", Value: float64(r.Devices)}}}
-	s.Text = fmt.Sprintf("%s · %s · %d von %d aktiv", r.Level, r.State, r.Active, r.Devices)
+	s.Text = model.Join(model.Raw(r.Level), model.Raw(r.State), model.T("monitor64.txt.active_of", "n", r.Active, "total", r.Devices))
 	if r.SyncPercent != nil {
 		s.Text += fmt.Sprintf(" · Sync %.1f %%", *r.SyncPercent)
 	}
@@ -491,20 +496,20 @@ func mapRAID(r m64proto.RAID) Service {
 }
 
 func mapZFS(z m64proto.ZPool) Service {
-	s := Service{Key: "zfs:" + z.Name, Name: "ZFS " + z.Name, Kind: "zfs", Default: true}
+	s := Service{Key: "zfs:" + z.Name, Name: "ZFS " + model.Raw(z.Name), Kind: "zfs", Default: true}
 	if z.Size > 0 {
 		s.Metrics = append(s.Metrics,
 			Metric{Name: "used", Value: round2(float64(z.Alloc) / float64(z.Size) * 100), Unit: "%", Rule: RuleStore, Max: float64(z.Size)},
 			Metric{Name: "free", Value: float64(z.Free), Unit: "B", Max: float64(z.Size)})
 	}
-	s.Text = z.Health
+	s.Text = model.Raw(z.Health)
 	if z.Size > 0 { // ohne Groesse (z. B. node_exporter) kein "0 B frei"
-		s.Text = fmt.Sprintf("%s · %s frei", z.Health, bytesText(z.Free))
+		s.Text = model.Join(model.Raw(z.Health), model.T("monitor64.txt.free", "v", bytesText(z.Free)))
 	}
 	if !strings.EqualFold(z.Health, "ONLINE") {
-		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: z.Health + " " + z.Errors})
+		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: strings.TrimSpace(model.Raw(z.Health) + " " + hostText(z.Errors))})
 	} else if e := zfsErrors(z.Errors); e != "" {
-		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: e}) // ONLINE, aber Daten-/Pruefsummenfehler
+		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: hostText(e)}) // ONLINE, aber Daten-/Pruefsummenfehler
 	}
 	return s
 }
@@ -522,7 +527,8 @@ func zfsErrors(raw string) string {
 }
 
 func mapLocal(l m64proto.LocalCheck) Service {
-	s := Service{Key: "local:" + l.Name, Name: l.Name, Kind: "local", Default: true, Text: l.Text}
+	l.Text = model.Raw(l.Text) // Name und Text kommen vom Skript auf dem Host
+	s := Service{Key: "local:" + l.Name, Name: model.Raw(l.Name), Kind: "local", Default: true, Text: l.Text}
 	for _, m := range l.Metrics {
 		s.Metrics = append(s.Metrics, Metric{Name: m.Name, Value: m.Value})
 	}
@@ -619,6 +625,66 @@ func mbitText(v float64) string {
 		return fmt.Sprintf("%.0f Mbit/s", v)
 	}
 	return strings.Replace(fmt.Sprintf("%.1f Mbit/s", v), ".", ",", 1)
+}
+
+// diskName: "sda (Modell)".
+func diskName(name, model_ string) string {
+	if model_ == "" {
+		return model.Raw(name)
+	}
+	return model.Raw(name) + " (" + model.Raw(model_) + ")"
+}
+
+// noteKeys: Hinweis-Codes der Agents und der SSH-Abfrage (m64proto.Hint) mit ihrem Text; Werte heissen a und b.
+var noteKeys = map[string]string{
+	"reading": "monitor64.note.reading", "timeout": "monitor64.note.timeout", "not_found": "monitor64.note.not_found",
+	"format": "monitor64.note.format", "no_systemd": "monitor64.note.no_systemd", "no_pkg_manager": "monitor64.note.no_pkg_manager",
+	"sec_unknown": "monitor64.note.sec_unknown", "not_parsable": "monitor64.note.not_parsable", "no_output": "monitor64.note.no_output",
+	"incomplete": "monitor64.note.incomplete", "no_smart_disks": "monitor64.note.no_smart_disks", "no_json": "monitor64.note.no_json",
+	"smart_unavail": "monitor64.note.smart_unavail", "smart_disabled": "monitor64.note.smart_disabled",
+	"dev_unreadable": "monitor64.note.dev_unreadable", "unreadable": "monitor64.note.unreadable",
+	"unknown_error": "monitor64.note.unknown_error", "no_count": "monitor64.note.no_count", "missing": "monitor64.note.missing",
+	"hung": "monitor64.note.hung", "exit_code": "monitor64.note.exit_code", "no_output_of": "monitor64.note.no_output_of",
+	"sudo_denied": "monitor64.note.sudo_denied", "too_large": "monitor64.note.too_large", "dev_errors": "monitor64.note.dev_errors",
+	"slow_failed": "monitor64.note.slow_failed", "member": "monitor64.note.member", "pkg_missing": "monitor64.note.pkg_missing",
+	"no_repo": "monitor64.note.no_repo", "no_vuln_db": "monitor64.note.no_vuln_db", "running": "monitor64.note.running",
+	"no_disks": "monitor64.note.no_disks", "counters_unreadable": "monitor64.note.counters_unreadable", "larger_than": "monitor64.note.larger_than",
+}
+
+// hostText macht aus einem Text des Hosts (Abschnittsfehler, Hinweis, SMART-Fehler) einen Text fuer die Anzeige:
+// bekannte Hinweis-Codes werden uebersetzbar, alles andere ist freier Text vom Host (model.Raw). Texte aelterer
+// Agents (deutsch, ohne Code) bleiben damit unveraendert.
+func hostText(s string) string {
+	token := false // direkt davor steht ein Token: Abstand halten, sonst wuerde der folgende Text dazugelesen
+	return m64proto.ReplaceHints(s, func(code string, args []string) (string, bool) {
+		key, ok := noteKeys[code]
+		if !ok {
+			return "", false
+		}
+		var kv []any
+		for i, a := range args {
+			if i < 2 {
+				kv = append(kv, string(rune('a'+i)), a)
+			}
+		}
+		pre := ""
+		if token {
+			pre = " "
+		}
+		token = true
+		return pre + model.T(key, kv...), true
+	}, func(t string) string {
+		if t == "" {
+			return ""
+		}
+		t = model.Raw(t)
+		if c := t[0]; token && (c == '.' || c == '-' || c == '_' || c == '~' || c == '%' || c == '+' || c == '=' || c == '&' ||
+			c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+			t = " " + t
+		}
+		token = false
+		return t
+	})
 }
 
 // isStandby: SMART meldet eine schlafende Platte (auch EPC-Zustaende wie STANDBY_Y).

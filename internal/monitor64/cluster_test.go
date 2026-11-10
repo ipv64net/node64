@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -56,6 +57,8 @@ type busNode struct {
 	log      map[string]busEntry
 	amu      sync.Mutex
 	alerts   []notify.Alert
+
+	failChange atomic.Bool // Change scheitert (Tests: Fehlschlag beim Schreiben ins Protokoll)
 }
 
 type fakeBus struct {
@@ -168,7 +171,10 @@ func (b *fakeBus) newNode(id, name string, boxKey byte, start bool) *busNode {
 	n.m.SetNotifier(func(a notify.Alert) { n.amu.Lock(); n.alerts = append(n.alerts, a); n.amu.Unlock() })
 	n.m.cl.now = b.clock
 	n.m.SetCluster(ClusterHooks{
-		Change: func(ctx context.Context, item, eid string, deleted bool) {
+		Change: func(ctx context.Context, item, eid string, deleted bool) error {
+			if n.failChange.Load() { // Protokoll des Clusters nicht beschreibbar (z. B. Datenbank belegt)
+				return errors.New("database is locked")
+			}
 			e := busEntry{item: item, id: eid, origin: id, at: time.Now().UTC().Truncate(time.Millisecond), deleted: deleted}
 			if o, ok := ctx.Value(originKey{}).(originVal); ok {
 				e.origin, e.at = o.node, o.at
@@ -176,6 +182,7 @@ func (b *fakeBus) newNode(id, name string, boxKey byte, start bool) *busNode {
 			n.mu.Lock()
 			n.log[item+"|"+eid] = e
 			n.mu.Unlock()
+			return nil
 		},
 		Members: func(_ context.Context, _ string) []ClusterPeer {
 			var out []ClusterPeer

@@ -283,7 +283,7 @@ func TestTrueNASREST(t *testing.T) {
 	if f.count("disk.temperatures") != 1 || f.count("smart.test.results") != 1 || f.count("pool.query") != 2 {
 		t.Errorf("Abrufe: temps %d smart %d pool %d", f.count("disk.temperatures"), f.count("smart.test.results"), f.count("pool.query"))
 	}
-	r := tn.Test(context.Background())
+	r := deRes(tn.Test(context.Background()))
 	if !r.OK || r.Version != "TrueNAS-SCALE-24.10.2" || r.Node != "nas01" || r.Summary != "2 Pools, 6 Platten, 3 offene Alarme (REST v2.0)" {
 		t.Errorf("Test = %+v", r)
 	}
@@ -311,7 +311,7 @@ func TestTrueNASRPC(t *testing.T) {
 	if auths != testSecret {
 		t.Errorf("Anmeldungen = %q", auths)
 	}
-	r := tn.Test(context.Background())
+	r := deRes(tn.Test(context.Background()))
 	if !r.OK || !strings.HasSuffix(r.Summary, "(JSON-RPC)") || r.Warning != "" {
 		t.Errorf("Test = %+v", r)
 	}
@@ -324,7 +324,7 @@ func TestTrueNASRPC(t *testing.T) {
 	if !hasPrefix(pe, "alerts") || !hasPrefix(pe, "vm:") || hasSvc(svcs, "alerts") || !hasSvc(svcs, "zfs:tank") {
 		t.Errorf("Teilfehler = %+v", pe)
 	}
-	if !strings.Contains(pe.Error(), "Read-Only Administrator") {
+	if !strings.Contains(deErr(pe), "Read-Only Administrator") {
 		t.Errorf("Rechte-Hinweis fehlt: %v", pe)
 	}
 	// falscher Key: Fehler ohne Geheimnis
@@ -332,7 +332,7 @@ func TestTrueNASRPC(t *testing.T) {
 	f.key = "anderer-key-123456"
 	f.mu.Unlock()
 	_, err = tn.Collect(context.Background())
-	if err == nil || strings.Contains(err.Error(), testSecret) || !strings.Contains(err.Error(), "abgelehnt") {
+	if err == nil || strings.Contains(deErr(err), testSecret) || !strings.Contains(deErr(err), "abgelehnt") {
 		t.Errorf("falscher Key: %v", err)
 	}
 }
@@ -341,7 +341,7 @@ func TestTrueNASTestConfirm(t *testing.T) {
 	f := newFakeTrueNAS(t, true)
 	addr, pin := tlsServer(t, f)
 	tn, _ := NewTrueNAS(TrueNASConfig{Address: addr, APIKey: testSecret})
-	r := tn.Test(context.Background())
+	r := deRes(tn.Test(context.Background()))
 	if r.OK || !r.NeedConfirm || r.Fingerprint != pin {
 		t.Errorf("Test ohne Pin = %+v", r)
 	}
@@ -359,7 +359,7 @@ func TestTrueNASTestConfirm(t *testing.T) {
 	f2 := newFakeTrueNAS(t, false)
 	addr2, pin2 := tlsServer(t, f2)
 	tn, _ = NewTrueNAS(TrueNASConfig{Address: addr2, APIKey: testSecret, Pin: pin2, API: TrueNASRPC})
-	if _, err := tn.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "REST wählen") {
+	if _, err := tn.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "REST wählen") {
 		t.Errorf("JSON-RPC fest ohne RPC: %v", err)
 	}
 }
@@ -425,7 +425,7 @@ func TestTrueNASLoginEx(t *testing.T) {
 	f.noOld = true
 	addr, pin := tlsServer(t, f)
 	tn, _ := NewTrueNAS(TrueNASConfig{Address: addr, APIKey: testSecret, Pin: pin})
-	if _, err := tn.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "Benutzer des API-Keys eintragen") {
+	if _, err := tn.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "Benutzer des API-Keys eintragen") {
 		t.Errorf("ohne Benutzer (TrueNAS 27): %v", err)
 	}
 	tn, _ = NewTrueNAS(TrueNASConfig{Address: addr, APIKey: testSecret, User: "monitor", Pin: pin})
@@ -433,7 +433,7 @@ func TestTrueNASLoginEx(t *testing.T) {
 		t.Errorf("auth.login_ex: %v", err)
 	}
 	tn, _ = NewTrueNAS(TrueNASConfig{Address: addr, APIKey: testSecret, User: "anderer", Pin: pin})
-	if _, err := tn.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "AUTH_ERR") || strings.Contains(err.Error(), testSecret) {
+	if _, err := tn.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "AUTH_ERR") || strings.Contains(deErr(err), testSecret) {
 		t.Errorf("auth.login_ex falscher Benutzer: %v", err)
 	}
 }

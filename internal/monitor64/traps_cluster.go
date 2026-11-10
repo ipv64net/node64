@@ -18,6 +18,10 @@ import (
 // Dienst "traps" (bekannte Arten stossen dort die sofortige Runde an). Anzeige ("list") und Zuruecksetzen ("reset")
 // fragen die zustaendige Node. Ist sie nicht erreichbar oder lehnt ab (aeltere Version, nicht mehr zustaendig),
 // bleibt der Trap hier wie ohne Cluster.
+//
+// Wechsel der zustaendigen Node: der Trap-Stand geht mit dem Laufzeitstand an die anderen Nodes (cluster_state.go);
+// die uebernehmende macht damit weiter (adopt: offene Traps bleiben offen, das Problem laeuft weiter), bei der
+// abgebenden gilt danach keiner mehr als offen (handedOver).
 
 const (
 	callTrap        = "trap"
@@ -138,14 +142,90 @@ func (m *Module) hostTrapsView(ctx context.Context, uid string) hostTrapsOut {
 	return mergeTrapsOut(remote, local)
 }
 
-// mergeTrapsOut fasst zwei Staende zusammen (neueste zuerst, hoechstens trapKeep Eintraege).
+// sameTrap: derselbe Trap (ein uebernommener Eintrag steht nach einer Uebernahme auf beiden Nodes).
+func sameTrap(a, b trapEntry) bool {
+	return a.Time.Equal(b.Time) && a.TrapOID == b.TrapOID && a.Kind == b.Kind && a.Version == b.Version
+}
+
+func hasTrap(list []trapEntry, e trapEntry) bool {
+	for _, x := range list {
+		if sameTrap(x, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// adopt: diese Node uebernimmt den Host und macht mit dem Trap-Stand der bisher zustaendigen Node weiter (from, Stand
+// von at; nil = dort keine Traps) - sonst fehlten die offenen Traps nach einer Uebernahme. Ihr Stand gilt (offen,
+// gesamt); dazu kommen nur Traps, die hier nach ihrem Stand eintrafen (z. B. waehrend sie nicht erreichbar war).
+// Eintraege, die beide kennen, bleiben einmal (die hiesigen samt Varbinds); mehrfaches Uebernehmen zaehlt nichts doppelt.
+func (t *trapMgr) adopt(uid string, from *hostTraps, at time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var src hostTraps
+	if from != nil {
+		src = *from
+	}
+	h := t.hosts[uid]
+	if h == nil {
+		if from == nil {
+			return
+		}
+		h = t.host(uid)
+	}
+	pending, total := src.Pending, src.Total
+	list := append([]trapEntry(nil), h.List...)
+	for _, e := range h.List {
+		if e.Time.After(at) && !hasTrap(src.List, e) {
+			total++
+			if !e.Handled {
+				pending++
+			}
+		}
+	}
+	for _, e := range src.List {
+		if !hasTrap(h.List, e) {
+			list = append(list, e)
+		}
+	}
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Time.Before(list[j].Time) })
+	if len(list) > trapKeep {
+		list = list[len(list)-trapKeep:]
+	}
+	h.List, h.Pending, h.Total = list, max(pending, 0), max(h.Total, total)
+}
+
+// handedOver: eine andere Node ueberwacht den Host jetzt und fuehrt die offenen Traps weiter (adopt dort). Hier gilt
+// keiner mehr als offen - sonst zaehlte die Anzeige sie doppelt (hostTrapsView). true = es waren welche offen.
+func (t *trapMgr) handedOver(uid string) bool {
+	return t.reset(uid)
+}
+
+// mergeTrapsOut fasst zwei Staende zusammen (neueste zuerst, hoechstens trapKeep Eintraege; derselbe Trap nur einmal,
+// bevorzugt mit Varbinds).
 func mergeTrapsOut(a, b hostTrapsOut) hostTrapsOut {
 	out := hostTrapsOut{Pending: a.Pending + b.Pending, Total: a.Total + b.Total, Rejected: a.Rejected + b.Rejected,
 		RejectReason: a.RejectReason, RejectedAt: a.RejectedAt}
 	if b.RejectedAt.After(a.RejectedAt) {
 		out.RejectReason, out.RejectedAt = b.RejectReason, b.RejectedAt
 	}
-	out.List = append(append([]trapEntry{}, a.List...), b.List...)
+	out.List = append([]trapEntry{}, a.List...)
+	for _, e := range b.List {
+		dup := false
+		for i := range out.List {
+			if sameTrap(out.List[i], e) {
+				dup = true
+				if len(out.List[i].Varbinds) == 0 && len(e.Varbinds) > 0 {
+					out.List[i] = e
+				}
+				break
+			}
+		}
+		if !dup {
+			out.List = append(out.List, e)
+		}
+	}
 	sort.SliceStable(out.List, func(i, j int) bool { return out.List[i].Time.After(out.List[j].Time) })
 	if len(out.List) > trapKeep {
 		out.List = out.List[:trapKeep]

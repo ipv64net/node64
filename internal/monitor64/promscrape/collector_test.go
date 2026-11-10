@@ -121,7 +121,7 @@ func TestNormalizeURL(t *testing.T) {
 	} {
 		got, err := NormalizeURL(tc.in, DefaultPort)
 		if tc.err != "" {
-			if err == nil || !strings.Contains(err.Error(), tc.err) {
+			if err == nil || !strings.Contains(deErr(err), tc.err) {
 				t.Errorf("%q: Fehler %v, erwartet %q", tc.in, err, tc.err)
 			}
 			continue
@@ -221,10 +221,10 @@ func TestCollectBearerAndErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ts.set(func(s *testServer) { s.status, s.handler, s.body = 0, nil, "nginx_up 1\n"; tc.set(s) })
 			_, err := c.Collect(context.Background())
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err == nil || !strings.Contains(deErr(err), tc.want) {
 				t.Errorf("Fehler %v, erwartet %q", err, tc.want)
 			}
-			if err != nil && strings.Contains(err.Error(), testSecret) {
+			if err != nil && strings.Contains(deErr(err), testSecret) {
 				t.Errorf("Geheimnis im Fehler: %v", err)
 			}
 		})
@@ -240,12 +240,12 @@ func TestCollectSizeLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Collect(context.Background()); !errors.Is(err, ErrTooLarge) && (err == nil || !strings.Contains(err.Error(), "zu groß")) {
+	if _, err := c.Collect(context.Background()); !errors.Is(err, ErrTooLarge) && (err == nil || !strings.Contains(deErr(err), "zu groß")) {
 		t.Errorf("unkomprimiert: %v", err)
 	}
 	// gzip-Bombe: klein uebertragen, gross entpackt
 	ts.set(func(s *testServer) { s.gz = true; s.body = strings.Repeat("a 1\n", 1<<20) })
-	if _, err := c.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "zu groß") {
+	if _, err := c.Collect(context.Background()); err == nil || !strings.Contains(deErr(err), "zu groß") {
 		t.Errorf("gzip: %v", err)
 	}
 	// zu viele Serien
@@ -269,7 +269,7 @@ func TestTLSPinning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := c.Test(context.Background())
+	res := deRes(c.Test(context.Background()))
 	if res.OK || !res.NeedConfirm || res.Fingerprint != fp || res.Trusted {
 		t.Errorf("unbestaetigt: %+v", res)
 	}
@@ -286,7 +286,7 @@ func TestTLSPinning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res = c.Test(context.Background())
+	res = deRes(c.Test(context.Background()))
 	if !res.OK || res.Fingerprint != fp || res.Version != "node_exporter 1.12.1" || !strings.Contains(res.Summary, "4 Dienste") || res.Warning != "" {
 		t.Errorf("Pin: %+v", res)
 	}
@@ -307,7 +307,7 @@ func TestTLSPinning(t *testing.T) {
 	roots := x509.NewCertPool()
 	roots.AddCert(srv.Certificate())
 	c, _ = New(Config{URL: srv.URL, Map: fakeMap, roots: roots})
-	res = c.Test(context.Background())
+	res = deRes(c.Test(context.Background()))
 	if !res.OK || !res.Trusted || res.NeedConfirm {
 		t.Errorf("CA: %+v", res)
 	}
@@ -318,18 +318,18 @@ func TestTestWarnings(t *testing.T) {
 	srv := httptest.NewServer(ts)
 	defer srv.Close()
 	c, _ := New(Config{URL: srv.URL, Secret: testSecret})
-	res := c.Test(context.Background())
+	res := deRes(c.Test(context.Background()))
 	if !res.OK || !strings.Contains(res.Warning, "unverschlüsselt") || !strings.Contains(res.Warning, "eigene Metriken eintragen") ||
-		res.Version != "Unbekannter Exporter" {
+		res.Version != "" || !strings.HasPrefix(res.Summary, "Unbekannter Exporter · ") {
 		t.Errorf("%+v", res)
 	}
 	c, _ = New(Config{URL: srv.URL, Metrics: []CustomMetric{{Name: "nginx_up"}}})
-	res = c.Test(context.Background())
+	res = deRes(c.Test(context.Background()))
 	if !res.OK || res.Warning != "" || !strings.Contains(res.Summary, "1 Dienste") {
 		t.Errorf("mit eigener Metrik: %+v", res)
 	}
 	ts.set(func(s *testServer) { s.status = 401 })
-	res = c.Test(context.Background())
+	res = deRes(c.Test(context.Background()))
 	if res.OK || !strings.Contains(res.Error, "Anmeldung") {
 		t.Errorf("401: %+v", res)
 	}

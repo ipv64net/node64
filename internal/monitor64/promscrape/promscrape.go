@@ -89,7 +89,7 @@ func New(cfg Config) (*Collector, error) {
 		return nil, err
 	}
 	if strings.ContainsAny(cfg.User, ":\r\n") || len(cfg.User) > 200 || strings.ContainsAny(cfg.Secret, "\r\n") {
-		return nil, errors.New("Benutzer bzw. Passwort/Token enthält unzulässige Zeichen")
+		return nil, errors.New(model.T("monitor64.txt.pm_cred_chars"))
 	}
 	f, err := newFetcher(cfg.URL, cfg.User, cfg.Secret, cfg.Pin, cfg.Timeout, cfg.Limits.MaxBytes, cfg.roots)
 	if err != nil {
@@ -190,7 +190,7 @@ func (c *Collector) partial(m *Metrics, kind string, out []model.Service) error 
 			prefixes[p] = true
 		}
 		if len(errs) < 5 {
-			errs = append(errs, clip(fc, 40)+": Sammler des Exporters fehlgeschlagen")
+			errs = append(errs, model.Raw(clip(fc, 40))+": "+model.T("monitor64.txt.pm_collector_failed"))
 		}
 	}
 	c.known = next
@@ -296,18 +296,21 @@ func (c *Collector) Test(ctx context.Context) apis.TestResult {
 	}
 	custom, _ := customServices(m, c.cfg.Metrics, c.now(), nil)
 	n += len(custom)
-	title := firstNonEmpty(kind, "Unbekannter Exporter")
-	res.Version = strings.TrimSpace(title + " " + ver)
-	res.Summary = fmt.Sprintf("%s · %d Dienste · %d Serien", title, n, m.Series)
+	title := model.T("monitor64.txt.pm_unknown_exporter")
+	if kind != "" {
+		title = model.Raw(kind)
+	}
+	res.Version = strings.TrimSpace(kind + " " + ver)
+	res.Summary = title + " · " + model.T("monitor64.txt.pm_summary", "n", n, "s", m.Series)
 	var warn []string
 	if strings.HasPrefix(c.cfg.URL, "http://") && c.cfg.Secret != "" {
-		warn = append(warn, "Zugangsdaten werden unverschlüsselt (http) gesendet")
+		warn = append(warn, model.T("monitor64.txt.pm_plain_cred"))
 	}
 	if kind == ExporterOther && len(c.cfg.Metrics) == 0 {
-		warn = append(warn, "Unbekannter Exporter – eigene Metriken eintragen")
+		warn = append(warn, model.T("monitor64.txt.pm_unknown_hint"))
 	}
 	if len(c.cfg.Metrics) > 0 && len(custom) == 0 {
-		warn = append(warn, "keine der eigenen Metriken gefunden")
+		warn = append(warn, model.T("monitor64.txt.pm_custom_none"))
 	}
 	if fc := failedCollectors(m, kind); len(fc) > 0 {
 		var rel []string
@@ -317,7 +320,7 @@ func (c *Collector) Test(ctx context.Context) apis.TestResult {
 			}
 		}
 		if len(rel) > 0 {
-			warn = append(warn, "Sammler im Exporter fehlgeschlagen: "+strings.Join(limitList(rel, 5), ", "))
+			warn = append(warn, model.T("monitor64.txt.pm_collectors_failed")+": "+model.Raw(strings.Join(limitList(rel, 5), ", ")))
 		}
 	}
 	res.Warning = strings.Join(warn, "; ")

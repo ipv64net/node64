@@ -1,0 +1,36 @@
+  pool: tank
+ state: ONLINE
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	tank        ONLINE       0     0     0
+	  nda0      ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: tmir
+ state: DEGRADED
+status: One or more devices has been taken offline by the administrator.
+	Sufficient replicas exist for the pool to continue functioning in a
+	degraded state.
+action: Online the device using 'zpool online' or replace the device with
+	'zpool replace'.
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	tmir        DEGRADED     0     0     0
+	  mirror-0  DEGRADED     0     0     0
+	    md0     ONLINE       0     0     0
+	    md1     OFFLINE      0     0     0
+
+errors: No known data errors
+
+  pool: zroot
+ state: ONLINE
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	zroot       ONLINE       0     0     0
+	  ada0p5    ONLINE       0     0     0
+
+errors: No known data errors

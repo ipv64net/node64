@@ -156,7 +156,7 @@ func firstLine(b []byte) string {
 			return t
 		}
 	}
-	return "unbekannter Fehler"
+	return m64proto.HintUnknownError
 }
 
 // ParseScriptOutput wertet die Ausgabe von Script aus. now ist die Empfangszeit (Report.Time).
@@ -165,11 +165,11 @@ func firstLine(b []byte) string {
 // Agent zu SMART.Error der Platte.
 func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 	if len(out) > m64proto.MaxReportBytes {
-		return nil, fmt.Errorf("Ausgabe zu gross (%d Bytes, hoechstens %d)", len(out), m64proto.MaxReportBytes)
+		return nil, errors.New(m64proto.Hint(m64proto.HintTooLarge, strconv.Itoa(len(out)), strconv.Itoa(m64proto.MaxReportBytes)))
 	}
 	secs := splitSections(out)
 	if len(secs) == 0 {
-		return nil, errors.New("keine Monitor64-Ausgabe")
+		return nil, errors.New(m64proto.HintNoOutput)
 	}
 	r := &m64proto.Report{V: m64proto.Version, Time: now.UnixMilli()}
 	files := map[string][]byte{}
@@ -242,7 +242,7 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 		}
 	}
 	if !ended {
-		addNote(r, "script", "Ausgabe unvollstaendig (Zeitlimit oder Abbruch)")
+		addNote(r, "script", m64proto.HintIncomplete)
 	}
 
 	src := newMapSource(files)
@@ -257,7 +257,7 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 		}
 		r.FS = FSFromDF(ParseDF(df), mounts, ParseDFInodes(cmd["df_i"]))
 	} else if !errSec[m64proto.SecFS] {
-		addErr(r, m64proto.SecFS, errors.New("df fehlt"))
+		addErr(r, m64proto.SecFS, errors.New(m64proto.Hint(m64proto.HintMissing, "df")))
 	}
 	ds, err := readDisks(src)
 	r.Disks = ds
@@ -281,13 +281,13 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 			MergeZpoolStatus(pools, ParseZpoolStatus(cmd["zpool_status"]))
 			r.ZFS = pools
 		} else if rc := strings.TrimSpace(string(cmd["zpool_list_rc"])); rc != "" && rc != "0" && len(lines(zl)) > 0 {
-			addErr(r, m64proto.SecZFS, errors.New("zpool list: Exit-Code "+rc))
+			addErr(r, m64proto.SecZFS, errors.New("zpool list: "+m64proto.Hint(m64proto.HintExitCode, rc)))
 		}
 	}
 	if f, ok := cmd["systemd_failed"]; ok {
 		r.Systemd = newSystemd(f, cmd["systemd_state"])
 	} else if !errSec[m64proto.SecSystemd] {
-		addNote(r, m64proto.SecSystemd, "kein systemd")
+		addNote(r, m64proto.SecSystemd, m64proto.HintNoSystemd)
 	}
 	rb := readReboot(src)
 	if nr, ok := cmd["needs_restarting"]; ok && !rb.Required {
@@ -319,7 +319,7 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 				continue
 			}
 			if len(strings.TrimSpace(string(s.body))) == 0 {
-				r.SMART = append(r.SMART, m64proto.SMART{Device: s.dev, Error: "keine Ausgabe von smartctl"})
+				r.SMART = append(r.SMART, m64proto.SMART{Device: s.dev, Error: m64proto.Hint(m64proto.HintNoOutputOf, "smartctl")})
 				continue
 			}
 			r.SMART = append(r.SMART, ParseSmartctl(s.dev, s.body))

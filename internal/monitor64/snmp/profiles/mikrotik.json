@@ -16,7 +16,7 @@
   "scalars": [
     {
       "key": "temp:board",
-      "service": "Temperatur Board",
+      "service": "i18n:monitor64.svc.temp?name=Board",
       "kind": "temp",
       "oid": ".1.3.6.1.4.1.14988.1.1.3.10.0",
       "metric": "temp",
@@ -48,7 +48,7 @@
   "tables": [
     {
       "key": "temp:{name}",
-      "service": "Temperatur {name}",
+      "service": "i18n:monitor64.svc.temp?name={name}",
       "kind": "temp",
       "oid": ".1.3.6.1.4.1.14988.1.1.3.100.1",
       "name_col": 2,
@@ -71,7 +71,7 @@
     },
     {
       "key": "fan:{name}",
-      "service": "Lüfter {name}",
+      "service": "i18n:monitor64.svc.fan?name={name}",
       "kind": "fan",
       "oid": ".1.3.6.1.4.1.14988.1.1.3.100.1",
       "name_col": 2,
@@ -101,21 +101,21 @@
         {
           "col": 3,
           "text": {
-            "1": "aus",
-            "2": "wartet auf Gerät",
-            "3": "versorgt",
-            "4": "überlastet",
-            "5": "Kurzschluss",
-            "6": "Spannung zu niedrig",
-            "7": "Strom zu niedrig",
-            "8": "Versorgung neu gestartet",
-            "9": "Spannung zu hoch",
-            "10": "Controller-Fehler",
-            "11": "Controller-Update",
-            "12": "PoE-Eingang erkannt",
-            "13": "kein gültiges Netzteil",
-            "14": "Controller startet",
-            "15": "Eingangsspannung zu niedrig"
+            "1": "i18n:monitor64.txt.off",
+            "2": "i18n:monitor64.snmp.poe_waiting",
+            "3": "i18n:monitor64.snmp.poe_powered",
+            "4": "i18n:monitor64.snmp.poe_overload",
+            "5": "i18n:monitor64.snmp.poe_short",
+            "6": "i18n:monitor64.snmp.poe_v_low",
+            "7": "i18n:monitor64.snmp.poe_i_low",
+            "8": "i18n:monitor64.snmp.poe_cycle",
+            "9": "i18n:monitor64.snmp.poe_v_high",
+            "10": "i18n:monitor64.snmp.poe_ctrl_error",
+            "11": "i18n:monitor64.snmp.poe_ctrl_upgrade",
+            "12": "i18n:monitor64.snmp.poe_in_detected",
+            "13": "i18n:monitor64.snmp.poe_no_psu",
+            "14": "i18n:monitor64.snmp.poe_ctrl_init",
+            "15": "i18n:monitor64.snmp.poe_vin_low"
           },
           "fact": {
             "code": "poe_fault",
@@ -128,7 +128,7 @@
               13,
               15
             ],
-            "text": "PoE-Fehler"
+            "text": "i18n:monitor64.snmp.poe_fault"
           }
         },
         {

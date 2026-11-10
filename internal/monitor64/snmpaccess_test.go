@@ -250,19 +250,19 @@ func TestSeenUpHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer col.close()
-	if l, ch := seenUpChanged(col, nil); ch || l != nil {
+	if l, ch := memoChanged(col, nil); ch || l != nil {
 		t.Fatalf("empty: %v %v", l, ch)
 	}
-	restoreSeenUp(col, []string{"if:eth1", "if:eth0"})
-	l, ch := seenUpChanged(col, nil)
+	restoreMemo(col, []string{"if:eth1", "if:eth0"})
+	l, ch := memoChanged(col, nil)
 	if !ch || !slices.Equal(l, []string{"if:eth0", "if:eth1"}) {
 		t.Fatalf("restored: %v %v", l, ch)
 	}
-	if _, ch := seenUpChanged(col, l); ch {
+	if _, ch := memoChanged(col, l); ch {
 		t.Fatal("unchanged reported as changed")
 	}
-	if _, ch := seenUpChanged(&fakeCol{}, nil); ch {
+	if _, ch := memoChanged(&fakeCol{}, nil); ch {
 		t.Fatal("other collector")
 	}
-	restoreSeenUp(&fakeCol{}, []string{"if:x"}) // kein SNMP-Sammler: nichts
+	restoreMemo(&fakeCol{}, []string{"if:x"}) // Sammler ohne merkbaren Zustand: nichts
 }

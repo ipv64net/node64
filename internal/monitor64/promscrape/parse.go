@@ -6,6 +6,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // Parser fuer das Prometheus-Textformat 0.0.4 (und OpenMetrics-Text, soweit kompatibel). Bewusst klein und ohne
@@ -27,8 +29,8 @@ var DefaultLimits = Limits{MaxBytes: 8 << 20, MaxLineBytes: 64 << 10, MaxSeries:
 
 // Fehler des Parsers.
 var (
-	ErrTooLarge      = errors.New("Antwort zu groß")
-	ErrTooManySeries = errors.New("zu viele Serien")
+	ErrTooLarge      = errors.New(model.T("monitor64.txt.resp_too_large"))
+	ErrTooManySeries = errors.New(model.T("monitor64.txt.pm_too_many_series"))
 )
 
 // Label ist ein Label einer Serie.
@@ -128,7 +130,7 @@ func Parse(b []byte, lim Limits) (*Metrics, error) {
 			continue
 		}
 		if m.Series >= lim.MaxSeries {
-			return nil, fmt.Errorf("%w (mehr als %d)", ErrTooManySeries, lim.MaxSeries)
+			return nil, fmt.Errorf("%w (%s)", ErrTooManySeries, model.T("monitor64.txt.more_than", "n", lim.MaxSeries))
 		}
 		m.Series++
 		m.byName[s.Name] = append(m.byName[s.Name], s)

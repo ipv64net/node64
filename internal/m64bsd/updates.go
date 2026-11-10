@@ -37,12 +37,13 @@ func ParsePkgVersion(b []byte) int {
 
 var (
 	pkgVulnRE    = regexp.MustCompile(`^(\S+) is vulnerable:?\s*$`)
-	pkgAuditSum  = regexp.MustCompile(`(\d+) problem\(s\) in (\d+) installed package\(s\) found`)
+	pkgAuditSum  = regexp.MustCompile(`(\d+) problem\(s\) in (\d+) (?:installed )?package\(s\) found`)
 	pkgAuditNoDB = regexp.MustCompile(`(?i)vuln\.?xml.*(does not exist|not found|cannot open|no such file)|pkg audit -F`)
 )
 
 // ParsePkgAudit wertet "pkg audit" aus: Zahl der verwundbaren installierten Pakete (Summenzeile "N problem(s) in M
-// installed package(s) found", sonst die Zeilen "<paket> is vulnerable:"). noDB: keine Schwachstellen-Datenbank
+// installed package(s) found", ab pkg 2 ohne "installed"; sonst die Zeilen "<paket> is vulnerable:"). noDB: keine
+// Schwachstellen-Datenbank
 // (noch nie "pkg audit -F" gelaufen). ok=false: Ausgabe nicht auswertbar.
 func ParsePkgAudit(stdout, stderr []byte, code int) (vulnerable int, noDB, ok bool) {
 	if pkgAuditNoDB.Match(stderr) || pkgAuditNoDB.Match(stdout) {
@@ -86,7 +87,7 @@ func ParseFreeBSDVersion(b []byte) (*m64proto.Reboot, bool) {
 	r := &m64proto.Reboot{}
 	if v[0] != v[1] {
 		r.Required = true
-		r.Packages = []string{"kernel " + v[0] + " (läuft: " + v[1] + ")"}
+		r.Packages = []string{"kernel " + v[0] + " (" + m64proto.Hint(m64proto.HintRunning, v[1]) + ")"}
 	}
 	return r, true
 }

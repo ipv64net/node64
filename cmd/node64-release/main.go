@@ -6,9 +6,15 @@
 //	                                                        Manifest aus den Programmen bauen (Name: node64-linux-<arch>)
 //	node64-release sign -key <datei> manifest.json          signieren -> manifest.json.sig
 //	                                                        (ohne -key: Umgebungsvariable NODE64_SIGNING_KEY)
-//	node64-release agent-sign -key <datei> -version V -os O -arch A monitor64-agent-O-A
+//	node64-release agent-sign -key <datei> -version V [-os O -arch A] monitor64-agent-O-A ...
 //	                                                        Update des Monitor64-Agents signieren -> <datei>.update.json
-//	                                                        (Kopfzeile fuer die Anfrage "update"; ohne -key wie sign)
+//	                                                        (Kopfzeile fuer die Anfrage "update"; ohne -key wie sign;
+//	                                                        ohne -os/-arch aus dem Dateinamen, dann auch mehrere Dateien)
+//	node64-release agent-index -version V -out agents.json <ordner>
+//	                                                        Verzeichnis der Agent-Dateien aus dem Ordner bauen
+//	                                                        (monitor64-agent-<os>-<arch>[.exe], install.sh, install.ps1),
+//	                                                        dazu <ordner>/SHA256SUMS; signieren mit sign
+//	                                                        (docs/MONITOR64-AGENT-RELEASE.md)
 package main
 
 import (
@@ -27,18 +33,21 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/m64proto"
+	"github.com/ipv64net/node64/internal/monitor64/agentdist"
 	"github.com/ipv64net/node64/internal/selfupdate"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: node64-release keygen|manifest|sign|agent-sign ...")
+		fmt.Fprintln(os.Stderr, "usage: node64-release keygen|manifest|sign|agent-sign|agent-index ...")
 		os.Exit(2)
 	}
 	var err error
 	switch os.Args[1] {
 	case "agent-sign":
 		err = agentSign(os.Args[2:])
+	case "agent-index":
+		err = agentIndex(os.Args[2:])
 	case "keygen":
 		err = keygen(os.Args[2:])
 	case "manifest":
@@ -135,22 +144,69 @@ func agentSign(args []string) error {
 	fs := flag.NewFlagSet("agent-sign", flag.ExitOnError)
 	keyFile := fs.String("key", "", "private key file (default: env NODE64_SIGNING_KEY)")
 	version := fs.String("version", "", "agent version (without v)")
-	goos := fs.String("os", "", "GOOS of the binary")
-	arch := fs.String("arch", "", "GOARCH of the binary")
+	goos := fs.String("os", "", "GOOS of the binary (default: from the file name)")
+	arch := fs.String("arch", "", "GOARCH of the binary (default: from the file name)")
 	_ = fs.Parse(args)
-	if fs.NArg() != 1 || *version == "" || *goos == "" || *arch == "" {
-		return errors.New("usage: agent-sign -key <file> -version V -os O -arch A <binary>")
+	named := *goos != "" || *arch != ""
+	if fs.NArg() == 0 || *version == "" || named && (fs.NArg() != 1 || *goos == "" || *arch == "") {
+		return errors.New("usage: agent-sign -key <file> -version V [-os O -arch A] <binary> ...")
 	}
 	key, err := signingKey(*keyFile)
 	if err != nil {
 		return err
 	}
-	h, err := agentHeader(fs.Arg(0), strings.TrimPrefix(*version, "v"), *goos, *arch, key)
+	return agentSignFiles(fs.Args(), strings.TrimPrefix(*version, "v"), *goos, *arch, key)
+}
+
+// agentSignFiles schreibt je Datei <datei>.update.json. Ohne goos/goarch kommt die Plattform aus dem Dateinamen
+// (monitor64-agent-<os>-<arch>[.exe]); Kopfzeilen eines frueheren Laufs im Muster monitor64-agent-* werden uebergangen.
+func agentSignFiles(files []string, version, goos, goarch string, key ed25519.PrivateKey) error {
+	for _, p := range files {
+		if strings.HasSuffix(p, agentdist.HeaderSuffix) {
+			continue
+		}
+		o, a := goos, goarch
+		if o == "" && a == "" {
+			var ok bool
+			if o, a, ok = agentdist.ParseFileName(filepath.Base(p)); !ok {
+				return fmt.Errorf("%s: expected monitor64-agent-<os>-<arch>[.exe] (or give -os and -arch)", p)
+			}
+		}
+		h, err := agentHeader(p, version, o, a, key)
+		if err != nil {
+			return err
+		}
+		b, _ := json.Marshal(h)
+		if err := os.WriteFile(p+agentdist.HeaderSuffix, append(b, '\n'), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// agentIndex schreibt das Verzeichnis der Agent-Dateien (agents.json) aus einem Ordner mit den gebauten Dateien und
+// legt SHA256SUMS dazu (damit pruefen die Installationsskripte). Signiert wird danach mit sign.
+func agentIndex(args []string) error {
+	fs := flag.NewFlagSet("agent-index", flag.ExitOnError)
+	version := fs.String("version", "", "agent version (without v)")
+	out := fs.String("out", agentdist.IndexFile, "output file")
+	_ = fs.Parse(args)
+	if fs.NArg() != 1 || *version == "" {
+		return errors.New("usage: agent-index -version V [-out agents.json] <folder>")
+	}
+	return writeAgentIndex(*version, fs.Arg(0), *out)
+}
+
+func writeAgentIndex(version, dir, out string) error {
+	ix, err := agentdist.Build(version, dir)
 	if err != nil {
 		return err
 	}
-	b, _ := json.Marshal(h)
-	return os.WriteFile(fs.Arg(0)+".update.json", append(b, '\n'), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, agentdist.SumsFile), ix.Sums(), 0o644); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(ix, "", "  ")
+	return os.WriteFile(out, append(b, '\n'), 0o644)
 }
 
 // agentHeader baut die Kopfzeile: Groesse, SHA-256 und Signatur ueber m64proto.SignedMessage.

@@ -74,10 +74,10 @@ func newRedfish(cfg RedfishConfig, roots *x509.CertPool) (*Redfish, error) {
 		return nil, err
 	}
 	if strings.TrimSpace(cfg.User) == "" || cfg.Password == "" {
-		return nil, errors.New("Benutzer und Passwort sind nötig")
+		return nil, errors.New(model.T("monitor64.txt.cred_required"))
 	}
 	if strings.ContainsAny(cfg.User, "\r\n:") || strings.ContainsAny(cfg.Password, "\r\n") {
-		return nil, errors.New("Benutzer bzw. Passwort ungültig")
+		return nil, errors.New(model.T("monitor64.txt.cred_invalid"))
 	}
 	wc, err := newWebClient(t, cfg.Pin, roots)
 	if err != nil {
@@ -167,7 +167,7 @@ func rfPath(p string) (string, bool) {
 func (r *Redfish) get(ctx context.Context, path string, out any) error {
 	p, ok := rfPath(path)
 	if !ok {
-		return &webError{Kind: errWebResp, Detail: "ungültiger Verweis " + shortText(path), Where: "GET"}
+		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.bad_link") + " " + devText(path), Where: "GET"}
 	}
 	if p == "/redfish/v1" {
 		p += "/"
@@ -198,7 +198,7 @@ func (r *Redfish) login(ctx context.Context, stale string) error {
 		if r.loginErr != nil {
 			return r.loginErr
 		}
-		return &webError{Kind: errWebAuth, Detail: "Sitzung beendet", Where: "POST SessionService/Sessions"}
+		return &webError{Kind: errWebAuth, Detail: model.T("monitor64.txt.session_ended"), Where: "POST SessionService/Sessions"}
 	}
 	body := map[string]string{"UserName": strings.TrimSpace(r.cfg.User), "Password": r.cfg.Password}
 	// ohne das abgelaufene Token (manche BMCs lehnen eine Anmeldung mit ungueltigem X-Auth-Token ab)
@@ -211,7 +211,7 @@ func (r *Redfish) login(ctx context.Context, stale string) error {
 			r.setTok(tok, sess)
 			return nil
 		}
-		err = &webError{Kind: errWebResp, Detail: "Anmeldung ohne X-Auth-Token", Where: "POST SessionService/Sessions"}
+		err = &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.login_no_token"), Where: "POST SessionService/Sessions"}
 	}
 	r.loginErr = err
 	r.setTok("", "")
@@ -245,9 +245,9 @@ func (r *Redfish) Close() {
 func (r *Redfish) hint(err error) error {
 	switch {
 	case errors.Is(err, errWebAuth):
-		return fmt.Errorf("%w – Benutzer und Passwort prüfen", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.rf_hint_auth"))
 	case errors.Is(err, errWebPerm):
-		return fmt.Errorf("%w – der Benutzer braucht mindestens die Rolle ReadOnly", err)
+		return fmt.Errorf("%w – %s", err, model.T("monitor64.txt.rf_hint_perm"))
 	}
 	return err
 }
@@ -334,7 +334,7 @@ func (r *Redfish) Test(ctx context.Context) TestResult {
 	}
 	res.OK = true
 	if len(sys) == 0 {
-		res.Warning = "der BMC nennt kein System"
+		res.Warning = model.T("monitor64.txt.rf_no_system")
 		return res
 	}
 	var s rfSystem
@@ -343,16 +343,16 @@ func (r *Redfish) Test(ctx context.Context) TestResult {
 		return res
 	}
 	res.Node = shortText(s.HostName)
-	res.Summary = shortText(strings.TrimSpace(s.Manufacturer+" "+s.Model)) + " (" + rfPower(s.PowerState) + ")"
+	res.Summary = devText(strings.TrimSpace(s.Manufacturer+" "+s.Model)) + " (" + rfPower(s.PowerState) + ")"
 	if len(sys) > 1 {
-		res.Summary += fmt.Sprintf(", %d Systeme", len(sys))
+		res.Summary += ", " + model.T("monitor64.txt.systems_n", "n", len(sys))
 	}
 	return res
 }
 
 func rfPower(s string) string {
-	return firstNonEmpty(map[string]string{"On": "an", "Off": "aus", "PoweringOn": "fährt hoch", "PoweringOff": "fährt herunter",
-		"Paused": "pausiert"}[s], shortText(s), "unbekannt")
+	return stateText(map[string]string{"On": "monitor64.txt.on", "Off": "monitor64.txt.off", "PoweringOn": "monitor64.txt.powering_on",
+		"PoweringOff": "monitor64.txt.shutting_down", "Paused": "monitor64.txt.paused"}, s)
 }
 
 // Collect ist eine Abfragerunde (nicht gleichzeitig mit sich selbst aufrufen).
@@ -410,7 +410,7 @@ func rfSystemService(key string, s rfSystem) model.Service {
 	if strings.HasPrefix(key, "system:") {
 		name += " (" + shortText(firstNonEmpty(s.ID, s.Name)) + ")"
 	}
-	sv := model.Service{Key: key, Name: name, Kind: "system", Default: true}
+	sv := model.Service{Key: key, Name: model.Raw(name), Kind: "system", Default: true}
 	on := 0.0
 	if s.PowerState == "On" {
 		on = 1
@@ -418,7 +418,7 @@ func rfSystemService(key string, s rfSystem) model.Service {
 	sv.Metrics = []model.Metric{{Name: "power_on", Value: on}}
 	parts := []string{rfPower(s.PowerState)}
 	if h := firstNonEmpty(s.Status.HealthRollup, s.Status.Health); h != "" {
-		parts = append(parts, "Zustand "+shortText(h))
+		parts = append(parts, model.T("monitor64.txt.health_v", "v", shortText(h)))
 	}
 	if s.Proc.Count.Set && s.Proc.Count.V > 0 {
 		parts = append(parts, fmt.Sprintf("%.0f CPU", s.Proc.Count.V))
@@ -427,7 +427,7 @@ func rfSystemService(key string, s rfSystem) model.Service {
 		parts = append(parts, fmt.Sprintf("%.0f GiB RAM", s.Mem.GiB.V))
 	}
 	if s.BIOS != "" {
-		parts = append(parts, "BIOS "+shortText(s.BIOS))
+		parts = append(parts, "BIOS "+devText(s.BIOS))
 	}
 	var warn, crit []string
 	note := func(what string, st *rfStatus) {
@@ -437,9 +437,9 @@ func rfSystemService(key string, s rfSystem) model.Service {
 		h := firstNonEmpty(st.HealthRollup, st.Health)
 		switch rfSev(h) {
 		case 1:
-			warn = append(warn, what+" "+h)
+			warn = append(warn, what+" "+model.Raw(h))
 		case 2:
-			crit = append(crit, what+" "+h)
+			crit = append(crit, what+" "+model.Raw(h))
 		}
 	}
 	note("CPU", s.Proc.Status)
@@ -610,7 +610,7 @@ func (r *Redfish) chassis(ctx context.Context, path string, add func(string, err
 		p.svc.Key = "power"
 		if multi {
 			p.svc.Key += ":" + p.chassis
-			p.svc.Name += " (" + p.chassis + ")"
+			p.svc.Name += " (" + model.Raw(p.chassis) + ")"
 		}
 		out = append(out, p.svc)
 	}
@@ -625,7 +625,7 @@ func rfKeys(prefix string, items []rfItem, multi bool) []model.Service {
 		k := prefix + it.name
 		if multi {
 			k = prefix + it.chassis + "/" + it.name
-			it.svc.Name += " (" + it.chassis + ")"
+			it.svc.Name += " (" + model.Raw(it.chassis) + ")"
 		}
 		if seen[k] {
 			continue // gleicher Name im selben Chassis: einmal
@@ -638,13 +638,14 @@ func rfKeys(prefix string, items []rfItem, multi bool) []model.Service {
 	return out
 }
 
-// rfHealthFacts haengt die Zustaende aus Health an (Warning -> device_warn, Critical -> device_crit).
+// rfHealthFacts haengt die Zustaende aus Health an (Warning -> device_warn, Critical -> device_crit); what ist
+// fertiger Text (Dienstname).
 func rfHealthFacts(s *model.Service, what string, h string) {
 	switch rfSev(h) {
 	case 1:
-		s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: what + ": Zustand " + h})
+		s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: what + ": " + model.T("monitor64.txt.health_v", "v", shortText(h))})
 	case 2:
-		s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: what + ": Zustand " + h})
+		s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: what + ": " + model.T("monitor64.txt.health_v", "v", shortText(h))})
 	}
 }
 
@@ -656,7 +657,7 @@ func rfTempItem(cid, name, member string, rd, warn, crit, fatal optF, st rfStatu
 	if name == "" || st.absent() {
 		return rfItem{}, false
 	}
-	s := model.Service{Name: "Temperatur " + name, Kind: "temp", Default: true}
+	s := model.Service{Name: model.T("monitor64.svc.temp", "name", name), Kind: "temp", Default: true}
 	var parts []string
 	if rd.Set && rd.V > -60 && rd.V < 300 {
 		m := model.Metric{Name: "temp", Value: round2(rd.V), Unit: "°C"}
@@ -671,28 +672,28 @@ func rfTempItem(cid, name, member string, rd, warn, crit, fatal optF, st rfStatu
 		}
 		switch {
 		case limit.Set && limit.V > 0 && rd.V >= limit.V:
-			s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: fmt.Sprintf("%s %.0f °C (kritisch ab %.0f °C)", name, rd.V, limit.V)})
+			s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: model.T("monitor64.txt.temp_crit", "name", name, "v", fmt.Sprintf("%.0f", rd.V), "limit", fmt.Sprintf("%.0f", limit.V))})
 		case warn.Set && warn.V > 0 && rd.V >= warn.V:
-			s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: fmt.Sprintf("%s %.0f °C (Warnung ab %.0f °C)", name, rd.V, warn.V)})
+			s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: model.T("monitor64.txt.temp_warn", "name", name, "v", fmt.Sprintf("%.0f", rd.V), "limit", fmt.Sprintf("%.0f", warn.V))})
 		}
 	}
 	if len(s.Metrics) == 0 {
-		parts = append(parts, "kein Messwert")
+		parts = append(parts, model.T("monitor64.txt.no_reading"))
 	}
 	var th []string
 	if warn.Set && warn.V > 0 {
-		th = append(th, fmt.Sprintf("Warnung ab %.0f", warn.V))
+		th = append(th, model.T("monitor64.txt.warn_from", "v", fmt.Sprintf("%.0f", warn.V)))
 	}
 	if crit.Set && crit.V > 0 {
-		th = append(th, fmt.Sprintf("kritisch ab %.0f", crit.V))
+		th = append(th, model.T("monitor64.txt.crit_from", "v", fmt.Sprintf("%.0f", crit.V)))
 	} else if fatal.Set && fatal.V > 0 {
-		th = append(th, fmt.Sprintf("kritisch ab %.0f", fatal.V))
+		th = append(th, model.T("monitor64.txt.crit_from", "v", fmt.Sprintf("%.0f", fatal.V)))
 	}
 	if len(th) > 0 {
-		parts = append(parts, "Gerät: "+strings.Join(th, ", "))
+		parts = append(parts, model.T("monitor64.txt.device")+": "+strings.Join(th, ", "))
 	}
 	if len(s.Facts) == 0 {
-		rfHealthFacts(&s, name, st.Health)
+		rfHealthFacts(&s, model.Raw(name), st.Health)
 	}
 	s.Text = strings.Join(parts, " · ")
 	return rfItem{chassis: cid, name: name, svc: s}, true
@@ -704,7 +705,7 @@ func rfFanItem(cid, name string, rd optF, units string, lowWarn, lowCrit, lowFat
 	if name == "" || st.absent() {
 		return rfItem{}, false
 	}
-	s := model.Service{Name: "Lüfter " + name, Kind: "fan", Default: true}
+	s := model.Service{Name: model.T("monitor64.svc.fan", "name", name), Kind: "fan", Default: true}
 	var parts []string
 	if rd.Set && rd.V >= 0 {
 		if strings.EqualFold(units, "Percent") || units == "%" {
@@ -712,7 +713,7 @@ func rfFanItem(cid, name string, rd optF, units string, lowWarn, lowCrit, lowFat
 			parts = append(parts, fmt.Sprintf("%.0f %%", rd.V))
 		} else {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "rpm", Value: round2(rd.V), Unit: "rpm"})
-			parts = append(parts, fmt.Sprintf("%.0f U/min", rd.V))
+			parts = append(parts, model.T("monitor64.txt.rpm", "v", fmt.Sprintf("%.0f", rd.V)))
 		}
 		limit := lowCrit
 		if !limit.Set || (lowFatal.Set && lowFatal.V > limit.V) {
@@ -720,16 +721,16 @@ func rfFanItem(cid, name string, rd optF, units string, lowWarn, lowCrit, lowFat
 		}
 		switch {
 		case limit.Set && limit.V > 0 && rd.V < limit.V:
-			s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: fmt.Sprintf("Lüfter %s %.0f (kritisch unter %.0f)", name, rd.V, limit.V)})
+			s.Facts = append(s.Facts, model.Fact{Code: "device_crit", Text: model.T("monitor64.txt.fan_crit", "name", name, "v", fmt.Sprintf("%.0f", rd.V), "limit", fmt.Sprintf("%.0f", limit.V))})
 		case lowWarn.Set && lowWarn.V > 0 && rd.V < lowWarn.V:
-			s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: fmt.Sprintf("Lüfter %s %.0f (Warnung unter %.0f)", name, rd.V, lowWarn.V)})
+			s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: model.T("monitor64.txt.fan_warn", "name", name, "v", fmt.Sprintf("%.0f", rd.V), "limit", fmt.Sprintf("%.0f", lowWarn.V))})
 		}
 	}
 	if h := st.Health; h != "" {
-		parts = append(parts, "Zustand "+shortText(h))
+		parts = append(parts, model.T("monitor64.txt.health_v", "v", shortText(h)))
 	}
 	if len(s.Facts) == 0 {
-		rfHealthFacts(&s, "Lüfter "+name, st.Health)
+		rfHealthFacts(&s, s.Name, st.Health)
 	}
 	s.Text = strings.Join(parts, " · ")
 	return rfItem{chassis: cid, name: name, svc: s}, true
@@ -741,13 +742,13 @@ func rfPSUItem(cid string, p rfPSU) (rfItem, bool) {
 	if name == "" || p.Status.absent() {
 		return rfItem{}, false
 	}
-	s := model.Service{Name: "Netzteil " + name, Kind: "psu", Default: true}
+	s := model.Service{Name: model.T("monitor64.svc.psu", "name", name), Kind: "psu", Default: true}
 	var parts []string
 	if h := p.Status.Health; h != "" {
-		parts = append(parts, "Zustand "+shortText(h))
+		parts = append(parts, model.T("monitor64.txt.health_v", "v", shortText(h)))
 	}
 	if st := p.Status.State; st != "" && st != "Enabled" {
-		parts = append(parts, shortText(st))
+		parts = append(parts, devText(st))
 	}
 	if w := p.InWatts; w.Set && w.V >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "watts", Value: round2(w.V), Unit: "W", Max: max(p.Capacity.V, 0)})
@@ -758,19 +759,19 @@ func rfPSUItem(cid string, p rfPSU) (rfItem, bool) {
 	}
 	if v := p.LineVolts; v.Set && v.V >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "input_voltage", Value: round2(v.V), Unit: "V"})
-		parts = append(parts, fmt.Sprintf("Eingang %.0f V", v.V))
+		parts = append(parts, model.T("monitor64.txt.input_v", "v", fmt.Sprintf("%.0f", v.V)))
 	}
 	if p.Model != "" {
-		parts = append(parts, shortText(p.Model))
+		parts = append(parts, devText(p.Model))
 	}
-	rfHealthFacts(&s, "Netzteil "+name, p.Status.Health)
+	rfHealthFacts(&s, s.Name, p.Status.Health)
 	s.Text = strings.Join(parts, " · ")
 	return rfItem{chassis: cid, name: name, svc: s}, true
 }
 
 // rfPowerItem: Leistungsaufnahme und Redundanz der Netzteile.
 func rfPowerItem(cid string, watts optF, red []rfRedundancy) (rfItem, bool) {
-	s := model.Service{Name: "Leistungsaufnahme", Kind: "power", Default: true}
+	s := model.Service{Name: model.T("monitor64.svc.power"), Kind: "power", Default: true}
 	var parts []string
 	if watts.Set && watts.V >= 0 {
 		s.Metrics = append(s.Metrics, model.Metric{Name: "watts", Value: round2(watts.V), Unit: "W"})
@@ -780,22 +781,25 @@ func rfPowerItem(cid string, watts optF, red []rfRedundancy) (rfItem, bool) {
 		if rd.Status.absent() {
 			continue
 		}
-		n := firstNonEmpty(shortText(rd.Name), "Redundanz")
+		n := model.T("monitor64.txt.redundancy")
+		if rd.Name != "" {
+			n = devText(rd.Name)
+		}
 		t := n
 		if rd.Mode != "" {
-			t += " (" + shortText(rd.Mode) + ")"
+			t += " (" + devText(rd.Mode) + ")"
 		}
 		h := firstNonEmpty(rd.Status.Health, rd.Status.HealthRollup)
 		switch {
 		case rfSev(h) > 0:
-			parts = append(parts, t+": "+h)
+			parts = append(parts, t+": "+model.Raw(h))
 			code := "device_warn"
 			if rfSev(h) == 2 {
 				code = "device_crit"
 			}
-			s.Facts = append(s.Facts, model.Fact{Code: code, Text: n + " verloren (" + h + ")"})
+			s.Facts = append(s.Facts, model.Fact{Code: code, Text: n + " " + model.T("monitor64.txt.lost_h", "v", h)})
 		case h != "":
-			parts = append(parts, t+": "+h)
+			parts = append(parts, t+": "+model.Raw(h))
 		}
 	}
 	if len(s.Metrics) == 0 && len(parts) == 0 {
@@ -1005,7 +1009,7 @@ func (r *Redfish) storage(ctx context.Context, now time.Time, systems []rfSystem
 				got[i] = &d
 			})
 			if errs > 0 {
-				add(fmt.Sprintf("Drives %s (%d)", sid, errs), first, "disk:")
+				add(fmt.Sprintf("Drives %s (%d)", model.Raw(sid), errs), first, "disk:")
 				ok = false
 			}
 			for _, d := range got {
@@ -1111,7 +1115,7 @@ func rfControllerService(sid string, st rfStorage) (model.Service, bool) {
 		return model.Service{}, false
 	}
 	name := shortText(firstNonEmpty(st.Name, sid))
-	s := model.Service{Key: "ctrl:" + sid, Name: "Controller " + name, Kind: "ctrl", Default: true}
+	s := model.Service{Key: "ctrl:" + sid, Name: "Controller " + model.Raw(name), Kind: "ctrl", Default: true}
 	var parts []string
 	worst := st.Status.Health
 	for _, c := range st.Controllers {
@@ -1123,16 +1127,16 @@ func rfControllerService(sid string, st rfStorage) (model.Service, bool) {
 			t += " (FW " + shortText(c.Firmware) + ")"
 		}
 		if t != "" {
-			parts = append(parts, t)
+			parts = append(parts, model.Raw(t))
 		}
 		if rfSev(c.Status.Health) > rfSev(worst) {
 			worst = c.Status.Health
 		}
 	}
-	if worst != "" {
-		parts = append(parts, "Zustand "+shortText(worst))
+	if h := worst; h != "" {
+		parts = append(parts, model.T("monitor64.txt.health_v", "v", shortText(h)))
 	}
-	rfHealthFacts(&s, "Controller "+name, worst)
+	rfHealthFacts(&s, s.Name, worst)
 	s.Text = strings.Join(parts, " · ")
 	return s, true
 }
@@ -1142,33 +1146,33 @@ func rfDriveService(key string, d rfDrive) model.Service {
 	if d.Model != "" && !strings.Contains(name, strings.TrimSpace(d.Model)) {
 		name += " (" + shortText(d.Model) + ")"
 	}
-	s := model.Service{Key: key, Name: name, Kind: "disk", Default: true}
+	s := model.Service{Key: key, Name: model.Raw(name), Kind: "disk", Default: true}
 	var parts []string
 	if d.Capacity.Set && d.Capacity.V > 0 {
 		parts = append(parts, bytesText(d.Capacity.V))
 	}
 	if t := strings.TrimSpace(d.Media + " " + d.Protocol); t != "" {
-		parts = append(parts, shortText(t))
+		parts = append(parts, devText(t))
 	}
 	h := d.Status.Health
 	if h != "" {
-		parts = append(parts, "Zustand "+shortText(h))
+		parts = append(parts, model.T("monitor64.txt.health_v", "v", shortText(h)))
 	}
 	switch {
 	case rfSev(h) == 2:
-		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: "Laufwerk meldet Zustand " + h})
+		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: model.T("monitor64.txt.drive_health", "v", h)})
 	case d.Predicted != nil && *d.Predicted:
-		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: "Ausfall vorhergesagt (FailurePredicted)"})
+		s.Facts = append(s.Facts, model.Fact{Code: "smart_failed", Text: model.T("monitor64.txt.failure_predicted_long")})
 	case rfSev(h) == 1:
-		s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: "Laufwerk meldet Zustand " + h})
+		s.Facts = append(s.Facts, model.Fact{Code: "disk_errors", Text: model.T("monitor64.txt.drive_health", "v", h)})
 	}
 	if d.Predicted != nil && *d.Predicted && rfSev(h) == 2 {
-		parts = append(parts, "Ausfall vorhergesagt")
+		parts = append(parts, model.T("monitor64.txt.failure_predicted"))
 	}
 	if l := d.LifeLeft; l.Set && strings.EqualFold(d.Media, "SSD") {
 		w := min(max(100-l.V, 0), 100)
 		s.Metrics = append(s.Metrics, model.Metric{Name: "wear", Value: round2(w), Unit: "%", Rule: model.RuleWear})
-		parts = append(parts, fmt.Sprintf("Verschleiß %.0f %%", w))
+		parts = append(parts, model.T("monitor64.txt.wear", "v", fmt.Sprintf("%.0f", w)))
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s
@@ -1177,25 +1181,25 @@ func rfDriveService(key string, d rfDrive) model.Service {
 func rfVolumeService(sid string, v rfVolume) model.Service {
 	id := firstNonEmpty(v.ID, v.Name)
 	name := shortText(firstNonEmpty(v.Name, v.ID))
-	s := model.Service{Key: "raid:" + sid + "/" + id, Name: "Volume " + name, Kind: "raid", Default: true}
+	s := model.Service{Key: "raid:" + sid + "/" + id, Name: "Volume " + model.Raw(name), Kind: "raid", Default: true}
 	var parts []string
 	if t := firstNonEmpty(v.RAIDType, v.VolumeType); t != "" {
-		parts = append(parts, shortText(t))
+		parts = append(parts, devText(t))
 	}
 	if v.Capacity.Set && v.Capacity.V > 0 {
 		parts = append(parts, bytesText(v.Capacity.V))
 	}
 	h := v.Status.Health
 	if h != "" {
-		parts = append(parts, "Zustand "+shortText(h))
+		parts = append(parts, model.T("monitor64.txt.health_v", "v", shortText(h)))
 	}
 	for _, op := range v.Operations {
 		if op.Name != "" {
-			parts = append(parts, fmt.Sprintf("%s %.0f %%", shortText(op.Name), op.Pct.V))
+			parts = append(parts, fmt.Sprintf("%s %.0f %%", devText(op.Name), op.Pct.V))
 		}
 	}
 	if rfSev(h) > 0 {
-		s.Facts = append(s.Facts, model.Fact{Code: "raid_degraded", Text: "Volume " + name + ": Zustand " + h})
+		s.Facts = append(s.Facts, model.Fact{Code: "raid_degraded", Text: s.Name + ": " + model.T("monitor64.txt.health_v", "v", shortText(h))})
 	}
 	s.Text = strings.Join(parts, " · ")
 	return s

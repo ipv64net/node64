@@ -231,7 +231,7 @@ func TestDockerPartialAndErrors(t *testing.T) {
 	f.fail["/containers/"+cid('d')+"/json"] = http.StatusInternalServerError
 	d := newTestDocker(t, host, &now)
 	svcs, err := d.Collect(context.Background())
-	if !IsPartial(err) || !strings.Contains(err.Error(), "inspect (1)") {
+	if !IsPartial(err) || !strings.Contains(deErr(err), "inspect (1)") {
 		t.Fatalf("erwartet PartialError: %v", err)
 	}
 	if wk := svcByKey(t, svcs, "ctr:worker"); hasFact(wk, "guest_down") || !strings.Contains(wk.Text, "Soll-Zustand unbekannt") {
@@ -253,7 +253,7 @@ func TestDockerTest(t *testing.T) {
 	now := time.Now()
 	_, host := dockerFake(t, now)
 	d := newTestDocker(t, host, &now)
-	res := d.Test(context.Background())
+	res := deRes(d.Test(context.Background()))
 	if !res.OK || res.Version != "27.3.1" || res.Node != "docker01" || res.Summary != "6 Container, 2 laufen" {
 		t.Errorf("Test = %+v", res)
 	}
@@ -266,10 +266,10 @@ func TestDockerTest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ds.Close()
-	if _, err := ds.Collect(context.Background()); err == nil || strings.Contains(err.Error(), testSecret) {
+	if _, err := ds.Collect(context.Background()); err == nil || strings.Contains(deErr(err), testSecret) {
 		t.Errorf("ssh mit kaputtem Schluessel: %v", err)
 	}
-	if r := ds.Test(context.Background()); r.OK || strings.Contains(r.Error, testSecret) {
+	if r := deRes(ds.Test(context.Background())); r.OK || strings.Contains(r.Error, testSecret) {
 		t.Errorf("Test ssh: %+v", r)
 	}
 }
@@ -285,7 +285,7 @@ func TestDockerLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Close()
-	r := d.Test(context.Background())
+	r := deRes(d.Test(context.Background()))
 	t.Logf("Test: %+v", r)
 	if !r.OK {
 		t.Fatal(r.Error)
@@ -355,7 +355,7 @@ func TestDockerNoRedirect(t *testing.T) {
 	f.mu.Unlock()
 	d := newTestDocker(t, host, &now)
 	svcs, err := d.Collect(context.Background())
-	if !IsPartial(err) || !strings.Contains(err.Error(), "302") {
+	if !IsPartial(err) || !strings.Contains(deErr(err), "302") {
 		t.Fatalf("erwartet Teilfehler mit 302: %v", err)
 	}
 	if wk := svcByKey(t, svcs, "ctr:worker"); !strings.Contains(wk.Text, "Soll-Zustand unbekannt") {

@@ -129,7 +129,7 @@ type guestCfg struct {
 func NewPVE(cfg PVEConfig) (*PVE, error) {
 	c, err := proxmox.NewClient(cfg.system())
 	if err != nil {
-		return nil, scrubErr(err, cfg.Secret)
+		return nil, foreignErr(err, cfg.Secret)
 	}
 	return &PVE{cfg: cfg, client: c, now: time.Now, counters: map[string]*counter{}, configs: map[string]guestCfg{},
 		locks: map[string]lockSeen{}}, nil
@@ -186,7 +186,7 @@ func (p *PVE) Nodes(ctx context.Context) (string, []ClusterNode, error) {
 	defer cancel()
 	var st []pveStatus
 	if err := p.client.Get(ctx, "/cluster/status", &st); err != nil {
-		return "", nil, scrubErr(err, p.cfg.Secret)
+		return "", nil, foreignErr(err, p.cfg.Secret)
 	}
 	cl, nodes := parseNodes(st)
 	return cl, nodes, nil
@@ -205,13 +205,13 @@ func (p *PVE) Test(ctx context.Context) TestResult {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
 	pr := proxmox.Probe(ctx, p.cfg.system())
-	res := TestResult{OK: pr.OK, Error: scrub(pr.Error, p.cfg.Secret), Version: pr.Version, Cluster: pr.Cluster,
-		Warning: scrub(pr.PermWarning, p.cfg.Secret), Fingerprint: pr.CertSHA256, CertSubject: pr.CertSubject,
+	res := TestResult{OK: pr.OK, Error: model.Raw(scrub(pr.Error, p.cfg.Secret)), Version: pr.Version, Cluster: pr.Cluster,
+		Warning: model.Raw(scrub(pr.PermWarning, p.cfg.Secret)), Fingerprint: pr.CertSHA256, CertSubject: pr.CertSubject,
 		Trusted: pr.CertTrusted, NeedConfirm: pr.NeedConfirm}
 	if !pr.OK {
 		return res
 	}
-	res.Summary = fmt.Sprintf("%d Gäste im Cluster", pr.Guests)
+	res.Summary = model.T("monitor64.txt.guests_cluster", "n", pr.Guests)
 	cl, nodes, err := p.Nodes(ctx)
 	if err != nil {
 		res.Warning = strings.TrimSpace(res.Warning + " cluster/status: " + err.Error())
@@ -231,7 +231,7 @@ func (p *PVE) Test(ctx context.Context) TestResult {
 	}
 	if !found && len(nodes) > 0 {
 		res.OK = false
-		res.Error = fmt.Sprintf("Node %q nicht gefunden (vorhanden: %s)", res.Node, nodeNames(nodes))
+		res.Error = model.T("monitor64.txt.node_missing", "node", res.Node, "list", nodeNames(nodes))
 	}
 	return res
 }
@@ -263,7 +263,7 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
 	now := p.now()
-	part := &partial{secrets: []string{p.cfg.Secret}}
+	part := &partial{secrets: []string{p.cfg.Secret}, foreign: true}
 
 	var st []pveStatus
 	stErr := p.client.Get(ctx, "/cluster/status", &st)
@@ -275,15 +275,15 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 		}
 		if node == "" {
 			if stErr != nil {
-				return nil, scrubErr(stErr, p.cfg.Secret)
+				return nil, foreignErr(stErr, p.cfg.Secret)
 			}
-			return nil, errors.New("Node nicht erkannt (cluster/status ohne lokale Node) – Node-Namen eintragen")
+			return nil, errors.New(model.T("monitor64.txt.node_unknown"))
 		}
 	}
 	nodePath := "/nodes/" + url.PathEscape(node)
 	var ns nodeStatus
 	if err := p.client.Get(ctx, nodePath+"/status", &ns); err != nil {
-		return nil, scrubErr(err, p.cfg.Secret)
+		return nil, foreignErr(err, p.cfg.Secret)
 	}
 	out := nodeServices(ns)
 	if svc := p.updates.collect(ctx, p.client, node, now, p.cfg.UpdatesEvery, part); svc != nil {
@@ -343,7 +343,7 @@ func clusterWide(svcs []model.Service, node, owner string) []model.Service {
 	for i := range svcs {
 		s := &svcs[i]
 		s.Metrics, s.Facts = nil, nil
-		s.Text = strings.TrimSuffix("gemeldet von Node "+owner+" · "+s.Text, " · ")
+		s.Text = model.Join(model.T("monitor64.txt.reported_by", "node", owner), s.Text)
 	}
 	return svcs
 }
@@ -374,18 +374,19 @@ func clusterService(st []pveStatus) (model.Service, bool) {
 	if quorate {
 		q = 1
 	}
-	s := model.Service{Key: "cluster", Name: "Cluster " + cl, Kind: "cluster", Default: true,
+	s := model.Service{Key: "cluster", Name: "Cluster " + model.Raw(cl), Kind: "cluster", Default: true,
 		Metrics: []model.Metric{{Name: "nodes_online", Value: float64(up)}, {Name: "nodes", Value: float64(len(nodes))}, {Name: "quorate", Value: q}}}
-	s.Text = fmt.Sprintf("%d von %d Nodes online", up, len(nodes))
+	s.Text = model.T("monitor64.txt.nodes_online", "n", up, "total", len(nodes))
 	if quorate {
-		s.Text += " · Quorum ok"
+		s.Text += " · " + model.T("monitor64.txt.quorum_ok")
 	} else {
-		s.Text += " · kein Quorum"
-		s.Facts = append(s.Facts, model.Fact{Code: "cluster_no_quorum", Text: "Cluster ohne Quorum"})
+		s.Text += " · " + model.T("monitor64.txt.no_quorum")
+		s.Facts = append(s.Facts, model.Fact{Code: "cluster_no_quorum", Text: model.T("monitor64.txt.cluster_no_quorum")})
 	}
 	if len(down) > 0 {
-		s.Text += " · offline: " + strings.Join(down, ", ")
-		s.Facts = append(s.Facts, model.Fact{Code: "cluster_node_down", Text: strings.Join(down, ", ") + " offline"})
+		list := model.Raw(strings.Join(down, ", "))
+		s.Text += " · offline: " + list
+		s.Facts = append(s.Facts, model.Fact{Code: "cluster_node_down", Text: list + " offline"})
 	}
 	return s, true
 }
@@ -429,16 +430,15 @@ func (p *PVE) ha(ctx context.Context, part *partial) []model.Service {
 	}
 	s := model.Service{Key: "ha", Name: "HA", Kind: "ha", Default: true,
 		Metrics: []model.Metric{{Name: "resources", Value: float64(len(res))}, {Name: "errors", Value: float64(len(bad))}}}
-	s.Text = fmt.Sprintf("%d Ressourcen", len(res))
+	s.Text = model.T("monitor64.txt.resources_ok", "n", len(res))
 	if len(bad) > 0 {
-		s.Text += " · gestört: " + strings.Join(limitList(bad, 5), ", ")
-		s.Facts = append(s.Facts, model.Fact{Code: "ha_error", Text: strings.Join(limitList(bad, 5), ", ")})
-	} else {
-		s.Text += ", alle ok"
+		list := strings.Join(limitList(bad, 5), ", ")
+		s.Text = model.T("monitor64.txt.resources", "n", len(res)) + " · " + model.T("monitor64.txt.faulty_list", "list", list)
+		s.Facts = append(s.Facts, model.Fact{Code: "ha_error", Text: model.Raw(list)})
 	}
 	if !quorumOK {
-		s.Text += " · HA ohne Quorum"
-		s.Facts = append(s.Facts, model.Fact{Code: "ha_error", Text: "HA ohne Quorum"})
+		s.Text += " · " + model.T("monitor64.txt.ha_no_quorum")
+		s.Facts = append(s.Facts, model.Fact{Code: "ha_error", Text: model.T("monitor64.txt.ha_no_quorum")})
 	}
 	return []model.Service{s}
 }
@@ -483,9 +483,9 @@ func (p *PVE) ceph(ctx context.Context, now time.Time, part *partial) []model.Se
 			return nil
 		case p.cephSeen && !authErr(err):
 			// eingerichtetes Ceph antwortet nicht (Monitore ohne Quorum, Zeitlimit): Stoerung
-			msg := scrub(err.Error(), p.cfg.Secret)
-			return []model.Service{{Key: "ceph", Name: "Ceph", Kind: "ceph", Default: true, Text: "Status nicht abrufbar: " + msg,
-				Facts: []model.Fact{{Code: "ceph_err", Text: "Ceph-Status nicht abrufbar: " + msg}}}}
+			msg := model.Raw(scrub(err.Error(), p.cfg.Secret))
+			return []model.Service{{Key: "ceph", Name: "Ceph", Kind: "ceph", Default: true, Text: model.T("monitor64.txt.status_unavailable") + ": " + msg,
+				Facts: []model.Fact{{Code: "ceph_err", Text: model.T("monitor64.txt.ceph_unavailable") + ": " + msg}}}}
 		}
 		part.add("cluster/ceph/status", err, "ceph")
 		return nil
@@ -514,15 +514,13 @@ func (p *PVE) ceph(ctx context.Context, now time.Time, part *partial) []model.Se
 	for _, k := range keys {
 		msgs = append(msgs, firstNonEmpty(cs.Health.Checks[k].Summary.Message, k))
 	}
-	s.Text = fmt.Sprintf("%s · %.0f von %.0f OSDs up", cs.Health.Status, float64(up), float64(osds))
-	if len(msgs) > 0 {
-		s.Text += " · " + strings.Join(limitList(msgs, 3), "; ")
-	}
+	list := model.Raw(strings.Join(limitList(msgs, 3), "; ")) // Meldungen von Ceph
+	s.Text = model.Join(model.Raw(cs.Health.Status), model.T("monitor64.txt.osds_up", "n", fmt.Sprintf("%.0f", float64(up)), "total", fmt.Sprintf("%.0f", float64(osds))), list)
 	switch cs.Health.Status {
 	case "HEALTH_WARN":
-		s.Facts = append(s.Facts, model.Fact{Code: "ceph_warn", Text: strings.Join(limitList(msgs, 3), "; ")})
+		s.Facts = append(s.Facts, model.Fact{Code: "ceph_warn", Text: list})
 	case "HEALTH_ERR":
-		s.Facts = append(s.Facts, model.Fact{Code: "ceph_err", Text: strings.Join(limitList(msgs, 3), "; ")})
+		s.Facts = append(s.Facts, model.Fact{Code: "ceph_err", Text: list})
 	}
 	return []model.Service{s}
 }
@@ -574,22 +572,22 @@ func (p *PVE) storages(ctx context.Context, nodePath string, part *partial) []mo
 		if x.Storage == "" {
 			continue
 		}
-		s := model.Service{Key: "store:" + x.Storage, Name: "Speicher " + x.Storage, Kind: "store", Default: x.Enabled != 0}
-		typ := x.Type
+		s := model.Service{Key: "store:" + x.Storage, Name: model.T("monitor64.svc.store", "name", x.Storage), Kind: "store", Default: x.Enabled != 0}
+		typ := model.Raw(x.Type)
 		if x.Shared != 0 {
-			typ += ", gemeinsam"
+			typ += ", " + model.T("monitor64.txt.shared")
 		}
 		switch {
 		case x.Enabled == 0:
-			s.Text = "abgeschaltet (" + typ + ")"
+			s.Text = model.T("monitor64.txt.disabled") + " (" + typ + ")"
 		case x.Active == 0:
-			s.Text = "nicht aktiv (" + typ + ")"
-			s.Facts = append(s.Facts, model.Fact{Code: "store_inactive", Text: "Speicher " + x.Storage + " nicht aktiv"})
+			s.Text = model.T("monitor64.txt.not_active") + " (" + typ + ")"
+			s.Facts = append(s.Facts, model.Fact{Code: "store_inactive", Text: model.T("monitor64.txt.store_inactive", "name", x.Storage)})
 		case x.Total > 0:
 			tot := float64(x.Total)
 			s.Metrics = []model.Metric{{Name: "used", Value: pct(float64(x.Used), tot), Unit: "%", Rule: model.RuleStore, Max: tot},
 				{Name: "free", Value: float64(x.Avail), Unit: "B", Max: tot}}
-			s.Text = fmt.Sprintf("%s von %s frei (%s)", bytesText(float64(x.Avail)), bytesText(tot), typ)
+			s.Text = model.T("monitor64.txt.free_of", "free", bytesText(float64(x.Avail)), "total", bytesText(tot)) + " (" + typ + ")"
 		default:
 			s.Text = typ
 		}
@@ -619,15 +617,15 @@ func (p *PVE) zfs(ctx context.Context, nodePath string, part *partial) []model.S
 	}
 	var out []model.Service
 	for _, z := range list {
-		s := model.Service{Key: "zfs:" + z.Name, Name: "ZFS " + z.Name, Kind: "zfs", Default: true}
+		s := model.Service{Key: "zfs:" + z.Name, Name: "ZFS " + model.Raw(z.Name), Kind: "zfs", Default: true}
 		if tot := float64(z.Size); tot > 0 {
 			s.Metrics = append(s.Metrics, model.Metric{Name: "used", Value: pct(float64(z.Alloc), tot), Unit: "%", Rule: model.RuleStore, Max: tot},
 				model.Metric{Name: "free", Value: float64(z.Free), Unit: "B", Max: tot},
 				model.Metric{Name: "frag", Value: float64(z.Frag), Unit: "%"})
 		}
-		s.Text = fmt.Sprintf("%s · %s frei", z.Health, bytesText(float64(z.Free)))
+		s.Text = model.Join(model.Raw(z.Health), model.T("monitor64.txt.free", "v", bytesText(float64(z.Free))))
 		if !strings.EqualFold(z.Health, "ONLINE") {
-			s.Facts = append(s.Facts, model.Fact{Code: "zfs_degraded", Text: z.Health})
+			s.Facts = append(s.Facts, model.Fact{Code: "zfs_degraded", Text: model.Raw(z.Health)})
 		}
 		out = append(out, s)
 	}
@@ -718,7 +716,7 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 		p.configs[k] = v
 	}
 	if cfgErrs > 0 {
-		part.add(fmt.Sprintf("Gast-Config (%d)", cfgErrs), firstErr)
+		part.add(model.T("monitor64.txt.guest_config", "n", cfgErrs), firstErr)
 	}
 	keep := map[string]bool{}
 	var out []model.Service
@@ -786,7 +784,7 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	}
 	name := fmt.Sprintf("%s %d", label, it.vmid)
 	if g.Name != "" {
-		name = fmt.Sprintf("%s (%s %d)", g.Name, label, it.vmid)
+		name = fmt.Sprintf("%s (%s %d)", model.Raw(g.Name), label, it.vmid)
 	}
 	s := model.Service{Key: it.key, Name: name, Kind: kind, Default: true}
 	for _, t := range strings.FieldsFunc(g.Tags, func(r rune) bool { return r == ';' || r == ',' || r == ' ' }) {
@@ -807,23 +805,25 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	var parts []string
 	switch {
 	case fault:
-		parts = append(parts, "gestört ("+qmp+")")
+		parts = append(parts, model.T("monitor64.txt.guest_fault", "v", qmp))
 	case held && qmp == "paused":
-		parts = append(parts, "pausiert")
+		parts = append(parts, model.T("monitor64.txt.paused"))
 	case held:
-		parts = append(parts, "angehalten ("+qmp+")")
+		parts = append(parts, model.T("monitor64.txt.held", "v", qmp))
 	case g.Status == "running":
-		parts = append(parts, "läuft")
+		parts = append(parts, model.T("monitor64.txt.running"))
 	case g.Status == "stopped":
-		parts = append(parts, "gestoppt")
+		parts = append(parts, model.T("monitor64.txt.stopped"))
+	case g.Status != "":
+		parts = append(parts, model.Raw(g.Status))
 	default:
-		parts = append(parts, firstNonEmpty(g.Status, "unbekannt"))
+		parts = append(parts, model.T("monitor64.txt.unknown"))
 	}
 	// Sperre: bei laufenden Gaesten erklaert (Backup im Snapshot-Modus, Migration), bei nicht laufenden nur
 	// lockGrace lang (eine haengende Sperre verdeckt sonst einen gestoppten Gast); eine Stoerung geht vor.
 	lockOK := false
 	if g.Lock != "" {
-		txt := "Sperre " + g.Lock
+		txt := model.T("monitor64.txt.lock", "v", g.Lock)
 		switch {
 		case fault:
 			delete(p.locks, it.key)
@@ -839,7 +839,7 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 			if d := now.Sub(l.since); d < lockGrace {
 				lockOK = true
 			} else {
-				txt += " seit " + hoursText(d)
+				txt = model.T("monitor64.txt.lock_since", "v", g.Lock, "d", model.Sub(hoursText(d)))
 			}
 		}
 		parts = append(parts, txt)
@@ -855,13 +855,17 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 		s.Metrics = append(s.Metrics, model.Metric{Name: "cpu", Value: round2(float64(g.CPU) * 100), Unit: "%", Rule: model.RuleCPU})
 		parts = append(parts, fmt.Sprintf("CPU %.0f %%", float64(g.CPU)*100))
 		if mx := float64(g.MaxMem); mx > 0 {
-			s.Metrics = append(s.Metrics, model.Metric{Name: "mem", Value: pct(float64(g.Mem), mx), Unit: "%", Rule: model.RuleMem, Max: mx},
+			rule := model.RuleMem
+			if isQEMU { // Proxmox zaehlt bei VMs den Cache des Gastes mit: eigene Regel, im Standard ohne Schwelle
+				rule = model.RuleGuestMem
+			}
+			s.Metrics = append(s.Metrics, model.Metric{Name: "mem", Value: pct(float64(g.Mem), mx), Unit: "%", Rule: rule, Max: mx},
 				model.Metric{Name: "mem_used", Value: float64(g.Mem), Unit: "B", Max: mx})
-			parts = append(parts, fmt.Sprintf("RAM %s von %s", bytesText(float64(g.Mem)), bytesText(mx)))
+			parts = append(parts, model.T("monitor64.txt.ram_of", "used", bytesText(float64(g.Mem)), "total", bytesText(mx)))
 		}
 		if mx := float64(g.MaxDisk); mx > 0 && g.Disk > 0 { // QEMU ohne Gast-Agent: 0
 			s.Metrics = append(s.Metrics, model.Metric{Name: "disk", Value: pct(float64(g.Disk), mx), Unit: "%", Rule: model.RuleFS, Max: mx})
-			parts = append(parts, fmt.Sprintf("Platte %.0f %%", pct(float64(g.Disk), mx)))
+			parts = append(parts, model.T("monitor64.txt.disk_pct", "v", fmt.Sprintf("%.0f", pct(float64(g.Disk), mx))))
 		}
 		prev := p.counters[it.key]
 		cur := &counter{t: now, v: map[string]float64{"netin": float64(g.NetIn), "netout": float64(g.NetOut),
@@ -887,19 +891,19 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	}
 	switch {
 	case !cfgKnown:
-		parts = append(parts, "Soll-Zustand unbekannt")
+		parts = append(parts, model.T("monitor64.txt.target_unknown"))
 	case cfg.onboot:
-		parts = append(parts, "soll laufen (beim Booten starten)")
+		parts = append(parts, model.T("monitor64.txt.should_run_onboot"))
 	default:
-		parts = append(parts, "darf aus sein")
+		parts = append(parts, model.T("monitor64.txt.may_be_off"))
 	}
 	switch {
 	case fault: // gestartet, steht aber: unabhaengig vom Soll-Zustand eine Stoerung
-		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: "VM steht (" + qmp + ")"}) // gilt auch bei Soll "aus"
+		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: model.T("monitor64.txt.vm_stalled", "v", qmp)}) // gilt auch bei Soll "aus"
 	case !active && cfgKnown && cfg.onboot && !lockOK:
-		t := parts[0] + ", soll laufen (beim Booten starten)"
+		t := parts[0] + ", " + model.T("monitor64.txt.should_run_onboot")
 		if g.Lock != "" {
-			t = parts[0] + ", Sperre " + g.Lock + " länger als " + hoursText(lockGrace) + ", soll laufen (beim Booten starten)"
+			t = parts[0] + ", " + model.T("monitor64.txt.lock_longer", "v", g.Lock, "d", model.Sub(hoursText(lockGrace))) + ", " + model.T("monitor64.txt.should_run_onboot")
 		}
 		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: t})
 	}

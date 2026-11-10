@@ -58,6 +58,18 @@ var winDrive = regexp.MustCompile(`^([A-Za-z]:)\\`)
 var fsHidden = []string{"/run", "/dev", "/sys", "/proc", "/snap/", "/var/lib/docker/", "/var/lib/containers/", "/var/lib/kubelet/",
 	"/run/", "/System/Volumes/", "/private/var/vm", "/etc/hostname", "/etc/hosts", "/etc/resolv.conf"}
 
+// Pseudo-Dateisysteme und Datei-Mounts eines Containers: sagen nichts ueber Plattenplatz, kommen gar nicht erst vor.
+var fsPseudo = []string{"/proc", "/sys", "/dev", "/run", "/etc/hostname", "/etc/hosts", "/etc/resolv.conf"}
+
+func fsSkip(mount string) bool {
+	for _, p := range fsPseudo {
+		if mount == p || strings.HasPrefix(mount, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func fsDefault(mount string) bool {
 	for _, p := range fsHidden {
 		if mount == strings.TrimSuffix(p, "/") || strings.HasPrefix(mount, p) || strings.HasPrefix(mount, strings.TrimSuffix(p, "/")+"/") {
@@ -113,7 +125,7 @@ func (c *Collector) collectHost(r *round) {
 			sum += v
 		}
 		util := pct(sum/float64(cores), 100)
-		r.out = append(r.out, model.Service{Key: "cpu", Name: "CPU", Kind: "cpu", Default: true, Text: fmt.Sprintf("%d Kerne", cores),
+		r.out = append(r.out, model.Service{Key: "cpu", Name: "CPU", Kind: "cpu", Default: true, Text: model.T("monitor64.txt.cores", "n", cores),
 			Metrics: []model.Metric{{Name: "util", Value: util, Unit: "%", Rule: model.RuleCPU}}})
 	} else if s, ok := c.ucdCPU(r, ucd); ok {
 		r.out = append(r.out, s)
@@ -168,7 +180,7 @@ func (c *Collector) collectHost(r *round) {
 			tot := hiLo(dsk, ucdDskTotHi, ucdDskTotLo, idx) * 1024
 			av := hiLo(dsk, ucdDskAvHi, ucdDskAvLo, idx) * 1024
 			us := hiLo(dsk, ucdDskUsHi, ucdDskUsLo, idx) * 1024
-			if tot <= 0 {
+			if tot <= 0 || fsSkip(path) {
 				continue
 			}
 			seen[path] = true
@@ -215,7 +227,7 @@ func (c *Collector) collectHost(r *round) {
 			if m := winDrive.FindStringSubmatch(descr); m != nil {
 				mount = strings.ToUpper(m[1])
 			}
-			if mount == "" || seen[mount] || size <= 0 {
+			if mount == "" || seen[mount] || size <= 0 || fsSkip(mount) {
 				continue
 			}
 			seen[mount] = true
@@ -272,27 +284,27 @@ func (c *Collector) ucdCPU(r *round, ucd map[string]pdu) (model.Service, bool) {
 func memService(total, avail float64) model.Service {
 	return model.Service{Key: "mem", Name: "RAM", Kind: "mem", Default: true,
 		Metrics: []model.Metric{{Name: "used", Value: pct(total-avail, total), Unit: "%", Rule: model.RuleMem, Max: total}, {Name: "avail", Value: avail, Unit: "B"}},
-		Text:    fmt.Sprintf("%s von %s frei", bytesText(avail), bytesText(total))}
+		Text:    model.T("monitor64.txt.free_of", "free", bytesText(avail), "total", bytesText(total))}
 }
 
 func swapService(total, free float64) model.Service {
 	return model.Service{Key: "swap", Name: "Swap", Kind: "swap", Default: true,
 		Metrics: []model.Metric{{Name: "used", Value: pct(total-free, total), Unit: "%", Rule: model.RuleSwap, Max: total}},
-		Text:    fmt.Sprintf("%s von %s frei", bytesText(free), bytesText(total))}
+		Text:    model.T("monitor64.txt.free_of", "free", bytesText(free), "total", bytesText(total))}
 }
 
 // fsService wie mapFS im Mapper: belegt als Anteil am fuer Benutzer Nutzbaren (used/(used+avail)).
 func fsService(mount string, total, used, avail float64, def bool) model.Service {
-	s := model.Service{Key: "fs:" + keyPart(mount), Name: "Dateisystem " + mount, Kind: "fs", Default: def}
+	s := model.Service{Key: "fs:" + keyPart(mount), Name: model.T("monitor64.svc.fs", "name", mount), Kind: "fs", Default: def}
 	if len(mount) == 2 && mount[1] == ':' {
-		s.Name = "Laufwerk " + mount
+		s.Name = model.T("monitor64.svc.drive", "name", mount)
 	}
 	u := 0.0
 	if used+avail > 0 {
 		u = pct(used, used+avail)
 	}
 	s.Metrics = []model.Metric{{Name: "used", Value: u, Unit: "%", Rule: model.RuleFS, Max: total}, {Name: "free", Value: avail, Unit: "B", Max: total}}
-	s.Text = fmt.Sprintf("%s von %s frei", bytesText(avail), bytesText(total))
+	s.Text = model.T("monitor64.txt.free_of", "free", bytesText(avail), "total", bytesText(total))
 	return s
 }
 

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -276,16 +277,30 @@ func checkOwner(fi os.FileInfo) error {
 
 // scriptCmd fuehrt die geoeffnete Datei aus (fexecve-Ersatz): sie wird im Kind Deskriptor 3 und ueber
 // /proc/self/fd/3 (bzw. /dev/fd/3) gestartet. Der Deskriptor bleibt offen, damit auch Skripte mit "#!" laufen
-// (der Interpreter oeffnet denselben Pfad).
+// (der Interpreter oeffnet denselben Pfad). FreeBSD kennt unter /dev/fd ohne eingehaengtes fdescfs nur 0 bis 2
+// (Standard bei FreeBSD 14): dann startet das Skript ueber seinen geprueften Pfad (Datei und alle
+// Ordner darueber gehoeren root und sind fuer andere nicht schreibbar, siehe checkScript).
 func scriptCmd(ctx context.Context, f *os.File, real string) *exec.Cmd {
 	p := "/dev/fd/3"
 	if runtime.GOOS == "linux" {
 		p = "/proc/self/fd/3"
+	} else if !fdPathWorks(f) {
+		p = real
 	}
 	cmd := exec.CommandContext(ctx, p)
 	cmd.Args[0] = real
 	cmd.ExtraFiles = []*os.File{f}
 	return cmd
+}
+
+// fdPathWorks sagt, ob offene Deskriptoren ueber /dev/fd/<n> erreichbar sind (fdescfs).
+func fdPathWorks(f *os.File) bool {
+	fd := f.Fd()
+	if fd <= 2 {
+		return false
+	}
+	_, err := os.Stat("/dev/fd/" + strconv.FormatUint(uint64(fd), 10))
+	return err == nil
 }
 
 // prepareCmd startet das Skript in einer eigenen Prozessgruppe, damit beim Zeitlimit auch Kindprozesse enden.
