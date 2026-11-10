@@ -11,6 +11,7 @@ Short summary of what changes per version. Details per module are in the node un
 - PROXY64: security headers from “Advanced” and HSTS apply to every response of the host, including block, error and sign-in pages; headers middlewares from Traefik labels are taken over.
 - DNS64: DHCP server as its own menu item (opt-in, off by default, no port until turned on) – networks per interface/VLAN, fixed addresses, dry run, detection of other DHCP servers, ARP check, PXE/netboot; host network or macvlan only (#59).
 - DNS64 DHCP: metrics in Prometheus (usage per network, requests, results, other DHCP servers).
+- DNS64: IPv6 DNS via router advertisement (opt-in, on the DHCP page) – the node announces itself as DNS server, also for Android; addresses still come from the router. Plus a view of the routers in the network with a hint if the router names a different DNS server (#59).
 - DNS64 DHCP: devices get names like `laptop.home.lan`, fixed addresses straight into a device group, networks behind a DHCP relay, cluster sync (networks, fixed addresses, leases) and a standby node that only steps in when the primary node is really gone (#59).
 - PROXY64: redirect on denied access per location – visitors turned away by the access list are sent to a configurable address with 302 instead of the error page (e.g. Vaultwarden `/admin` only from the LAN); logins stay unchanged (#55).
 - DNS64: block and allow lists understand AdGuard rules with a single bar – `@@|name^` exempts exactly this name, `|name^` blocks exactly it (previously ignored silently).

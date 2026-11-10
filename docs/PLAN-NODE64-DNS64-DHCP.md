@@ -1,6 +1,6 @@
 # Plan: DHCP-Server in DNS64
 
-Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0, Review-Fixes 1.37.1 und 1.38.1, Prometheus 1.38.0. Import fester Adressen entfällt (Dennis, 2026-11-09).** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
+Stand 2026-11-09, **Entscheidungen von Dennis eingearbeitet (siehe unten). Umgesetzt: D1+D2 als DNS64 1.36.0, D3–D6 als DNS64 1.37.0, Review-Fixes 1.37.1 und 1.38.1, Prometheus 1.38.0, IPv6-DNS per RA (D7) 1.39.0. Import fester Adressen entfällt (Dennis, 2026-11-09).** Anlass: DHCP wird auf GitHub und im Forum immer wieder gewünscht
 (Pi-hole und AdGuard Home haben ihn). Ziel: ein leichter DHCP-Server für Homelab und kleine bis mittlere Firmen, der
 Hand in Hand mit dem lokalen DNS arbeitet. Grundlagen: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md),
 [PLAN-NODE64-DNS64-GRUPPEN.md](PLAN-NODE64-DNS64-GRUPPEN.md), [CLUSTER.md](CLUSTER.md).
@@ -158,10 +158,25 @@ Leases liegen zusätzlich im Speicher. Geschrieben wird bei jedem ACK/RELEASE/DE
   Benachrichtigung. Vergaben aus dem Cluster mit Altersvergleich (`clApplyLease`), Löschungen per `Server.Forget`.
   Prüf-DISCOVER tragen Option 60 `node64-probe`: andere Nodes antworten, merken sich aber nichts.
 
+## D7: IPv6-DNS per Router Advertisement (Dennis, 2026-11-10: nur Stufe 1 plus Anzeige)
+
+- Paket `internal/dns64/ra`, auf der DHCP-Seite, aber unabhängig vom DHCP-Server; Schalter `dns64.ra`,
+  Schnittstellen `dns64.ra_ifaces`, Suchdomain `dns64.ra_domain` je Node (nie im Cluster). Ohne Einschalten kein Socket.
+- RA nur mit RDNSS/DNSSL: Router-Lifetime 0, keine Präfixe – Adressen (SLAAC aus dem Provider-Präfix) und Route
+  kommen weiter vom Router. Flags M/O übernimmt das eigene RA vom Default-Router des Netzes (Linux merkt sich die
+  Flags des letzten RA); dafür fragt der Sender beim Start per RS und wartet 2 s.
+- Zeiten: RA alle 150–200 s, nach dem Start drei im Abstand von 16 s, auf RS nach 0–0,5 s (höchstens alle 3 s);
+  DNS-Lifetime 600 s. Beim Abschalten/Stopp ein RA mit Lifetime 0 (zurücknehmen), geänderte Adressen ebenso.
+- Angekündigt: ULA der Schnittstelle, sonst globale Adresse; Bind-Adresse IPv6 = nur diese, IPv4-Bind oder Port ≠ 53
+  oder DNS aus = keine Ankündigung. Jede Node kündigt sich selbst an (Geräte nutzen alle, kein Failover nötig).
+- Anzeige: RAs anderer Router (Präfixe, SLAAC/DHCPv6, Default-Router, ihr DNS-Server); Hinweis bei anderem
+  DNS-Server und wenn kein Router Adressen vergibt. Bei ausgeschaltetem Sender per Knopf (RS, 3 s).
+- Test: Integration im Wegwerf-Container (radvd als Router, rdisc6 als Gerät), nie im LAN.
+
 ## Bewusst nicht dabei (vorerst)
 
-- DHCPv6 und Router Advertisements: IPv6 läuft im Heimnetz über SLAAC des Routers. Den DNS-Server dafür verteilt
-  der Router (RDNSS). Kann später als „RA mit RDNSS“ kommen, falls gefragt.
+- DHCPv6 (stateless und mit Adressvergabe) und eigene Präfixe: Adressen vergibt der Router per SLAAC; Android kann
+  kein DHCPv6. Siehe D7 für den DNS-Server per RA.
 - Freie DHCP-Optionen (nur die festen Felder inkl. PXE).
 - Option 82 (Relay-Agent-Info), Klassen/Vendor-Regeln, DDNS an fremde DNS-Server (dafür gibt es RFC 2136 an DNS64),
   MAC-Herstellerliste.

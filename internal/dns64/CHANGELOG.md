@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.39.0 – 2026-11-10
+
+### Neu
+- IPv6: DNS per Router Advertisement (auf der DHCP-Seite, opt-in je Node, Standard aus). Die Node kündigt sich auf den gewählten Schnittstellen per RA als DNS-Server an (RDNSS, Suchdomain per DNSSL) – das wirkt auch bei Android, das kein DHCPv6 kann. Node64 ist dabei kein Router: Router-Lifetime 0, keine Präfixe; Adressen aus dem Provider-Präfix und die Route kommen weiter vom Router, dessen Flags M/O übernimmt das eigene RA. Angekündigt wird die ULA-Adresse der Schnittstelle (bleibt beim Präfixwechsel), sonst die globale; beim Abschalten nimmt die Node die Ankündigung zurück. Jede Node im Cluster kündigt sich selbst an (#59).
+- Anzeige „Router im Netz“: Präfixe, ob Geräte eine Adresse bekommen (SLAAC/DHCPv6), Default-Router und welchen DNS-Server der Router selbst nennt – mit Hinweis, wenn er einen anderen DNS-Server ankündigt (dann im Router den DNSv6-Server auf Node64 stellen). Bei ausgeschaltetem Sender per „Netz prüfen“ (Router Solicitation).
+- Prometheus: `node64_dns64_ra_up`, `node64_dns64_ra_sent_total`, `node64_dns64_ra_announcing`. API: `GET`/`PUT /api/dns64/dhcp/ipv6`, `POST /api/dns64/dhcp/ipv6/probe`.
+
 ## 1.38.1 – 2026-11-09
 
 ### Behoben (zweites Review des DHCP-Servers)

@@ -52,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.38.1"
+	version   = "1.39.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -223,6 +223,7 @@ func (m *Module) Start(ctx context.Context) error {
 	defer m.ctl.Unlock()
 	err := m.startLocked()
 	m.dhcpApplyLocked(ctx) // DHCP nur, wenn eingeschaltet (dns64.dhcp)
+	m.raApplyLocked(ctx)   // IPv6-DNS per RA nur, wenn eingeschaltet (dns64.ra)
 	return err
 }
 
@@ -379,6 +380,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
 	m.dhcpHalt()
+	m.raHalt()
 	defer m.dhcpLeasesSoon() // eigener DHCP-Zustand (DNS aus) fuer den Cluster
 	return m.stopLocked(ctx)
 }

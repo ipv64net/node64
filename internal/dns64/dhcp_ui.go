@@ -45,6 +45,11 @@ func (m *Module) dhcpRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("PUT /api/dns64/dhcp/reservations/{id}", h(m.apiDHCPResSave))
 	mux.Handle("DELETE /api/dns64/dhcp/reservations/{id}", h(m.apiDHCPResDelete))
 	mux.Handle("DELETE /api/dns64/dhcp/leases/{scope}/{mac}", h(m.apiDHCPRelease))
+	mux.Handle("POST /dns64/dhcp/ipv6", h(m.pageRASave))
+	mux.Handle("POST /dns64/dhcp/ipv6/probe", h(m.pageRAProbe))
+	mux.Handle("GET /api/dns64/dhcp/ipv6", h(m.apiRA))
+	mux.Handle("PUT /api/dns64/dhcp/ipv6", h(m.apiRASave))
+	mux.Handle("POST /api/dns64/dhcp/ipv6/probe", h(m.apiRAProbe))
 }
 
 // ---- Ansicht ----
@@ -97,6 +102,7 @@ type dhcpPage struct {
 	Suggest   DHCPScope
 	Self      string              // Adresse dieser Node (Hinweis DNS-Server)
 	Conflicts map[string][]string // Netz -> andere Haupt-Nodes, die dort auch vergeben
+	RA        raView              // IPv6-DNS per Router Advertisement
 }
 
 func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
@@ -181,6 +187,7 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 	if pick != nil {
 		v.Suggest, v.Self = pick.Suggest, pick.Addrs[0].Addr().String()
 	}
+	v.RA = m.raView(ctx, scopes)
 	d.DHCP = v
 	return nil
 }

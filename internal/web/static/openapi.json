@@ -24773,7 +24773,7 @@
           "DNS64"
         ],
         "summary": "Rolle dieser Node im Cluster (je Node)",
-        "description": "primary vergibt Adressen; reserve antwortet nur, wenn keine Node mit dem Cluster-Bereich „DHCP-Vergaben“ erreichbar ist und keine in den letzten 3 Minuten als DHCP-Server geantwortet hat.",
+        "description": "primary vergibt Adressen; reserve antwortet nur, wenn keine Node mit dem Cluster-Bereich „DHCP-Netze“ erreichbar ist und keine in den letzten 3 Minuten als DHCP-Server geantwortet hat.",
         "requestBody": {
           "required": true,
           "content": {
@@ -25134,6 +25134,286 @@
           },
           "404": {
             "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/ipv6": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "IPv6-DNS per Router Advertisement: Einstellungen und Zustand",
+        "description": "Je Node, nie im Cluster. Die Node kündigt sich nur als DNS-Server an (RDNSS/DNSSL, Router-Lifetime 0, keine Präfixe); routers sind die RAs anderer Router (nur bei laufendem Sender).",
+        "responses": {
+          "200": {
+            "description": "Zustand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "interfaces": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "example": [
+                            "eth0"
+                          ]
+                        },
+                        "domain": {
+                          "type": "string",
+                          "description": "Suchdomain (DNSSL), leer = keine",
+                          "example": "home.lan"
+                        }
+                      }
+                    },
+                    "running": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "Socket-Fehler (z. B. ohne cap_net_raw)"
+                    },
+                    "status": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "interface": {
+                            "type": "string"
+                          },
+                          "dns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "last_sent": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "error_kind": {
+                            "type": "string",
+                            "enum": [
+                              "no_iface",
+                              "no_addr",
+                              "send"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "routers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "interface": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "example": "fe80::1"
+                          },
+                          "router_lifetime": {
+                            "type": "integer",
+                            "description": "Sekunden, 0 = kein Default-Router"
+                          },
+                          "managed": {
+                            "type": "boolean",
+                            "description": "M-Flag: Adressen per DHCPv6"
+                          },
+                          "other": {
+                            "type": "boolean",
+                            "description": "O-Flag: weitere Angaben per DHCPv6"
+                          },
+                          "prefixes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "prefix": {
+                                  "type": "string"
+                                },
+                                "slaac": {
+                                  "type": "boolean"
+                                },
+                                "on_link": {
+                                  "type": "boolean"
+                                },
+                                "valid_lifetime": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          },
+                          "dns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "last_seen": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "IPv6-DNS per Router Advertisement einstellen",
+        "description": "Einschalten braucht mindestens eine (höchstens 8) Schnittstellen und Host-Netz; angekündigt wird die ULA-Adresse der Schnittstelle, sonst die globale.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "interfaces": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "eth0"
+                    ]
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Suchdomain (DNSSL), leer = keine",
+                    "example": "home.lan"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert"
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/dhcp/ipv6/probe": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Router im Netz fragen (Router Solicitation, 3 s)",
+        "description": "Auf den gewählten Schnittstellen, sonst auf allen mit IPv6.",
+        "responses": {
+          "200": {
+            "description": "Router",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "routers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "interface": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "example": "fe80::1"
+                          },
+                          "router_lifetime": {
+                            "type": "integer",
+                            "description": "Sekunden, 0 = kein Default-Router"
+                          },
+                          "managed": {
+                            "type": "boolean",
+                            "description": "M-Flag: Adressen per DHCPv6"
+                          },
+                          "other": {
+                            "type": "boolean",
+                            "description": "O-Flag: weitere Angaben per DHCPv6"
+                          },
+                          "prefixes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "prefix": {
+                                  "type": "string"
+                                },
+                                "slaac": {
+                                  "type": "boolean"
+                                },
+                                "on_link": {
+                                  "type": "boolean"
+                                },
+                                "valid_lifetime": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          },
+                          "dns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "last_seen": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

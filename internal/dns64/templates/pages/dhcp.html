@@ -216,6 +216,61 @@
 				</table>
 			</div>{{else}}<div class="card-body text-body-secondary small">{{.T "dns64.dhcp.no_events"}}</div>{{end}}
 		</div>{{end}}
+		{{$ra := $h.RA}}<div class="card mt-3" id="ipv6">
+			<div class="card-header d-flex align-items-center gap-2"><i class="bi bi-globe2 text-primary"></i> {{.T "dns64.dhcp.ra.title"}}
+				{{if $ra.Running}}<span class="badge text-bg-success">{{.T "dns64.js.active"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "dns64.dhcp.mode_off"}}</span>{{end}}</div>
+			<div class="card-body">
+				<p class="small text-body-secondary">{{.T "dns64.dhcp.ra.hint"}}</p>
+				{{if $ra.Err}}<div class="alert alert-danger small py-2"><i class="bi bi-exclamation-octagon"></i> {{.T "dns64.dhcp.ra.err_socket" "err" $ra.Err}}</div>{{end}}
+				<form method="post" action="/dns64/dhcp/ipv6">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="ra-on" name="enabled" value="1"{{if $ra.Config.Enabled}} checked{{end}}{{if $h.Bridge}} disabled{{end}}><label class="form-check-label" for="ra-on">{{.T "dns64.dhcp.ra.enable"}}</label></div>
+					<div class="small fw-semibold mb-1">{{.T "dns64.dhcp.ra.ifaces"}}</div>
+					{{range $ra.Ifaces}}<div class="form-check"><input class="form-check-input" type="checkbox" name="iface" value="{{.Name}}" id="ra-if-{{.Name}}"{{if .Selected}} checked{{end}}><label class="form-check-label small" for="ra-if-{{.Name}}"><span class="font-monospace">{{.Name}}</span> <span class="text-body-secondary">{{if .Pick.IsValid}}{{$.T "dns64.dhcp.ra.would" "addr" .Pick.String}}{{else}}{{$.T "dns64.dhcp.ra.no_addr_short"}}{{end}}</span></label></div>
+					{{else}}<div class="small text-body-secondary">{{.T "dns64.dhcp.ra.no_ifaces"}}</div>{{end}}
+					<label class="form-label mt-2" for="ra-domain">{{.T "dns64.dhcp.domain"}}</label>
+					<input type="text" class="form-control form-control-sm font-monospace mb-1" id="ra-domain" name="domain" maxlength="253" value="{{$ra.Config.Domain}}" placeholder="{{if $ra.DomainHint}}{{$ra.DomainHint}}{{else}}home.lan{{end}}" style="max-width: 20rem">
+					<div class="form-text mb-2">{{.T "dns64.dhcp.ra.domain_hint"}}</div>
+					<button class="btn btn-sm btn-primary" type="submit">{{.T "common.save"}}</button>
+				</form>
+				{{if $ra.Status}}<div class="table-responsive mt-3">
+					<table class="table table-sm align-middle mb-0 small table-stack">
+						<thead><tr><th data-nolabel>{{.T "dns64.dhcp.iface"}}</th><th>{{.T "dns64.dhcp.ra.announced"}}</th><th>{{.T "dns64.dhcp.ra.last"}}</th></tr></thead>
+						<tbody>
+						{{range $ra.Status}}<tr>
+							<td class="font-monospace">{{.Iface}}</td>
+							<td>{{if .ErrKind}}<span class="text-danger">{{$.T (print "dns64.dhcp.ra.err_" .ErrKind) "err" .Error}}</span>{{else}}{{range $i, $a := .DNS}}{{if $i}}, {{end}}<span class="font-monospace">{{$a}}</span>{{end}}{{end}}</td>
+							<td>{{if .LastSent.IsZero}}–{{else}}{{$.Time .LastSent}}{{end}}</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>{{end}}
+			</div>
+			<div class="card-body border-top">
+				<div class="d-flex align-items-center gap-2 mb-2">
+					<div class="fw-semibold small me-auto"><i class="bi bi-router"></i> {{.T "dns64.dhcp.ra.routers"}}</div>
+					{{if not $ra.Running}}<form method="post" action="/dns64/dhcp/ipv6/probe"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-primary" type="submit"{{if $h.Bridge}} disabled{{end}}><i class="bi bi-search"></i> {{.T "dns64.dhcp.ra.probe"}}</button></form>{{end}}
+				</div>
+				{{if $ra.Probed}}<div class="small text-body-secondary mb-2">{{.T "dns64.dhcp.ra.probed" "time" ($.Time $ra.ProbeAt)}}</div>{{end}}
+				{{if $ra.ProbeErr}}<div class="alert alert-warning small py-2">{{$ra.ProbeErr}}</div>{{end}}
+				{{if $ra.NoAddrs}}<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.dhcp.ra.no_addrs"}}</div>{{end}}
+				{{range $ra.Routers}}{{if .OtherDNS}}<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "dns64.dhcp.ra.other_dns" "router" .Source.String "dns" .DNSList}}</div>{{end}}{{end}}
+				{{if $ra.Routers}}<div class="table-responsive">
+					<table class="table table-sm align-middle mb-0 small table-stack">
+						<thead><tr><th data-nolabel>{{.T "dns64.dhcp.ra.col_router"}}</th><th>{{.T "dns64.dhcp.ra.col_addrs"}}</th><th>{{.T "dns64.dhcp.ra.col_dns"}}</th></tr></thead>
+						<tbody>
+						{{range $ra.Routers}}<tr>
+							<td class="text-break"><span class="font-monospace">{{.Source}}</span> <span class="text-body-secondary font-monospace">{{.Iface}}</span>
+								<div class="text-body-secondary">{{if gt .Lifetime 0}}{{$.T "dns64.dhcp.ra.default_router"}}{{else}}{{$.T "dns64.dhcp.ra.not_default"}}{{end}} · {{$.Time .LastSeen}}</div></td>
+							<td>{{range .Prefixes}}<div><span class="font-monospace">{{.Prefix}}</span>{{if .SLAAC}} <span class="badge text-bg-light">{{$.T "dns64.dhcp.ra.slaac"}}</span>{{end}}</div>{{end}}
+								{{if .Managed}}<span class="badge text-bg-light">{{$.T "dns64.dhcp.ra.dhcpv6"}}</span>{{end}}{{if not .Addresses}}<span class="text-body-secondary">{{$.T "dns64.dhcp.ra.none"}}</span>{{end}}</td>
+							<td>{{range .DNS}}<div class="font-monospace">{{.}}</div>{{else}}<span class="text-body-secondary">{{$.T "dns64.dhcp.ra.none"}}</span>{{end}}{{if .OwnDNS}}<span class="badge text-bg-success">{{$.T "dns64.dhcp.ra.own"}}</span>{{end}}{{if .Domains}}<div class="text-body-secondary font-monospace">{{join .Domains ", "}}</div>{{end}}</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>{{else}}<div class="small text-body-secondary">{{.T "dns64.dhcp.ra.no_routers"}}</div>{{end}}
+			</div>
+		</div>
 	</div>
 </div>
 {{end}}

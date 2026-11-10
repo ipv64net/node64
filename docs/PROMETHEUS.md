@@ -120,6 +120,9 @@ und `increase()` kommen damit zurecht.
 | `node64_dns64_dhcp_requests_total` | `type` | DHCP-Anfragen: `discover`, `request`, `decline`, `release`, `inform` |
 | `node64_dns64_dhcp_results_total` | `result` | Ergebnisse: `offer`, `ack`, `nak`, `ignored`, `observe`, `standby`, `full`, `conflict`, `decline`, `release` |
 | `node64_dns64_dhcp_foreign_servers` | | fremde DHCP-Server, die in den letzten 30 Minuten geantwortet haben |
+| `node64_dns64_ra_up` | | IPv6-DNS per Router Advertisement an und Socket offen (nur wenn eingeschaltet) |
+| `node64_dns64_ra_sent_total` | | gesendete Router Advertisements |
+| `node64_dns64_ra_announcing` | `interface` | Schnittstelle kündigt gerade einen DNS-Server an |
 
 Anteil blockierter Anfragen der letzten Stunde:
 
