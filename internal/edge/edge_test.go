@@ -67,7 +67,11 @@ func freePort(t *testing.T) int {
 
 func newEdge(t *testing.T, check func(context.Context, []ports.Claim) error) (*Edge, Config) {
 	t.Helper()
-	cfg := Config{Bind: "127.0.0.1", HTTPPort: freePort(t), HTTPSPort: freePort(t), HTTP3: true, Default: DefaultNotFound}
+	hp, hsp := freePort(t), freePort(t)
+	for hsp == hp { // Zufallsports: beide gleich waere ein ungueltiges Edge
+		hsp = freePort(t)
+	}
+	cfg := Config{Bind: "127.0.0.1", HTTPPort: hp, HTTPSPort: hsp, HTTP3: true, Default: DefaultNotFound}
 	crt := selfSigned(t, "app.test", "dns.test")
 	e, err := New(cfg, fakeCerts{crt: map[string]*tls.Certificate{"app.test": crt, "dns.test": crt}}, check, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {

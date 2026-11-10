@@ -104,7 +104,11 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(cm2.Close)
-	cfg := edge.Config{Bind: "127.0.0.1", HTTPPort: freePort(t), HTTPSPort: freePort(t), HTTP3: true, Default: edge.DefaultNotFound}
+	hp, hsp := freePort(t), freePort(t)
+	for hsp == hp { // Zufallsports: beide gleich waere ein ungueltiges Edge
+		hsp = freePort(t)
+	}
+	cfg := edge.Config{Bind: "127.0.0.1", HTTPPort: hp, HTTPSPort: hsp, HTTP3: true, Default: edge.DefaultNotFound}
 	e, err := edge.New(cfg, cm2, nil, log)
 	if err != nil {
 		t.Fatal(err)
