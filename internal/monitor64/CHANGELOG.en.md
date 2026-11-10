@@ -1,6 +1,6 @@
 # Monitor64 – Changes
 
-## 0.1.0 – unreleased (preview, only with switch `NODE64_MONITOR64=1`)
+## 0.1.0 – 2026-11-10
 
 - New module: monitor systems with thresholds and history.
 - Access: Monitor64 agent (Linux), agentless SSH, Proxmox VE, Proxmox Backup Server and Docker via API.

@@ -1,6 +1,6 @@
 # Monitor64 – Änderungen
 
-## 0.1.0 – unveröffentlicht (Vorschau, nur mit Schalter `NODE64_MONITOR64=1`)
+## 0.1.0 – 2026-11-10
 
 - Neues Modul: Systeme überwachen mit Schwellen und Verlauf (Plan `docs/PLAN-NODE64-MONITOR64.md`).
 - Zugänge: Monitor64-Agent (Linux), SSH ohne Agent, Proxmox VE, Proxmox Backup Server und Docker per API.

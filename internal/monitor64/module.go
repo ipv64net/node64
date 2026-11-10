@@ -2,8 +2,7 @@
 // docs/PLAN-NODE64-MONITOR64.md). Zugaenge: Monitor64-Agent, SSH ohne Agent, SNMP, APIs (Proxmox VE, PBS, Docker).
 //
 // Standard aus: ausgeschaltet gibt es keinen Menuepunkt, keinen Port, keine Goroutine und keine Abfrage; die
-// Tabellen entstehen erst beim ersten Einschalten (Migrationen des Moduls). Bis zur Freigabe ist das Modul nur mit
-// dem Schalter NODE64_MONITOR64=1 registriert (cmd/node64/main.go).
+// Tabellen entstehen erst beim ersten Einschalten (Migrationen des Moduls).
 package monitor64
 
 import (
@@ -47,8 +46,6 @@ const Name = "monitor64"
 const (
 	version = "0.1.0"
 
-	// EnvSwitch schaltet das Modul bis zur Freigabe frei (nur Testsystem).
-	EnvSwitch = "NODE64_MONITOR64"
 	// EnvLoadGen startet den Lastgenerator mit N Schein-Hosts (nur Entwicklung, nie in der Oberflaeche).
 	EnvLoadGen = "NODE64_MONITOR64_LOADGEN"
 
@@ -59,9 +56,6 @@ const (
 	keepProblems = 365 * 24 * time.Hour // Problem-Historie so lange wie die Stundenwerte
 	stopWait     = 15 * time.Second
 )
-
-// Enabled sagt, ob der Schalter fuer Monitor64 gesetzt ist (bis zur Freigabe).
-func Enabled() bool { return os.Getenv(EnvSwitch) == "1" }
 
 // Migrations liefert die Tabellen des Moduls.
 func Migrations() []store.Migration {

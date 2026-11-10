@@ -318,6 +318,19 @@ networks:
 - **Container entfernt:** Der Host wird nach 2 Minuten gelöscht und bei CDN64 online abgemeldet; ein gestoppter
   Container behält seinen Host. Details: [docs/CDN64.md](docs/CDN64.md#docker-labels).
 
+## Monitor64 (Systeme überwachen)
+
+Das Modul *Monitor64* (in den Einstellungen einschalten, standardmäßig aus – ausgeschaltet läuft nichts und es ist kein Port offen) überwacht Systeme mit Schwellen und Verlauf, leichter als CheckMK oder Zabbix:
+
+- **Zugänge:** Monitor64-Agent für Linux, Windows und FreeBSD/OPNsense (die Node fragt ab; für Hosts hinter NAT oder VPS baut der Agent die Verbindung selbst auf), Linux ohne Agent per SSH, Proxmox VE, Proxmox Backup Server, Docker, TrueNAS, Unraid, Server-BMC (Redfish), USV über NUT, Prometheus-Exporter (`node_exporter`, `windows_exporter`, eigene Metriken) und SNMP v1/v2c/v3 mit Geräteprofilen und Traps. Ein Host kann mehrere Zugänge haben.
+- **Dienste:** werden erkannt und nie automatisch übernommen; verschwundene Dienste bleiben gemeldet, bis man sie entfernt.
+- **Schwellen:** Standard für alle, Abweichungen je Gruppe oder Tag, eigene Werte am Host; mit Dauer, Hysterese, „GB frei“ und Trend „voll in N Tagen“. Feste Regeln für SMART, RAID/ZFS, Bonding, Updates, Gäste und Container.
+- **Probleme und Meldungen:** Ablauf je Problem mit Person, Quittieren, Wartungsfenster; eine Meldung je Host und Runde über die Benachrichtigungskanäle der Node, Entwarnung an dieselben Kanäle.
+- **Agent:** Die Node hält die signierten Agent-Dateien bereit (*Monitor64 → Agent*, auch für Hosts ohne Internet), zeigt die Installationsbefehle und aktualisiert Agents automatisch. Unter Windows zeigt ein Symbol in der Taskleiste Version und Zustand.
+- **Mehr:** Einträge auf den Statusseiten, Prometheus-Export unter `/api/metrics`, Konfiguration im Export und Backup der Node. Im Cluster überwacht je Host eine Node, eine Ersatz-Node übernimmt bei Ausfall.
+
+Der Verlauf liegt in einer eigenen Datei `monitor64.db` im Datenverzeichnis (1-Minuten-Werte 48 Stunden, 5-Minuten-Werte 30 Tage, Stundenwerte 1 Jahr). Agent-Dateien und Ablauf: [docs/MONITOR64-AGENT-RELEASE.md](docs/MONITOR64-AGENT-RELEASE.md), Cluster: [docs/CLUSTER.md](docs/CLUSTER.md).
+
 ## Honeypot64 (Fallen-Dienste)
 
 Das Modul *Honeypot64* (in den Einstellungen einschalten, standardmäßig aus) stellt Fallen-Dienste auf, die Angreifer anlocken: SSH und Telnet (Logins werden immer abgelehnt und mit Benutzername und Passwort erfasst), HTTP/HTTPS mit neutralen Login-Ködern und Einordnung der Web-Angriffe nach OWASP (SQL-Injection, Log4Shell, Path Traversal …), beliebige TCP-Ports (erste Bytes, z. B. RDP-Benutzername) und Port-Scan-Erkennung. Je Port wählbare Dienst-Profile (z. B. OpenSSH Debian/Ubuntu oder Dropbear, BusyBox- oder Linux-Telnet, MySQL oder MariaDB, nginx, Apache, Proxmox VE, Webmin, Home Assistant, Grafana, NAS, Elasticsearch) bestimmen Banner, Kopfzeilen, Antworten und Zertifikat; Hostname und Versionen variieren stabil je Sensor. Low Interaction: nichts wird ausgeführt, keine ausgehenden Verbindungen, Limits je IP. Profile `minimal`, `standard`, `full` oder eigene Auswahl; belegte Ports (PROXY64, DNS64, Streams) werden erkannt. Auswertung unter *Honeypot64*: Dienste, Verlauf, Top-IPs, Zugangsdaten, Pfade, User-Agents, letzte Ereignisse; Prometheus (`node64_honeypot_*`), optional Meldung bei neuen Angreifern. Daten lokal 7 Tage. API: `/api/honeypot/*`.

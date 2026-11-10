@@ -643,6 +643,12 @@ Jede Phase endet mit demselben **Abschluss** – erst danach beginnt die nächst
   Taskleiste** (der Dienst startet es je angemeldeter Sitzung; zeigt läuft/Version/letzte Abfrage/Update verfügbar –
   die Node nennt dem Agent die verfügbare Version mit `info latest=<version>`), echt getestet inklusive Update.
   Englische Oberfläche durchgeklickt, Funde behoben.
+- 2026-11-10 (Abend): `/security-review` über alle lokalen Commits – ein Fund unter der Meldeschwelle (Assistent
+  übernahm bei SSH mit Passwort den unbestätigten Fingerabdruck) samt Härtungen behoben (314dc444). Agent-Dateien
+  0.1.0 signiert auf `ipv64.net/node64/agent/` und `node64.de/agent/`, von der Testnode mit dem Release-Schlüssel
+  angenommen. **Freigabe (Entscheidung Dennis): Monitor64 kommt mit der nächsten Version, zusammen mit dem Rückbau
+  von Proxmox VE/Docker aus Healthchecks (Healthchecks 3.0.0, andere Sitzung).** Der Schalter `NODE64_MONITOR64`
+  ist entfernt: Das Modul ist wie die anderen unter Einstellungen → Module einschaltbar, Standard aus.
 - Offene Punkte: OPNsense, pfSense und TrueNAS CORE nur nachgestellt (Test durch die Community); Ruhezeit-Prüfung für Erinnerungen (Dispatcher
   exportieren); vor der Umstellung auf übersetzbare Namen erkannte Dienste behalten ihren deutschen Namen (der
   gespeicherte Name geht vor); Synology md0/md1 mit leeren Plätzen erscheint als degraded; Aufbewahrung zur Laufzeit
