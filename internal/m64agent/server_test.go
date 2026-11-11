@@ -208,6 +208,10 @@ func TestSilentConnections(t *testing.T) {
 		_, _ = io.Copy(io.Discard, c) // Agent schliesst nach dem Handshake-Zeitlimit
 		_ = c.Close()
 	}
+	// ssh.NewServerConn schliesst die Verbindung, bevor der Agent den Fehlversuch zaehlt: kurz warten (CI ist langsamer)
+	for i := 0; i < 100 && !s.lim.blocked("127.0.0.2", time.Now()); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if !s.lim.blocked("127.0.0.2", time.Now()) {
 		t.Fatal("silent connections were not counted as failures")
 	}
