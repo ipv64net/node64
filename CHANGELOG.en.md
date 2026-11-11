@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - AI interface (MCP): Monitor64 as its own area with four read-only tools – overview, host with services and values, problems, maintenance.
+- AI interface (MCP): more read-only tools for DNS64 DHCP (leases, fixed addresses, foreign DHCP servers), status pages (state per entry) and the cluster.
 - API: Monitor64 in the API docs (OpenAPI, page API) – all endpoints under `/api/monitor64/…` with requests and responses.
 
 - Monitor64: own logo.

@@ -18,6 +18,7 @@ func (m *Module) statusPagesAPIRoutes(mux *http.ServeMux, api func(http.HandlerF
 	mux.Handle("GET /api/status-pages", api(m.apiStatusPages))
 	mux.Handle("POST /api/status-pages", api(m.apiStatusPageCreate))
 	mux.Handle("GET /api/status-pages/{id}", api(m.apiStatusPageGet))
+	mux.Handle("GET /api/status-pages/{id}/view", api(m.apiStatusPageView))
 	mux.Handle("PUT /api/status-pages/{id}", api(m.apiStatusPageUpdate))
 	mux.Handle("DELETE /api/status-pages/{id}", api(m.apiStatusPageDelete))
 	mux.Handle("POST /api/status-pages/{id}/items", api(m.apiStatusItemsAdd))
@@ -86,6 +87,25 @@ func (m *Module) apiStatusPageGet(w http.ResponseWriter, r *http.Request) {
 	if p := m.apiStatusPage(w, r); p != nil {
 		writeJSON(w, http.StatusOK, p)
 	}
+}
+
+// apiStatusPageView: was die Seite gerade zeigt (wie status.json, auch fuer abgeschaltete bzw. passwortgeschuetzte
+// Seiten; Anmeldung wie die uebrige API). lang=de|en (Standard en).
+func (m *Module) apiStatusPageView(w http.ResponseWriter, r *http.Request) {
+	p := m.apiStatusPage(w, r)
+	if p == nil {
+		return
+	}
+	lang := "en"
+	if r.URL.Query().Get("lang") == "de" {
+		lang = "de"
+	}
+	v, err := m.buildStatusView(r.Context(), p, lang)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (m *Module) apiStatusPageCreate(w http.ResponseWriter, r *http.Request) {

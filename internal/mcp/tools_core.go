@@ -15,6 +15,7 @@ func Tools() []Tool {
 	out = append(out, networkTools()...)
 	out = append(out, honeypotTools()...)
 	out = append(out, monitor64Tools()...)
+	out = append(out, moreTools()...)
 	return out
 }
 

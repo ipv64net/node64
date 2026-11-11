@@ -3,6 +3,7 @@
 ## 3.1.0 – 2026-11-11
 
 - Statusseiten: Healthchecks und Monitor64-Systeme stehen getrennt – auf der Seite als eigene Abschnitte „Dienste“ und „Systeme“ (je mit ihren Gruppen), im Editor mit eigener Überschrift in der Liste und in der Auswahl. Beides auf einer Seite bleibt möglich.
+- API: `GET /api/status-pages/{id}/view` liefert, was die Seite gerade zeigt (wie status.json, auch für abgeschaltete oder passwortgeschützte Seiten).
 
 ## 3.0.0 – 2026-11-10
 

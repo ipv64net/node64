@@ -24210,6 +24210,55 @@
         }
       }
     },
+    "/status-pages/{id}/view": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Was die Statusseite gerade zeigt",
+        "description": "Gesamtzustand, Abschnitte (section: leer = Healthchecks, systems = Monitor64) mit Gruppen und dem Zustand jedes Eintrags, Wartungen und Stoerungen - dieselben Daten wie status.json der Seite, aber auch fuer abgeschaltete oder passwortgeschuetzte Seiten (Anmeldung wie die uebrige API).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID der Statusseite"
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en",
+                "de"
+              ],
+              "default": "en"
+            },
+            "description": "Sprache der Texte (Gruende der Stoerungen)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK (Aufbau wie status.json der oeffentlichen Seite)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Statusseite nicht gefunden"
+          }
+        }
+      }
+    },
     "/status-pages/{id}/notices": {
       "parameters": [
         {

@@ -5,6 +5,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - KI-Schnittstelle (MCP): Monitor64 als eigener Bereich mit vier lesenden Werkzeugen – Übersicht, Host mit Diensten und Messwerten, Probleme, Wartungen.
+- KI-Schnittstelle (MCP): weitere lesende Werkzeuge für DNS64-DHCP (Vergaben, feste Adressen, fremde DHCP-Server), Statusseiten (Zustand je Eintrag) und den Cluster.
 - API: Monitor64 in der API-Doku (OpenAPI, Seite API) – alle Endpunkte unter `/api/monitor64/…` mit Anfragen und Antworten.
 
 - Monitor64: eigenes Logo.
