@@ -3,7 +3,14 @@
 ## 1.55.1 – 2026-11-11
 
 ### Fixed
-- Reachability check switched off: the host no longer keeps showing the old "unreachable" state in the overview and on the dashboard.
+- Reachability check switched off: the host no longer keeps showing the old "unreachable" state in the overview and on the dashboard. Health checks on the target can still be created and are shown.
+- Locations: access lists and blocks can no longer be bypassed with a backslash right after a slash (`/%5Cadmin`, relevant for IIS/Windows targets); empty segments and parameter-only segments no longer count when matching or building the target path.
+- Addresses with a session parameter as a separate segment (`/app/;jsessionid=…` from Tomcat/Jetty) are no longer rejected with 400.
+- Host response headers (Advanced) no longer override anything the node sets itself on its own pages (login, block, maintenance, error page, redirect), e.g. `Cache-Control: no-store`, `X-Frame-Options: DENY`, the Basic auth challenge, the login cookie; "remove" only applies to target responses.
+- gRPC: a visitor's Content-Type no longer bypasses the limit of concurrent requests to the target (gRPC streams have their own, larger slots) and no longer switches off the custom error page (the target's response decides).
+- Protocol "automatic": upgrades other than WebSocket (kubectl exec/port-forward, Docker API attach) go over HTTP/1.1 again instead of failing with 502.
+- 100 Continue and 103 Early Hints from the target no longer end up as the status in the access log, statistics and error count.
+- Traefik labels: headers from `headers` middlewares follow later label changes (including removal) as long as they were not changed in the UI.
 
 ## 1.55.0 – 2026-11-11
 

@@ -2825,6 +2825,11 @@
           "no_probe": {
             "type": "boolean",
             "description": "Ziel nicht auf Erreichbarkeit prüfen (Proxy-Host, TLS durchreichen), z. B. für Dienste ohne Weboberfläche: keine Anzeige „nicht erreichbar“, keine Kennzahl node64_cdn64_host_target_up"
+          },
+          "label_headers": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Prüfsumme der Antwort-Kopfzeilen, die zuletzt aus Traefik-Labels übernommen wurden (intern: solange die Kopfzeilen des Hosts damit übereinstimmen, folgen sie Änderungen der Labels)"
           }
         }
       },

@@ -5,7 +5,10 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Monitor64: card on the dashboard; problems appear under "Recent incidents" together with the health checks.
-- PROXY64: with the reachability check switched off, the host no longer stays red ("unreachable") in the overview.
+- PROXY64: with the reachability check switched off, the host no longer stays red ("unreachable") in the overview; health checks on the target still work.
+- PROXY64: security – location access lists can no longer be bypassed via `/%5Cadmin` (IIS/Windows targets); host headers no longer override anything on the node's own pages (no-store, X-Frame-Options, login); a gRPC header no longer bypasses the limit to the target.
+- PROXY64: `;jsessionid=` addresses (Tomcat/Jetty) work again; upgrades other than WebSocket (kubectl, Docker API) with the automatic protocol; 1xx no longer logged as status; Traefik headers follow label changes.
+- SSO login: changed own CAs apply immediately to the provider's keys (JWKS) too; no more open connections per login.
 - Monitor64: host page and list view readable on tablets and smartphones (services table fits the screen).
 - Monitor64: IPv6 throughout – host address also as `[2001:db8::1]:2222`, IPv6 without brackets for the Prometheus exporter and Docker (`tcp://`, `ssh://`), link-local addresses with a zone (`fe80::1%eth0`) also for Proxmox VE, PBS, TrueNAS, Unraid and server BMC.
 

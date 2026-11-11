@@ -38,9 +38,14 @@ func TestLocationPathVariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := e.client(false)
-	for _, p := range []string{"/secure", "/SECURE", "/Secure/x", "/secure%20", "/secure.", "/secure%09", "/secure;x=1", "/secure%5cx"} {
+	for _, p := range []string{"/secure", "/SECURE", "/Secure/x", "/secure%20", "/secure.", "/secure%09", "/secure;x=1", "/secure%5cx", "/%5Csecure/", "/%5csecure", "/;x/secure"} {
 		if code, _, _ := do(t, c, "GET", "http://var.test"+p); code != 403 {
 			t.Errorf("%s: %d, want 403", p, code)
+		}
+	}
+	for _, p := range []string{"/securex", "/app/;jsessionid=ABC", "/;jsessionid=ABC"} { // reine Parameter-Abschnitte: kein 400
+		if code, _, _ := do(t, c, "GET", "http://var.test"+p); code != 200 {
+			t.Errorf("%s: %d, want 200", p, code)
 		}
 	}
 	if code, _, _ := do(t, c, "GET", "http://var.test/securex"); code != 200 {
@@ -74,7 +79,7 @@ func TestLocationForwardVariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := e.client(false)
-	for in, want := range map[string]string{"/api/x": "/v1/x", "/API/x": "/v1/x", "/api./x": "/v1/x", "/api%5cx": "/v1/x", "/Api/a/b/": "/v1/a/b/", "/api../x": "/v1/x"} {
+	for in, want := range map[string]string{"/api/x": "/v1/x", "/API/x": "/v1/x", "/api./x": "/v1/x", "/api%5cx": "/v1/x", "/Api/a/b/": "/v1/a/b/", "/api../x": "/v1/x", "/%5Capi/x": "/v1/x", "/;s=1/api/x": "/v1/x"} {
 		if _, got, _ := getJSON(t, c, "http://fw.test"+in); got["path"] != want {
 			t.Errorf("%s: %v, want %s", in, got["path"], want)
 		}

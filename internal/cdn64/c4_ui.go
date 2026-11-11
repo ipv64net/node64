@@ -422,7 +422,7 @@ func (m *Module) hostCheck(r *http.Request) (*Host, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if !h.probed() {
+	if !h.hasTarget() {
 		return h, "", ferr("kind", "cdn64.err.no_target")
 	}
 	scheme := h.Scheme

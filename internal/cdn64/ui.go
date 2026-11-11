@@ -279,7 +279,7 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 		if h.DockerContainer != "" {
 			row.Docker, row.DockerRO = m.dockerHostLabel(h), m.dockerOn(ctx)
 		}
-		if h.probed() {
+		if h.hasTarget() {
 			row.Watch = watch.of(h.TargetHost, h.TargetPort)
 		}
 		if h.Kind == KindStatus {

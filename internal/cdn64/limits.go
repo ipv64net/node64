@@ -25,6 +25,10 @@ const (
 
 var limQueueWait = 10 * time.Second // so lange wartet eine Anfrage auf einen freien Platz beim Ziel (Tests kuerzer)
 
+// grpcSlotFactor: gRPC-Streams laufen dauerhaft (NetBird: je Peer zwei) und haben je Host das Vielfache der Zielplaetze
+// fuer sich; begrenzt bleiben sie trotzdem, denn den Content-Type kann jeder Besucher setzen.
+const grpcSlotFactor = 10
+
 // Gruende fuer Abweisungen (Statistik, Zugriffs-Log; Texte unter cdn64.reject.*).
 const (
 	rejBlocklist = "blocklist" // ipv64-Blocklisten

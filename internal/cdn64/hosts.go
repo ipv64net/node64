@@ -90,10 +90,11 @@ func (h *Host) Target() string {
 // HTTPS: der Host beendet HTTPS hier (beim Durchreichen macht das das Ziel).
 func (h *Host) HTTPS() bool { return h.CertID != CertNone && h.Kind != KindPass }
 
-// probed: das Ziel wird auf Erreichbarkeit geprueft (abschaltbar je Host).
-func (h *Host) probed() bool {
-	return (h.Kind == KindProxy || h.Kind == KindPass) && !h.Advanced.NoProbe
-}
+// hasTarget: der Host hat ein Ziel (Proxy, TLS durchreichen) - fuer Healthchecks auf das Ziel.
+func (h *Host) hasTarget() bool { return h.Kind == KindProxy || h.Kind == KindPass }
+
+// probed: das Ziel wird auf Erreichbarkeit geprueft (abschaltbar je Host; Healthchecks aufs Ziel gehen trotzdem).
+func (h *Host) probed() bool { return h.hasTarget() && !h.Advanced.NoProbe }
 
 // newHost: Standardwerte eines neuen Hosts.
 func newHost() *Host { return newHostKind(KindProxy) }

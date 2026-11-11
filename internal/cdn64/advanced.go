@@ -69,6 +69,10 @@ type Advanced struct {
 
 	// NoProbe: Ziel nicht auf Erreichbarkeit pruefen (z. B. Dienst ohne Weboberflaeche; Forum 5100)
 	NoProbe bool `json:"no_probe,omitempty"`
+
+	// LabelHeaders: Pruefsumme der Antwort-Kopfzeilen, die zuletzt aus Traefik-Labels kamen. Stimmen die Kopfzeilen
+	// des Hosts noch damit ueberein, folgen sie spaeteren Label-Aenderungen; von Hand geaenderte bleiben (nur lesend).
+	LabelHeaders string `json:"label_headers,omitempty"`
 }
 
 // PROXY-Protokoll zum Ziel (Advanced.ProxyProtocol bei TLS durchreichen, Stream.ProxyProtocol bei TCP-Streams): der

@@ -3,7 +3,14 @@
 ## 1.55.1 – 2026-11-11
 
 ### Behoben
-- Erreichbarkeitsprüfung abgeschaltet: Der Host steht in der Übersicht und im Dashboard nicht mehr mit dem alten Stand „nicht erreichbar“ da.
+- Erreichbarkeitsprüfung abgeschaltet: Der Host steht in der Übersicht und im Dashboard nicht mehr mit dem alten Stand „nicht erreichbar“ da. Healthchecks auf das Ziel lassen sich trotzdem anlegen und werden angezeigt.
+- Locations: Zugriffsliste und Sperre lassen sich nicht mehr mit einem Backslash direkt nach einem Schrägstrich umgehen (`/%5Cadmin`, wirkt bei IIS/Windows-Zielen); leere Abschnitte und reine Parameter zählen beim Vergleich und beim Pfad zum Ziel nicht.
+- Adressen mit Sitzungs-Parameter als eigenem Abschnitt (`/app/;jsessionid=…` von Tomcat/Jetty) werden nicht mehr mit 400 abgewiesen.
+- Antwort-Kopfzeilen des Hosts (Erweitert) überschreiben auf Seiten der Node (Anmeldung, Sperre, Wartung, Fehlerseite, Weiterleitung) nichts mehr, was die Node selbst setzt (z. B. `Cache-Control: no-store`, `X-Frame-Options: DENY`, Basic-Auth-Abfrage, Anmelde-Cookie); „entfernen“ gilt nur für Antworten des Ziels.
+- gRPC: Der Content-Type des Besuchers hebelt die Begrenzung gleichzeitiger Anfragen ans Ziel nicht mehr aus (gRPC-Streams haben eigene, größere Plätze) und schaltet die eigene Fehlerseite nicht mehr ab (entscheidend ist die Antwort des Ziels).
+- Protokoll „automatisch“: Upgrades außer WebSocket (kubectl exec/port-forward, Docker-API attach) gehen wieder über HTTP/1.1 statt mit 502 zu scheitern.
+- 100 Continue und 103 Early Hints des Ziels landen nicht mehr als Status in Zugriffslog, Statistik und Fehlerzählung.
+- Traefik-Labels: Kopfzeilen aus `headers`-Middlewares folgen späteren Label-Änderungen (auch Entfernen), solange sie in der Oberfläche nicht geändert wurden.
 
 ## 1.55.0 – 2026-11-11
 

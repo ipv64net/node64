@@ -107,7 +107,8 @@ type idleCloser interface {
 	CloseIdleConnections()
 }
 
-// upgradeSplit: h2c bzw. nur HTTP/2 - WebSocket und andere Upgrades gibt es nur mit HTTP/1.1, sie gehen ueber h1.
+// upgradeSplit: automatisch, h2c bzw. nur HTTP/2 - WebSocket und andere Upgrades (SPDY von kubectl, "tcp" der
+// Docker-API) gibt es nur mit HTTP/1.1, sie gehen ueber h1 (Go erzwingt HTTP/1.1 von sich aus nur fuer WebSocket).
 type upgradeSplit struct{ h2, h1 *http.Transport }
 
 func (s upgradeSplit) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -126,7 +127,7 @@ func (s upgradeSplit) CloseIdleConnections() {
 // Verbindungen des vorigen Transports unter key werden geschlossen: Aenderungen wirken nach dem Speichern).
 func (m *Module) targetTransport(key int64, verify bool, mode string, timeout int) http.RoundTripper {
 	if timeout <= 0 {
-		if mode != TargetH2C {
+		if mode == TargetHTTP1 {
 			return m.transport(verify, mode)
 		}
 		return upgradeSplit{h2: m.transport(verify, mode), h1: m.transport(verify, TargetHTTP1)}
@@ -137,7 +138,7 @@ func (m *Module) targetTransport(key int64, verify bool, mode string, timeout in
 		return tr
 	}
 	var tr idleCloser = mk(mode)
-	if mode == TargetH2C {
+	if mode != TargetHTTP1 {
 		tr = upgradeSplit{h2: tr.(*http.Transport), h1: mk(TargetHTTP1)}
 	}
 	m.mu.Lock()
@@ -402,7 +403,7 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 		if host && t.forward != "" {
 			unpath(resp, t)
 		}
-		if !grpcReq(resp.Request) {
+		if !grpcResp(resp) {
 			overrideErr(adv, resp) // eigene Fehlerseite statt 5xx des Ziels (vor dem Cache: wird nie gespeichert)
 		}
 		if host {
@@ -427,6 +428,11 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 // in beide Richtungen - weder komprimieren noch durch die eigene Fehlerseite ersetzen.
 func grpcReq(r *http.Request) bool {
 	return r != nil && strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/grpc")
+}
+
+// grpcResp: das Ziel antwortet mit gRPC (nicht der Besucher behauptet es: den Kopf der Anfrage kann jeder setzen).
+func grpcResp(resp *http.Response) bool {
+	return resp != nil && strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "application/grpc")
 }
 
 // compress: Komprimierung der Antworten (Erweitert), ausser bei gRPC (Clients erwarten die Rahmen unveraendert).
@@ -516,7 +522,10 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 			return
 		}
 		rt := &routes[len(routes)-1]
-		pk := pathKey(p)
+		var pk string
+		if len(routes) > 1 { // ohne Locations nur die Route des Hosts: kein Schluessel noetig
+			pk = pathKey(p)
+		}
 		for i := range routes {
 			if routes[i].prefix == "" || keyIn(pk, routes[i].key) {
 				rt = pickRoute(routes[i:], p)
@@ -577,7 +586,7 @@ func reqPath(p string) (string, bool) {
 		return p, true
 	}
 	for _, s := range strings.FieldsFunc(p, func(c rune) bool { return c == '/' || c == '\\' }) {
-		if segKey(s) == "" {
+		if dotSeg(s) {
 			return "", false
 		}
 	}
@@ -598,27 +607,64 @@ func keyIn(pk, key string) bool { return pk == key || strings.HasPrefix(pk, key+
 
 // stripSegs: Pfad ohne seine ersten n Abschnitte (/ und \ trennen wie bei pathKey) - der Rest hinter einer Location,
 // auch wenn der Besucher ihren Pfad anders schreibt (/API/x, /api./x unter /api).
+// Gezaehlt wird wie bei pathKey: leere Abschnitte und reine Parameter (/\api, /;x/api) zaehlen nicht.
 func stripSegs(p string, n int) string {
-	for i := 0; i < len(p); i++ {
-		if p[i] == '/' || p[i] == '\\' {
-			if n == 0 {
-				return p[i+1:]
-			}
+	sep := func(c byte) bool { return c == '/' || c == '\\' }
+	i := 0
+	for n > 0 {
+		for i < len(p) && sep(p[i]) {
+			i++
+		}
+		if i >= len(p) {
+			return ""
+		}
+		j := i
+		for j < len(p) && !sep(p[j]) {
+			j++
+		}
+		if segKey(p[i:j]) != "" {
 			n--
 		}
+		i = j
 	}
-	return ""
+	if i < len(p) && sep(p[i]) {
+		i++
+	}
+	if i >= len(p) {
+		return ""
+	}
+	return p[i:]
 }
 
 // pathKey: Pfad fuer den Vergleich mit Locations - klein, \ wie / (IIS), je Abschnitt ohne Parameter (;…),
-// NTFS-Stream (::…) und ohne Leerzeichen bzw. Punkte am Ende.
+// NTFS-Stream (::…) und ohne Leerzeichen bzw. Punkte am Ende; leere Abschnitte fallen weg (/\admin, //admin und
+// /;x/admin sind beim Ziel /admin).
 func pathKey(p string) string {
 	segs := strings.Split(strings.ReplaceAll(p, "\\", "/"), "/")
+	out := segs[:0]
 	for i, s := range segs {
-		segs[i] = segKey(s)
+		if k := segKey(s); k != "" || i == 0 {
+			out = append(out, k)
+		}
+	}
+	k := strings.Join(out, "/")
+	if k == "" && strings.HasPrefix(p, "/") {
+		k = "/"
 	}
 	// erst gross, dann klein: auch Zeichen, die gross zu ASCII werden (U+017F -> S), wie IIS/.NET vergleichen
-	return strings.ToLower(strings.ToUpper(strings.Join(segs, "/")))
+	return strings.ToLower(strings.ToUpper(k))
+}
+
+// dotSeg: Abschnitt, den ein Ziel als "." bzw. ".." lesen kann ("..", "..;x", ".. ", "...", "..::$DATA"). Ein
+// Abschnitt aus nur Parametern (";jsessionid=..." von Tomcat/Jetty) zaehlt nicht dazu.
+func dotSeg(s string) bool {
+	if j := strings.IndexByte(s, ';'); j >= 0 {
+		s = s[:j]
+	}
+	if j := strings.Index(s, "::"); j >= 0 {
+		s = s[:j]
+	}
+	return s != "" && strings.TrimRightFunc(s, func(r rune) bool { return r == '.' || unicode.IsSpace(r) }) == ""
 }
 
 // segKey: ein Abschnitt ohne Parameter (;...), NTFS-Stream (::...) und ohne Punkte bzw. Leerzeichen am Ende.
@@ -898,9 +944,9 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 	if h.AccessListID > 0 || slices.ContainsFunc(h.Locations, func(l Location) bool { return l.AccessListID > 0 }) {
 		busyAdv = nil
 	}
-	var sl slots // gleichzeitige Anfragen an das Ziel
+	var sl, slg slots // gleichzeitige Anfragen an das Ziel; gRPC-Streams in eigenen, groesseren Plaetzen
 	if c := m.lim.config(); h.Kind == KindProxy && limited && c.Enabled && c.TargetConns > 0 {
-		sl = make(slots, c.TargetConns)
+		sl, slg = make(slots, c.TargetConns), make(slots, c.TargetConns*grpcSlotFactor)
 	}
 	if h.Kind == KindProxy && !h.WebSockets && len(h.Locations) == 0 {
 		next = stripUpgrade(next)
@@ -925,18 +971,22 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		// Wartung, Fehlerseite, Weiterleitung). Antworten des Ziels haben die aus Erweitert schon (ModifyResponse, mit
 		// denen der Location); HSTS ersetzt einen eigenen Kopf des Ziels statt ihn zu verdoppeln.
 		fromTarget := new(bool)
-		r = r.WithContext(context.WithValue(r.Context(), ctxTargetKey{}, fromTarget))
-		sw.sec = func(hd http.Header) {
-			if !*fromTarget {
-				for _, n := range h.Advanced.ResponseRemove {
-					hd.Del(n)
+		if len(h.Advanced.ResponseHeaders) > 0 || hsts != "" { // sonst gibt es nichts zu setzen
+			r = r.WithContext(context.WithValue(r.Context(), ctxTargetKey{}, fromTarget))
+			sw.sec = func(hd http.Header) {
+				if !*fromTarget {
+					// eigene Antworten (Anmeldung, Sperre, Wartung, Fehlerseite): Kopfzeilen des Hosts nur ergaenzen - was die
+					// Node selbst setzt (no-store, X-Frame-Options DENY, WWW-Authenticate, Set-Cookie), bleibt; "entfernen"
+					// gilt nur fuer Antworten des Ziels
+					for _, x := range h.Advanced.ResponseHeaders {
+						if _, own := hd[http.CanonicalHeaderKey(x.Name)]; !own {
+							hd.Set(x.Name, x.Value)
+						}
+					}
 				}
-				for _, x := range h.Advanced.ResponseHeaders {
-					hd.Set(x.Name, x.Value)
+				if hsts != "" && r.TLS != nil {
+					hd.Set("Strict-Transport-Security", hsts)
 				}
-			}
-			if hsts != "" && r.TLS != nil {
-				hd.Set("Strict-Transport-Security", hsts)
 			}
 		}
 		defer func() {
@@ -1026,10 +1076,15 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			r.Body = http.MaxBytesReader(sw, r.Body, maxBody)
 		}
-		// WebSockets (nur, wo erlaubt) und gRPC-Streams (NetBird: je Peer zwei dauerhaft) laufen lange und zaehlen nicht;
+		// WebSockets (nur, wo erlaubt) laufen lange und zaehlen nicht; gRPC-Streams (NetBird: je Peer zwei dauerhaft)
+		// zaehlen in eigenen, groesseren Plaetzen (der Kopf kommt vom Besucher - ohne Grenze hebelte er den Schutz aus);
 		// Wartung braucht kein Ziel
-		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) && !grpcReq(r) {
-			if !sl.acquire(r.Context(), limQueueWait) {
+		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) {
+			use := sl
+			if grpcReq(r) {
+				use = slg
+			}
+			if !use.acquire(r.Context(), limQueueWait) {
 				if r.Context().Err() == nil {
 					*reject = rejTarget
 					m.overload("target", h.Names[0])
@@ -1040,7 +1095,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 				}
 				return
 			}
-			defer sl.release()
+			defer use.release()
 		}
 		if r.Body != nil && r.Body != http.NoBody { // Upload zaehlen (was das Ziel wirklich liest), mit Bandbreite des Hosts
 			if bw != nil {
@@ -1133,6 +1188,10 @@ func (w *statusWriter) code() int {
 }
 
 func (w *statusWriter) WriteHeader(code int) {
+	if code >= 100 && code < 200 && code != http.StatusSwitchingProtocols { // 100 Continue, 103 Early Hints: nicht der Status
+		w.ResponseWriter.WriteHeader(code)
+		return
+	}
 	if w.status == 0 {
 		w.status = code
 	}

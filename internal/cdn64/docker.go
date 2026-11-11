@@ -2,6 +2,8 @@ package cdn64
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -604,6 +606,7 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 			nh.AccessListID = acl
 		}
 		nh.Advanced.ResponseHeaders, nh.Advanced.ResponseRemove = s.RespHeaders, s.RespRemove
+		nh.Advanced.LabelHeaders = headerSum(s.RespHeaders, s.RespRemove)
 		if missing != "" {
 			nh.Enabled = false
 		}
@@ -619,9 +622,11 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 	if acl == 0 {
 		acl = h.AccessListID // ohne Label: wie in der Oberflaeche eingestellt
 	}
-	// Kopfzeilen aus Traefik-headers-Middlewares nur, solange der Host keine eigenen Antwort-Kopfzeilen hat (in der
-	// Oberflaeche eingestellte bleiben)
-	hdrs := (len(s.RespHeaders) > 0 || len(s.RespRemove) > 0) && len(h.Advanced.ResponseHeaders) == 0 && len(h.Advanced.ResponseRemove) == 0
+	// Kopfzeilen aus Traefik-headers-Middlewares, solange der Host keine eigenen Antwort-Kopfzeilen hat oder noch die
+	// zuletzt aus den Labels uebernommenen (auch Entfernen kommt an); in der Oberflaeche geaenderte bleiben
+	cur := headerSum(h.Advanced.ResponseHeaders, h.Advanced.ResponseRemove)
+	fromLabels := cur == "" || h.Advanced.LabelHeaders != "" && cur == h.Advanced.LabelHeaders
+	hdrs := fromLabels && cur != headerSum(s.RespHeaders, s.RespRemove)
 	if !hdrs && slices.Equal(h.Names, names) && h.Scheme == s.Scheme && h.TargetHost == addr && h.TargetPort == tport && h.AccessListID == acl {
 		return v, nil
 	}
@@ -629,6 +634,7 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 	nh.Names, nh.Scheme, nh.TargetHost, nh.TargetPort, nh.AccessListID = names, s.Scheme, addr, tport, acl
 	if hdrs {
 		nh.Advanced.ResponseHeaders, nh.Advanced.ResponseRemove = s.RespHeaders, s.RespRemove
+		nh.Advanced.LabelHeaders = headerSum(s.RespHeaders, s.RespRemove)
 	}
 	if err := m.saveHost(ctx, &nh); err != nil {
 		return saveErr(err)
@@ -830,4 +836,19 @@ func (m *Module) dockerCert(ctx context.Context, h *Host) {
 		return
 	}
 	m.log.Info("cdn64 docker: certificate requested", "container", m.dockerHostLabel(h), "cert", c.Title())
+}
+
+// headerSum: Pruefsumme von Antwort-Kopfzeilen (setzen und entfernen), "" ohne Kopfzeilen.
+func headerSum(set []Header, del []string) string {
+	if len(set) == 0 && len(del) == 0 {
+		return ""
+	}
+	h := sha256.New()
+	for _, x := range set {
+		fmt.Fprintf(h, "s\x00%s\x00%s\x00", x.Name, x.Value)
+	}
+	for _, n := range del {
+		fmt.Fprintf(h, "d\x00%s\x00", n)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }

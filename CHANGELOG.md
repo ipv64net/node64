@@ -5,7 +5,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Monitor64: Karte im Dashboard; Probleme stehen unter „Letzte Störungen“ zusammen mit den Healthchecks.
-- PROXY64: Bei abgeschalteter Erreichbarkeitsprüfung bleibt der Host nicht mehr rot („nicht erreichbar“) in der Übersicht stehen.
+- PROXY64: Bei abgeschalteter Erreichbarkeitsprüfung bleibt der Host nicht mehr rot („nicht erreichbar“) in der Übersicht stehen; Healthchecks aufs Ziel gehen trotzdem.
+- PROXY64: Sicherheit – Location-Zugriffslisten nicht mehr per `/%5Cadmin` umgehbar (IIS/Windows-Ziele); Kopfzeilen des Hosts überschreiben auf Seiten der Node nichts mehr (no-store, X-Frame-Options, Anmeldung); gRPC-Kopf hebelt die Begrenzung ans Ziel nicht mehr aus.
+- PROXY64: `;jsessionid=`-Adressen (Tomcat/Jetty) gehen wieder; Upgrades außer WebSocket (kubectl, Docker-API) im automatischen Protokoll; 1xx nicht mehr als Status im Log; Traefik-Kopfzeilen folgen Label-Änderungen.
+- Anmeldung per SSO: geänderte eigene CAs gelten sofort auch für die Schlüssel des Anbieters (JWKS); keine offenen Verbindungen je Anmeldung mehr.
 - Monitor64: Host-Seite und Listenansicht auf Tablet und Smartphone gut lesbar (Dienste-Tabelle passt auf den Bildschirm).
 - Monitor64: IPv6 durchgängig – Host-Adresse auch als `[2001:db8::1]:2222`, IPv6 ohne Klammern beim Prometheus-Exporter und bei Docker (`tcp://`, `ssh://`), Link-Local-Adressen mit Zone (`fe80::1%eth0`) auch bei Proxmox VE, PBS, TrueNAS, Unraid und Server-BMC.
 

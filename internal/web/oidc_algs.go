@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -73,7 +74,8 @@ func (k *oidcKeySet) VerifySignature(ctx context.Context, raw string) ([]byte, e
 	return k.remote.VerifySignature(ctx, raw)
 }
 
-// JWKS je Adresse, langlebig (die Schluessel werden zwischengespeichert und bei unbekannter kid neu geholt).
+// JWKS je Adresse und Satz eigener CAs, langlebig (die Schluessel werden zwischengespeichert und bei unbekannter kid
+// neu geholt). Aendern sich die eigenen CAs, gibt es einen neuen Eintrag mit dem neuen Client.
 var oidcJWKS struct {
 	sync.Mutex
 	m map[string]*oidc.RemoteKeySet
@@ -85,16 +87,28 @@ func oidcRemoteKeys(jwksURL string, hc *http.Client) *oidc.RemoteKeySet {
 	if oidcJWKS.m == nil {
 		oidcJWKS.m = map[string]*oidc.RemoteKeySet{}
 	}
-	ks := oidcJWKS.m[jwksURL]
+	if hc == nil {
+		hc = &http.Client{Timeout: 10 * time.Second}
+	}
+	key := fmt.Sprintf("%s|%p", jwksURL, hc.Transport) // Transport je CA-Satz geteilt (oidcClient)
+	ks := oidcJWKS.m[key]
 	if ks == nil {
-		if hc == nil {
-			hc = &http.Client{Timeout: 10 * time.Second}
+		if len(oidcJWKS.m) >= 32 { // alte CA-Saetze bzw. Adressen nicht ewig halten
+			clear(oidcJWKS.m)
 		}
 		ctx := oidc.ClientContext(context.Background(), hc)
 		ks = oidc.NewRemoteKeySet(ctx, jwksURL)
-		oidcJWKS.m[jwksURL] = ks
+		oidcJWKS.m[key] = ks
 	}
 	return ks
+}
+
+// Transport zum SSO-Anbieter je Satz eigener CAs (ein Transport fuer alle Anmeldungen statt je Anmeldung einer, der
+// nie geschlossen wird).
+var oidcTr struct {
+	sync.Mutex
+	key string
+	tr  *http.Transport
 }
 
 // oidcClient: HTTP-Client fuer den SSO-Anbieter - System-CAs plus die eigenen CAs der Node (Anbieter im eigenen
@@ -104,9 +118,21 @@ func (s *Server) oidcClient(ctx context.Context) *http.Client {
 	if s.Certs == nil {
 		return hc
 	}
-	if pool := s.Certs.TrustPool(ctx); pool != nil {
-		hc.Transport = &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}
+	pool, key := s.Certs.TrustPoolKey(ctx)
+	if pool == nil {
+		return hc
 	}
+	oidcTr.Lock()
+	defer oidcTr.Unlock()
+	if oidcTr.tr == nil || oidcTr.key != key {
+		if oidcTr.tr != nil {
+			oidcTr.tr.CloseIdleConnections()
+		}
+		oidcTr.key = key
+		oidcTr.tr = &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+			IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 2}
+	}
+	hc.Transport = oidcTr.tr
 	return hc
 }
 

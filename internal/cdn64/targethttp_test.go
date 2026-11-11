@@ -330,7 +330,8 @@ func TestTargetHTTPGRPC(t *testing.T) {
 		t.Run(x.scheme+"-mode2", func(t *testing.T) { grpcCall(t, fc, front.URL+"/svc.Echo/Bidi", "app.test") })
 		t.Run(x.scheme+"-mode2-keepalive", func(t *testing.T) { grpcCall(t, fcKA, frontKA.URL+"/svc.Echo/Bidi", "app.test") })
 	}
-	// ohne h2c: das Ziel bekommt HTTP/1.1 und lehnt ab (wie ein echter gRPC-Server); die eigene Fehlerseite bleibt aus
+	// ohne h2c: das Ziel bekommt HTTP/1.1 und lehnt ab (wie ein echter gRPC-Server). Die Antwort ist kein gRPC, also gilt
+	// die eigene Fehlerseite (ob sie greift, entscheidet die Antwort des Ziels, nicht der Content-Type des Besuchers)
 	h.Scheme, h.TargetPort, h.Advanced.TargetHTTP = "http", plain, ""
 	if err := e.m.saveHost(ctx, h); err != nil {
 		t.Fatal(err)
@@ -343,7 +344,7 @@ func TestTargetHTTPGRPC(t *testing.T) {
 	}
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusHTTPVersionNotSupported || strings.Contains(string(b), "<p>") {
+	if resp.StatusCode != http.StatusHTTPVersionNotSupported || !strings.Contains(string(b), "<p>505</p>") {
 		t.Fatalf("grpc over http/1.1: %d %q", resp.StatusCode, b)
 	}
 }
