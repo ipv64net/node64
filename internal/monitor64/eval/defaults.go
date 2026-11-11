@@ -20,6 +20,7 @@ const (
 	KindPrinterSupply = "printer.supply" // Toner/Tinte in % (Richtung unten)
 	KindUPSRuntime    = "ups.runtime"    // USV-Restlaufzeit in Sekunden (Richtung unten)
 	KindPoEUsed       = "poe.used"       // PoE-Budget belegt in %
+	KindMailQueue     = "mail.queue"     // zurueckgestellte Mails in der Warteschlange (Mail Gateway)
 	KindTempSystem    = "temp.system"    // System-/CPU-Temperatur in °C
 )
 
@@ -124,6 +125,7 @@ func Defaults() Table {
 		KindPrinterSupply: num(L(15), L(5), Down, 0, DefaultHyst),
 		KindUPSRuntime:    num(LOff(), L(600), Down, 0, 60), // Warnung ist "auf Batterie" (ups.on_battery); bewertet nur auf Batterie (runner)
 		KindPoEUsed:       num(L(85), L(95), Up, 5*m, DefaultHyst),
+		KindMailQueue:     num(L(100), L(500), Up, 10*m, 10),
 		KindTempSystem:    num(L(70), L(80), Up, 5*m, DefaultHyst),
 
 		KindSmartFailed:     stateRule(SevCrit, 0),

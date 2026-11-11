@@ -80,7 +80,7 @@ type Host struct {
 type Access struct {
 	UID     string          `json:"uid"`
 	HostUID string          `json:"host_uid"`
-	Type    string          `json:"type"` // agent, ssh, snmp, pve, pbs, docker, prom
+	Type    string          `json:"type"` // agent, ssh, snmp, pve, pbs, pmg, docker, prom ...
 	Config  json.RawMessage `json:"config"`
 	Secret  string          `json:"-"` // verschluesselt (internal/secrets)
 	HostKey string          `json:"hostkey,omitempty"`

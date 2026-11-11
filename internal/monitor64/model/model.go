@@ -21,6 +21,7 @@ const (
 	RulePrinterSupply = "printer.supply" // Toner/Tinte in % (Richtung unten)
 	RuleUPSRuntime    = "ups.runtime"    // USV-Restlaufzeit in Sekunden (Richtung unten)
 	RulePoEUsed       = "poe.used"       // PoE-Budget belegt in %
+	RuleMailQueue     = "mail.queue"     // zurueckgestellte Mails in der Warteschlange
 )
 
 // Metric ist ein Messwert eines Dienstes.

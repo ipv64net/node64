@@ -45,7 +45,7 @@ func accessRank(typ string) int {
 		return 0
 	case "ssh":
 		return 1
-	case "pve", "pbs", "docker", "nut", "truenas", "unraid", "redfish":
+	case "pve", "pbs", "pmg", "docker", "nut", "truenas", "unraid", "redfish":
 		return 2
 	case "snmp":
 		return 3

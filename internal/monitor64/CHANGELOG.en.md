@@ -1,5 +1,11 @@
 # Monitor64 – Changes
 
+## 0.1.5 – 2026-11-11
+
+- New access **Proxmox Mail Gateway** (own tile in the wizard): CPU, load, RAM, swap and root file system, services (Postfix, SMTP filter, ClamAV, database …), mail queue with the largest target domains, mail flow of the last hour (in, out, spam, viruses, rejected), quarantine, age of the ClamAV signatures, cluster (node unreachable, not in sync) and pending updates.
+- Login to the Mail Gateway with user and password (role "Auditor", e.g. `monitor64@pmg`) because it has no API tokens; the ticket is renewed automatically. Users with a second factor are rejected with a hint.
+- New threshold "Mail queue: deferred mails" (warning from 100, critical from 500, each for 10 minutes) in the new "E-mail" section of the thresholds; the services are listed in the new "E-mail" category.
+
 ## 0.1.4 – 2026-11-11
 
 - If an access hangs (Docker daemon, PVE API or BMC not answering), the round is no longer discarded: the host becomes "unreachable" and is notified as expected instead of staying at its last state (often OK).

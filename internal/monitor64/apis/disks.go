@@ -92,7 +92,12 @@ type slowUpdates struct {
 	svc *model.Service
 }
 
-func (s *slowUpdates) collect(ctx context.Context, c *proxmox.Client, node string, now time.Time, every time.Duration, part *partial) *model.Service {
+// aptGetter fragt einen API-Pfad ab (Proxmox VE/PBS: proxmox.Client, Mail Gateway: PMG).
+type aptGetter interface {
+	Get(ctx context.Context, path string, out any) error
+}
+
+func (s *slowUpdates) collect(ctx context.Context, c aptGetter, node string, now time.Time, every time.Duration, part *partial) *model.Service {
 	if every <= 0 {
 		every = DefaultUpdatesEvery
 	}
@@ -102,7 +107,7 @@ func (s *slowUpdates) collect(ctx context.Context, c *proxmox.Client, node strin
 	var list []aptUpdate
 	if err := c.Get(ctx, "/nodes/"+url.PathEscape(node)+"/apt/update", &list); err != nil {
 		var pe *proxmox.Error
-		if errors.As(err, &pe) && pe.Status == http.StatusForbidden {
+		if (errors.As(err, &pe) && pe.Status == http.StatusForbidden) || errors.Is(err, errWebPerm) {
 			// dem Token fehlt das Recht (Proxmox VE: Sys.Modify, die Rolle PVEAuditor reicht nicht): kein Teilfehler,
 			// der Dienst nennt den Grund; neuer Versuch erst nach every
 			svc := model.Service{Key: "updates", Name: "Updates", Kind: "updates", Default: true, Text: model.T("monitor64.txt.updates_forbidden")}

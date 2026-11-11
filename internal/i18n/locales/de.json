@@ -5611,7 +5611,8 @@
       "snmp_unverified": "Profil noch nicht an einem echten Gerät geprüft – Werte bitte kontrollieren und Rückmeldung geben.",
       "snmp_unverified_short": "nicht geprüft",
       "snmp_queries": "Was wird abgefragt?",
-      "hostkey_set": "Fingerabdruck übernommen – jetzt erneut testen oder speichern."
+      "hostkey_set": "Fingerabdruck übernommen – jetzt erneut testen oder speichern.",
+      "secret_pmg": "Passwort des Benutzers."
     },
     "access": {
       "agent": "Agent",
@@ -5624,7 +5625,8 @@
       "nut": "NUT (USV)",
       "truenas": "TrueNAS",
       "unraid": "Unraid",
-      "redfish": "Redfish (BMC: iDRAC, iLO …)"
+      "redfish": "Redfish (BMC: iDRAC, iLO …)",
+      "pmg": "Proxmox Mail Gateway"
     },
     "sd": {
       "vanished": "Dieser Dienst wird nicht mehr geliefert. Er bleibt als Warnung, bis du ihn entfernst.",
@@ -5858,7 +5860,8 @@
       "storage": "Speicher",
       "disks": "Platten",
       "network": "Netzwerk",
-      "devices": "Geräte"
+      "devices": "Geräte",
+      "mail": "E-Mail"
     },
     "kind": {
       "cpu_util": "CPU-Auslastung",
@@ -5916,7 +5919,8 @@
       "hw_failed": "Hardware-Fehler (Lüfter, Netzteil, Systemstatus)",
       "poe_fault": "PoE-Fehler",
       "trap_received": "SNMP-Trap empfangen (bis quittiert)",
-      "guest_mem": "RAM einer VM (Sicht von Proxmox, mit Cache des Gastes)"
+      "guest_mem": "RAM einer VM (Sicht von Proxmox, mit Cache des Gastes)",
+      "mail_queue": "Mail-Warteschlange: zurückgestellte Mails"
     },
     "cat": {
       "system": "System",
@@ -5930,7 +5934,8 @@
       "local": "Eigene Skripte",
       "access": "Zugänge",
       "other": "Weitere",
-      "devices": "Geräte"
+      "devices": "Geräte",
+      "mail": "E-Mail"
     },
     "hostkind": {
       "linux-agent": {
@@ -5988,6 +5993,10 @@
       "prom": {
         "title": "Prometheus-Exporter",
         "sub": "node_exporter, windows_exporter, eigene"
+      },
+      "pmg": {
+        "title": "Proxmox Mail Gateway",
+        "sub": "API – Dienste, Warteschlange, Quarantäne"
       }
     },
     "new": {
@@ -6050,7 +6059,8 @@
       "hint_unraid": "Unter Einstellungen → Verwaltungszugriff → API-Keys einen Key mit der Rolle „Viewer“ anlegen (ab Unraid 7.2 eingebaut, davor Plugin „Unraid Connect“). https:// empfohlen.",
       "hint_redfish": "Im BMC einen eigenen Benutzer mit der Rolle „ReadOnly“ anlegen (iDRAC: Read Only, iLO: Login, Supermicro: User). Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
       "hint_snmp": "Im Gerät SNMP einschalten (nur lesend) und diese Node als erlaubten Abfrager eintragen. Am besten v3 mit Authentifizierung und Verschlüsselung; v1/v2c senden die Community im Klartext. Profile (Synology, QNAP, MikroTik, UniFi, APC, Drucker …) wählt die Node selbst.",
-      "unconfirmed": "Der Fingerabdruck des Hosts ist noch nicht bestätigt. Du kannst den Host trotzdem anlegen – das Passwort wird aber erst gesendet, nachdem du den Fingerabdruck am Zugang über „Testen“ verglichen und bestätigt hast. Besser: zurück zu Schritt 2 und dort bestätigen."
+      "unconfirmed": "Der Fingerabdruck des Hosts ist noch nicht bestätigt. Du kannst den Host trotzdem anlegen – das Passwort wird aber erst gesendet, nachdem du den Fingerabdruck am Zugang über „Testen“ verglichen und bestätigt hast. Besser: zurück zu Schritt 2 und dort bestätigen.",
+      "hint_pmg": "Im Mail Gateway unter Konfiguration → Benutzerverwaltung einen eigenen Benutzer mit der Rolle „Auditor“ anlegen (Realm „Proxmox Mail Gateway Authentication Server“, ohne zweiten Faktor) und hier mit Realm eintragen, z. B. monitor64@pmg. API-Token kennt das Mail Gateway nicht, deshalb Benutzer und Passwort. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen."
     },
     "nf": {
       "where": "Wohin",
@@ -6537,7 +6547,11 @@
       "ups": "USV {name}",
       "ups_plain": "USV",
       "uptime": "Laufzeit",
-      "winsvc": "Windows-Dienste"
+      "winsvc": "Windows-Dienste",
+      "mailq": "Mail-Warteschlange",
+      "mailflow": "Mail-Durchsatz",
+      "quarantine": "Quarantäne",
+      "clamav": "ClamAV-Signaturen"
     },
     "txt": {
       "aborted": "abgebrochen",
@@ -6943,7 +6957,22 @@
       "winsvc_stopped": "{n} von {total} automatischen Diensten gestoppt: {list}",
       "yes": "ja",
       "zfs_errors": "ZFS-Fehler {v}",
-      "updates_forbidden": "nicht abgefragt – dem Token fehlt das Recht dafür (Proxmox VE: Sys.Modify auf /nodes, die Rolle PVEAuditor reicht nicht)"
+      "updates_forbidden": "nicht abgefragt – dem Token fehlt das Recht dafür (Proxmox VE: Sys.Modify auf /nodes, die Rolle PVEAuditor reicht nicht)",
+      "pmg_user_missing": "Benutzer fehlt (mit Realm, z. B. monitor64@pmg)",
+      "pmg_pw_missing": "Passwort fehlt",
+      "pmg_tfa": "der Benutzer hat einen zweiten Faktor – für die Abfrage einen Benutzer ohne zweiten Faktor anlegen",
+      "pmg_no_ticket": "Anmeldung ohne Ticket",
+      "pmg_hint_auth": "Benutzer mit Realm (z. B. monitor64@pmg) und Passwort prüfen",
+      "pmg_hint_perm": "dem Benutzer fehlt die Rolle Auditor",
+      "pmg_role_admin": "der Benutzer ist Administrator – zum Abfragen reicht die Rolle Auditor",
+      "pmg_services_ok": "{n} Dienste laufen",
+      "pmg_not_synced": "nicht synchron: {list}",
+      "mailq": "{d} zurückgestellt, {a} aktiv, {h} angehalten",
+      "mailflow": "letzte Stunde: {in} ein, {out} aus, {spam} Spam, {virus} Viren, {rej} abgewiesen",
+      "quarantine": "{s} Spam, {v} Viren ({size})",
+      "clamav_version": "Signaturen Version {v}",
+      "clamav_age": "Signaturen Version {v}, Alter in Tagen: {n}",
+      "clamav_old": "ClamAV-Signaturen seit {n} Tagen nicht aktualisiert"
     }
   }
 }

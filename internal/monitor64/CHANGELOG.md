@@ -1,5 +1,11 @@
 # Monitor64 – Änderungen
 
+## 0.1.5 – 2026-11-11
+
+- Neuer Zugang **Proxmox Mail Gateway** (eigene Kachel im Assistenten): CPU, Load, RAM, Swap und Root-Dateisystem, Dienste (Postfix, SMTP-Filter, ClamAV, Datenbank …), Mail-Warteschlange mit den größten Ziel-Domains, Durchsatz der letzten Stunde (ein, aus, Spam, Viren, abgewiesen), Quarantäne, Alter der ClamAV-Signaturen, Cluster (Node nicht erreichbar, nicht synchron) und ausstehende Updates.
+- Anmeldung am Mail Gateway mit Benutzer und Passwort (Rolle „Auditor“, z. B. `monitor64@pmg`), weil es keine API-Token kennt; das Ticket wird automatisch erneuert. Benutzer mit zweitem Faktor werden mit Hinweis abgelehnt.
+- Neue Schwelle „Mail-Warteschlange: zurückgestellte Mails“ (Warnung ab 100, kritisch ab 500, jeweils über 10 Minuten) im neuen Abschnitt „E-Mail“ der Schwellen; die Dienste stehen in der neuen Kategorie „E-Mail“.
+
 ## 0.1.4 – 2026-11-11
 
 - Hängt ein Zugang (Docker-Daemon, PVE-API oder BMC antwortet nicht), wird die Runde nicht mehr verworfen: Der Host wird wie erwartet „nicht erreichbar“ und gemeldet, statt auf dem letzten Stand (oft OK) stehen zu bleiben.

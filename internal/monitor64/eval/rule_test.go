@@ -216,6 +216,7 @@ func TestDefaultsTable(t *testing.T) {
 		{KindPrinterSupply, 15, 5, Down, 0},
 		{KindUPSRuntime, -1, 600, Down, 0}, // Warnung = auf Batterie (eigene Zustandsregel)
 		{KindPoEUsed, 85, 95, Up, 5 * time.Minute},
+		{KindMailQueue, 100, 500, Up, 10 * time.Minute},
 		{KindTempSystem, 70, 80, Up, 5 * time.Minute},
 	}
 	for _, c := range cases {
