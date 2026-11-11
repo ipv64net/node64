@@ -1,5 +1,9 @@
 # Monitor64 – Changes
 
+## 0.1.3 – 2026-11-11
+
+- Tablet and smartphone: the services table on the host page fits the screen – extra texts wrap, service names no longer break letter by letter; the overview list view fits narrow screens, "4 hosts · 93 services" is no longer cut off.
+
 ## 0.1.2 – 2026-11-11
 
 - Own logo (light and dark) in the overview and in the module list.

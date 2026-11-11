@@ -66,7 +66,11 @@
 .svc-table td { vertical-align: middle; }
 .svc-table tbody tr { cursor: pointer; }
 .svc-cat td { background: var(--bs-tertiary-bg) !important; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); font-weight: 600; padding: .35rem .75rem !important; cursor: default; }
-.svc-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Wert und Balken bleiben zusammen, Zusatztexte (Container, Ursache) brechen um - sonst wird die Tabelle auf Tablet
+   und Smartphone breiter als der Bildschirm und die Dienstnamen brechen buchstabenweise */
+.svc-val { font-variant-numeric: tabular-nums; }
+.svc-val > .fw-semibold, .svc-val .bar { white-space: nowrap; }
+.svc-val .small { overflow-wrap: anywhere; }
 .svc-val .bar { width: 70px; display: inline-block; vertical-align: middle; margin-left: .4rem; }
 .thr { font-size: .8rem; color: var(--bs-secondary-color); white-space: nowrap; }
 .src { font-size: .72rem; color: var(--bs-secondary-color); }
@@ -146,7 +150,13 @@ tr.clickable { cursor: pointer; }
 .svc-table tr.vanished td:first-child { opacity: 1; }
 .new-svc { border-left: 3px solid var(--bs-primary); }
 .new-svc .form-check { margin-bottom: .15rem; }
-.m64-svc-name { overflow-wrap: anywhere; }
+.m64-svc-name { overflow-wrap: break-word; hyphens: auto; min-width: 7rem; }
+#m64 .stat-sub { white-space: normal; } /* "4 Hosts · 93 Dienste" nicht abschneiden */
+@media (max-width: 575.98px) {
+	.svc-table th:first-child { width: 4.75rem !important; }
+	.svc-table > :not(caption) > * > *, #m64-hosts .table > :not(caption) > * > * { padding-left: .4rem; padding-right: .4rem; }
+	.svc-val .bar { width: 48px; }
+}
 .access-row .bi-check-circle-fill { color: var(--bs-success); }
 .access-row .bi-x-circle-fill { color: var(--bs-danger); }
 .access-row .bi-dash-circle { color: var(--bs-secondary-color); }

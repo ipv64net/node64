@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: host page and list view readable on tablets and smartphones (services table fits the screen).
+
 ## 1.5.2 – 2026-11-11
 
 - Monitor64: PBS commands in the wizard also grant `Audit` to the user.

@@ -1,5 +1,9 @@
 # Monitor64 – Änderungen
 
+## 0.1.3 – 2026-11-11
+
+- Tablet und Smartphone: Die Dienste-Tabelle der Host-Seite passt auf den Bildschirm – Zusatztexte brechen um, Dienstnamen nicht mehr buchstabenweise; die Listenansicht der Übersicht passt auf schmale Bildschirme, „4 Hosts · 93 Dienste“ wird nicht mehr abgeschnitten.
+
 ## 0.1.2 – 2026-11-11
 
 - Eigenes Logo (hell und dunkel) in der Übersicht und bei den Modulen.
