@@ -12,7 +12,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -116,8 +115,8 @@ func (e *webPinMismatch) shown() string {
 
 // webTarget ist eine geprueft Adresse (scheme://host:port ohne Pfad).
 type webTarget struct {
-	base   string // https://host:port
-	host   string // Hostname bzw. IP (ServerName, Zertifikat)
+	base   string // https://host:port (IPv6-Zone als %25)
+	host   string // Hostname bzw. IP ohne Zone (ServerName, Zertifikat)
 	hostPt string // host:port fuers Waehlen
 	https  bool
 }
@@ -129,9 +128,7 @@ func parseWebAddr(raw, defScheme, defPort string, allowHTTP bool) (webTarget, er
 	if s == "" {
 		return webTarget{}, errors.New(model.T("monitor64.txt.addr_missing"))
 	}
-	if a, err := netip.ParseAddr(s); err == nil && a.Is6() {
-		s = "[" + a.String() + "]" // IPv6 ohne Klammern
-	}
+	s = model.URLHostV6(s) // IPv6 ohne Klammern bzw. mit Zone
 	if !strings.Contains(s, "://") {
 		s = defScheme + "://" + s
 	}
@@ -167,7 +164,8 @@ func parseWebAddr(raw, defScheme, defPort string, allowHTTP bool) (webTarget, er
 	}
 	host := strings.ToLower(u.Hostname())
 	hp := net.JoinHostPort(host, port)
-	return webTarget{base: scheme + "://" + hp, host: host, hostPt: hp, https: scheme == "https"}, nil
+	base := (&url.URL{Scheme: scheme, Host: hp}).String()
+	return webTarget{base: base, host: model.NoZone(host), hostPt: hp, https: scheme == "https"}, nil
 }
 
 // pinnedTLS baut die TLS-Einstellung: pin leer = System-CA (roots nil) mit Hostname, sonst nur genau dieses

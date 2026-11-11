@@ -179,7 +179,7 @@ type tnRPC struct {
 }
 
 func (t *TrueNAS) dialRPC(ctx context.Context) (*tnRPC, error) {
-	u := "wss://" + t.wc.t.hostPt + "/api/current"
+	u := "wss://" + strings.TrimPrefix(t.wc.t.base, "https://") + "/api/current"
 	conn, resp, err := websocket.Dial(ctx, u, &websocket.DialOptions{HTTPClient: t.wc.hc})
 	if err != nil {
 		if resp != nil {

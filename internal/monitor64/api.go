@@ -9,8 +9,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -137,6 +139,45 @@ type hostIn struct {
 
 var reAddress = regexp.MustCompile(`^[A-Za-z0-9._:\-\[\]%]{1,253}$`)
 
+// cleanAddress prueft die Adresse eines Hosts: Hostname, IPv4 oder IPv6 (auch Link-Local mit Zone), wahlweise mit
+// Port ("nas:2222", "[2001:db8::1]:2222"). IPv6 ohne Port steht ohne Klammern ("[2001:db8::1]" -> "2001:db8::1");
+// mehrere Doppelpunkte ohne Klammern sind immer eine IPv6-Adresse.
+func cleanAddress(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if !reAddress.MatchString(s) {
+		return "", false
+	}
+	port := func(p string) bool {
+		n, err := strconv.Atoi(p)
+		return err == nil && n >= 1 && n <= 65535
+	}
+	if strings.HasPrefix(s, "[") {
+		i := strings.Index(s, "]")
+		if i < 0 {
+			return "", false
+		}
+		if a, err := netip.ParseAddr(s[1:i]); err != nil || !a.Is6() {
+			return "", false
+		}
+		if s[i+1:] == "" {
+			return s[1:i], true
+		}
+		return s, strings.HasPrefix(s[i+1:], ":") && port(s[i+2:])
+	}
+	if strings.ContainsAny(s, "[]") {
+		return "", false
+	}
+	switch strings.Count(s, ":") {
+	case 0:
+		return s, !strings.Contains(s, "%")
+	case 1:
+		h, p, _ := strings.Cut(s, ":")
+		return s, h != "" && port(p) && !strings.Contains(s, "%")
+	}
+	a, err := netip.ParseAddr(s)
+	return s, err == nil && a.Is6()
+}
+
 func cleanText(s string, max int) string {
 	s = strings.TrimSpace(strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
@@ -155,11 +196,11 @@ func (in *hostIn) apply(h *Host, defInterval int) error {
 	if h.Name == "" {
 		return errBad("name")
 	}
-	addr := strings.TrimSpace(in.Address)
-	if !reAddress.MatchString(addr) {
+	addr, ok := cleanAddress(in.Address)
+	if !ok {
 		return errBad("address")
 	}
-	h.Address = strings.Trim(addr, "[]")
+	h.Address = addr
 	if _, ok := hostKindOf(in.Kind); !ok && in.Kind != "" {
 		return errBad("kind")
 	}
@@ -844,8 +885,8 @@ func (m *Module) apiTest(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	addr := strings.Trim(strings.TrimSpace(in.Address), "[]")
-	if !reAddress.MatchString(addr) {
+	addr, ok := cleanAddress(in.Address)
+	if !ok {
 		m.fail(w, r, errBad("address"))
 		return
 	}
@@ -861,7 +902,7 @@ func (m *Module) apiTest(w http.ResponseWriter, r *http.Request) {
 			m.fail(w, r, err)
 			return
 		}
-		if !strings.EqualFold(strings.Trim(strings.TrimSpace(h.Address), "[]"), addr) {
+		if !strings.EqualFold(strings.Trim(strings.TrimSpace(h.Address), "[]"), strings.Trim(addr, "[]")) {
 			m.fail(w, r, errBad("address"))
 			return
 		}
@@ -967,7 +1008,7 @@ func decodeOptional(r *http.Request, v any) (has bool, err error) {
 // apiNodeAddr: GET Adresse dieser Node in Richtung eines Hosts (fuer from="..." in authorized_keys). Es wird kein
 // Paket gesendet (UDP-"Verbindung" waehlt nur die Quelladresse).
 func (m *Module) apiNodeAddr(w http.ResponseWriter, r *http.Request) {
-	target := strings.Trim(strings.TrimSpace(r.URL.Query().Get("target")), "[]")
+	target := transport.SplitHost(r.URL.Query().Get("target")) // ohne Port und Klammern
 	out := map[string]string{"addr": ""}
 	if target != "" && reAddress.MatchString(target) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)

@@ -1,5 +1,12 @@
 # Monitor64 – Changes
 
+## 0.1.4 – 2026-11-11
+
+- IPv6 throughout: a host's address now also accepts IPv6 with a port (`[2001:db8::1]:2222`); this form used to be mangled on save. Invalid addresses are rejected right away.
+- IPv6 without square brackets now also works in the address of a Prometheus exporter (`fd00::1`) and for Docker via `tcp://` or `ssh://`; with `ssh://user@fd00::1` the last block used to be read as the port silently.
+- Link-local addresses with a zone (`fe80::1%eth0`) now also work for the HTTPS accesses (Proxmox VE, Proxmox Backup Server, TrueNAS, Unraid, server BMC) and Prometheus.
+- Wizard and access dialog: the suggested URL puts an IPv6 address in brackets and drops a port from the host's address; the other nodes of a Proxmox cluster thus get the right URL even if the address carries a port.
+
 ## 0.1.3 – 2026-11-11
 
 - Dashboard: own card with hosts, services, unreachable hosts, critical services and warnings, maintenance and the last incident. Problems appear under "Recent incidents" in the same list as the health checks (with a "Monitor64" badge).

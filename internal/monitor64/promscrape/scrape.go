@@ -65,6 +65,7 @@ func NormalizeURL(s string, defPort int) (string, error) {
 	if s == "" {
 		return "", errors.New(model.T("monitor64.txt.addr_required"))
 	}
+	s = model.URLHostV6(s) // IPv6 ohne Klammern bzw. mit Zone
 	bare := !strings.Contains(s, "://")
 	if bare {
 		s = "http://" + s

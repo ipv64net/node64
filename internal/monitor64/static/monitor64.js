@@ -65,7 +65,16 @@ var DEVSPEC = {
 	unraid: { url: 'http://{a}', user: false, extra: [] },
 	redfish: { url: 'https://{a}', user: true, extra: ['session'] }
 };
-function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', addr || '10.0.0.21'); }
+// urlHost: Host-Teil einer URL aus der Adresse eines Hosts - ein Port der Adresse entfaellt, IPv6 kommt in Klammern
+// ("nas:2222" -> "nas", "2001:db8::1" und "[2001:db8::1]:22" -> "[2001:db8::1]").
+function urlHost(a) {
+	a = String(a || '').trim();
+	var m = /^\[([^\]]+)\](?::\d+)?$/.exec(a);
+	if (m) { return '[' + m[1] + ']'; }
+	if ((a.match(/:/g) || []).length >= 2) { return '[' + a + ']'; }
+	return a.replace(/:\d+$/, '');
+}
+function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', urlHost(addr) || '10.0.0.21'); }
 // Texte je Art und Feld (ausgeschrieben, damit die Pruefung der Texte sie findet)
 function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish') }[t]; }
 function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish') }[t]; }
@@ -1337,7 +1346,7 @@ function pageHost() {
 	function accessShow(body) {
 		var t = $('#m64-af-type', body).value;
 		$$('[data-af]', body).forEach(function (x) { x.classList.toggle('d-none', x.dataset.af.split(' ').indexOf(t) < 0); });
-		$('#m64-af-url', body).placeholder = DEVAPI.indexOf(t) >= 0 ? devURL(t, H.host.address) : t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (H.host.address || '10.0.0.21') + ':' + (t === 'pbs' ? 8007 : 8006);
+		$('#m64-af-url', body).placeholder = DEVAPI.indexOf(t) >= 0 ? devURL(t, H.host.address) : t === 'docker' ? 'unix:///var/run/docker.sock' : 'https://' + (urlHost(H.host.address) || '10.0.0.21') + ':' + (t === 'pbs' ? 8007 : 8006);
 		$('#m64-af-shint', body).textContent = DEVAPI.indexOf(t) >= 0 ? devSecretHint(t) : L('acc.secret_hint');
 		snmpShow(body, 'af');
 	}
@@ -2289,7 +2298,7 @@ function pageNew() {
 					'<input class="form-control form-control-sm mt-1' + (WZ.usePw ? '' : ' d-none') + '" type="password" id="m64-w-pass" data-w="password" autocomplete="new-password" aria-label="' + esc(L('acc.secret')) + '" value="' + esc(WZ.password) + '"></div></div></details></div>';
 			} else if (k.access === 'pve' || k.access === 'pbs') {
 				var port = k.access === 'pve' ? 8006 : 8007;
-				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="https://' + esc(WZ.address || '10.0.0.21') + ':' + port + '"') + '</div>' +
+				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="https://' + esc(urlHost(WZ.address) || '10.0.0.21') + ':' + port + '"') + '</div>' +
 					'<div class="col-md-6">' + field('tid', L('new.token_id'), WZ.token_id, ' data-w="token_id" maxlength="128" placeholder="' + (k.access === 'pve' ? 'monitor@pve!node64' : 'monitor@pbs!node64') + '"') + '</div>' +
 					'<div class="col-md-6">' + field('tsec', L('new.token_secret'), WZ.token_secret, ' data-w="token_secret" type="password" autocomplete="new-password"') + '</div>' +
 					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.token_cmd')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(k.access === 'pve' ?
@@ -2469,7 +2478,7 @@ function pageNew() {
 				// je weitere Cluster-Node ein Host mit gleichem Token und Pin, Abfrage ueber dieselbe Adresse (Node gesetzt)
 				var chain = clApply(r.uid), failed = [];
 				nodes.forEach(function (n) {
-					var na = { type: 'pve', config: { url: acc.config.url || ('https://' + (WZ.address.indexOf(':') >= 0 ? '[' + WZ.address + ']' : WZ.address) + ':8006'), token_id: acc.config.token_id, pin: acc.config.pin, node: n.name }, secret: acc.secret };
+					var na = { type: 'pve', config: { url: acc.config.url || ('https://' + urlHost(WZ.address) + ':8006'), token_id: acc.config.token_id, pin: acc.config.pin, node: n.name }, secret: acc.secret };
 					var addr = n.ip || n.name;
 					chain = chain.then(function () {
 						// Dienste der Node erkennen und die vorgeschlagenen gleich uebernehmen (wie beim ersten Host im

@@ -1,5 +1,12 @@
 # Monitor64 – Änderungen
 
+## 0.1.4 – 2026-11-11
+
+- IPv6 durchgängig: Die Adresse eines Hosts nimmt IPv6 jetzt auch mit Port (`[2001:db8::1]:2222`) an; bisher wurde diese Schreibweise beim Speichern verstümmelt. Ungültige Adressen werden gleich abgelehnt.
+- IPv6 ohne eckige Klammern funktioniert jetzt auch in der Adresse eines Prometheus-Exporters (`fd00::1`) und bei Docker über `tcp://` bzw. `ssh://`; bei `ssh://user@fd00::1` wurde bisher still der letzte Block als Port gelesen.
+- Link-Local-Adressen mit Zone (`fe80::1%eth0`) funktionieren jetzt auch bei den Zugängen über HTTPS (Proxmox VE, Proxmox Backup Server, TrueNAS, Unraid, Server-BMC) und Prometheus.
+- Assistent und Zugangs-Dialog: Die vorgeschlagene URL setzt eine IPv6-Adresse in Klammern und lässt einen Port aus der Adresse des Hosts weg; die weiteren Nodes eines Proxmox-Clusters bekommen damit auch bei einer Adresse mit Port die richtige URL.
+
 ## 0.1.3 – 2026-11-11
 
 - Dashboard: eigene Karte mit Hosts, Diensten, nicht erreichbaren Hosts, kritischen Diensten und Warnungen, Wartung und letzter Störung. Die Probleme stehen unter „Letzte Störungen“ in derselben Liste wie die Healthchecks (mit Abzeichen „Monitor64“).

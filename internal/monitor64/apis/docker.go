@@ -75,6 +75,7 @@ func NewDocker(cfg DockerConfig) (*Docker, error) {
 	if host == "" {
 		host = proxmox.DefaultDockerHost()
 	}
+	host = model.URLHostV6(host) // tcp://fd00::1 bzw. ssh://user@fd00::1: sonst wuerde der letzte Block zum Port
 	if !proxmox.ValidDockerHost(host) {
 		return nil, errors.New(model.T("monitor64.txt.docker_addr_invalid", "addr", host))
 	}

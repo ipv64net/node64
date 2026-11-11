@@ -5681,7 +5681,7 @@
     },
     "f": {
       "name": "Name",
-      "address": "Address (hostname or IP)",
+      "address": "Address (hostname, IPv4 or IPv6)",
       "group": "Group",
       "tag": "Tag",
       "tags": "Tags",
