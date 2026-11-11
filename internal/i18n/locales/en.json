@@ -5297,6 +5297,17 @@
     }
   },
   "monitor64": {
+    "card": {
+      "hosts": "Hosts",
+      "services": "Services",
+      "unreachable": "Hosts unreachable",
+      "crit": "Services critical",
+      "warn": "Services with warning",
+      "unknown": "Services unknown",
+      "maint": "Hosts in maintenance",
+      "paused": "Hosts paused",
+      "last": "Last incident"
+    },
     "state": {
       "ok": "OK",
       "warn": "Warning",

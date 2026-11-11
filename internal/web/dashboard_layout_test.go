@@ -2,6 +2,7 @@ package web
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -28,5 +29,38 @@ func TestDashMerge(t *testing.T) {
 		if it.Hidden != (it.ID == "chart:dns64") {
 			t.Fatalf("by default only charts are hidden: %+v", it)
 		}
+	}
+}
+
+// Letzte Stoerungen: Monitor64 laeuft in der Liste der Healthchecks mit (neueste zuerst, hoechstens 10); ohne
+// Healthchecks bekommt die Liste eine eigene Kachel vorne.
+func TestDashIncidents(t *testing.T) {
+	now := time.Now()
+	hc := []module.IncidentInfo{{Name: "web", StartedAt: now.Add(-2 * time.Hour)}}
+	var m64 []module.IncidentInfo
+	for i := range 12 {
+		m64 = append(m64, module.IncidentInfo{Name: "m64", Source: "nav.monitor64", StartedAt: now.Add(-time.Duration(i) * time.Hour)})
+	}
+	boards := []module.DashboardInfo{{Module: "healthchecks", Incidents: hc}}
+	avail := dashAvailable(boards, nil, false, false)
+	avail = dashIncidents(avail, boards, m64)
+	var list []module.IncidentInfo
+	for _, it := range avail {
+		if it.Kind == "incidents" {
+			if it.ID != "incidents:healthchecks" || list != nil {
+				t.Fatalf("one shared list expected: %+v", it)
+			}
+			list = it.Board.Incidents
+		}
+	}
+	if len(list) != dashIncidentsMax || list[0].StartedAt != m64[0].StartedAt || list[2].Name != "web" || list[3].Name != "m64" {
+		t.Fatalf("merged: %+v", list)
+	}
+	only := dashIncidents(dashAvailable(nil, nil, false, false), nil, m64[:2])
+	if only[0].ID != "incidents:monitor64" || len(only[0].Board.Incidents) != 2 {
+		t.Fatalf("without healthchecks: %+v", only[0])
+	}
+	if got := dashIncidents(dashAvailable(nil, nil, false, false), nil, nil); got[0].Kind == "incidents" {
+		t.Fatal("no incidents, no tile")
 	}
 }

@@ -282,6 +282,16 @@ type IncidentInfo struct {
 	EndedAt   time.Time
 	Open      bool
 	Message   string
+
+	Source   string // Titel-Schluessel des Moduls (Abzeichen in der gemeinsamen Liste), leer = Healthchecks
+	StateKey string // i18n-Schluessel des (schlimmsten) Zustands, leer = "hc.state.down"
+	Warn     bool   // nur Warnung (gelb statt rot)
+}
+
+// IncidentProvider liefert Stoerungen eines Moduls ohne eigene Dashboard-Kacheln (z. B. Monitor64) fuer die
+// gemeinsame Liste "Letzte Stoerungen" (neueste zuerst, hoechstens n).
+type IncidentProvider interface {
+	DashIncidents(ctx context.Context, n int) []IncidentInfo
 }
 
 // Status ist der Zustand eines Moduls fuer die Anzeige.

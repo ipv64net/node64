@@ -48,8 +48,9 @@
 		<ul class="list-group list-group-flush small">
 		{{range .Incidents}}
 			<li class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap">
-				<span>{{if .Open}}<span class="badge text-bg-danger">{{$.T "hc.state.down"}}</span>{{else}}<span class="badge text-bg-success">{{$.T "hc.state.up"}}</span>{{end}}
-				<a href="{{.Path}}">{{.Name}}</a> <span class="text-body-secondary">{{.Message}}</span></span>
+				<span>{{if .Open}}<span class="badge {{if .Warn}}text-bg-warning{{else}}text-bg-danger{{end}}">{{if .StateKey}}{{$.T .StateKey}}{{else}}{{$.T "hc.state.down"}}{{end}}</span>{{else}}<span class="badge text-bg-success">{{$.T "hc.state.up"}}</span>{{end}}
+				{{with .Source}}<span class="badge text-bg-light border">{{$.T .}}</span>{{end}}
+				<a href="{{.Path}}">{{.Name}}</a> <span class="text-body-secondary">{{if and .StateKey (not .Open)}}{{$.T .StateKey}}{{end}}{{.Message}}</span></span>
 				<span class="text-body-secondary">{{$.Time .StartedAt}}{{if not .Open}} – {{$.Time .EndedAt}}{{end}}</span>
 			</li>
 		{{end}}

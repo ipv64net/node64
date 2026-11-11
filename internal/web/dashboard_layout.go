@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 
 	"github.com/ipv64net/node64/internal/module"
@@ -55,6 +56,34 @@ func dashAvailable(boards []module.DashboardInfo, cards []namedCard, dns64On, cd
 	}
 	for _, k := range []string{"node", "storage", "modules", "account", "link"} {
 		out = append(out, dashItem{ID: k, Size: "s", Kind: k})
+	}
+	return out
+}
+
+// dashIncidentsMax: Eintraege der Liste "Letzte Stoerungen".
+const dashIncidentsMax = 10
+
+// dashIncidents fuehrt die Stoerungen weiterer Module (Monitor64) mit denen der Healthchecks in einer Liste zusammen
+// (neueste zuerst). Ohne Healthchecks bekommt die Liste eine eigene Kachel (vorne).
+func dashIncidents(avail []dashItem, boards []module.DashboardInfo, extra []module.IncidentInfo) []dashItem {
+	if len(extra) == 0 {
+		return avail
+	}
+	if len(boards) > 0 {
+		b := &boards[0]
+		b.Incidents = mergeIncidents(b.Incidents, extra, dashIncidentsMax)
+		return avail
+	}
+	b := &module.DashboardInfo{Module: "monitor64", Incidents: mergeIncidents(nil, extra, dashIncidentsMax)}
+	return append([]dashItem{{ID: "incidents:monitor64", Size: "l", Kind: "incidents", Board: b}}, avail...)
+}
+
+// mergeIncidents: beide Listen nach Beginn absteigend, hoechstens n.
+func mergeIncidents(a, b []module.IncidentInfo, n int) []module.IncidentInfo {
+	out := append(append([]module.IncidentInfo{}, a...), b...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
+	if len(out) > n {
+		out = out[:n]
 	}
 	return out
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
+	m64model "github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/selfupdate"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
@@ -383,7 +384,25 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			cards = append(cards, namedCard{Module: m.Info().Name, Card: *c})
 		}
 	}
+	var extra []module.IncidentInfo
+	for _, m := range s.Modules.Modules() {
+		if p, ok := m.(module.IncidentProvider); ok && s.Modules.IsRunning(m.Info().Name) {
+			extra = append(extra, p.DashIncidents(ctx, dashIncidentsMax)...)
+		}
+	}
+	// Texte von Monitor64 kommen als Token ("i18n:monitor64.svc.fs?name=/"): in der Sprache des Betrachters
+	tx := func(s string) string { return m64model.Translate(s, v.T) }
+	for i := range extra {
+		extra[i].Name, extra[i].Message = tx(extra[i].Name), tx(extra[i].Message)
+	}
+	for i := range cards {
+		for j := range cards[i].Card.Stats {
+			st := &cards[i].Card.Stats[j]
+			st.Text, st.Title = tx(st.Text), tx(st.Title)
+		}
+	}
 	avail := dashAvailable(d.Boards, cards, s.Modules.IsRunning("dns64"), s.Modules.IsRunning("cdn64"))
+	avail = dashIncidents(avail, d.Boards, extra)
 	if d.Cluster = s.dashClusterData(ctx); d.Cluster != nil {
 		avail = append(avail, dashItem{ID: "cluster", Size: "s", Kind: "cluster"})
 	}

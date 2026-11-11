@@ -2,6 +2,7 @@
 
 ## 0.1.3 – 2026-11-11
 
+- Dashboard: eigene Karte mit Hosts, Diensten, nicht erreichbaren Hosts, kritischen Diensten und Warnungen, Wartung und letzter Störung. Die Probleme stehen unter „Letzte Störungen“ in derselben Liste wie die Healthchecks (mit Abzeichen „Monitor64“).
 - Tablet und Smartphone: Die Dienste-Tabelle der Host-Seite passt auf den Bildschirm – Zusatztexte brechen um, Dienstnamen nicht mehr buchstabenweise; die Listenansicht der Übersicht passt auf schmale Bildschirme, „4 Hosts · 93 Dienste“ wird nicht mehr abgeschnitten.
 
 ## 0.1.2 – 2026-11-11

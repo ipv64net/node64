@@ -2,6 +2,7 @@
 
 ## 0.1.3 – 2026-11-11
 
+- Dashboard: own card with hosts, services, unreachable hosts, critical services and warnings, maintenance and the last incident. Problems appear under "Recent incidents" in the same list as the health checks (with a "Monitor64" badge).
 - Tablet and smartphone: the services table on the host page fits the screen – extra texts wrap, service names no longer break letter by letter; the overview list view fits narrow screens, "4 hosts · 93 services" is no longer cut off.
 
 ## 0.1.2 – 2026-11-11
