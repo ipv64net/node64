@@ -32,7 +32,8 @@ type StatusView struct {
 // StatusViewGroup ist eine Gruppe.
 type StatusViewGroup struct {
 	Name    string           `json:"name"`
-	Overall string           `json:"overall"` // wie StatusView.Overall
+	Section string           `json:"section,omitempty"` // "" = Healthchecks, "systems" = Monitor64 (eigener Abschnitt)
+	Overall string           `json:"overall"`           // wie StatusView.Overall
 	Items   []StatusViewItem `json:"items"`
 }
 

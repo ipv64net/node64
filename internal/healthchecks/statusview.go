@@ -801,8 +801,26 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		}
 		return "", false
 	}
-	for _, g := range statusGroupsFor(p, groupOf) {
-		vg := StatusViewGroup{Name: g.Name, Items: []StatusViewItem{}}
+	// erst die Healthchecks, dann Monitor64 als eigener Abschnitt (je mit seinen Gruppen)
+	type secGroup struct {
+		g   StatusGroup
+		sec string
+	}
+	var groups []secGroup
+	for _, sec := range []string{"", "systems"} {
+		only := func(tok string) (string, bool) {
+			if isM64Source(tok) != (sec == "systems") {
+				return "", false
+			}
+			return groupOf(tok)
+		}
+		for _, g := range statusGroupsFor(p, only) {
+			groups = append(groups, secGroup{g, sec})
+		}
+	}
+	for _, sg := range groups {
+		g := sg.g
+		vg := StatusViewGroup{Name: g.Name, Section: sg.sec, Items: []StatusViewItem{}}
 		var states []string
 		for _, it := range g.Items {
 			x := tv[it.Token]

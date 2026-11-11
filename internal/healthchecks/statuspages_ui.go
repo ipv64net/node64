@@ -48,6 +48,7 @@ type statusCheckOpt struct {
 	Value  string // Wert im Formular (Check: Token)
 	Type   string // i18n-Schluessel der Art ("" = Check)
 	M64    bool   // Host bzw. Dienst aus Monitor64: Value ist die Quelle (add_m64)
+	Sec    string // i18n-Schluessel der Abschnitts-Ueberschrift vor diesem Eintrag ("" = keine)
 }
 
 // statusPageItem ist ein Eintrag der Seite im Formular (eine Liste, gruppiert wird nach den Healthchecks-Gruppen).
@@ -55,6 +56,7 @@ type statusPageItem struct {
 	Token, Name, Label, Group string
 	M64                       bool   // Eintrag aus Monitor64 (Name "" = Monitor64 aus bzw. Host/Dienst unbekannt)
 	Link                      string // Monitor64: Seite des Hosts
+	Sec                       string // i18n-Schluessel der Abschnitts-Ueberschrift vor diesem Eintrag ("" = keine)
 }
 
 type statusFormData struct {
@@ -228,6 +230,9 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 			d.PageList = append(d.PageList, pi)
 		}
 	}
+	// Healthchecks vor Monitor64 (die Seite zeigt beide als eigene Abschnitte)
+	sort.SliceStable(d.PageList, func(i, j int) bool { return !d.PageList[i].M64 && d.PageList[j].M64 })
+	statusMarkSections(d.PageList, func(i int) bool { return d.PageList[i].M64 }, func(i int, k string) { d.PageList[i].Sec = k })
 	d.Items = len(d.PageList)
 	if err == nil {
 		for _, c := range list {
@@ -251,12 +256,29 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 		d.Checks = append(d.Checks, o)
 		groups[statusM64Group] = true
 	}
+	statusMarkSections(d.Checks, func(i int) bool { return d.Checks[i].M64 }, func(i int, k string) { d.Checks[i].Sec = k })
 	d.Tags, d.HCGroups = sortedKeys(tags), sortedKeys(groups)
 	title := "hc.status.new"
 	if d.Edit {
 		title = "hc.status.edit"
 	}
 	m.g.Render(w, r, status, Name+"/status_page_form", title, d)
+}
+
+// statusMarkSections setzt die Abschnitts-Ueberschriften (Healthchecks, Monitor64-Systeme) an den ersten Eintrag jedes
+// Abschnitts - nur, wenn es beide gibt (Liste: erst Healthchecks, dann Monitor64).
+func statusMarkSections[T any](list []T, m64 func(int) bool, set func(int, string)) {
+	first := map[bool]int{}
+	for i := range list {
+		if _, ok := first[m64(i)]; !ok {
+			first[m64(i)] = i
+		}
+	}
+	if len(first) < 2 {
+		return
+	}
+	set(first[false], "hc.status.sec_checks")
+	set(first[true], "hc.status.sec_systems")
 }
 
 func sortedKeys(m map[string]bool) []string {

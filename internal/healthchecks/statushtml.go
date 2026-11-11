@@ -117,6 +117,7 @@ type stRef struct {
 }
 
 type stGroup struct {
+	Section     string // Ueberschrift des Abschnitts vor dieser Gruppe ("" = keine; nur wenn es beide Abschnitte gibt)
 	Name        string
 	Overall     string
 	OverallText string
@@ -320,10 +321,23 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 	for _, g := range v.Groups {
 		total += len(g.Items)
 	}
+	inSec := map[string]int{} // Gruppen je Abschnitt (Healthchecks, Monitor64-Systeme)
+	for _, g := range v.Groups {
+		inSec[g.Section]++
+	}
+	both := len(inSec) > 1
+	seen := map[string]bool{}
 	for _, g := range v.Groups {
 		sg := p.group(g, total)
-		// Ueberschrift immer, ausser bei einer einzigen Gruppe ohne Namen; mehrere namenlose heissen "Weitere"
-		sg.Heading = strings.TrimSpace(g.Name) != "" || len(v.Groups) > 1
+		if both && !seen[g.Section] {
+			sg.Section = p.T("hc.status.pub.section_checks")
+			if g.Section == "systems" {
+				sg.Section = p.T("hc.status.pub.section_systems")
+			}
+		}
+		seen[g.Section] = true
+		// Ueberschrift immer, ausser bei einer einzigen Gruppe ohne Namen (je Abschnitt); mehrere namenlose heissen "Weitere"
+		sg.Heading = strings.TrimSpace(g.Name) != "" || inSec[g.Section] > 1
 		if strings.TrimSpace(sg.Name) == "" && sg.Heading {
 			sg.Name = p.T("hc.status.pub.group_other")
 		}
@@ -464,9 +478,9 @@ func (p *stPage) group(g StatusViewGroup, total int) stGroup {
 		}
 	}
 	sg.Counts = strings.Join(parts, " · ")
-	sg.Key = g.Name + "|0"
+	sg.Key = g.Section + g.Name + "|0" // Abschnitt vorn: gleich benannte Gruppen in beiden Abschnitten
 	if flag {
-		sg.Key = g.Name + "|1"
+		sg.Key = g.Section + g.Name + "|1"
 	}
 	sg.Open = flag || total <= stOpenAllMax
 	return sg

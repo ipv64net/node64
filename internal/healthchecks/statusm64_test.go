@@ -222,6 +222,19 @@ func TestStatusM64View(t *testing.T) {
 	if groupOf["nas01"] != "GruppeKeller" || groupOf["Datenbank"] != "GruppeKeller" || groupOf["router"] != "GruppeNetz" || groupOf["Webseite"] != "" {
 		t.Fatalf("groups: %+v", groupOf)
 	}
+	// eigener Abschnitt: erst die Healthchecks, dann die Monitor64-Systeme (mit ihren Gruppen)
+	if v.Groups[0].Section != "" || v.Groups[0].Items[0].Label != "Webseite" {
+		t.Fatalf("healthchecks first: %+v", v.Groups[0])
+	}
+	for _, g := range v.Groups[1:] {
+		if g.Section != "systems" {
+			t.Fatalf("monitor64 section: %+v", g)
+		}
+	}
+	sp := stBuildPage(v, statusRenderOpts{T: func(k string, _ ...any) string { return k }})
+	if sp.Groups[0].Section != "hc.status.pub.section_checks" || sp.Groups[1].Section != "hc.status.pub.section_systems" || sp.Groups[2].Section != "" {
+		t.Fatalf("section titles: %q %q %q", sp.Groups[0].Section, sp.Groups[1].Section, sp.Groups[2].Section)
+	}
 	// Balken: 7 Tage, heute beim Router rot (20 min), beim Dienst gelb, sonst gruen; Verfuegbarkeit aus den Zeiten
 	r, db, nas := got["router"], got["Datenbank"], got["nas01"]
 	if len(r.Bars) != 7 || r.Bars[6].State != "down" || r.Bars[6].DownMins != 20 || r.Bars[5].State != "up" || db.Bars[6].State != "partial" ||

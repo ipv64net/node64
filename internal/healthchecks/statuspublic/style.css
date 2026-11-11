@@ -92,3 +92,6 @@ details .its{border-top:1px solid var(--ln)}
 .lg button{margin-top:1em;width:100%;font:inherit;font-weight:600;padding:.6em;border:0;border-radius:8px;background:var(--ac);color:#fff;cursor:pointer}
 .err{color:#fff;background:#c02a2a;border-radius:6px;padding:.4em .7em}
 @media (prefers-reduced-motion:no-preference){summary::after{transition:transform .15s}}
+.sec{font-size:.95em;font-weight:600;color:var(--mu);margin:1.4em 0 .2em}
+main>.sec:first-child{margin-top:.3em}
+.cg li.sec{display:block;margin:0;padding:.4em .9em;font-size:.85em}

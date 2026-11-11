@@ -141,6 +141,7 @@
 			<thead><tr><th class="small">{{.T "common.name"}}</th><th class="small">{{.T "hc.group.label"}}</th><th class="small">{{.T "hc.status.label"}}</th><th></th></tr></thead>
 			<tbody>
 			{{range $ii, $it := $d.PageList}}
+			{{if $it.Sec}}<tr class="table-group"><td colspan="4" class="small fw-semibold text-body-secondary">{{if $it.M64}}<i class="bi bi-activity"></i> {{else}}<i class="bi bi-heart-pulse"></i> {{end}}{{$.T $it.Sec}}</td></tr>{{end}}
 			<tr>
 				<td class="small"><input type="hidden" name="it_tok" value="{{$it.Token}}">
 					{{if $it.M64}}{{if $it.Name}}<a href="{{$it.Link}}" class="text-decoration-none" target="_blank" rel="noopener"><i class="bi bi-activity text-primary" title="Monitor64"></i> {{$it.Name}}</a>{{else if $d.M64On}}<span class="text-danger"><i class="bi bi-x-circle"></i> {{$.T "hc.status.m64_gone"}}</span>{{else}}<span class="text-body-secondary"><i class="bi bi-eye-slash"></i> {{$.T "hc.status.m64_hidden"}}</span>{{end}}
@@ -178,6 +179,7 @@
 		</div>
 		<div class="border rounded p-2 mb-2" style="max-height:360px;overflow:auto" data-sp-list>
 			{{range $i, $c := $d.Checks}}
+			{{if .Sec}}<div class="small fw-semibold text-body-secondary{{if .M64}} mt-2 pt-2 border-top{{end}}">{{if .M64}}<i class="bi bi-activity"></i> {{else}}<i class="bi bi-heart-pulse"></i> {{end}}{{$.T .Sec}}</div>{{end}}
 			<div class="form-check" data-sp-check data-name="{{.Name}} {{.Sub}}" data-tags="{{.Tags}}" data-group="{{.Group}}">
 				<input class="form-check-input" type="checkbox" name="{{if .M64}}add_m64{{else}}add_tok{{end}}" value="{{.Value}}" id="sp-c-{{$i}}"{{if .OnPage}} disabled{{end}}>
 				<label class="form-check-label small" for="sp-c-{{$i}}">{{.Name}}

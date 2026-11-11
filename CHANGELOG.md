@@ -7,6 +7,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Monitor64: eigenes Logo.
 - Monitor64: Knöpfe „alle“/„keine“ bei neuen Diensten; Container auch mit Podman überwachen (Docker-kompatible API über `podman.socket`).
 - Monitor64: SNMP-Ports von MikroTik-Switches und -Routern (RouterOS, z. B. CRS305) erscheinen jetzt.
+- Statusseiten: Healthchecks und Monitor64-Systeme als getrennte Abschnitte („Dienste“, „Systeme“), auch im Editor.
 - Anmeldung per SSO: Die Node vertraut beim SSO-Anbieter auch ihren eigenen CAs – z. B. authentik mit einem Zertifikat der eigenen CA (bisher „Der SSO-Anbieter ist nicht erreichbar …“).
 
 ## 1.5.1 – 2026-11-10

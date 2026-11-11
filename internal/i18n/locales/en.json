@@ -2775,6 +2775,8 @@
       "m64_off": "Monitor64 is switched off: its entries are hidden on the page but stay saved.",
       "m64_hidden": "Monitor64 entry (hidden)",
       "m64_gone": "Monitor64 entry not found (removed or from another node)",
+      "sec_checks": "Health checks",
+      "sec_systems": "Monitor64 – systems",
       "pub": {
         "reason_other": "Not reachable",
         "too_many": "Too many failed attempts. Please try again in a few minutes.",
@@ -2882,6 +2884,8 @@
           "wrong": "Wrong password."
         },
         "nodata": "No data",
+        "section_checks": "Services",
+        "section_systems": "Systems",
         "group_other": "Other"
       },
       "hint": "Public status pages from your health checks: only names, state, uptime, incidents, maintenance and announcements – never targets, IPs or error messages.",

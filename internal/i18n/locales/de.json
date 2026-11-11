@@ -2775,6 +2775,8 @@
       "m64_off": "Monitor64 ist ausgeschaltet: Seine Einträge werden auf der Seite ausgeblendet, bleiben aber gespeichert.",
       "m64_hidden": "Monitor64-Eintrag (ausgeblendet)",
       "m64_gone": "Monitor64-Eintrag nicht gefunden (entfernt oder von einer anderen Node)",
+      "sec_checks": "Healthchecks",
+      "sec_systems": "Monitor64 – Systeme",
       "pub": {
         "reason_other": "Nicht erreichbar",
         "too_many": "Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.",
@@ -2882,6 +2884,8 @@
           "wrong": "Passwort falsch."
         },
         "nodata": "Keine Daten",
+        "section_checks": "Dienste",
+        "section_systems": "Systeme",
         "group_other": "Weitere"
       },
       "hint": "Öffentliche Statusseiten aus deinen Healthchecks: nur Namen, Zustand, Verfügbarkeit, Störungen, Wartungen und Ankündigungen – nie Ziele, IPs oder Fehlermeldungen.",
