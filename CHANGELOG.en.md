@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: new access mailcow – containers, mail storage, mail queue and quarantine via the mailcow API (read-only key).
 - Monitor64: new access Proxmox Mail Gateway – services, mail queue (with threshold), mail flow, quarantine, ClamAV signatures, cluster and updates; login with a user of the role "Auditor".
 
 ## 1.5.3 – 2026-11-11

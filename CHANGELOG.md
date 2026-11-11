@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Neuer Zugang mailcow – Container, Mail-Speicher, Mail-Warteschlange und Quarantäne über die mailcow-API (Nur-Lese-Schlüssel).
 - Monitor64: Neuer Zugang Proxmox Mail Gateway – Dienste, Mail-Warteschlange (mit Schwelle), Durchsatz, Quarantäne, ClamAV-Signaturen, Cluster und Updates; Anmeldung mit einem Benutzer der Rolle „Auditor“.
 
 ## 1.5.3 – 2026-11-11
