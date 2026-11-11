@@ -52,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.39.1"
+	version   = "1.39.2"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -274,6 +274,9 @@ func (m *Module) retry(ctx context.Context) {
 		err := m.tryStart(ctx)
 		m.mu.Unlock()
 		if err == nil {
+			// DNS laeuft jetzt: DHCP und RA verteilen die Node wieder als DNS-Server (ohne m.ctl hier - ein Neustart
+			// haelt ihn und wartet auf diese Schleife)
+			go func() { m.dhcpApply(context.Background()); m.raApply(context.Background()) }()
 			return
 		}
 	}
@@ -457,6 +460,10 @@ func (m *Module) restart(ctx context.Context) error {
 		m.log.Warn("dns64 stop before restart did not finish", "err", stopErr)
 	}
 	_ = m.startLocked()
+	// DHCP und RA mit den neuen Einstellungen (Port, Bind-Adresse: wen sie als DNS-Server verteilen) - sonst blieb
+	// DHCP beim Stand des letzten Starts
+	m.dhcpApplyLocked(sctx)
+	m.raApplyLocked(sctx)
 	if e := m.startError(); e != "" {
 		if stopErr != nil {
 			m.mu.Lock()

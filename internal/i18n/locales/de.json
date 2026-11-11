@@ -3684,6 +3684,7 @@
         "announced": "Angekündigt",
         "last": "Zuletzt gesendet",
         "err_no_iface": "Schnittstelle fehlt ({err})",
+        "err_self_router": "Auf diesem Host kündigt schon ein Router-Dienst (radvd, odhcpd) auf der Schnittstelle an – Node64 sendet hier keine eigenen RAs (sie würden den Geräten die Default-Route nehmen). DNS bitte im Router-Dienst eintragen (RDNSS).",
         "err_no_addr": "Keine IPv6-Adresse zum Ankündigen – oder DNS64 antwortet nicht per IPv6 auf Port 53 (Port oder Bind-Adresse)",
         "err_send": "Senden fehlgeschlagen: {err}",
         "err_socket": "Router Advertisements lassen sich nicht senden: {err}. Der Container braucht Host-Netz und cap_net_raw.",

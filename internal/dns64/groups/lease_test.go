@@ -22,3 +22,18 @@ func TestLeaseMAC(t *testing.T) {
 		t.Fatalf("ips %v", ips)
 	}
 }
+
+// Vergaben zaehlen fuer die Adressen eines Geraets nur, wenn die Nachbartabelle das Geraet gerade nicht kennt - und nie
+// mit einer Adresse, die dort zu einer anderen MAC gehoert (gefaelschte MAC im DHCP-Paket).
+func TestLeaseIPsNotForeign(t *testing.T) {
+	r := NewResolver(nil)
+	neigh := map[netip.Addr]string{netip.MustParseAddr("192.168.50.20"): "02:00:00:00:00:05", netip.MustParseAddr("192.168.50.66"): "02:00:00:00:00:99"}
+	r.neigh.Store(&neigh)
+	r.SetLeases(map[netip.Addr]string{netip.MustParseAddr("192.168.50.105"): "02:00:00:00:00:05", netip.MustParseAddr("192.168.50.66"): "02:00:00:00:00:07"})
+	if ips := r.IPs("02:00:00:00:00:05"); len(ips) != 1 || ips[0].String() != "192.168.50.20" {
+		t.Fatalf("known device: %v", ips)
+	}
+	if ips := r.IPs("02:00:00:00:00:07"); len(ips) != 0 {
+		t.Fatalf("lease address used by another MAC: %v", ips)
+	}
+}

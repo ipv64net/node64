@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Monitor64: hanging accesses report "unreachable" instead of silently staying OK; explicitly chosen default channels get all messages; reminder for unreachable hosts; no "unknown" for push hosts after a restart; pausing visible right away; Prometheus label `service` with names; more robust cluster sync (acknowledgements, history, responsibility, keys).
+- DNS64: security – DHCP no longer assigns zone device names (spoofed MAC), DECLINE only for the own address, RA list limited; DHCP only hands out the node as DNS when DNS64 runs and applies changed settings right away; new interfaces and addresses without restart; cluster without double leases when the connection is broken; no own RAs next to radvd/odhcpd.
 - Monitor64: security – a new access target requires the secret again; push tokens no longer in clear text in exports; limits for agent reports; SNMP traps per sender; PVE/PBS with IPv6 zone; Podman CPU on 2 cores; several UI fixes (wizard, problems, dialogs); faster (ETag, indexes).
 - Health checks: status page editor – after sorting the list, "remove" deleted the wrong entry.
 - Health checks: in a cluster with older nodes, the update no longer deletes Docker/Proxmox checks on the older nodes.

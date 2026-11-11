@@ -30,6 +30,24 @@ func (s *Server) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	var cmu sync.Mutex
 	conns := map[string]*net.UDPConn{}
+	idx := map[string]int{} // Index der Schnittstelle beim Oeffnen (neu angelegt = neuer Index, alter Socket hoert nichts)
+	ifIndex := func(name string) int {
+		if ifi, err := net.InterfaceByName(name); err == nil {
+			return ifi.Index
+		}
+		return -1
+	}
+	reopen := func() { // Sockets zu Schnittstellen, die es so nicht mehr gibt, schliessen (open oeffnet sie neu)
+		cmu.Lock()
+		defer cmu.Unlock()
+		for iface, c := range conns {
+			if i := ifIndex(iface); i != idx[iface] {
+				s.logger().Info("dhcp interface changed, reopening", "iface", iface)
+				_ = c.Close()
+				delete(conns, iface)
+			}
+		}
+	}
 	open := func() int {
 		cmu.Lock()
 		defer cmu.Unlock()
@@ -37,6 +55,7 @@ func (s *Server) Run(ctx context.Context) {
 			if conns[iface] != nil || ctx.Err() != nil {
 				continue
 			}
+			idx[iface] = ifIndex(iface)
 			c, err := listen(ctx, iface, 67)
 			if err != nil {
 				s.ifaceErr(iface, err)
@@ -62,7 +81,8 @@ func (s *Server) Run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-rb.C:
-				s.bind(true)
+				s.bind(false) // alle Netze: auch eine geaenderte Adresse der Node (Server-ID, DNS-Option)
+				reopen()
 				open()
 				continue
 			case <-t.C:

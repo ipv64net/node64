@@ -2,6 +2,8 @@ package dns64
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -11,7 +13,6 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/ipv64net/node64/internal/dns64/dhcp"
-	"github.com/ipv64net/node64/internal/dns64/groups"
 )
 
 // DHCP und DNS Hand in Hand (Plan D3): Jede aktive Vergabe und jede feste Adresse mit Namen bekommt
@@ -86,6 +87,9 @@ func (m *Module) dhcpNamesBuild(ctx context.Context) error {
 	prev := map[string]string{}
 	if old := m.dhcpNames.Load(); old != nil {
 		prev = old.owner
+	} else {
+		// nach dem Start: Besitzer aus der Einstellung (sonst bekaeme nach jedem Neustart die kleinste MAC den Namen)
+		_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setDHCPNameOwners, "{}")), &prev)
 	}
 	t := &dhcpNameTable{byName: map[string]dhcpName{}, owner: map[string]string{}, byPTR: map[string]string{}, byIP: map[netip.Addr]string{}, labels: map[netip.Addr]string{}}
 	domain := map[int64]string{}
@@ -147,8 +151,17 @@ func (m *Module) dhcpNamesBuild(ctx context.Context) error {
 	}
 	m.dhcpNames.Store(t)
 	m.grp.SetLeases(macs)
+	if !maps.Equal(prev, t.owner) {
+		if b, err := json.Marshal(t.owner); err == nil {
+			_ = m.core.SetSetting(ctx, setDHCPNameOwners, string(b))
+		}
+	}
 	return nil
 }
+
+// setDHCPNameOwners: wer welchen DHCP-Namen hat (Name -> MAC), damit "wer einen Namen hat, behaelt ihn" auch nach
+// einem Neustart gilt.
+const setDHCPNameOwners = "dns64.dhcp_name_owners"
 
 // dhcpActiveLeases liest nur die aktiven gebundenen Vergaben (Namen; RFC3339 in UTC sortiert wie die Zeit).
 func (m *Module) dhcpActiveLeases(ctx context.Context, now time.Time) ([]dhcp.Lease, error) {
@@ -183,10 +196,10 @@ func (m *Module) ownName(name string) bool {
 	return ok
 }
 
-// deviceNameTaken: slug.domain ist der Geraetename eines anderen Geraets in einer Zone mit Geraeten (die Zone
-// antwortet sonst erst nach den DHCP-Namen - ein Geraet koennte per Option 12 den Namen z. B. des NAS uebernehmen).
-// Das Geraet selbst (gleiche MAC oder IP wie in der Gruppe) behaelt seinen DHCP-Namen.
-func (m *Module) deviceNameTaken(slug, domain, mac string, ip netip.Addr) bool {
+// deviceNameTaken: slug.domain ist der Geraetename eines Geraets in einer Zone mit Geraeten. Den Namen beantwortet die
+// Zone (mit den Adressen des Geraets, auch aus seiner DHCP-Vergabe); ein DHCP-Name dafuer entsteht nie - auch nicht
+// fuer "das Geraet selbst": die MAC im DHCP-Paket kann jedes Geraet setzen (sonst uebernaehme es den Namen des NAS).
+func (m *Module) deviceNameTaken(slug, domain, _ string, _ netip.Addr) bool {
 	zt, dt := m.zns.Load(), m.devs.Load()
 	if zt == nil || dt == nil {
 		return false
@@ -194,13 +207,7 @@ func (m *Module) deviceNameTaken(slug, domain, mac string, ip netip.Addr) bool {
 	if z, ok := zt.byName[domain]; !ok || !z.Devices {
 		return false
 	}
-	list := (*dt)[slug]
-	for _, x := range list {
-		if (x.Kind == groups.KindMAC && strings.EqualFold(x.Value, mac)) || (x.Kind == groups.KindIP && x.Value == ip.String()) {
-			return false
-		}
-	}
-	return len(list) > 0
+	return len((*dt)[slug]) > 0
 }
 
 // dhcpNamesSoon baut die Namen gebuendelt kurz danach neu.

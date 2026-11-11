@@ -473,7 +473,8 @@ func TestDHCPNameRules(t *testing.T) {
 	if rrs, ok := m.Lookup("103.50.168.192.in-addr.arpa", dns.TypePTR); ok && len(rrs) > 0 {
 		t.Fatalf("PTR for a name owned by a rewrite: %v", rrs)
 	}
-	// Geraetenamen einer Zone mit Geraeten: ein anderes Geraet bekommt sie nicht per Option 12, das Geraet selbst schon
+	// Geraetenamen einer Zone mit Geraeten: kein Geraet bekommt sie per Option 12 (die MAC im DHCP-Paket kann jeder
+	// setzen) - die Zone beantwortet sie, beim Geraet mit MAC auch mit der Adresse aus seiner Vergabe
 	if _, err := m.AddZone(ctx, Zone{Name: "home.lan", Devices: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -489,8 +490,11 @@ func TestDHCPNameRules(t *testing.T) {
 	save("02:00:00:00:00:04", "192.168.50.104", "nas") // fremdes Geraet will den Namen des NAS
 	save("02:00:00:00:00:05", "192.168.50.105", "tv")  // das Geraet aus der Gruppe selbst
 	_ = m.dhcpNamesBuild(ctx)
-	if a("nas.home.lan") != "" || a("tv.home.lan") != "192.168.50.105" {
-		t.Fatalf("nas=%q tv=%q", a("nas.home.lan"), a("tv.home.lan"))
+	if a("nas.home.lan") != "" || a("tv.home.lan") != "" {
+		t.Fatalf("dhcp names for zone devices: nas=%q tv=%q", a("nas.home.lan"), a("tv.home.lan"))
+	}
+	if ans, _, _, ok := m.zoneAnswer("tv.home.lan", dns.TypeA); !ok || len(ans) != 1 || ans[0].(*dns.A).A.String() != "192.168.50.105" {
+		t.Fatalf("zone answer for the TV (lease): %v", ans)
 	}
 	if ans, _, _, ok := m.zoneAnswer("nas.home.lan", dns.TypeA); !ok || len(ans) != 1 || ans[0].(*dns.A).A.String() != "192.168.50.20" {
 		t.Fatalf("zone answer for the NAS: %v", ans)

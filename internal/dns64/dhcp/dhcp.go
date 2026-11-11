@@ -112,6 +112,7 @@ type Config struct {
 const (
 	offerHold    = time.Minute         // so lange haelt ein OFFER die Adresse
 	conflictHold = time.Hour           // Adresse nach ARP-Antwort oder DECLINE gesperrt
+	maxConflicts = 4096                // so viele gesperrte Adressen hoechstens (je Server)
 	keepFree     = 30 * 24 * time.Hour // zurueckgegebene/abgelaufene Leases merken (gleiche IP fuer denselben Client)
 	maxEvents    = 100
 	probeWait    = 300 * time.Millisecond
@@ -192,8 +193,8 @@ func (s *Server) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// bind ermittelt je Scope die eigene Adresse und MAC (beim Start; danach jede Minute fuer Netze, deren
-// Schnittstelle oder Adresse fehlte, z. B. ein VLAN, das erst nach dem Start angelegt wurde).
+// bind ermittelt je Scope die eigene Adresse und MAC (beim Start und danach jede Minute: fehlende Schnittstellen bzw.
+// Adressen, z. B. ein VLAN, das erst nach dem Start angelegt wurde, und eine geaenderte Adresse der Node).
 func (s *Server) bind(onlyMissing bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -590,16 +591,16 @@ func (s *Server) mayAck(sc *scope, mac string, ip netip.Addr, now time.Time, sel
 func (s *Server) decline(sc *scope, req *dhcpv4.DHCPv4, mac string) {
 	ip := ip4(req.RequestedIPAddress())
 	s.mu.Lock()
-	if ip4(req.ServerIdentifier()) != sc.self || !ip.IsValid() {
+	// nur die Adresse, die dieser Client von uns hat (angeboten oder vergeben, RFC 2131 4.3.3) - sonst sperrte ein
+	// einzelnes Paket die Adresse eines anderen Geraets bzw. fuellte die Liste mit beliebigen Adressen
+	l := sc.byMAC[mac]
+	if ip4(req.ServerIdentifier()) != sc.self || !ip.IsValid() || l == nil || l.IP != ip || len(s.conflicts) >= maxConflicts {
 		s.mu.Unlock()
 		return
 	}
 	s.conflicts[ip] = s.now().Add(conflictHold)
-	drop := false
-	if l := sc.byMAC[mac]; l != nil && l.IP == ip {
-		sc.dropLease(mac)
-		drop = true
-	}
+	sc.dropLease(mac)
+	drop := true
 	s.event(sc, "decline", mac, "", ip, "decline")
 	s.mu.Unlock()
 	if drop {

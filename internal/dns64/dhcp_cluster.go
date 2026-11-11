@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"slices"
 	"strings"
@@ -305,6 +306,9 @@ func (m *Module) dhcpStandby(subnet netip.Prefix) bool {
 	}
 	m.dh.soonMu.Unlock()
 	alive, _ := m.dhcpPrimaryAlive(context.Background(), key)
+	if !alive && m.primaryAnswers(key) {
+		alive = true // im Cluster nicht erreichbar, aber die Haupt-Node antwortet direkt (nur die Verbindung zwischen den Nodes ist weg)
+	}
 	m.dh.soonMu.Lock()
 	if m.dh.standby == nil {
 		m.dh.standby = map[string]standbyState{}
@@ -700,10 +704,16 @@ func (m *Module) clApplyLease(ctx context.Context, l dhcp.Lease) (applied bool, 
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var curExp string
-	switch err := tx.QueryRowContext(ctx, `SELECT expires FROM dns64_dhcp_leases WHERE scope_id = ? AND mac = ?`, l.Scope, l.MAC).Scan(&curExp); {
+	var curExp, curIP, curState string
+	switch err := tx.QueryRowContext(ctx, `SELECT expires, ip, state FROM dns64_dhcp_leases WHERE scope_id = ? AND mac = ?`, l.Scope, l.MAC).Scan(&curExp, &curIP, &curState); {
 	case err == nil:
-		if t, _ := time.Parse(time.RFC3339, curExp); t.After(l.Expires) {
+		t, _ := time.Parse(time.RFC3339, curExp)
+		// Freigabe (RELEASE: frei, Ablauf = Zeitpunkt der Freigabe) nach der hier gespeicherten Vergabe derselben
+		// Adresse: gilt, obwohl die Vergabe hier laenger liefe - sonst meldete diese Node ihre alte Vergabe zurueck und
+		// die Adresse lebte auf der Haupt-Node wieder auf. Vergeben wurde hier hoechstens eine Laufzeit vor dem Ablauf.
+		released := l.State == dhcp.StateFree && curState == dhcp.StateBound && curIP == l.IP.String() &&
+			l.Expires.After(t.Add(-m.clLeaseTime(ctx, tx, l.Scope)))
+		if t.After(l.Expires) && !released {
 			return false, nil
 		}
 	case !errors.Is(err, sql.ErrNoRows):
@@ -742,4 +752,33 @@ func (m *Module) clApplyLease(ctx context.Context, l dhcp.Lease) (applied bool, 
 		return false, err
 	}
 	return true, tx.Commit()
+}
+
+// clLeaseTime: Laufzeit der Vergaben eines Netzes (Standard 24 Std.).
+func (m *Module) clLeaseTime(ctx context.Context, tx *sql.Tx, scope int64) time.Duration {
+	h := 24
+	_ = tx.QueryRowContext(ctx, `SELECT lease_hours FROM dns64_dhcp_scopes WHERE id = ?`, scope).Scan(&h)
+	if h <= 0 {
+		h = 24
+	}
+	return time.Duration(h) * time.Hour
+}
+
+// primaryAnswers: eine Haupt-Node des Netzes antwortet direkt (DNS auf ihrer Server-ID, TCP 53). Bei Relay-Netzen sieht
+// die Reserve deren DHCP-Antworten nicht; ohne diese Probe vergaeben bei einer Trennung nur zwischen den Nodes beide
+// aus demselben Bereich.
+func (m *Module) primaryAnswers(subnet string) bool {
+	c := m.dhcpClusterState(context.Background())
+	for _, n := range c.nodes {
+		server, ok := n.primaryFor(subnet)
+		if !ok || !server.IsValid() {
+			continue
+		}
+		d := net.Dialer{Timeout: time.Second}
+		if conn, err := d.Dial("tcp", net.JoinHostPort(server.String(), "53")); err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
 }

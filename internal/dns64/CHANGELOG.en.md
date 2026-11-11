@@ -1,5 +1,19 @@
 # Changes – DNS64
 
+## 1.39.2 – 2026-11-11
+
+### Security
+- DHCP names: device names of a zone with "devices" are never assigned via DHCP any more, not even to "the device itself" – any device can set the MAC in a DHCP packet. The zone answers the name (for a device by MAC also with the address from its lease). Lease addresses only count for a device when the neighbour table does not know it right now, and never with an address that belongs to another MAC there.
+- DHCPDECLINE only blocks the address the declining client got itself (so far a single packet could block another device's address for an hour and fill the list with arbitrary addresses).
+- Router Advertisements: only RAs from link-local addresses count, and the list of foreign routers is limited (an RA flood with changing senders filled the memory).
+
+### Fixed
+- DHCP only hands out this node as DNS server when DNS64 really runs here (e.g. not while port 53 is taken); after DNS64 starts or settings change (port, bind address) the new state applies right away – so far DHCP kept the state of its last start.
+- DHCP detects a newly created interface (VLAN) and a changed node address every minute (server ID, DNS option) and reopens the socket.
+- Cluster: a release (RELEASE) of an address no longer comes back to life via another node. A reserve no longer hands out addresses in a network while the main node answers directly (DNS on its server ID) – even if only the connection between the nodes is broken (important for relay networks).
+- DHCP names: "whoever has a name keeps it" also holds after a restart.
+- Router Advertisements: if a router service (radvd, odhcpd) already runs on the same host, Node64 no longer sends its own RAs on that interface – they would have removed the default route from the devices. Hint on the page.
+
 ## 1.39.1 – 2026-11-10
 
 ### Security

@@ -196,7 +196,8 @@ func (m *Module) dhcpConfig(ctx context.Context) (dhcp.Config, error) {
 	}
 	// DNS-Server der Geraete (DNS leer): DNS64 muss dort auf Port 53 antworten (Bind-Adresse, Port)
 	var dnsBind netip.Addr
-	noSelf := m.port(ctx) != 53
+	// ... und laufen: sonst verteilte DHCP einen DNS-Server, der nicht antwortet (z. B. Port 53 belegt) - wie bei RA
+	noSelf := m.port(ctx) != 53 || m.engNow.Load() == nil
 	if b, err := netip.ParseAddr(strings.TrimSpace(m.core.SettingOr(ctx, setBind, ""))); err == nil && !b.IsUnspecified() {
 		if b.Is4() {
 			dnsBind = b

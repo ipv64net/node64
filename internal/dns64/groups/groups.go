@@ -328,16 +328,22 @@ func (r *Resolver) SetLeases(m map[netip.Addr]string) {
 	r.lease.Store(l)
 }
 
-// IPs liefert die Adressen einer MAC aus der Nachbartabelle (ohne Link-Local), sortiert.
+// IPs liefert die Adressen einer MAC aus der Nachbartabelle (ohne Link-Local), sortiert. DHCP-Vergaben nur, wenn die
+// Nachbartabelle das Geraet gerade nicht kennt, und nie eine Adresse, die dort zu einer anderen MAC gehoert: die MAC
+// im DHCP-Paket kann jeder setzen (sonst holte sich ein Geraet mit fremder MAC eine Adresse in den Namen des NAS).
 func (r *Resolver) IPs(mac string) []netip.Addr {
 	var out []netip.Addr
-	for ip, m := range *r.neigh.Load() {
+	neigh := *r.neigh.Load()
+	for ip, m := range neigh {
 		if m == mac && !ip.IsLinkLocalUnicast() {
 			out = append(out, ip)
 		}
 	}
-	if l := r.lease.Load(); l != nil {
+	if l := r.lease.Load(); l != nil && len(out) == 0 {
 		for _, ip := range l.ips[mac] {
+			if other, ok := neigh[ip]; ok && other != mac {
+				continue
+			}
 			if !slices.Contains(out, ip) {
 				out = append(out, ip)
 			}

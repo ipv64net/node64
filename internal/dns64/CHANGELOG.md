@@ -1,5 +1,19 @@
 # Änderungen – DNS64
 
+## 1.39.2 – 2026-11-11
+
+### Sicherheit
+- DHCP-Namen: Gerätenamen einer Zone mit „Geräte“ vergibt nie mehr DHCP, auch nicht an „das Gerät selbst“ – die MAC im DHCP-Paket kann jedes Gerät setzen. Die Zone beantwortet den Namen (beim Gerät mit MAC auch mit der Adresse aus seiner Vergabe). Adressen aus Vergaben zählen für ein Gerät nur, wenn die Nachbartabelle es gerade nicht kennt, und nie mit einer Adresse, die dort einer anderen MAC gehört.
+- DHCPDECLINE sperrt nur noch die Adresse, die der ablehnende Client selbst bekommen hat (bisher konnte ein einzelnes Paket die Adresse eines anderen Geräts eine Stunde sperren und die Liste mit beliebigen Adressen füllen).
+- Router Advertisements: Nur RAs von Link-Local-Adressen zählen, und die Liste fremder Router ist begrenzt (eine RA-Flut mit wechselnden Absendern füllte den Speicher).
+
+### Behoben
+- DHCP verteilt diese Node nur als DNS-Server, wenn DNS64 hier wirklich läuft (z. B. nicht, solange Port 53 belegt ist); nach dem Start von DNS64 bzw. nach geänderten Einstellungen (Port, Bind-Adresse) gilt sofort der neue Stand – bisher blieb DHCP beim Stand des letzten Starts.
+- DHCP erkennt eine neu angelegte Schnittstelle (VLAN) und eine geänderte Adresse der Node jede Minute (Server-ID, DNS-Option) und öffnet den Socket neu.
+- Cluster: Eine Freigabe (RELEASE) einer Adresse lebt nicht mehr über eine andere Node wieder auf. Eine Reserve vergibt in einem Netz nicht, solange die Haupt-Node direkt antwortet (DNS auf ihrer Server-ID) – auch wenn nur die Verbindung zwischen den Nodes getrennt ist (wichtig bei Relay-Netzen).
+- DHCP-Namen: „Wer einen Namen hat, behält ihn“ gilt auch nach einem Neustart.
+- Router Advertisements: Läuft auf demselben Host schon ein Router-Dienst (radvd, odhcpd), sendet Node64 auf der Schnittstelle keine eigenen RAs mehr – sie hätten den Geräten die Default-Route genommen. Hinweis auf der Seite.
+
 ## 1.39.1 – 2026-11-10
 
 ### Sicherheit

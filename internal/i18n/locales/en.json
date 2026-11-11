@@ -3684,6 +3684,7 @@
         "announced": "Announced",
         "last": "Last sent",
         "err_no_iface": "Interface missing ({err})",
+        "err_self_router": "A router service on this host (radvd, odhcpd) already announces on the interface – Node64 does not send its own RAs here (they would remove the default route from the devices). Please add DNS in the router service (RDNSS).",
         "err_no_addr": "No IPv6 address to announce – or DNS64 does not answer via IPv6 on port 53 (port or bind address)",
         "err_send": "Sending failed: {err}",
         "err_socket": "Router advertisements cannot be sent: {err}. The container needs host network and cap_net_raw.",

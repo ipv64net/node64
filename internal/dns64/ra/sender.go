@@ -27,6 +27,7 @@ const (
 	initialRAs  = 3
 	rsGap       = 3 * time.Second
 	routerKeep  = 30 * time.Minute // Router ohne neues RA verschwinden aus der Liste
+	maxRouters  = 64               // so viele fremde Router hoechstens merken
 )
 
 var (
@@ -52,8 +53,9 @@ type Sender struct {
 
 	mu      sync.Mutex
 	state   map[string]*ifState
-	routers map[string]Router // Schnittstelle|Quelle
-	err     string            // Socket
+	routers map[string]Router    // Schnittstelle|Quelle
+	selfRtr map[string]time.Time // Schnittstelle -> zuletzt RA eines Router-Dienstes auf diesem Host (radvd, odhcpd)
+	err     string               // Socket
 	sent    atomic.Int64
 }
 
@@ -300,6 +302,13 @@ func (s *Sender) announce(p *ipv6.PacketConn, n string) {
 		setErr("no_addr", "no IPv6 address for DNS")
 		return
 	}
+	s.mu.Lock()
+	selfAt, selfRouter := s.selfRtr[n]
+	s.mu.Unlock()
+	if selfRouter && time.Since(selfAt) < routerKeep {
+		setErr("self_router", "router service on this host (radvd/odhcpd) announces on this interface")
+		return
+	}
 	m, o := s.flags(n)
 	ad := Ad{Managed: m, Other: o, DNS: dns, Withdraw: gone, Lifetime: Lifetime, MAC: st.mac}
 	if len(dns) > 0 {
@@ -350,7 +359,25 @@ func (s *Sender) read(p *ipv6.PacketConn, rs chan<- string) {
 		}
 		name := s.ifaceName(cm.IfIndex)
 		ip := srcAddr(src)
-		if name == "" || !ip.IsValid() || own(cm.IfIndex, ip) {
+		if name == "" || !ip.IsValid() || !ip.IsLinkLocalUnicast() { // RA/RS kommen von Link-Local (RFC 4861 6.1.2)
+			continue
+		}
+		if own(cm.IfIndex, ip) {
+			// eigene Adresse: unser RA - oder das eines Router-Dienstes auf demselben Host (gleiche Quelle). Dessen
+			// Default-Route wuerden unsere RAs (Lifetime 0) bei den Geraeten loeschen: dann nicht senden.
+			if buf[0] == typeRA {
+				if r, ok := Parse(buf[:n]); ok && (r.Lifetime > 0 || len(r.Prefixes) > 0) {
+					s.mu.Lock()
+					if s.selfRtr == nil {
+						s.selfRtr = map[string]time.Time{}
+					}
+					if _, known := s.selfRtr[name]; !known && s.Log != nil {
+						s.Log.Warn("ra: router service on this host announces on the interface - not sending own RAs", "iface", name)
+					}
+					s.selfRtr[name] = time.Now()
+					s.mu.Unlock()
+				}
+			}
 			continue
 		}
 		switch buf[0] {
@@ -363,7 +390,17 @@ func (s *Sender) read(p *ipv6.PacketConn, rs chan<- string) {
 			if r, ok := Parse(buf[:n]); ok {
 				r.Iface, r.Source, r.LastSeen = name, ip, time.Now()
 				s.mu.Lock()
-				s.routers[name+"|"+ip.String()] = r
+				key := name + "|" + ip.String()
+				if _, ok := s.routers[key]; !ok && len(s.routers) >= maxRouters {
+					for k, v := range s.routers { // voll (z. B. gefaelschte RAs): alte vergessen, sonst neue nicht merken
+						if time.Since(v.LastSeen) > routerKeep {
+							delete(s.routers, k)
+						}
+					}
+				}
+				if _, ok := s.routers[key]; ok || len(s.routers) < maxRouters {
+					s.routers[key] = r
+				}
 				s.mu.Unlock()
 			}
 		}
