@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gosnmp/gosnmp"
@@ -118,6 +119,7 @@ type Collector struct {
 	maxSpeed map[string]float64
 	absent   map[string]time.Time // MIB-Gruppe -> nicht fragen bis
 	noHC     bool                 // keine 64-Bit-Zaehler (ifHC*): 32-Bit-Spalten nehmen
+	bulkMax  atomic.Int32         // gelernte Grenze Varbinds je GETBULK (gsConn.getBulk)
 
 	ifStatic   map[string]ifInfo // ifIndex -> Name, Typ, Alias
 	ifStaticAt time.Time
@@ -374,7 +376,7 @@ func (c *Collector) dialGoSNMP() (conn, error) {
 	if err := g.Connect(); err != nil {
 		return nil, err
 	}
-	return &gsConn{g: g}, nil
+	return &gsConn{g: g, bulk: &c.bulkMax}, nil
 }
 
 // Close beendet die Verbindung.

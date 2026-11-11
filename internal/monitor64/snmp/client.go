@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/gosnmp/gosnmp"
@@ -73,7 +74,8 @@ func statusOf(err error) gosnmp.SNMPError {
 
 // gsConn ist die echte Verbindung ueber gosnmp.
 type gsConn struct {
-	g *gosnmp.GoSNMP
+	g    *gosnmp.GoSNMP
+	bulk *atomic.Int32 // gelernte Grenze Varbinds je GETBULK (0 = keine; gehoert dem Collector, ueberlebt neue Verbindungen)
 }
 
 func (c *gsConn) v1() bool { return c.g.Version == gosnmp.Version1 }
@@ -107,9 +109,37 @@ func (c *gsConn) getNext(ctx context.Context, oids []string) ([]pdu, error) {
 	return c.check(c.g.GetNext(oids))
 }
 
+// getBulk: manche Agenten (RouterOS, z. B. CRS305) verwerfen eine zu grosse Antwort still statt mit tooBig - dann
+// kleiner versuchen und die Grenze merken, sobald eine kleinere Anfrage durchkommt (ein Geraet, das gar nicht
+// antwortet, wird so nicht dauerhaft gedrosselt).
 func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]pdu, error) {
 	c.g.Context = ctx
-	return c.check(c.g.GetBulk(oids, 0, maxRep))
+	n := uint32(max(1, len(oids)))
+	if c.bulk != nil {
+		if lim := uint32(max(0, c.bulk.Load())); lim > 0 && maxRep*n > lim {
+			maxRep = max(1, lim/n)
+		}
+	}
+	shrunk := false
+	for {
+		res, err := c.check(c.g.GetBulk(oids, 0, maxRep))
+		if err == nil {
+			if shrunk && c.bulk != nil {
+				c.bulk.Store(int32(min(maxRep*n, math.MaxInt32)))
+			}
+			return res, nil
+		}
+		if maxRep <= 1 || ctx.Err() != nil || !isTimeout(err) {
+			return res, err
+		}
+		maxRep, shrunk = max(1, maxRep/2), true
+	}
+}
+
+// isTimeout: Anfrage ohne Antwort (gosnmp meldet "request timeout").
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout() || strings.Contains(err.Error(), "timeout")
 }
 
 // ---- OIDs ----
@@ -387,6 +417,21 @@ func getScalars(ctx context.Context, c conn, oids []string) (map[string]pdu, err
 				if errors.As(err, &se) && se.status == gosnmp.NoSuchName && se.index >= 1 && se.index <= len(chunk) {
 					chunk = append(chunk[:se.index-1], chunk[se.index:]...)
 					continue
+				}
+				if se != nil && se.status == gosnmp.NoSuchName && se.index == 0 {
+					// ohne Index (RouterOS): welcher Wert fehlt, sagt der Agent nicht - einzeln fragen, fehlende fallen weg
+					for _, o := range chunk {
+						if one, err := c.get(ctx, []string{o}); err == nil {
+							for _, p := range one {
+								if n := normOID(p.Name); n != "" && !missing(p) {
+									out[n], _ = clip(p)
+								}
+							}
+						} else if statusOf(err) != gosnmp.NoSuchName {
+							return out, err
+						}
+					}
+					break
 				}
 				return out, err
 			}

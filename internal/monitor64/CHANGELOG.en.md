@@ -6,6 +6,7 @@
 - New services on a host: "all" and "none" buttons above the selection.
 - The Docker access also works with Podman (Docker-compatible API via `podman.socket`, locally or via `ssh://…/run/podman/podman.sock`). Container CPU load is correct there: Podman reports system time differently from Docker, so far a container using one core showed up to 100 %.
 - SNMP traps switched off: the remembered trap state disappears right away, even if a round was running (so far until the next round).
+- SNMP with MikroTik/RouterOS (e.g. CRS305): ports now show up. RouterOS silently drops oversized bulk requests instead of rejecting them; Monitor64 then asks in smaller pieces and remembers the limit. Missing values without saying which one (RouterOS) no longer mark the round as "partial".
 
 ## 0.1.1 – 2026-11-10
 

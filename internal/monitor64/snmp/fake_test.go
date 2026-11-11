@@ -287,6 +287,7 @@ type udpAgent struct {
 	community string
 	pc        net.PacketConn
 	done      chan struct{}
+	routerOS  int // > 0: wie RouterOS - GETBULK ueber so viele Varbinds still verwerfen, noSuchName ohne Index
 }
 
 func startAgent(t testing.TB, m *mib, community string) *udpAgent {
@@ -327,6 +328,11 @@ func (a *udpAgent) serve() {
 			case gosnmp.GetNextRequest:
 				p = a.m.next(v.Name)
 			}
+			if a.routerOS > 0 && req.PDUType == gosnmp.GetRequest && p.Type == gosnmp.NoSuchObject {
+				resp.Error, resp.ErrorIndex = gosnmp.NoSuchName, 0
+				resp.Variables = req.Variables
+				break
+			}
 			if v1 && (p.Type == gosnmp.NoSuchObject || p.Type == gosnmp.EndOfMibView) {
 				resp.Error, resp.ErrorIndex = gosnmp.NoSuchName, uint8(i+1)
 				resp.Variables = req.Variables
@@ -335,6 +341,9 @@ func (a *udpAgent) serve() {
 			if req.PDUType != gosnmp.GetBulkRequest {
 				resp.Variables = append(resp.Variables, p)
 			}
+		}
+		if req.PDUType == gosnmp.GetBulkRequest && a.routerOS > 0 && int(req.MaxRepetitions)*len(req.Variables) > a.routerOS {
+			continue // zu gross: keine Antwort statt tooBig
 		}
 		if req.PDUType == gosnmp.GetBulkRequest {
 			cur := make([]string, len(req.Variables))

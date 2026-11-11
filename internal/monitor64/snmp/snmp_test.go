@@ -843,3 +843,33 @@ func TestUDPAgent(t *testing.T) {
 		t.Fatalf("falsche Community: %v (%v)", err, time.Since(start))
 	}
 }
+
+// RouterOS (CRS305): verwirft zu grosse GETBULK-Antworten still und meldet noSuchName ohne Index. Die Ports kommen
+// trotzdem, die Grenze wird gelernt, und fehlende Werte (UPS-MIB) machen die Runde nicht "teilweise".
+func TestUDPAgentRouterOS(t *testing.T) {
+	m := loadWalk(t, "testdata/switch.walk")
+	a := startAgent(t, m, "testcommunity")
+	a.routerOS = 20
+	c, err := New(Config{Address: "127.0.0.1", Port: a.port(), Version: "2c", Secret: Secret{Community: "testcommunity"},
+		Timeout: 300 * time.Millisecond, Retries: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	s, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	ports := 0
+	for _, x := range s {
+		if strings.HasPrefix(x.Key, "if:") {
+			ports++
+		}
+	}
+	if ports == 0 {
+		t.Fatal("no ports")
+	}
+	if lim := c.bulkMax.Load(); lim <= 0 || lim > 20 {
+		t.Fatalf("learned limit: %d", lim)
+	}
+}
