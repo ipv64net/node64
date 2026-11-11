@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -78,7 +79,7 @@ var oidcJWKS struct {
 	m map[string]*oidc.RemoteKeySet
 }
 
-func oidcRemoteKeys(jwksURL string) *oidc.RemoteKeySet {
+func oidcRemoteKeys(jwksURL string, hc *http.Client) *oidc.RemoteKeySet {
 	oidcJWKS.Lock()
 	defer oidcJWKS.Unlock()
 	if oidcJWKS.m == nil {
@@ -86,15 +87,31 @@ func oidcRemoteKeys(jwksURL string) *oidc.RemoteKeySet {
 	}
 	ks := oidcJWKS.m[jwksURL]
 	if ks == nil {
-		ctx := oidc.ClientContext(context.Background(), &http.Client{Timeout: 10 * time.Second})
+		if hc == nil {
+			hc = &http.Client{Timeout: 10 * time.Second}
+		}
+		ctx := oidc.ClientContext(context.Background(), hc)
 		ks = oidc.NewRemoteKeySet(ctx, jwksURL)
 		oidcJWKS.m[jwksURL] = ks
 	}
 	return ks
 }
 
+// oidcClient: HTTP-Client fuer den SSO-Anbieter - System-CAs plus die eigenen CAs der Node (Anbieter im eigenen
+// Netz mit Zertifikat der eigenen CA, z. B. authentik; Forum).
+func (s *Server) oidcClient(ctx context.Context) *http.Client {
+	hc := &http.Client{Timeout: 10 * time.Second}
+	if s.Certs == nil {
+		return hc
+	}
+	if pool := s.Certs.TrustPool(ctx); pool != nil {
+		hc.Transport = &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}
+	}
+	return hc
+}
+
 // oidcVerifier: Pruefer fuer das ID-Token dieses Anbieters und die erlaubten Verfahren.
-func oidcVerifier(p *oidc.Provider, o oidcSettings) (*oidc.IDTokenVerifier, []string, error) {
+func oidcVerifier(p *oidc.Provider, o oidcSettings, hc *http.Client) (*oidc.IDTokenVerifier, []string, error) {
 	var d oidcDiscovery
 	if err := p.Claims(&d); err != nil {
 		return nil, nil, err
@@ -106,7 +123,7 @@ func oidcVerifier(p *oidc.Provider, o oidcSettings) (*oidc.IDTokenVerifier, []st
 	}
 	var remote oidc.KeySet = &oidc.StaticKeySet{} // ohne JWKS: nur HS moeglich
 	if d.JWKS != "" {
-		remote = oidcRemoteKeys(d.JWKS)
+		remote = oidcRemoteKeys(d.JWKS, hc)
 	}
 	ks := &oidcKeySet{remote: remote, secret: []byte(o.Secret), allowed: ja}
 	return oidc.NewVerifier(d.Issuer, ks, &oidc.Config{ClientID: o.ClientID, SupportedSigningAlgs: allowed}), allowed, nil

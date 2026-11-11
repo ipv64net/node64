@@ -283,6 +283,23 @@ func (m *Manager) CAs(ctx context.Context) ([]*CA, error) {
 }
 
 // GetCA liefert eine CA.
+// TrustPool: System-CAs plus die eigenen CAs (ihre Wurzel bzw. die CA selbst) fuer Verbindungen der Node zu Diensten
+// im eigenen Netz, deren Zertifikat von einer eigenen CA stammt (z. B. SSO-Anbieter). nil = keine eigene CA.
+func (m *Manager) TrustPool(ctx context.Context) *x509.CertPool {
+	cas, err := m.CAs(ctx)
+	if err != nil || len(cas) == 0 {
+		return nil
+	}
+	pool, err := trustRoots()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	for _, ca := range cas {
+		pool.AddCert(ca.anchor())
+	}
+	return pool
+}
+
 func (m *Manager) GetCA(ctx context.Context, id int64) (*CA, error) {
 	ca, err := m.loadCA(ctx, id, false)
 	if err != nil {

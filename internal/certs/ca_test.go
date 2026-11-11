@@ -207,3 +207,32 @@ func TestOtherACMECA(t *testing.T) {
 		t.Fatal("unknown acme ca")
 	}
 }
+
+// TrustPool: ohne eigene CA nil, sonst System-CAs plus die eigene CA (SSO-Anbieter mit Zertifikat der eigenen CA).
+func TestTrustPool(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	if e.m.TrustPool(ctx) != nil {
+		t.Fatal("pool without own CA")
+	}
+	ca, err := e.m.CreateCA(ctx, CAInput{Name: "SSO"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, _, _, err := e.m.CAFile(ctx, ca.ID, "pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := pem.Decode(der)
+	c, err := x509.ParseCertificate(b.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := e.m.TrustPool(ctx)
+	if pool == nil {
+		t.Fatal("no pool")
+	}
+	if _, err := c.Verify(x509.VerifyOptions{Roots: pool}); err != nil {
+		t.Fatalf("own CA not trusted: %v", err)
+	}
+}

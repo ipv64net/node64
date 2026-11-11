@@ -105,7 +105,7 @@ func TestOIDCSigningAlgs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			v, allowed, err := oidcVerifier(p, oidcSettings{Issuer: srv.URL, ClientID: "node64", Secret: c.secret})
+			v, allowed, err := oidcVerifier(p, oidcSettings{Issuer: srv.URL, ClientID: "node64", Secret: c.secret}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -180,7 +180,7 @@ func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request, linkUser int6
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	p, err := oidcProvider(r.Context(), o.Issuer)
+	p, err := oidcProvider(oidc.ClientContext(r.Context(), s.oidcClient(r.Context())), o.Issuer)
 	if err != nil {
 		s.log.Warn("oidc discovery failed", "issuer", o.Issuer, "err", err)
 		s.flash(w, r, "danger", v.T("sso.unreachable"))
@@ -258,6 +258,8 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o := s.oidcSettings(ctx)
+	hc := s.oidcClient(ctx)
+	ctx = oidc.ClientContext(ctx, hc) // Discovery und Code-Austausch mit den eigenen CAs
 	p, err := oidcProvider(ctx, o.Issuer)
 	if err != nil || !o.Enabled() {
 		fail(back, "sso.unreachable")
@@ -272,7 +274,7 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, _ := tok.Extra("id_token").(string)
-	verifier, allowed, err := oidcVerifier(p, o)
+	verifier, allowed, err := oidcVerifier(p, o, hc)
 	if err != nil {
 		s.log.Warn("oidc discovery unreadable", "err", err)
 		fail(back, "sso.unreachable")
