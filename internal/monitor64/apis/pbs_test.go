@@ -11,7 +11,7 @@ import (
 	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
-// pbsFake: PBS 3.3 mit einem Datastore (backup, zwei Namespaces), einem Wechseldatenträger und einem Datastore im
+// pbsFake: PBS 3.3 mit einem Datastore (backup, zwei Namespaces), einem Wechseldatentraeger und einem Datastore im
 // Wartungsmodus; /admin/gc gibt es nicht (GC-Status je Datastore).
 func pbsFake(t *testing.T, now time.Time) (*fakeAPI, PBSConfig) {
 	f := newFakeAPI(t)

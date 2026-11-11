@@ -416,7 +416,7 @@ func TestReporterRetry(t *testing.T) {
 	if want := f.now.Add(-reportGrace).Truncate(time.Second); !f.lastEnd(t).Equal(want) {
 		t.Fatalf("last_end %v want %v", f.lastEnd(t), want)
 	}
-	// 401: frühestens im Takt
+	// 401: fruehestens im Takt
 	f.srv.answers = []int{http.StatusUnauthorized}
 	f.now = f.now.Add(10 * time.Minute)
 	if d := f.r.RunOnce(ctx); d < ReportEvery {

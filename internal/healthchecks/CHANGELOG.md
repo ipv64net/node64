@@ -2,6 +2,7 @@
 
 ## 3.1.1 – 2026-11-11
 
+- Statusseiten-Editor: Die Liste der Einträge lässt sich nicht mehr per Klick auf die Spalten sortieren – danach hätte „entfernen“ den falschen Eintrag gelöscht (und die Reihenfolge der Seite still geändert).
 - Cluster mit älteren Nodes (1.4): Nach dem Update auf 1.5 liefert eine Node die beim Update entfernten Docker- und Proxmox-Checks anderer Nodes nicht mehr als Löschung aus – eine ältere Node hätte sonst ihren noch laufenden Check gelöscht.
 - Löscht eine nicht verknüpfte Node einen Check, gibt die weiterleitende Node die Löschung an IPv64.net weiter, auch wenn sie den Check selbst schon nicht mehr hatte (bisher blieb er dort stehen).
 

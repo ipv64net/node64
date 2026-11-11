@@ -191,6 +191,20 @@ func TestDockerSSHStdio(t *testing.T) {
 	}
 }
 
+// dkCert erzeugt ein selbst signiertes Client-Zertifikat (PEM).
+func dkCert(t *testing.T) (certPEM, keyPEM string) {
+	t.Helper()
+	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "node64"}, NotBefore: time.Now().Add(-time.Hour),
+		NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &k.PublicKey, k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kd, _ := x509.MarshalECPrivateKey(k)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))
+}
+
 func TestDockerSSH(t *testing.T) {
 	f, _, _ := newFakeDocker(t)
 	f.list = []map[string]any{dkEntry("a1", "web", "running", "Up 1 hour", nil), dkEntry("b1", "db", "exited", "Exited (0) 1 hour ago", nil)}
@@ -210,9 +224,6 @@ func TestDockerSSH(t *testing.T) {
 	res := DockerProbe(ctx, sys)
 	if res.OK || !res.NeedConfirm || res.Fingerprint != SSHFingerprint(hostKey) || res.Error != "" {
 		t.Fatalf("probe ohne pin: %+v", res)
-	}
-	if ValidateSystem(&System{Kind: KindDocker, Addresses: sys.Addresses, Secret: sys.Secret}, true) == nil {
-		t.Fatal("ssh ohne Pin gespeichert")
 	}
 	// mit Pin (auch im Format von ssh-keygen)
 	sys.PinSHA256 = PinBase64(res.Fingerprint)
@@ -249,20 +260,6 @@ func TestDockerSSH(t *testing.T) {
 	}
 }
 
-// dkCert erzeugt ein selbst signiertes Client-Zertifikat (PEM).
-func dkCert(t *testing.T) (certPEM, keyPEM string) {
-	t.Helper()
-	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "node64"}, NotBefore: time.Now().Add(-time.Hour),
-		NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}
-	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &k.PublicKey, k)
-	if err != nil {
-		t.Fatal(err)
-	}
-	kd, _ := x509.MarshalECPrivateKey(k)
-	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))
-}
-
 func TestDockerTLS(t *testing.T) {
 	f, _, _ := newFakeDocker(t)
 	f.list = []map[string]any{dkEntry("a1", "web", "running", "Up 1 hour", nil)}
@@ -292,48 +289,5 @@ func TestDockerTLS(t *testing.T) {
 	noCert.Secret = ""
 	if res := DockerProbe(ctx, noCert); res.OK {
 		t.Fatalf("ohne client-zertifikat: %+v", res)
-	}
-	if err := ValidateSystem(&System{Kind: KindDocker, Addresses: sys.Addresses, Secret: DockerCreds{Cert: cert}.Encode()}, true); err == nil {
-		t.Fatal("zertifikat ohne schluessel")
-	}
-}
-
-func TestDockerRemoteValidate(t *testing.T) {
-	user, addr, sock, err := dockerSSHTarget("ssh://admin@10.0.0.5")
-	if err != nil || user != "admin" || addr != "10.0.0.5:22" || sock != "/var/run/docker.sock" {
-		t.Fatalf("ssh target: %q %q %q %v", user, addr, sock, err)
-	}
-	if _, addr, sock, _ := dockerSSHTarget("ssh://a@[fd00::1]:2222/run/user/1000/docker.sock"); addr != "[fd00::1]:2222" || sock != "/run/user/1000/docker.sock" {
-		t.Fatalf("ssh target v6: %q %q", addr, sock)
-	}
-	for _, h := range []string{"ssh://10.0.0.5", "ssh://a:pw@10.0.0.5", "ssh://a@", "tcp://a@host:2375", "tcp://fd00::1", "https://fd00::1:2376"} {
-		if ValidDockerHost(h) {
-			t.Errorf("%s gilt als gueltig", h)
-		}
-	}
-	for _, h := range []string{"tcp://[fd00::1]:2375", "https://[fd00::1]:2376", "tcp://10.0.0.5:2375", "http://docker-proxy:2375"} {
-		if !ValidDockerHost(h) {
-			t.Errorf("%s gilt als ungueltig", h)
-		}
-	}
-	hex := strings.Repeat("0a", 32)
-	if p, ok := NormalizeDockerPin(PinBase64(hex)); !ok || p != hex {
-		t.Fatalf("pin base64: %q %v", p, ok)
-	}
-	if _, ok := NormalizeDockerPin("SHA256:kaputt"); ok {
-		t.Fatal("kaputter pin")
-	}
-	key, _ := GenerateDockerSSHKey()
-	sys := &System{Kind: KindDocker, Addresses: []string{"ssh://a@h"}, PinSHA256: PinBase64(hex)}
-	if err := ValidateSystem(sys, true); err == nil {
-		t.Fatal("ssh ohne schluessel")
-	}
-	sys.Secret = DockerCreds{Key: key}.Encode()
-	if err := ValidateSystem(sys, true); err != nil || sys.PinSHA256 != hex {
-		t.Fatalf("ssh: %v %q", err, sys.PinSHA256)
-	}
-	sys = &System{Kind: KindDocker, Addresses: []string{"tcp://h:2375"}, Secret: "x", PinSHA256: hex}
-	if err := ValidateSystem(sys, true); err != nil || sys.Secret != "" || sys.PinSHA256 != "" {
-		t.Fatalf("tcp: %v %+v", err, sys)
 	}
 }

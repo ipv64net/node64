@@ -137,7 +137,8 @@
 		{{if $d.M64Off}}<div class="alert alert-warning py-2 small"><i class="bi bi-activity"></i> {{.T "hc.status.m64_off"}}</div>{{end}}
 		{{if not $d.PageList}}<p class="text-body-secondary small mb-0">{{.T "hc.status.items_empty"}}</p>
 		{{else}}
-		<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+		{{/* nicht sortierbar: die Reihenfolge ist die der Seite, und "entfernen" zaehlt nach der Position */}}
+		<div class="table-responsive"><table class="table table-sm align-middle mb-0" data-nosort>
 			<thead><tr><th class="small">{{.T "common.name"}}</th><th class="small">{{.T "hc.group.label"}}</th><th class="small">{{.T "hc.status.label"}}</th><th></th></tr></thead>
 			<tbody>
 			{{range $ii, $it := $d.PageList}}

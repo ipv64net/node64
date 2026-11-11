@@ -2,6 +2,7 @@
 
 ## 3.1.1 – 2026-11-11
 
+- Status page editor: the list of entries can no longer be sorted by clicking the columns – "remove" would then have deleted the wrong entry (and silently changed the page order).
 - Clusters with older nodes (1.4): after the update to 1.5, a node no longer serves the Docker and Proxmox checks of other nodes removed during the update as deletions – an older node would otherwise have deleted its still running check.
 - When an unlinked node deletes a check, the forwarding node passes the deletion on to IPv64.net even if it no longer had the check itself (so far it stayed there).
 

@@ -5,6 +5,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Monitor64: Hängende Zugänge melden „nicht erreichbar“ statt still auf OK zu bleiben; ausdrücklich gewählte Standardkanäle bekommen alle Meldungen; Erinnerung für nicht erreichbare Hosts; nach einem Neustart kein „unbekannt“ bei Push-Hosts; Pausieren sofort sichtbar; Prometheus-Label `service` mit Namen; Cluster-Abgleich robuster (Quittierungen, Verlauf, Zuständigkeit, Schlüssel).
+- Monitor64: Sicherheit – neues Ziel eines Zugangs verlangt das Geheimnis neu; Push-Token nicht mehr im Klartext im Export; Grenzen für Agent-Berichte; SNMP-Traps je Absender; PVE/PBS mit IPv6-Zone; Podman-CPU auf 2 Kernen; mehrere Korrekturen der Oberfläche (Assistent, Probleme, Dialoge); schneller (ETag, Indizes).
+- Healthchecks: Statusseiten-Editor – nach Sortieren der Liste entfernte „entfernen“ den falschen Eintrag.
 - Healthchecks: Im Cluster mit älteren Nodes löscht das Update keine Docker-/Proxmox-Checks mehr auf den älteren Nodes.
 - Benachrichtigungen: Im Protokoll führen Monitor64-Meldungen zum Host (bisher ins Leere).
 - Monitor64: Karte im Dashboard; Probleme stehen unter „Letzte Störungen“ zusammen mit den Healthchecks.

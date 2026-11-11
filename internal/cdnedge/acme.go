@@ -343,12 +343,13 @@ func (s *Server) acmeTXT(ctx context.Context, fqdn, value string, del bool) erro
 var waitTXT = func(ctx context.Context, name, fqdn string, want []string) error {
 	var servers [][]string
 	for z := name; strings.Count(z, ".") >= 1; z = z[strings.IndexByte(z, '.')+1:] {
-		ns, err := net.DefaultResolver.LookupNS(ctx, z)
+		// Namen absolut (mit Punkt): sonst haengt der System-Resolver die Suchdomains an (wie in certs, Forum 5085)
+		ns, err := net.DefaultResolver.LookupNS(ctx, strings.TrimSuffix(z, ".")+".")
 		if err != nil || len(ns) == 0 {
 			continue
 		}
 		for _, n := range ns {
-			addrs, _ := net.DefaultResolver.LookupHost(ctx, strings.TrimSuffix(n.Host, "."))
+			addrs, _ := net.DefaultResolver.LookupHost(ctx, strings.TrimSuffix(n.Host, ".")+".")
 			var list []string
 			for _, a := range addrs {
 				list = append(list, net.JoinHostPort(a, "53"))

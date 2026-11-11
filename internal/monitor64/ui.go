@@ -2,7 +2,9 @@ package monitor64
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io/fs"
 	"net/http"
 	"regexp"
@@ -157,9 +159,16 @@ func (m *Module) apiStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) serveAsset(b []byte, ctype string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	sum := sha256.Sum256(b)
+	etag := `"` + hex.EncodeToString(sum[:8]) + `"` // ueber den Inhalt: neue Version = neuer Wert, auch bei gleicher Versionsnummer
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", ctype)
-		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Cache-Control", "no-cache") // immer nachfragen, aber mit ETag: unveraendert = 304 statt 230 KB
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		_, _ = w.Write(b)
 	}
 }

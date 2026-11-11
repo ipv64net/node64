@@ -19,6 +19,8 @@
 - A port in the host address (SSH, e.g. `nas:2222`) no longer applies to API accesses without own URL or to SNMP – as in the UI suggestion.
 - Docker/Podman: Podman CPU load on hosts with 2 cores no longer jumps between the right and a doubled value.
 - Agent (with the next agent version): failed attempts before login also count per IPv6 /48.
+- UI: in the wizard, input (user, password) is no longer lost when the answer for the node address or push token arrives late. Overrides for groups or tags with "|" in their name are saved correctly. On the problems page, a quickly changed problem no longer shows another problem's history (and buttons). Dialogs no longer stack old click handlers. A broken link `#svc=%` no longer stops the host page from refreshing.
+- Faster: script and stylesheet are served with an ETag (unchanged = 304 instead of 230 KB each time); the dashboard card counts without database queries; new indexes for "Recent" and closed problems; the node ID is no longer read every round.
 
 - IPv6 throughout: a host's address now also accepts IPv6 with a port (`[2001:db8::1]:2222`); this form used to be mangled on save. Invalid addresses are rejected right away.
 - IPv6 without square brackets now also works in the address of a Prometheus exporter (`fd00::1`) and for Docker via `tcp://` or `ssh://`; with `ssh://user@fd00::1` the last block used to be read as the port silently.

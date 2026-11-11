@@ -12,7 +12,6 @@ package proxmox
 
 import (
 	"context"
-	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -250,17 +249,6 @@ type Source interface {
 	Run(ctx context.Context)
 	Poll(ctx context.Context) *Snapshot
 	Last() *Snapshot
-}
-
-// NewSource baut die Abfrage passend zur Art des Systems.
-func NewSource(log *slog.Logger, sys System, fn SnapshotFunc) Source {
-	if sys.IsDocker() {
-		return NewDockerPoller(log, sys, fn)
-	}
-	if sys.IsPBS() {
-		return NewPBSPoller(log, sys, fn)
-	}
-	return NewPoller(log, sys, fn)
 }
 
 // Probe prueft eine Verbindung beim Anlegen (Assistent): liefert Version, Clustername, Nodes und den

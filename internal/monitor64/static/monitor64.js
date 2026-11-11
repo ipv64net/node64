@@ -21,6 +21,8 @@ function L(k, a) {
 function esc(s) {
 	return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
 }
+// splitTarget: "group|Name" am ersten | trennen (Gruppen und Tags duerfen selbst | enthalten).
+function splitTarget(v) { var i = String(v).indexOf('|'); return i < 0 ? [String(v), ''] : [v.slice(0, i), v.slice(i + 1)]; }
 function $(sel, ctx) { return (ctx || document).querySelector(sel); }
 function $$(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
 var LOC = D.lang === 'de' ? 'de-DE' : (D.lang || undefined);
@@ -339,7 +341,10 @@ var modalEl = document.getElementById('m64-modal');
 function modal(title, body, buttons, wide) {
 	if (!modalEl || !window.bootstrap) { return null; }
 	$('#m64-modal-title').textContent = title;
-	$('#m64-modal-body').innerHTML = body;
+	// frischer Koerper je Dialog: Klick-Handler frueherer Dialoge (mit deren Zugang) haengen sonst weiter daran
+	var oldBody = $('#m64-modal-body'), freshBody = oldBody.cloneNode(false);
+	oldBody.parentNode.replaceChild(freshBody, oldBody);
+	freshBody.innerHTML = body;
 	$('.modal-dialog', modalEl).classList.toggle('modal-lg', !!wide);
 	var foot = $('#m64-modal-foot');
 	foot.innerHTML = '';
@@ -1578,7 +1583,12 @@ function pageHost() {
 	renderAll();
 	buildCharts();
 	loadSparks();
-	function openHash() { if (location.hash.indexOf('#svc=') === 0) { openDetail(decodeURIComponent(location.hash.slice(5))); } }
+	function openHash() {
+		if (location.hash.indexOf('#svc=') !== 0) { return; }
+		var key;
+		try { key = decodeURIComponent(location.hash.slice(5)); } catch (e) { return; } // kaputter Link: sonst liefen Neuladen und hashchange nicht
+		openDetail(key);
+	}
 	openHash();
 	window.addEventListener('hashchange', openHash); // Link auf einen Dienst derselben Seite (kein Neuladen)
 	setInterval(function () { if (!document.hidden && !detailFor && !(modalEl && modalEl.classList.contains('show'))) { reload().catch(failQuiet); } }, 15000);
@@ -1684,7 +1694,7 @@ function pageProblems() {
 		if (!p) { return; }
 		api('GET', '/api/monitor64/problems/' + encodeURIComponent(puid)).then(function (d) {
 			var box = $('#m64-pb-detail');
-			if (!box) { return; }
+			if (!box || PB.open !== puid) { return; } // inzwischen ein anderes Problem aufgeklappt: Antwort verwerfen
 			var right;
 			if (!p.closed) {
 				right = '<div class="small fw-semibold mb-1">' + esc(L('pb.ack_title')) + '</div><textarea class="form-control form-control-sm mb-2" rows="2" id="m64-ack-c" maxlength="500" placeholder="' + esc(L('pb.ack_ph')) + '">' + esc(p.ack ? p.ack.comment || '' : '') + '</textarea>' +
@@ -1940,7 +1950,7 @@ function pageRules() {
 			}
 		}
 		function cur() {
-			var t = $('#m64-nf-t').value.split('|'), tn = $('#m64-nf-tn').value.trim();
+			var t = splitTarget($('#m64-nf-t').value), tn = $('#m64-nf-tn').value.trim();
 			if (tn) { t = [$('#m64-nf-tt').value, tn]; }
 			var k = $('#m64-nf-k').value, meta = kindMeta(k) || {}, f = meta.factor || 1, rule = {};
 			if (meta.state) { rule.severity = $('#m64-nf-s').value; }
@@ -2073,7 +2083,7 @@ function pageNotify() {
 		function rem(id) { var v = $('#' + id).value; return v === '' ? null : parseInt(v, 10); }
 		$('#m64-no-cancel').onclick = function () { box.innerHTML = ''; };
 		$('#m64-no-save').onclick = function () {
-			var t = $('#m64-no-t').value.split('|');
+			var t = splitTarget($('#m64-no-t').value);
 			if (!t[1]) { toast(L('rl.pick_target'), true); return; }
 			var body = { target_type: t[0], target: t[1], replace: $('#m64-no-rep').value === '1', channels: [] };
 			$$('[data-och]', box).forEach(function (s) { if (s.value) { body.channels.push({ id: s.dataset.och, warn: s.value === 'both', crit: true }); } });
@@ -2377,7 +2387,8 @@ function pageNew() {
 	}
 	// pushTok holt einen Token fuer den Installationsbefehl (wird mit dem Zugang gespeichert).
 	function pushTok() {
-		api('GET', '/api/monitor64/push/token').then(function (r) { WZ.token = r.token; WZ.pushPort = r.port; render(); }).catch(fail);
+		// collect vor render: was inzwischen eingetippt wurde, bliebe sonst nicht stehen
+		api('GET', '/api/monitor64/push/token').then(function (r) { collect(); WZ.token = r.token; WZ.pushPort = r.port; render(); }).catch(fail);
 	}
 	function selectedNodes() { return otherNodes().filter(function (n) { return WZ.nodes[n.name]; }); }
 	// clusterStep: letzter Schritt, Abschnitt "Ueberwachung im Cluster" (zugeklappt, solange nichts gewaehlt ist).
@@ -2404,7 +2415,7 @@ function pageNew() {
 	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
-		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { WZ.nodeAddr = r.addr; render(); } }).catch(failQuiet);
+		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { collect(); WZ.nodeAddr = r.addr; render(); } }).catch(failQuiet);
 	}
 	function testConn() {
 		collect();

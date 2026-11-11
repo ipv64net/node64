@@ -48,7 +48,6 @@ const (
 	statusSrcSvc       = "m64:svc:"
 	statusMaxIncidents = 100 // Stoerungen je Quelle (neueste zuerst)
 	statusMaxDays      = 800 // Tage, die ein wiederkehrendes Wartungsfenster hoechstens durchlaeuft
-	statusMaxKey       = 200 // Laenge eines Dienst-Schluessels in der Quelle (Bytes, wie die Statusseite)
 )
 
 // StatusSourceHost ist die Quelle eines Host-Eintrags auf einer Statusseite.
@@ -57,43 +56,12 @@ func StatusSourceHost(uid string) string { return statusSrcHost + uid }
 // StatusSourceService ist die Quelle eines Dienst-Eintrags auf einer Statusseite.
 func StatusSourceService(uid, key string) string { return statusSrcSvc + uid + "/" + key }
 
-// parseStatusSource zerlegt eine Quelle (key "" = Host).
-func parseStatusSource(s string) (host, key string, ok bool) {
-	if uid, found := strings.CutPrefix(s, statusSrcHost); found {
-		return uid, "", validStatusUID(uid)
-	}
-	if rest, found := strings.CutPrefix(s, statusSrcSvc); found {
-		uid, key, cut := strings.Cut(rest, "/")
-		return uid, key, cut && validStatusUID(uid) && validStatusKey(key)
-	}
-	return "", "", false
-}
+// parseStatusSource zerlegt eine Quelle (key "" = Host); Format und Pruefung im Kern (module.ParseStatusSource).
+func parseStatusSource(s string) (host, key string, ok bool) { return module.ParseStatusSource(s) }
 
-// validStatusKey: Dienst-Schluessel, den die Statusseite annimmt (1-200 Bytes, keine Steuerzeichen; gleiche Pruefung
-// wie healthchecks.validM64Source).
-func validStatusKey(k string) bool {
-	if k == "" || len(k) > statusMaxKey {
-		return false
-	}
-	for i := 0; i < len(k); i++ {
-		if k[i] < 0x20 || k[i] == 0x7f {
-			return false
-		}
-	}
-	return true
-}
+func validStatusKey(k string) bool { return module.ValidStatusKey(k) }
 
-func validStatusUID(s string) bool {
-	if s == "" || len(s) > 64 {
-		return false
-	}
-	for _, c := range s {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
-			return false
-		}
-	}
-	return true
-}
+func validStatusUID(s string) bool { return module.ValidStatusUID(s) }
 
 // statusSvcName ist der Name eines Dienstes in der Auswahl und auf der Seite, uebersetzt nach lang ("" = Deutsch;
 // erkannte Namen sind Token, siehe model.T).

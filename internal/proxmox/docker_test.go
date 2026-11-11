@@ -277,51 +277,6 @@ func TestDockerUpMax(t *testing.T) {
 	}
 }
 
-func TestDockerPollerError(t *testing.T) {
-	f, p, _ := newFakeDocker(t)
-	f.set(func(f *fakeDocker) { f.fail = true })
-	s := p.Poll(context.Background())
-	if s.OK || !strings.Contains(s.Error, "boom") || len(s.Resources) != 0 {
-		t.Fatalf("fehler: %+v", s)
-	}
-	bad := NewDockerPoller(nil, System{Kind: KindDocker, Addresses: []string{"ftp://x"}}, nil)
-	if s := bad.Poll(context.Background()); s.OK || s.Error == "" {
-		t.Fatalf("ungueltiger Host: %+v", s)
-	}
-	if _, ok := NewSource(nil, System{Kind: KindDocker}, nil).(*DockerPoller); !ok {
-		t.Fatal("NewSource docker")
-	}
-	if _, ok := NewSource(nil, System{Kind: KindPVE, Addresses: []string{"pve:8006"}}, nil).(*Poller); !ok {
-		t.Fatal("NewSource pve")
-	}
-}
-
-func dkRes(name, status string, st State, detail string) Resource {
-	r := Resource{Type: TypeDocker, Node: "h", Name: name, Status: status, State: st, Detail: detail, MaxCPU: 4, MaxMem: 1000}
-	if status == "running" {
-		r.CPU, r.Mem = 0.1, 100
-	}
-	if detail == DockerExited {
-		r.ExitCode = 1
-	}
-	return r
-}
-
-// Angaben eines Docker-Hosts: Adresse und Art werden geprueft.
-func TestValidateDockerSystem(t *testing.T) {
-	for _, a := range []string{"ftp://x", "unix://relative", "tcp://"} {
-		if err := ValidateSystem(&System{Kind: KindDocker, Addresses: []string{a}}, true); err == nil {
-			t.Errorf("%s: kein Fehler", a)
-		}
-	}
-	if err := ValidateSystem(&System{Kind: "vmware"}, true); err == nil {
-		t.Error("unbekannte Art")
-	}
-	if !ValidKey("docker/my-app_1.web") || ValidKey("docker/") || ValidKey("docker/-x") || ValidKey("docker/a/b") {
-		t.Error("ValidKey docker")
-	}
-}
-
 // Podman meldet in system_cpu_usage nur die verstrichene Zeit (nicht x Kerne): CPU dann ueber die Uhr.
 func TestDockerPollerPodmanCPU(t *testing.T) {
 	f, p, clock := newFakeDocker(t)

@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/monitor64/eval"
 )
 
 // Dashboard des Kerns: kleine Karte mit Kennzahlen (module.CardProvider) und die Probleme in der gemeinsamen Liste
@@ -13,26 +14,33 @@ import (
 // Card liefert die Dashboard-Karte: Hosts, Dienste, offene Probleme nach Zustand, Wartung, letzte Stoerung.
 func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	c := &module.Card{TitleKey: "nav.monitor64", Icon: "bi-activity", Image: "monitor64.svg", Path: "/monitor64"}
-	d := m.overview(ctx)
-	var crit, warn, unknown int64
-	for _, p := range d.Problems {
-		switch {
-		case p.Unreach:
-		case p.State == "crit":
-			crit++
-		case p.State == "warn":
-			warn++
-		default:
-			unknown++
-		}
-	}
-	var maint, paused int64
-	for _, h := range d.Hosts {
-		if h.Maint != nil {
+	// Zahlen aus dem Stand im Speicher (wie die Uebersicht, aber ohne deren Datenbank-Abfragen)
+	var hosts, services, unreach, crit, warn, unknown, maint, paused int64
+	for _, v := range m.Views() {
+		hosts++
+		if v.Maint != nil {
 			maint++
 		}
-		if h.Paused {
+		if v.Host.Paused {
 			paused++
+		}
+		down := v.View == eval.ViewUnreachable && !v.Host.Paused
+		if down {
+			unreach++
+		}
+		for _, s := range v.Services {
+			services++
+			if down || v.Host.Paused || s.ShowOnly {
+				continue
+			}
+			switch s.State {
+			case eval.Crit:
+				crit++
+			case eval.Warn:
+				warn++
+			case eval.Unknown:
+				unknown++
+			}
 		}
 	}
 	red := func(n int64) string {
@@ -42,9 +50,9 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 		return ""
 	}
 	c.Stats = []module.CardStat{
-		{LabelKey: "monitor64.card.hosts", Value: int64(len(d.Hosts))},
-		{LabelKey: "monitor64.card.services", Value: int64(d.Services)},
-		{LabelKey: "monitor64.card.unreachable", Value: int64(d.Unreachable), Class: red(int64(d.Unreachable))},
+		{LabelKey: "monitor64.card.hosts", Value: hosts},
+		{LabelKey: "monitor64.card.services", Value: services},
+		{LabelKey: "monitor64.card.unreachable", Value: unreach, Class: red(unreach)},
 		{LabelKey: "monitor64.card.crit", Value: crit, Class: red(crit)},
 	}
 	st := module.CardStat{LabelKey: "monitor64.card.warn", Value: warn}

@@ -391,7 +391,11 @@ func (s *Store) Problems(ctx context.Context, f problemFilter) ([]problemRow, er
 	if f.Limit <= 0 || f.Limit > 5000 {
 		f.Limit = 5000
 	}
-	q += ` ORDER BY (closed_at = '') DESC, opened_at DESC LIMIT ?`
+	if f.Status == "open" || f.Status == "closed" { // nur eine Art: Sortierung ueber den Index (opened_at)
+		q += ` ORDER BY opened_at DESC LIMIT ?`
+	} else {
+		q += ` ORDER BY (closed_at = '') DESC, opened_at DESC LIMIT ?`
+	}
 	args = append(args, f.Limit)
 	rows, err := s.st.Reader().QueryContext(ctx, q, args...)
 	if err != nil {

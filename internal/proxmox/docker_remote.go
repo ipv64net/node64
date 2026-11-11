@@ -2,15 +2,12 @@ package proxmox
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -95,15 +92,6 @@ func DockerScheme(host string) string {
 	return strings.ToLower(s)
 }
 
-// DockerUsesSecret sagt, ob der Host Zugangsdaten bzw. einen Pin haben kann (https, ssh).
-func DockerUsesSecret(host string) bool {
-	s := DockerScheme(host)
-	return s == "https" || s == "ssh"
-}
-
-// DockerLocal sagt, ob der Host ein Socket dieser Maschine ist.
-func DockerLocal(host string) bool { return DockerScheme(host) == "unix" }
-
 // dockerSSHTarget zerlegt ssh://user@host[:port][/pfad] (Port 22, Socket /var/run/docker.sock).
 func dockerSSHTarget(host string) (user, addr, sock string, err error) {
 	u, err := url.Parse(host)
@@ -155,58 +143,6 @@ func NormalizeDockerPin(s string) (string, bool) {
 		return hex.EncodeToString(b), true
 	}
 	return NormalizePin(s)
-}
-
-// GenerateDockerSSHKey erzeugt einen ed25519-Schluessel (PEM) fuer einen Docker-Host per SSH.
-func GenerateDockerSSHKey() (string, error) {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return "", err
-	}
-	blk, err := ssh.MarshalPrivateKey(priv, dockerKeyComment)
-	if err != nil {
-		return "", err
-	}
-	return string(pem.EncodeToMemory(blk)), nil
-}
-
-// DockerSSHPublicKey liefert die Zeile fuer authorized_keys zum privaten Schluessel ("" bei Fehler).
-func DockerSSHPublicKey(privPEM string) string {
-	signer, err := ssh.ParsePrivateKey([]byte(privPEM))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))) + " " + dockerKeyComment
-}
-
-// validateDockerCreds prueft die Zugangsdaten passend zur Art der Verbindung.
-func validateDockerCreds(host string, c DockerCreds) error {
-	switch DockerScheme(host) {
-	case "ssh":
-		if c.Key == "" {
-			return pveFerr("key", "docker.err.key")
-		}
-		if _, err := ssh.ParsePrivateKey([]byte(c.Key)); err != nil {
-			var pp *ssh.PassphraseMissingError
-			if errors.As(err, &pp) {
-				return pveFerr("key", "docker.err.key_passphrase")
-			}
-			return pveFerr("key", "docker.err.key")
-		}
-	case "https":
-		if (c.Cert == "") != (c.Key == "") {
-			return pveFerr("cert", "docker.err.cert_pair")
-		}
-		if c.Cert != "" {
-			if _, err := tls.X509KeyPair([]byte(c.Cert), []byte(c.Key)); err != nil {
-				return pveFerr("cert", "docker.err.cert")
-			}
-		}
-		if c.CA != "" && !x509.NewCertPool().AppendCertsFromPEM([]byte(c.CA)) {
-			return pveFerr("ca", "docker.err.ca")
-		}
-	}
-	return nil
 }
 
 // dockerConn ist die Verbindung zu einem Docker-Host (HTTP-Client, Basis-URL, Schliessen).

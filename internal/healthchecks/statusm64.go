@@ -3,7 +3,6 @@ package healthchecks
 import (
 	"context"
 	"math"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -29,12 +28,6 @@ const statusM64Group = "Monitor64"
 
 const statusM64Prefix = "m64:"
 
-// statusM64Re: Form der Quelle; der Dienst-Schluessel (Gruppe 1) wird in Bytes geprueft (validM64Key, wie Monitor64).
-var statusM64Re = regexp.MustCompile(`^m64:(?:host:[A-Za-z0-9_-]{1,64}|svc:[A-Za-z0-9_-]{1,64}/(.+))$`)
-
-// statusM64MaxKey: Laenge eines Dienst-Schluessels in Bytes (Monitor64: statusMaxKey).
-const statusM64MaxKey = 200
-
 // statusM64Feeds ordnet jedem Modul die Verbindung zu Monitor64 zu (ohne Feld im Modul, wie statusStates).
 var statusM64Feeds sync.Map // *Module -> func() module.StatusFeed
 
@@ -54,37 +47,16 @@ func (m *Module) m64Status() module.StatusFeed {
 // isM64Source: Eintrag aus Monitor64 (statt Check-Token).
 func isM64Source(tok string) bool { return strings.HasPrefix(tok, statusM64Prefix) }
 
-// validM64Source prueft die Form einer Monitor64-Quelle.
+// validM64Source prueft die Form einer Monitor64-Quelle (Format im Kern, wie Monitor64 es liefert).
 func validM64Source(tok string) bool {
-	m := statusM64Re.FindStringSubmatch(tok)
-	if m == nil {
-		return false
-	}
-	return !strings.HasPrefix(tok, statusM64Prefix+"svc:") || validM64Key(m[1])
-}
-
-// validM64Key: Dienst-Schluessel mit 1-200 Bytes ohne Steuerzeichen (gleiche Pruefung wie monitor64.validStatusKey).
-func validM64Key(k string) bool {
-	if k == "" || len(k) > statusM64MaxKey {
-		return false
-	}
-	for i := 0; i < len(k); i++ {
-		if k[i] < 0x20 || k[i] == 0x7f {
-			return false
-		}
-	}
-	return true
+	_, _, ok := module.ParseStatusSource(tok)
+	return ok
 }
 
 // statusM64HostUID liefert den Host einer Quelle (fuer den Link im Editor).
 func statusM64HostUID(tok string) string {
-	rest := strings.TrimPrefix(tok, statusM64Prefix)
-	if uid, ok := strings.CutPrefix(rest, "host:"); ok {
-		return uid
-	}
-	rest = strings.TrimPrefix(rest, "svc:")
-	uid, _, _ := strings.Cut(rest, "/")
-	return uid
+	h, _, _ := module.ParseStatusSource(tok)
+	return h
 }
 
 // statusM64State bildet den Zustand aus Monitor64 auf die Zustaende der Statusseite ab.

@@ -201,8 +201,18 @@ func (m *Module) Resolve(ctx context.Context, hostUID, svcKey, comment string, b
 	return nil
 }
 
-// nodeID ist die Kennung dieser Node (Einstellung des Kerns).
-func (m *Module) nodeID() string { return m.st.SettingOr(context.Background(), "node.id", "") }
+// nodeID ist die Kennung dieser Node (Einstellung des Kerns; einmal gelesen gemerkt - sie aendert sich nicht, wird
+// aber je Abfragerunde und Ereignis gebraucht).
+func (m *Module) nodeID() string {
+	if p := m.nodeIDCache.Load(); p != nil {
+		return *p
+	}
+	id := m.st.SettingOr(context.Background(), "node.id", "")
+	if id != "" {
+		m.nodeIDCache.Store(&id)
+	}
+	return id
+}
 
 // CloseHostProblems schliesst alle offenen Probleme eines Hosts (Host entfernt), mit Akteur.
 func (m *Module) CloseHostProblems(ctx context.Context, hostUID string, by Actor) error {

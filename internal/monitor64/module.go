@@ -68,6 +68,7 @@ func Migrations() []store.Migration {
 
 // Module ist Monitor64.
 type Module struct {
+	nodeIDCache atomic.Pointer[string] // node.id, einmal gelesen (nodeID)
 	st          *store.Store
 	log         *slog.Logger
 	box         *secrets.Box

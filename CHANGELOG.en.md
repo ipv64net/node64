@@ -5,6 +5,8 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Monitor64: hanging accesses report "unreachable" instead of silently staying OK; explicitly chosen default channels get all messages; reminder for unreachable hosts; no "unknown" for push hosts after a restart; pausing visible right away; Prometheus label `service` with names; more robust cluster sync (acknowledgements, history, responsibility, keys).
+- Monitor64: security – a new access target requires the secret again; push tokens no longer in clear text in exports; limits for agent reports; SNMP traps per sender; PVE/PBS with IPv6 zone; Podman CPU on 2 cores; several UI fixes (wizard, problems, dialogs); faster (ETag, indexes).
+- Health checks: status page editor – after sorting the list, "remove" deleted the wrong entry.
 - Health checks: in a cluster with older nodes, the update no longer deletes Docker/Proxmox checks on the older nodes.
 - Notifications: Monitor64 entries in the log lead to the host (so far nowhere).
 - Monitor64: card on the dashboard; problems appear under "Recent incidents" together with the health checks.

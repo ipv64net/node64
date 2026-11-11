@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -80,4 +81,52 @@ type StatusMaint struct {
 	Start  time.Time
 	End    time.Time // leer = bis beendet
 	Active bool
+}
+
+// Quelle eines Monitor64-Eintrags auf einer Statusseite: "m64:host:<uid>" bzw. "m64:svc:<uid>/<schluessel>". Eine
+// Stelle fuer Monitor64 (liefert) und die Statusseiten (pruefen, verlinken) - frueher je eine Kopie, die gleich
+// bleiben musste.
+const (
+	StatusSourcePrefix = "m64:"
+	statusSrcHost      = "m64:host:"
+	statusSrcSvc       = "m64:svc:"
+	StatusMaxKey       = 200 // Laenge eines Dienst-Schluessels in Bytes
+)
+
+// ParseStatusSource zerlegt eine Quelle (key "" = Host) und prueft sie.
+func ParseStatusSource(s string) (host, key string, ok bool) {
+	if uid, found := strings.CutPrefix(s, statusSrcHost); found {
+		return uid, "", ValidStatusUID(uid)
+	}
+	if rest, found := strings.CutPrefix(s, statusSrcSvc); found {
+		uid, key, cut := strings.Cut(rest, "/")
+		return uid, key, cut && ValidStatusUID(uid) && ValidStatusKey(key)
+	}
+	return "", "", false
+}
+
+// ValidStatusKey: Dienst-Schluessel mit 1-200 Bytes ohne Steuerzeichen.
+func ValidStatusKey(k string) bool {
+	if k == "" || len(k) > StatusMaxKey {
+		return false
+	}
+	for i := 0; i < len(k); i++ {
+		if k[i] < 0x20 || k[i] == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidStatusUID: Kennung eines Hosts (1-64 Zeichen A-Z a-z 0-9 - _).
+func ValidStatusUID(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }

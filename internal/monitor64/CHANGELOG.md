@@ -19,6 +19,8 @@
 - Ein Port in der Adresse des Hosts (SSH, z. B. `nas:2222`) gilt nicht mehr für API-Zugänge ohne eigene URL und für SNMP – wie im Vorschlag der Oberfläche.
 - Docker/Podman: Die CPU-Last bei Podman auf Hosts mit 2 Kernen springt nicht mehr zwischen richtigem und doppeltem Wert.
 - Agent (mit der nächsten Agent-Version): Fehlversuche vor der Anmeldung zählen auch je IPv6-/48.
+- Oberfläche: Im Assistenten gehen Eingaben (Benutzer, Passwort) nicht mehr verloren, wenn die Antwort zur Node-Adresse bzw. zum Push-Token nachkommt. Abweichungen für Gruppen oder Tags mit „|“ im Namen werden richtig gespeichert. Auf der Seite Probleme zeigt ein schnell gewechseltes Problem nicht mehr den Verlauf (und die Knöpfe) eines anderen. Dialoge stapeln keine alten Klick-Handler mehr. Ein kaputter Link `#svc=%` hält das Neuladen der Host-Seite nicht mehr an.
+- Schneller: Skript und Stylesheet werden mit ETag ausgeliefert (unverändert 304 statt jedes Mal 230 KB); die Dashboard-Karte rechnet ohne Datenbank-Abfragen; neue Indizes für „Zuletzt“ und geschlossene Probleme; die Kennung der Node wird nicht mehr je Runde gelesen.
 
 - IPv6 durchgängig: Die Adresse eines Hosts nimmt IPv6 jetzt auch mit Port (`[2001:db8::1]:2222`) an; bisher wurde diese Schreibweise beim Speichern verstümmelt. Ungültige Adressen werden gleich abgelehnt.
 - IPv6 ohne eckige Klammern funktioniert jetzt auch in der Adresse eines Prometheus-Exporters (`fd00::1`) und bei Docker über `tcp://` bzw. `ssh://`; bei `ssh://user@fd00::1` wurde bisher still der letzte Block als Port gelesen.
