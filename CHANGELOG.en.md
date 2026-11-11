@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: inodes are monitored together with the file system (own threshold, warning from 80 %, critical from 90 %).
+- Monitor64: Btrfs – missing devices and device errors per file system; ZFS – pool fragmentation.
+- Monitor64: Raspberry Pi – own tile, service "Power supply" (under-voltage, throttling); the agent (0.1.1) now also runs on Pi Zero and Pi 1.
 - Monitor64: new access mailcow – containers, mail storage, mail queue and quarantine via the mailcow API (read-only key).
 - Monitor64: new access Proxmox Mail Gateway – services, mail queue (with threshold), mail flow, quarantine, ClamAV signatures, cluster and updates; login with a user of the role "Auditor".
 
