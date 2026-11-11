@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: with the reachability check switched off, the host no longer stays red ("unreachable") in the overview.
 - Monitor64: host page and list view readable on tablets and smartphones (services table fits the screen).
 
 ## 1.5.2 – 2026-11-11

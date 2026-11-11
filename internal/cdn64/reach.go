@@ -95,6 +95,8 @@ func (m *Module) reachLoop(ctx context.Context) {
 				m.checkAll(ctx)
 			} else if h, err := m.host(ctx, id); err == nil && h.Enabled && h.probed() {
 				m.reach.set(id, m.probe(ctx, h))
+			} else if err == nil {
+				m.reach.forget(id) // Pruefung aus bzw. Host aus: alten Stand nicht weiter zeigen
 			}
 		}
 	}
@@ -109,6 +111,7 @@ func (m *Module) checkAll(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, h := range list {
 		if !h.Enabled || !h.probed() {
+			m.reach.forget(h.ID)
 			continue
 		}
 		wg.Add(1)

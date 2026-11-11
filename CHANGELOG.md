@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Bei abgeschalteter Erreichbarkeitsprüfung bleibt der Host nicht mehr rot („nicht erreichbar“) in der Übersicht stehen.
 - Monitor64: Host-Seite und Listenansicht auf Tablet und Smartphone gut lesbar (Dienste-Tabelle passt auf den Bildschirm).
 
 ## 1.5.2 – 2026-11-11

@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.55.1 – 2026-11-11
+
+### Behoben
+- Erreichbarkeitsprüfung abgeschaltet: Der Host steht in der Übersicht und im Dashboard nicht mehr mit dem alten Stand „nicht erreichbar“ da.
+
 ## 1.55.0 – 2026-11-11
 
 ### Neu

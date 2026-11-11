@@ -87,7 +87,7 @@
 				{{if .Advanced.AccessLog}}<i class="bi bi-list-columns me-1" title="{{$.T "cdn64.f.adv_access_log"}}"></i>{{end}}
 				{{if and .HTTPS .HTTP3}}<span class="badge text-bg-light" title="{{$.T "cdn64.f.http3"}}">H3</span>{{end}}
 			</td>
-			{{if eq .Kind "proxy"}}<td>{{if .Enabled}}{{with .Reach}}
+			{{if eq .Kind "proxy"}}<td>{{if and .Enabled (not .Advanced.NoProbe)}}{{with .Reach}}
 				{{if eq .State "up"}}<span class="badge text-bg-success" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>
 				{{else if eq .State "slow"}}<span class="badge text-bg-warning" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
 				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span><div class="text-body-secondary">{{$.T "cdn64.reach.since" "ago" ($.Ago .Since)}}</div>

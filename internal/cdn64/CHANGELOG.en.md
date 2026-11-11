@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.55.1 – 2026-11-11
+
+### Fixed
+- Reachability check switched off: the host no longer keeps showing the old "unreachable" state in the overview and on the dashboard.
+
 ## 1.55.0 – 2026-11-11
 
 ### New
