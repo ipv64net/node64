@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.5.6 – 2026-11-11
+
 - Monitor64: Neuer Zugang FRITZ!Box (TR-064) – Internetverbindung, DSL-Werte, Durchsatz, FRITZ!OS-Update.
 
 ## 1.5.5 – 2026-11-11

@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.5.6 – 2026-11-11
+
 - Monitor64: new access FRITZ!Box (TR-064) – internet connection, DSL values, throughput, FRITZ!OS update.
 
 ## 1.5.5 – 2026-11-11
