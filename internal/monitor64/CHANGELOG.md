@@ -1,5 +1,10 @@
 # Monitor64 – Änderungen
 
+## 0.1.9 – 2026-11-11
+
+- Neuer Zugang **FRITZ!Box** (eigene Kachel im Assistenten) über die Schnittstelle TR-064: Internetverbindung (verbunden/getrennt, Dauer, externe Adresse, aktueller Durchsatz, Zugangsart und Zustand der Leitung), bei DSL-Anschlüssen Sync-Raten, Störabstand, Dämpfung und CRC-Fehler, Laufzeit und FRITZ!OS-Version der Box sowie „Update verfügbar“.
+- Anmeldung mit einem FRITZ!Box-Benutzer (das Kennwort geht dabei nicht über die Leitung). In der FRITZ!Box muss „Zugriff für Anwendungen zulassen“ eingeschaltet sein. Für alle Werte braucht der Benutzer das Recht „FRITZ!Box Einstellungen“ – eine Nur-Lese-Rolle kennt die FRITZ!Box nicht; ohne das Recht kommen Zugangsart, Zustand der Leitung und der Update-Stand.
+
 ## 0.1.8 – 2026-11-11
 
 - **Raspberry Pi, Stromversorgung korrigiert (Agent 0.1.2 und SSH):** Die Werte kommen jetzt von `vcgencmd get_throttled` (Unterspannung und Drosselung, jetzt und seit dem Start) und, wo das Programm fehlt oder der Zugriff nicht erlaubt ist, vom Unterspannungs-Alarm des Kernels (nur „jetzt“). Die bisher gelesene Datei `get_throttled` unter `/sys` ist im Pi-Kernel veraltet: Das Lesen schrieb einmal je Start eine Warnung ins Kernel-Log, „seit dem Start“ stimmte damit nicht, und ab Kernel 6.12 (Raspberry Pi OS 13) gibt es sie nicht mehr.

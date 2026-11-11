@@ -79,7 +79,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 			return nil, err
 		}
 		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
-	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow":
+	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow", "fritzbox":
 		src, done, err := newDeviceAPI(typ, h, cfg, secret)
 		if err != nil {
 			return nil, err
@@ -164,6 +164,15 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 			addr = "https://" + apiHostPort(h.Address, 443)
 		}
 		c, err := apis.NewMailcow(apis.MailcowConfig{Address: addr, APIKey: secret, Pin: cfg.Pin})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, c.Close, nil
+	case "fritzbox":
+		if addr == "" {
+			addr = "https://" + apiHostPort(h.Address, 49443)
+		}
+		c, err := apis.NewFritzbox(apis.FritzboxConfig{Address: addr, User: cfg.User, Password: secret, Pin: cfg.Pin})
 		if err != nil {
 			return nil, nil, err
 		}

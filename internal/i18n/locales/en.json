@@ -5613,7 +5613,8 @@
       "snmp_queries": "What is queried?",
       "hostkey_set": "Fingerprint accepted – test again or save now.",
       "secret_pmg": "The user's password.",
-      "secret_mailcow": "API key (read-only)."
+      "secret_mailcow": "API key (read-only).",
+      "secret_fritzbox": "Password of the FRITZ!Box user."
     },
     "access": {
       "agent": "Agent",
@@ -5628,7 +5629,8 @@
       "unraid": "Unraid",
       "redfish": "Redfish (BMC: iDRAC, iLO …)",
       "pmg": "Proxmox Mail Gateway",
-      "mailcow": "mailcow"
+      "mailcow": "mailcow",
+      "fritzbox": "FRITZ!Box"
     },
     "sd": {
       "vanished": "This service is no longer delivered. It stays a warning until you remove it.",
@@ -6008,6 +6010,10 @@
       "raspberrypi": {
         "title": "Raspberry Pi",
         "sub": "Agent – temperature, under-voltage, SD card"
+      },
+      "fritzbox": {
+        "title": "FRITZ!Box",
+        "sub": "TR-064 – internet, DSL, update"
       }
     },
     "new": {
@@ -6072,7 +6078,8 @@
       "hint_snmp": "Enable SNMP on the device (read-only) and allow this node as a manager. Preferably v3 with authentication and privacy; v1/v2c send the community in clear text. The node picks profiles (Synology, QNAP, MikroTik, UniFi, APC, printers …) itself.",
       "unconfirmed": "The host's fingerprint is not confirmed yet. You can still create the host – but the password is only sent after you compared and confirmed the fingerprint via \"Test\" at the access. Better: go back to step 2 and confirm it there.",
       "hint_pmg": "In the Mail Gateway under Configuration → User Management, create a dedicated user with the role \"Auditor\" (realm \"Proxmox Mail Gateway Authentication Server\", without a second factor) and enter it here with its realm, e.g. monitor64@pmg. The Mail Gateway has no API tokens, hence user and password. The certificate is usually self-signed – confirm the fingerprint during the test.",
-      "hint_mailcow": "In mailcow under System → Configuration → Access → API, enable read-only access, add this node's address to \"Allow API access from\" and paste the key here. Note: mailcow counts requests with a wrong key as failed logins and may ban the node (Fail2ban)."
+      "hint_mailcow": "In mailcow under System → Configuration → Access → API, enable read-only access, add this node's address to \"Allow API access from\" and paste the key here. Note: mailcow counts requests with a wrong key as failed logins and may ban the node (Fail2ban).",
+      "hint_fritzbox": "In the FRITZ!Box enable \"Allow access for applications\" under Home Network → Network → Network Settings and create a dedicated user under System → FRITZ!Box Users. For all values it needs the right \"FRITZ!Box Settings\" – the FRITZ!Box has no read-only role; without the right you get access type, line state and the update status. Access works from the home network only. The certificate is self-signed – confirm the fingerprint during the test."
     },
     "nf": {
       "where": "Where to",
@@ -6565,7 +6572,8 @@
       "quarantine": "Quarantine",
       "clamav": "ClamAV signatures",
       "mc_containers": "mailcow containers",
-      "pi_power": "Power supply"
+      "pi_power": "Power supply",
+      "fb_wan": "Internet connection"
     },
     "txt": {
       "aborted": "aborted",
@@ -7000,7 +7008,27 @@
       "btrfs_devices": "devices: {n}",
       "btrfs_meta": "metadata {n} %",
       "btrfs_missing": "missing devices: {n}",
-      "btrfs_errors": "device errors: {n} (btrfs device stats)"
+      "btrfs_errors": "device errors: {n} (btrfs device stats)",
+      "fb_user_missing": "user missing (FRITZ!Box user, without quotes and colon)",
+      "fb_hint_auth": "check the FRITZ!Box user and password",
+      "fb_hint_perm": "the user lacks the right \"FRITZ!Box Settings\" – without it connection, DSL values and uptime are missing",
+      "fb_no_tr064": "no TR-064 description – enable \"Allow access for applications\" in the FRITZ!Box, port 49443",
+      "fb_no_service": "the FRITZ!Box does not offer this service",
+      "fb_no_digest": "login without a digest challenge",
+      "fb_too_many": "too many rejected logins – the FRITZ!Box blocks temporarily",
+      "fb_summary": "{m} · access {a}",
+      "fb_fiber": "fiber",
+      "fb_cable": "cable",
+      "fb_mobile": "mobile",
+      "fb_system": "FRITZ!OS {v} · up for {t}",
+      "fb_system_plain": "FRITZ!OS {v}",
+      "fb_update": "FRITZ!OS update available: {v}",
+      "fb_link_down": "line not connected ({s})",
+      "fb_wan_down": "internet connection down ({s})",
+      "fb_wan_up": "connected for {t}",
+      "fb_rates": "{d} down / {u} up",
+      "fb_dsl_down": "DSL not in sync ({s})",
+      "fb_dsl": "sync {d} down / {u} up · noise margin {sd} / {su} dB"
     }
   }
 }

@@ -318,7 +318,7 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 		switch typ {
 		case "nut": // host[:3493] oder nut://
 			ok = !strings.Contains(c.URL, "/") || strings.HasPrefix(c.URL, "nut://")
-		case "truenas", "redfish", "pmg", "mailcow": // TrueNAS widerruft ueber http benutzte API-Keys; BMC, Mail Gateway und mailcow nur https
+		case "truenas", "redfish", "pmg", "mailcow", "fritzbox": // TrueNAS widerruft ueber http benutzte API-Keys; BMC, Mail Gateway und mailcow nur https
 			ok = strings.HasPrefix(c.URL, "https://")
 		case "snmp": // Adresse des Hosts, Port im Zugang
 			ok = false

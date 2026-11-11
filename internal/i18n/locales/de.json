@@ -5613,7 +5613,8 @@
       "snmp_queries": "Was wird abgefragt?",
       "hostkey_set": "Fingerabdruck übernommen – jetzt erneut testen oder speichern.",
       "secret_pmg": "Passwort des Benutzers.",
-      "secret_mailcow": "API-Schlüssel (nur lesend)."
+      "secret_mailcow": "API-Schlüssel (nur lesend).",
+      "secret_fritzbox": "Kennwort des FRITZ!Box-Benutzers."
     },
     "access": {
       "agent": "Agent",
@@ -5628,7 +5629,8 @@
       "unraid": "Unraid",
       "redfish": "Redfish (BMC: iDRAC, iLO …)",
       "pmg": "Proxmox Mail Gateway",
-      "mailcow": "mailcow"
+      "mailcow": "mailcow",
+      "fritzbox": "FRITZ!Box"
     },
     "sd": {
       "vanished": "Dieser Dienst wird nicht mehr geliefert. Er bleibt als Warnung, bis du ihn entfernst.",
@@ -6008,6 +6010,10 @@
       "raspberrypi": {
         "title": "Raspberry Pi",
         "sub": "Agent – Temperatur, Unterspannung, SD-Karte"
+      },
+      "fritzbox": {
+        "title": "FRITZ!Box",
+        "sub": "TR-064 – Internet, DSL, Update"
       }
     },
     "new": {
@@ -6072,7 +6078,8 @@
       "hint_snmp": "Im Gerät SNMP einschalten (nur lesend) und diese Node als erlaubten Abfrager eintragen. Am besten v3 mit Authentifizierung und Verschlüsselung; v1/v2c senden die Community im Klartext. Profile (Synology, QNAP, MikroTik, UniFi, APC, Drucker …) wählt die Node selbst.",
       "unconfirmed": "Der Fingerabdruck des Hosts ist noch nicht bestätigt. Du kannst den Host trotzdem anlegen – das Passwort wird aber erst gesendet, nachdem du den Fingerabdruck am Zugang über „Testen“ verglichen und bestätigt hast. Besser: zurück zu Schritt 2 und dort bestätigen.",
       "hint_pmg": "Im Mail Gateway unter Konfiguration → Benutzerverwaltung einen eigenen Benutzer mit der Rolle „Auditor“ anlegen (Realm „Proxmox Mail Gateway Authentication Server“, ohne zweiten Faktor) und hier mit Realm eintragen, z. B. monitor64@pmg. API-Token kennt das Mail Gateway nicht, deshalb Benutzer und Passwort. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
-      "hint_mailcow": "In mailcow unter System → Konfiguration → Zugriff → API den Nur-Lese-Zugriff einschalten, die Adresse dieser Node bei „API-Zugriff erlauben von“ eintragen und den Schlüssel hier einfügen. Achtung: Abfragen mit falschem Schlüssel zählt mailcow als Fehlversuch und kann die Node sperren (Fail2ban)."
+      "hint_mailcow": "In mailcow unter System → Konfiguration → Zugriff → API den Nur-Lese-Zugriff einschalten, die Adresse dieser Node bei „API-Zugriff erlauben von“ eintragen und den Schlüssel hier einfügen. Achtung: Abfragen mit falschem Schlüssel zählt mailcow als Fehlversuch und kann die Node sperren (Fail2ban).",
+      "hint_fritzbox": "In der FRITZ!Box unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ einschalten und unter System → FRITZ!Box-Benutzer einen eigenen Benutzer anlegen. Für alle Werte braucht er das Recht „FRITZ!Box Einstellungen“ – eine Nur-Lese-Rolle kennt die FRITZ!Box nicht; ohne das Recht kommen Zugangsart, Zustand der Leitung und der Update-Stand. Der Zugriff geht nur aus dem Heimnetz. Das Zertifikat ist selbst signiert – den Fingerabdruck beim Test bestätigen."
     },
     "nf": {
       "where": "Wohin",
@@ -6565,7 +6572,8 @@
       "quarantine": "Quarantäne",
       "clamav": "ClamAV-Signaturen",
       "mc_containers": "mailcow-Container",
-      "pi_power": "Stromversorgung"
+      "pi_power": "Stromversorgung",
+      "fb_wan": "Internetverbindung"
     },
     "txt": {
       "aborted": "abgebrochen",
@@ -7000,7 +7008,27 @@
       "btrfs_devices": "Geräte: {n}",
       "btrfs_meta": "Metadaten {n} %",
       "btrfs_missing": "fehlende Geräte: {n}",
-      "btrfs_errors": "Gerätefehler: {n} (btrfs device stats)"
+      "btrfs_errors": "Gerätefehler: {n} (btrfs device stats)",
+      "fb_user_missing": "Benutzer fehlt (FRITZ!Box-Benutzer, ohne Anführungszeichen und Doppelpunkt)",
+      "fb_hint_auth": "FRITZ!Box-Benutzer und Kennwort prüfen",
+      "fb_hint_perm": "dem Benutzer fehlt das Recht „FRITZ!Box Einstellungen“ – ohne es fehlen Verbindung, DSL-Werte und Laufzeit",
+      "fb_no_tr064": "keine TR-064-Beschreibung – in der FRITZ!Box „Zugriff für Anwendungen zulassen“ einschalten, Port 49443",
+      "fb_no_service": "diesen Dienst bietet die FRITZ!Box nicht an",
+      "fb_no_digest": "Anmeldung ohne Digest-Aufforderung",
+      "fb_too_many": "zu viele abgelehnte Anmeldungen – die FRITZ!Box blockt vorübergehend",
+      "fb_summary": "{m} · Zugang {a}",
+      "fb_fiber": "Glasfaser",
+      "fb_cable": "Kabel",
+      "fb_mobile": "Mobilfunk",
+      "fb_system": "FRITZ!OS {v} · läuft seit {t}",
+      "fb_system_plain": "FRITZ!OS {v}",
+      "fb_update": "FRITZ!OS-Update verfügbar: {v}",
+      "fb_link_down": "Leitung nicht verbunden ({s})",
+      "fb_wan_down": "Internetverbindung getrennt ({s})",
+      "fb_wan_up": "verbunden seit {t}",
+      "fb_rates": "{d} ab / {u} auf",
+      "fb_dsl_down": "DSL nicht synchron ({s})",
+      "fb_dsl": "Sync {d} ab / {u} auf · Störabstand {sd} / {su} dB"
     }
   }
 }

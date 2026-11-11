@@ -1,5 +1,10 @@
 # Monitor64 – Changes
 
+## 0.1.9 – 2026-11-11
+
+- New access **FRITZ!Box** (own tile in the wizard) via the TR-064 interface: internet connection (connected/disconnected, duration, external address, current throughput, access type and line state), for DSL lines sync rates, noise margin, attenuation and CRC errors, the box's uptime and FRITZ!OS version, and "update available".
+- Login with a FRITZ!Box user (the password does not go over the wire). "Allow access for applications" must be enabled in the FRITZ!Box. For all values the user needs the right "FRITZ!Box Settings" – the FRITZ!Box has no read-only role; without the right you get access type, line state and the update status.
+
 ## 0.1.8 – 2026-11-11
 
 - **Raspberry Pi, power supply corrected (agent 0.1.2 and SSH):** the values now come from `vcgencmd get_throttled` (under-voltage and throttling, now and since boot) and, where the program is missing or access is not allowed, from the kernel's under-voltage alarm ("now" only). The file `get_throttled` under `/sys` read so far is deprecated in the Pi kernel: reading it wrote a warning to the kernel log once per boot, "since boot" was not correct with it, and from kernel 6.12 (Raspberry Pi OS 13) it no longer exists.
