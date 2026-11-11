@@ -7,6 +7,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Monitor64: Karte im Dashboard; Probleme stehen unter „Letzte Störungen“ zusammen mit den Healthchecks.
 - PROXY64: Bei abgeschalteter Erreichbarkeitsprüfung bleibt der Host nicht mehr rot („nicht erreichbar“) in der Übersicht stehen.
 - Monitor64: Host-Seite und Listenansicht auf Tablet und Smartphone gut lesbar (Dienste-Tabelle passt auf den Bildschirm).
+- Monitor64: IPv6 durchgängig – Host-Adresse auch als `[2001:db8::1]:2222`, IPv6 ohne Klammern beim Prometheus-Exporter und bei Docker (`tcp://`, `ssh://`), Link-Local-Adressen mit Zone (`fe80::1%eth0`) auch bei Proxmox VE, PBS, TrueNAS, Unraid und Server-BMC.
 
 ## 1.5.2 – 2026-11-11
 
