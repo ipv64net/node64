@@ -4,22 +4,22 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
-- Certificates: Let's Encrypt certificates optionally with an RSA key (RSA 2048) – e.g. for older devices like Synology DSM 6 that cannot import ECDSA (#62).
-- PROXY64: reachability check per host can be switched off (targets without a web interface); country blocking with the shortcut `EU` and suggestions after the first country (#54).
-- Honeypot64: live map with a "new attacks only" switch (#51).
-- Dashboard shows a notice when a new version is available.
-- Health checks: failed beats are also striped – distinguishable from OK with red-green colour blindness too.
+## 1.5.2 – 2026-11-11
+
 - Monitor64: PBS commands in the wizard also grant `Audit` to the user.
-
-- AI interface (MCP): Monitor64 as its own area with four read-only tools – overview, host with services and values, problems, maintenance.
-- AI interface (MCP): more read-only tools for DNS64 DHCP (leases, fixed addresses, foreign DHCP servers), status pages (state per entry) and the cluster.
-- API: Monitor64 in the API docs (OpenAPI, page API) – all endpoints under `/api/monitor64/…` with requests and responses.
-
 - Monitor64: own logo.
 - Monitor64: "all"/"none" buttons for new services; monitor containers with Podman too (Docker-compatible API via `podman.socket`).
 - Monitor64: SNMP ports of MikroTik switches and routers (RouterOS, e.g. CRS305) now show up.
+- PROXY64: reachability check per host can be switched off (targets without a web interface); country blocking with the shortcut `EU` and suggestions after the first country (#54).
 - Status pages: health checks and Monitor64 systems as separate sections ("Services", "Systems"), in the editor too.
+- Health checks: failed beats are also striped – distinguishable from OK with red-green colour blindness too.
+- Certificates: Let's Encrypt certificates optionally with an RSA key (RSA 2048) – e.g. for older devices like Synology DSM 6 that cannot import ECDSA (#62).
 - SSO login: the node also trusts its own CAs for the SSO provider – e.g. authentik with a certificate from the own CA (so far "The SSO provider is not reachable …").
+- Honeypot64: live map with a "new attacks only" switch (#51).
+- AI interface (MCP): Monitor64 as its own area with four read-only tools – overview, host with services and values, problems, maintenance.
+- AI interface (MCP): more read-only tools for DNS64 DHCP (leases, fixed addresses, foreign DHCP servers), status pages (state per entry) and the cluster.
+- API: Monitor64 in the API docs (OpenAPI, page API) – all endpoints under `/api/monitor64/…` with requests and responses.
+- Dashboard shows a notice when a new version is available.
 
 ## 1.5.1 – 2026-11-10
 

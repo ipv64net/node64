@@ -4,22 +4,22 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
-- Zertifikate: Let's-Encrypt-Zertifikate wahlweise mit RSA-Schlüssel (RSA 2048) – z. B. für ältere Geräte wie Synology DSM 6, die kein ECDSA importieren (#62).
-- PROXY64: Erreichbarkeitsprüfung je Host abschaltbar (Ziele ohne Weboberfläche); Ländersperre mit Kürzel `EU` und Vorschlägen auch nach dem ersten Land (#54).
-- Honeypot64: Live-Karte mit Schalter „nur neue Angriffe“ (#51).
-- Dashboard zeigt einen Hinweis, wenn eine neue Version verfügbar ist.
-- Healthchecks: gestörte Messpunkte sind zusätzlich gestreift – auch bei Rot-Grün-Schwäche von OK unterscheidbar.
+## 1.5.2 – 2026-11-11
+
 - Monitor64: PBS-Befehle im Assistenten vergeben `Audit` auch an den Benutzer.
-
-- KI-Schnittstelle (MCP): Monitor64 als eigener Bereich mit vier lesenden Werkzeugen – Übersicht, Host mit Diensten und Messwerten, Probleme, Wartungen.
-- KI-Schnittstelle (MCP): weitere lesende Werkzeuge für DNS64-DHCP (Vergaben, feste Adressen, fremde DHCP-Server), Statusseiten (Zustand je Eintrag) und den Cluster.
-- API: Monitor64 in der API-Doku (OpenAPI, Seite API) – alle Endpunkte unter `/api/monitor64/…` mit Anfragen und Antworten.
-
 - Monitor64: eigenes Logo.
 - Monitor64: Knöpfe „alle“/„keine“ bei neuen Diensten; Container auch mit Podman überwachen (Docker-kompatible API über `podman.socket`).
 - Monitor64: SNMP-Ports von MikroTik-Switches und -Routern (RouterOS, z. B. CRS305) erscheinen jetzt.
+- PROXY64: Erreichbarkeitsprüfung je Host abschaltbar (Ziele ohne Weboberfläche); Ländersperre mit Kürzel `EU` und Vorschlägen auch nach dem ersten Land (#54).
+- Healthchecks: gestörte Messpunkte sind zusätzlich gestreift – auch bei Rot-Grün-Schwäche von OK unterscheidbar.
 - Statusseiten: Healthchecks und Monitor64-Systeme als getrennte Abschnitte („Dienste“, „Systeme“), auch im Editor.
+- Zertifikate: Let's-Encrypt-Zertifikate wahlweise mit RSA-Schlüssel (RSA 2048) – z. B. für ältere Geräte wie Synology DSM 6, die kein ECDSA importieren (#62).
 - Anmeldung per SSO: Die Node vertraut beim SSO-Anbieter auch ihren eigenen CAs – z. B. authentik mit einem Zertifikat der eigenen CA (bisher „Der SSO-Anbieter ist nicht erreichbar …“).
+- Honeypot64: Live-Karte mit Schalter „nur neue Angriffe“ (#51).
+- KI-Schnittstelle (MCP): Monitor64 als eigener Bereich mit vier lesenden Werkzeugen – Übersicht, Host mit Diensten und Messwerten, Probleme, Wartungen.
+- KI-Schnittstelle (MCP): weitere lesende Werkzeuge für DNS64-DHCP (Vergaben, feste Adressen, fremde DHCP-Server), Statusseiten (Zustand je Eintrag) und den Cluster.
+- API: Monitor64 in der API-Doku (OpenAPI, Seite API) – alle Endpunkte unter `/api/monitor64/…` mit Anfragen und Antworten.
+- Dashboard zeigt einen Hinweis, wenn eine neue Version verfügbar ist.
 
 ## 1.5.1 – 2026-11-10
 
