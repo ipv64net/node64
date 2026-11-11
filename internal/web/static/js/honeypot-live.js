@@ -9,6 +9,8 @@
 	if (!svg) { return; }
 	var $ = function (s) { return document.querySelector(s); };
 	var layer = svg.querySelector("[data-hp-live-layer]"), selLayer = svg.querySelector("[data-hp-live-sel]");
+	var repBtn = $("[data-hp-live-replay]"), replayOn = true; // Wiederholungen aelterer Angriffe (#51), Wahl bleibt im Browser
+	try { replayOn = localStorage.getItem("hp-live-replay") !== "0"; } catch (e) { /* ohne Speicher: an */ }
 	var list = $("[data-hp-live-list]"), btn = $("[data-hp-live-toggle]"), stage = $("[data-hp-live-stage]"), fullBtn = $("[data-hp-live-full]");
 	var nowBox = $("[data-hp-live-now]"), topBox = $("[data-hp-live-top]"), selBox = $("[data-hp-live-selbox]");
 	var namesLayer = svg.querySelector("[data-hp-live-names]"), labelLayer = svg.querySelector("[data-hp-live-labels]"), strip = $("[data-hp-live-strip]");
@@ -310,7 +312,7 @@
 		if (!running || !target || document.hidden) { return; }
 		var room = Math.min(PER_TICK, MAX_LIVE - live.length), batch = [], used = {}, tries = 0, g = gen;
 		while (room > 0 && fresh.length) { batch.push([fresh.shift(), false]); room--; }
-		if (!batch.length) {
+		if (!batch.length && replayOn) {
 			room = Math.min(room, 1 + (Math.random() < 0.5 ? 1 : 0));
 			while (room > 0 && events.length && tries < Math.min(events.length, 20)) {
 				var e = events[replay++ % events.length]; tries++;
@@ -322,6 +324,19 @@
 		batch.forEach(function (b, i) { setTimeout(function () { if (running && g === gen) { arc(b[0], b[1]); } }, i * 300); });
 	}
 
+	function showReplay() {
+		if (!repBtn) { return; }
+		repBtn.setAttribute("aria-pressed", replayOn ? "true" : "false");
+		repBtn.classList.toggle("active", replayOn);
+	}
+	if (repBtn) {
+		showReplay();
+		repBtn.addEventListener("click", function () {
+			replayOn = !replayOn;
+			try { localStorage.setItem("hp-live-replay", replayOn ? "1" : "0"); } catch (e) { /* nur fuer diese Seite */ }
+			showReplay();
+		});
+	}
 	if (btn) {
 		btn.addEventListener("click", function () {
 			running = !running;

@@ -97,6 +97,7 @@
 			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-map text-primary"></i> {{.T "honeypot.map.title"}}{{.Doc "honeypot#herkunft"}}</span>
 				{{with $d.Map.Legend}}<span class="ms-auto small d-flex flex-wrap align-items-center gap-2" title="{{$.T "honeypot.map.legend"}}">{{range .}}<span class="text-nowrap"><span class="hp-sw hp-m{{.Level}}"></span> {{$.Int .From}}{{if ne .From .To}}–{{$.Int .To}}{{end}}</span>{{end}}</span>{{end}}
 				{{if or $d.Map.Max $d.Geo.Loaded}}<button type="button" class="btn btn-sm btn-outline-danger py-0{{if not $d.Map.Legend}} ms-auto{{end}}" data-hp-live-toggle aria-pressed="true" title="{{.T "honeypot.live.toggle"}}"><span class="hp-live-dot"></span> {{.T "honeypot.live.title"}}</button>
+				<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-hp-live-replay aria-pressed="true" title="{{.T "honeypot.live.replay_toggle"}}" aria-label="{{.T "honeypot.live.replay_toggle"}}"><i class="bi bi-arrow-repeat"></i></button>
 				<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-hp-live-full title="{{.T "honeypot.live.full"}}" aria-label="{{.T "honeypot.live.full"}}"><i class="bi bi-arrows-fullscreen"></i></button>{{end}}
 			</div>
 			<div class="card-body p-2">

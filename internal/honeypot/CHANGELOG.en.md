@@ -1,5 +1,9 @@
 # Changes – Honeypot64
 
+## 0.22.0 – 2026-11-11
+
+- Live map: replays of older attacks can be hidden (button next to "Live", remembered by the browser) – the map then shows new attacks only (#51).
+
 ## 0.21.0 – 2026-11-08
 
 ### New

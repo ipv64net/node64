@@ -1,5 +1,9 @@
 # Änderungen – Honeypot64
 
+## 0.22.0 – 2026-11-11
+
+- Live-Karte: Wiederholungen älterer Angriffe lassen sich ausblenden (Knopf neben „Live“, die Wahl merkt sich der Browser) – dann zeigt die Karte nur neue Angriffe (#51).
+
 ## 0.21.0 – 2026-11-08
 
 ### Neu
