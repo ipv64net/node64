@@ -4,19 +4,21 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.5.3 – 2026-11-11
+
 - Monitor64: hanging accesses report "unreachable" instead of silently staying OK; explicitly chosen default channels get all messages; reminder for unreachable hosts; no "unknown" for push hosts after a restart; pausing visible right away; Prometheus label `service` with names; more robust cluster sync (acknowledgements, history, responsibility, keys).
-- DNS64: security – DHCP no longer assigns zone device names (spoofed MAC), DECLINE only for the own address, RA list limited; DHCP only hands out the node as DNS when DNS64 runs and applies changed settings right away; new interfaces and addresses without restart; cluster without double leases when the connection is broken; no own RAs next to radvd/odhcpd.
 - Monitor64: security – a new access target requires the secret again; push tokens no longer in clear text in exports; limits for agent reports; SNMP traps per sender; PVE/PBS with IPv6 zone; Podman CPU on 2 cores; several UI fixes (wizard, problems, dialogs); faster (ETag, indexes).
-- Health checks: status page editor – after sorting the list, "remove" deleted the wrong entry.
-- Health checks: in a cluster with older nodes, the update no longer deletes Docker/Proxmox checks on the older nodes.
-- Notifications: Monitor64 entries in the log lead to the host (so far nowhere).
 - Monitor64: card on the dashboard; problems appear under "Recent incidents" together with the health checks.
+- Monitor64: host page and list view readable on tablets and smartphones (services table fits the screen).
+- Monitor64: IPv6 throughout – host address also as `[2001:db8::1]:2222`, IPv6 without brackets for the Prometheus exporter and Docker (`tcp://`, `ssh://`), link-local addresses with a zone (`fe80::1%eth0`) also for Proxmox VE, PBS, TrueNAS, Unraid and server BMC.
 - PROXY64: with the reachability check switched off, the host no longer stays red ("unreachable") in the overview; health checks on the target still work.
 - PROXY64: security – location access lists can no longer be bypassed via `/%5Cadmin` (IIS/Windows targets); host headers no longer override anything on the node's own pages (no-store, X-Frame-Options, login); a gRPC header no longer bypasses the limit to the target.
 - PROXY64: `;jsessionid=` addresses (Tomcat/Jetty) work again; upgrades other than WebSocket (kubectl, Docker API) with the automatic protocol; 1xx no longer logged as status; Traefik headers follow label changes.
+- DNS64: security – DHCP no longer assigns zone device names (spoofed MAC), DECLINE only for the own address, RA list limited; DHCP only hands out the node as DNS when DNS64 runs and applies changed settings right away; new interfaces and addresses without restart; cluster without double leases when the connection is broken; no own RAs next to radvd/odhcpd.
+- Health checks: status page editor – after sorting the list, "remove" deleted the wrong entry.
+- Health checks: in a cluster with older nodes, the update no longer deletes Docker/Proxmox checks on the older nodes.
+- Notifications: Monitor64 entries in the log lead to the host (so far nowhere).
 - SSO login: changed own CAs apply immediately to the provider's keys (JWKS) too; no more open connections per login.
-- Monitor64: host page and list view readable on tablets and smartphones (services table fits the screen).
-- Monitor64: IPv6 throughout – host address also as `[2001:db8::1]:2222`, IPv6 without brackets for the Prometheus exporter and Docker (`tcp://`, `ssh://`), link-local addresses with a zone (`fe80::1%eth0`) also for Proxmox VE, PBS, TrueNAS, Unraid and server BMC.
 
 ## 1.5.2 – 2026-11-11
 

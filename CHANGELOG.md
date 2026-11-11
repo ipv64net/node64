@@ -4,19 +4,21 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.5.3 – 2026-11-11
+
 - Monitor64: Hängende Zugänge melden „nicht erreichbar“ statt still auf OK zu bleiben; ausdrücklich gewählte Standardkanäle bekommen alle Meldungen; Erinnerung für nicht erreichbare Hosts; nach einem Neustart kein „unbekannt“ bei Push-Hosts; Pausieren sofort sichtbar; Prometheus-Label `service` mit Namen; Cluster-Abgleich robuster (Quittierungen, Verlauf, Zuständigkeit, Schlüssel).
-- DNS64: Sicherheit – DHCP vergibt keine Gerätenamen von Zonen mehr (gefälschte MAC), DECLINE nur für die eigene Adresse, RA-Liste begrenzt; DHCP verteilt die Node nur als DNS, wenn DNS64 läuft, und übernimmt geänderte Einstellungen sofort; neue Schnittstellen und Adressen ohne Neustart; Cluster ohne doppelte Vergaben bei getrennter Verbindung; keine eigenen RAs neben radvd/odhcpd.
 - Monitor64: Sicherheit – neues Ziel eines Zugangs verlangt das Geheimnis neu; Push-Token nicht mehr im Klartext im Export; Grenzen für Agent-Berichte; SNMP-Traps je Absender; PVE/PBS mit IPv6-Zone; Podman-CPU auf 2 Kernen; mehrere Korrekturen der Oberfläche (Assistent, Probleme, Dialoge); schneller (ETag, Indizes).
-- Healthchecks: Statusseiten-Editor – nach Sortieren der Liste entfernte „entfernen“ den falschen Eintrag.
-- Healthchecks: Im Cluster mit älteren Nodes löscht das Update keine Docker-/Proxmox-Checks mehr auf den älteren Nodes.
-- Benachrichtigungen: Im Protokoll führen Monitor64-Meldungen zum Host (bisher ins Leere).
 - Monitor64: Karte im Dashboard; Probleme stehen unter „Letzte Störungen“ zusammen mit den Healthchecks.
+- Monitor64: Host-Seite und Listenansicht auf Tablet und Smartphone gut lesbar (Dienste-Tabelle passt auf den Bildschirm).
+- Monitor64: IPv6 durchgängig – Host-Adresse auch als `[2001:db8::1]:2222`, IPv6 ohne Klammern beim Prometheus-Exporter und bei Docker (`tcp://`, `ssh://`), Link-Local-Adressen mit Zone (`fe80::1%eth0`) auch bei Proxmox VE, PBS, TrueNAS, Unraid und Server-BMC.
 - PROXY64: Bei abgeschalteter Erreichbarkeitsprüfung bleibt der Host nicht mehr rot („nicht erreichbar“) in der Übersicht stehen; Healthchecks aufs Ziel gehen trotzdem.
 - PROXY64: Sicherheit – Location-Zugriffslisten nicht mehr per `/%5Cadmin` umgehbar (IIS/Windows-Ziele); Kopfzeilen des Hosts überschreiben auf Seiten der Node nichts mehr (no-store, X-Frame-Options, Anmeldung); gRPC-Kopf hebelt die Begrenzung ans Ziel nicht mehr aus.
 - PROXY64: `;jsessionid=`-Adressen (Tomcat/Jetty) gehen wieder; Upgrades außer WebSocket (kubectl, Docker-API) im automatischen Protokoll; 1xx nicht mehr als Status im Log; Traefik-Kopfzeilen folgen Label-Änderungen.
+- DNS64: Sicherheit – DHCP vergibt keine Gerätenamen von Zonen mehr (gefälschte MAC), DECLINE nur für die eigene Adresse, RA-Liste begrenzt; DHCP verteilt die Node nur als DNS, wenn DNS64 läuft, und übernimmt geänderte Einstellungen sofort; neue Schnittstellen und Adressen ohne Neustart; Cluster ohne doppelte Vergaben bei getrennter Verbindung; keine eigenen RAs neben radvd/odhcpd.
+- Healthchecks: Statusseiten-Editor – nach Sortieren der Liste entfernte „entfernen“ den falschen Eintrag.
+- Healthchecks: Im Cluster mit älteren Nodes löscht das Update keine Docker-/Proxmox-Checks mehr auf den älteren Nodes.
+- Benachrichtigungen: Im Protokoll führen Monitor64-Meldungen zum Host (bisher ins Leere).
 - Anmeldung per SSO: geänderte eigene CAs gelten sofort auch für die Schlüssel des Anbieters (JWKS); keine offenen Verbindungen je Anmeldung mehr.
-- Monitor64: Host-Seite und Listenansicht auf Tablet und Smartphone gut lesbar (Dienste-Tabelle passt auf den Bildschirm).
-- Monitor64: IPv6 durchgängig – Host-Adresse auch als `[2001:db8::1]:2222`, IPv6 ohne Klammern beim Prometheus-Exporter und bei Docker (`tcp://`, `ssh://`), Link-Local-Adressen mit Zone (`fe80::1%eth0`) auch bei Proxmox VE, PBS, TrueNAS, Unraid und Server-BMC.
 
 ## 1.5.2 – 2026-11-11
 
