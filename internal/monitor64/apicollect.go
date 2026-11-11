@@ -79,7 +79,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 			return nil, err
 		}
 		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
-	case "nut", "truenas", "unraid", "redfish", "pmg":
+	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow":
 		src, done, err := newDeviceAPI(typ, h, cfg, secret)
 		if err != nil {
 			return nil, err
@@ -104,7 +104,7 @@ func newProm(h *Host, cfg accessConfig, secret string) (*promscrape.Collector, e
 	return promscrape.New(promscrape.Config{URL: u, User: cfg.User, Secret: secret, Pin: cfg.Pin, Metrics: cfg.Metrics, Map: MapReport})
 }
 
-// deviceAPI: Sammler fuer NUT, TrueNAS, Unraid, Redfish und Proxmox Mail Gateway (Collect und Test).
+// deviceAPI: Sammler fuer NUT, TrueNAS, Unraid, Redfish, Proxmox Mail Gateway und mailcow (Collect und Test).
 type deviceAPI interface {
 	apiSource
 	Test(ctx context.Context) apis.TestResult
@@ -155,6 +155,15 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 			addr = "https://" + apiHostPort(h.Address, 8006)
 		}
 		c, err := apis.NewPMG(apis.PMGConfig{Address: addr, User: cfg.User, Password: secret, Pin: cfg.Pin})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, c.Close, nil
+	case "mailcow":
+		if addr == "" {
+			addr = "https://" + apiHostPort(h.Address, 443)
+		}
+		c, err := apis.NewMailcow(apis.MailcowConfig{Address: addr, APIKey: secret, Pin: cfg.Pin})
 		if err != nil {
 			return nil, nil, err
 		}

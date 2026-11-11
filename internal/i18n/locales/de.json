@@ -5612,7 +5612,8 @@
       "snmp_unverified_short": "nicht geprüft",
       "snmp_queries": "Was wird abgefragt?",
       "hostkey_set": "Fingerabdruck übernommen – jetzt erneut testen oder speichern.",
-      "secret_pmg": "Passwort des Benutzers."
+      "secret_pmg": "Passwort des Benutzers.",
+      "secret_mailcow": "API-Schlüssel (nur lesend)."
     },
     "access": {
       "agent": "Agent",
@@ -5626,7 +5627,8 @@
       "truenas": "TrueNAS",
       "unraid": "Unraid",
       "redfish": "Redfish (BMC: iDRAC, iLO …)",
-      "pmg": "Proxmox Mail Gateway"
+      "pmg": "Proxmox Mail Gateway",
+      "mailcow": "mailcow"
     },
     "sd": {
       "vanished": "Dieser Dienst wird nicht mehr geliefert. Er bleibt als Warnung, bis du ihn entfernst.",
@@ -5997,6 +5999,10 @@
       "pmg": {
         "title": "Proxmox Mail Gateway",
         "sub": "API – Dienste, Warteschlange, Quarantäne"
+      },
+      "mailcow": {
+        "title": "mailcow",
+        "sub": "API – Container, Speicher, Warteschlange"
       }
     },
     "new": {
@@ -6060,7 +6066,8 @@
       "hint_redfish": "Im BMC einen eigenen Benutzer mit der Rolle „ReadOnly“ anlegen (iDRAC: Read Only, iLO: Login, Supermicro: User). Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
       "hint_snmp": "Im Gerät SNMP einschalten (nur lesend) und diese Node als erlaubten Abfrager eintragen. Am besten v3 mit Authentifizierung und Verschlüsselung; v1/v2c senden die Community im Klartext. Profile (Synology, QNAP, MikroTik, UniFi, APC, Drucker …) wählt die Node selbst.",
       "unconfirmed": "Der Fingerabdruck des Hosts ist noch nicht bestätigt. Du kannst den Host trotzdem anlegen – das Passwort wird aber erst gesendet, nachdem du den Fingerabdruck am Zugang über „Testen“ verglichen und bestätigt hast. Besser: zurück zu Schritt 2 und dort bestätigen.",
-      "hint_pmg": "Im Mail Gateway unter Konfiguration → Benutzerverwaltung einen eigenen Benutzer mit der Rolle „Auditor“ anlegen (Realm „Proxmox Mail Gateway Authentication Server“, ohne zweiten Faktor) und hier mit Realm eintragen, z. B. monitor64@pmg. API-Token kennt das Mail Gateway nicht, deshalb Benutzer und Passwort. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen."
+      "hint_pmg": "Im Mail Gateway unter Konfiguration → Benutzerverwaltung einen eigenen Benutzer mit der Rolle „Auditor“ anlegen (Realm „Proxmox Mail Gateway Authentication Server“, ohne zweiten Faktor) und hier mit Realm eintragen, z. B. monitor64@pmg. API-Token kennt das Mail Gateway nicht, deshalb Benutzer und Passwort. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
+      "hint_mailcow": "In mailcow unter System → Konfiguration → Zugriff → API den Nur-Lese-Zugriff einschalten, die Adresse dieser Node bei „API-Zugriff erlauben von“ eintragen und den Schlüssel hier einfügen. Achtung: Abfragen mit falschem Schlüssel zählt mailcow als Fehlversuch und kann die Node sperren (Fail2ban)."
     },
     "nf": {
       "where": "Wohin",
@@ -6551,7 +6558,8 @@
       "mailq": "Mail-Warteschlange",
       "mailflow": "Mail-Durchsatz",
       "quarantine": "Quarantäne",
-      "clamav": "ClamAV-Signaturen"
+      "clamav": "ClamAV-Signaturen",
+      "mc_containers": "mailcow-Container"
     },
     "txt": {
       "aborted": "abgebrochen",
@@ -6972,7 +6980,10 @@
       "quarantine": "{s} Spam, {v} Viren ({size})",
       "clamav_version": "Signaturen Version {v}",
       "clamav_age": "Signaturen Version {v}, Alter in Tagen: {n}",
-      "clamav_old": "ClamAV-Signaturen seit {n} Tagen nicht aktualisiert"
+      "clamav_old": "ClamAV-Signaturen seit {n} Tagen nicht aktualisiert",
+      "mc_ctr_down": "läuft nicht: {list}",
+      "mc_hint_auth": "API-Schlüssel prüfen und die Adresse dieser Node in mailcow bei „API-Zugriff erlauben von“ eintragen",
+      "mc_quarantine": "{s} Spam, {v} Viren"
     }
   }
 }

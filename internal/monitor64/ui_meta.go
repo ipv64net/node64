@@ -159,6 +159,7 @@ var hostKinds = []hostKind{
 	{Kind: "pve", Icon: "bi-hdd-rack", Access: "pve"},
 	{Kind: "pbs", Icon: "bi-archive", Access: "pbs"},
 	{Kind: "pmg", Icon: "bi-envelope-check", Access: "pmg"},
+	{Kind: "mailcow", Icon: "bi-mailbox", Access: "mailcow"},
 	{Kind: "docker", Icon: "bi-box-seam", Access: "docker"},
 	{Kind: "truenas", Icon: "bi-device-hdd", Access: "truenas"},
 	{Kind: "unraid", Icon: "bi-hdd-stack", Access: "unraid"},
@@ -187,7 +188,7 @@ func hostIcon(kind string) string {
 }
 
 // accessTypes sind die Zugangsarten, die angelegt werden koennen.
-var accessTypes = []string{"agent", "ssh", "pve", "pbs", "pmg", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp"}
+var accessTypes = []string{"agent", "ssh", "pve", "pbs", "pmg", "mailcow", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp"}
 
 func validAccessType(t string) bool {
 	for _, a := range accessTypes {

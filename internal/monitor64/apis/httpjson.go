@@ -330,6 +330,7 @@ func webStatusError(status int, body []byte, where string) *webError {
 	var env struct {
 		Message any `json:"message"`
 		Error   any `json:"error"`
+		Msg     any `json:"msg"` // mailcow
 		Errors  []struct {
 			Message string `json:"message"`
 		} `json:"errors"` // GraphQL
@@ -339,7 +340,7 @@ func webStatusError(status int, body []byte, where string) *webError {
 		if len(env.Errors) > 0 {
 			gql = env.Errors[0].Message
 		}
-		e.Detail = devText(firstNonEmpty(jsonMsg(env.Message), jsonMsg(env.Error), gql))
+		e.Detail = devText(firstNonEmpty(jsonMsg(env.Message), jsonMsg(env.Error), jsonMsg(env.Msg), gql))
 	}
 	return e
 }

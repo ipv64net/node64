@@ -1,5 +1,9 @@
 # Monitor64 – Changes
 
+## 0.1.6 – 2026-11-11
+
+- New access **mailcow** (own tile in the wizard) via the mailcow API with a read-only key: containers (Postfix, Dovecot, Rspamd, SOGo …; any that is not running is reported), usage of the mail storage (vmail), mail queue with the largest target domains (uses the threshold "Mail queue: deferred mails") and quarantine. In mailcow the node's address must be listed under "Allow API access from".
+
 ## 0.1.5 – 2026-11-11
 
 - New access **Proxmox Mail Gateway** (own tile in the wizard): CPU, load, RAM, swap and root file system, services (Postfix, SMTP filter, ClamAV, database …), mail queue with the largest target domains, mail flow of the last hour (in, out, spam, viruses, rejected), quarantine, age of the ClamAV signatures, cluster (node unreachable, not in sync) and pending updates.

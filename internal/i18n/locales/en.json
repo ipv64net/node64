@@ -5612,7 +5612,8 @@
       "snmp_unverified_short": "not verified",
       "snmp_queries": "What is queried?",
       "hostkey_set": "Fingerprint accepted – test again or save now.",
-      "secret_pmg": "The user's password."
+      "secret_pmg": "The user's password.",
+      "secret_mailcow": "API key (read-only)."
     },
     "access": {
       "agent": "Agent",
@@ -5626,7 +5627,8 @@
       "truenas": "TrueNAS",
       "unraid": "Unraid",
       "redfish": "Redfish (BMC: iDRAC, iLO …)",
-      "pmg": "Proxmox Mail Gateway"
+      "pmg": "Proxmox Mail Gateway",
+      "mailcow": "mailcow"
     },
     "sd": {
       "vanished": "This service is no longer delivered. It stays a warning until you remove it.",
@@ -5997,6 +5999,10 @@
       "pmg": {
         "title": "Proxmox Mail Gateway",
         "sub": "API – services, queue, quarantine"
+      },
+      "mailcow": {
+        "title": "mailcow",
+        "sub": "API – containers, storage, queue"
       }
     },
     "new": {
@@ -6060,7 +6066,8 @@
       "hint_redfish": "Create a separate BMC user with the role \"ReadOnly\" (iDRAC: Read Only, iLO: Login, Supermicro: User). The certificate is usually self-signed – confirm the fingerprint during the test.",
       "hint_snmp": "Enable SNMP on the device (read-only) and allow this node as a manager. Preferably v3 with authentication and privacy; v1/v2c send the community in clear text. The node picks profiles (Synology, QNAP, MikroTik, UniFi, APC, printers …) itself.",
       "unconfirmed": "The host's fingerprint is not confirmed yet. You can still create the host – but the password is only sent after you compared and confirmed the fingerprint via \"Test\" at the access. Better: go back to step 2 and confirm it there.",
-      "hint_pmg": "In the Mail Gateway under Configuration → User Management, create a dedicated user with the role \"Auditor\" (realm \"Proxmox Mail Gateway Authentication Server\", without a second factor) and enter it here with its realm, e.g. monitor64@pmg. The Mail Gateway has no API tokens, hence user and password. The certificate is usually self-signed – confirm the fingerprint during the test."
+      "hint_pmg": "In the Mail Gateway under Configuration → User Management, create a dedicated user with the role \"Auditor\" (realm \"Proxmox Mail Gateway Authentication Server\", without a second factor) and enter it here with its realm, e.g. monitor64@pmg. The Mail Gateway has no API tokens, hence user and password. The certificate is usually self-signed – confirm the fingerprint during the test.",
+      "hint_mailcow": "In mailcow under System → Configuration → Access → API, enable read-only access, add this node's address to \"Allow API access from\" and paste the key here. Note: mailcow counts requests with a wrong key as failed logins and may ban the node (Fail2ban)."
     },
     "nf": {
       "where": "Where to",
@@ -6551,7 +6558,8 @@
       "mailq": "Mail queue",
       "mailflow": "Mail flow",
       "quarantine": "Quarantine",
-      "clamav": "ClamAV signatures"
+      "clamav": "ClamAV signatures",
+      "mc_containers": "mailcow containers"
     },
     "txt": {
       "aborted": "aborted",
@@ -6972,7 +6980,10 @@
       "quarantine": "{s} spam, {v} viruses ({size})",
       "clamav_version": "signatures version {v}",
       "clamav_age": "signatures version {v}, age in days: {n}",
-      "clamav_old": "ClamAV signatures not updated for {n} days"
+      "clamav_old": "ClamAV signatures not updated for {n} days",
+      "mc_ctr_down": "not running: {list}",
+      "mc_hint_auth": "check the API key and add this node's address to \"Allow API access from\" in mailcow",
+      "mc_quarantine": "{s} spam, {v} viruses"
     }
   }
 }

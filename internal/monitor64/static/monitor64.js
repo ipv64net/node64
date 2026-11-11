@@ -58,15 +58,16 @@ function parseNum(s) {
 	var v = Number(sign + s);
 	return isFinite(v) ? v : NaN;
 }
-// Geraete-APIs (Prometheus, NUT, TrueNAS, Unraid, Redfish, Proxmox Mail Gateway): zusaetzliche Felder je Zugangsart.
-var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish', 'pmg'];
+// Geraete-APIs (Prometheus, NUT, TrueNAS, Unraid, Redfish, Proxmox Mail Gateway, mailcow): zusaetzliche Felder je Zugangsart.
+var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish', 'pmg', 'mailcow'];
 var DEVSPEC = {
 	prom: { url: 'http://{a}:9100/metrics', user: true, extra: ['metrics'] },
 	nut: { url: '{a}:3493', user: true, extra: ['ups', 'tls'] },
 	truenas: { url: 'https://{a}', user: true, extra: ['api'] },
 	unraid: { url: 'http://{a}', user: false, extra: [] },
 	redfish: { url: 'https://{a}', user: true, extra: ['session'] },
-	pmg: { url: 'https://{a}:8006', user: true, extra: [] }
+	pmg: { url: 'https://{a}:8006', user: true, extra: [] },
+	mailcow: { url: 'https://{a}', user: false, extra: [] }
 };
 // urlHost: Host-Teil einer URL aus der Adresse eines Hosts - ein Port der Adresse entfaellt, IPv6 kommt in Klammern
 // ("nas:2222" -> "nas", "2001:db8::1" und "[2001:db8::1]:22" -> "[2001:db8::1]").
@@ -79,8 +80,8 @@ function urlHost(a) {
 }
 function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', urlHost(addr) || '10.0.0.21'); }
 // Texte je Art und Feld (ausgeschrieben, damit die Pruefung der Texte sie findet)
-function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish'), pmg: L('acc.secret_pmg') }[t]; }
-function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish'), pmg: L('new.hint_pmg') }[t]; }
+function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish'), pmg: L('acc.secret_pmg'), mailcow: L('acc.secret_mailcow') }[t]; }
+function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish'), pmg: L('new.hint_pmg'), mailcow: L('new.hint_mailcow') }[t]; }
 function devText(k) {
 	return { ups: L('acc.ups'), tls: L('acc.tls'), api: L('acc.api'), session: L('acc.session'), metrics: L('acc.metrics'), tls_auto: L('acc.tls_auto'), tls_require: L('acc.tls_require'), tls_off: L('acc.tls_off'),
 		api_auto: L('acc.api_auto'), api_jsonrpc: L('acc.api_jsonrpc'), api_rest: L('acc.api_rest') }[k];

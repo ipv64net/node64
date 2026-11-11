@@ -1,5 +1,9 @@
 # Monitor64 – Änderungen
 
+## 0.1.6 – 2026-11-11
+
+- Neuer Zugang **mailcow** (eigene Kachel im Assistenten) über die mailcow-API mit Nur-Lese-Schlüssel: Container (Postfix, Dovecot, Rspamd, SOGo …; jeder, der nicht läuft, wird gemeldet), Belegung des Mail-Speichers (vmail), Mail-Warteschlange mit den größten Ziel-Domains (nutzt die Schwelle „Mail-Warteschlange: zurückgestellte Mails“) und Quarantäne. In mailcow muss die Adresse der Node unter „API-Zugriff erlauben von“ stehen.
+
 ## 0.1.5 – 2026-11-11
 
 - Neuer Zugang **Proxmox Mail Gateway** (eigene Kachel im Assistenten): CPU, Load, RAM, Swap und Root-Dateisystem, Dienste (Postfix, SMTP-Filter, ClamAV, Datenbank …), Mail-Warteschlange mit den größten Ziel-Domains, Durchsatz der letzten Stunde (ein, aus, Spam, Viren, abgewiesen), Quarantäne, Alter der ClamAV-Signaturen, Cluster (Node nicht erreichbar, nicht synchron) und ausstehende Updates.
