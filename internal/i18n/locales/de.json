@@ -5922,7 +5922,8 @@
       "poe_fault": "PoE-Fehler",
       "trap_received": "SNMP-Trap empfangen (bis quittiert)",
       "guest_mem": "RAM einer VM (Sicht von Proxmox, mit Cache des Gastes)",
-      "mail_queue": "Mail-Warteschlange: zurückgestellte Mails"
+      "mail_queue": "Mail-Warteschlange: zurückgestellte Mails",
+      "fs_inodes": "Dateisystem: Inodes belegt"
     },
     "cat": {
       "system": "System",
@@ -6003,6 +6004,10 @@
       "mailcow": {
         "title": "mailcow",
         "sub": "API – Container, Speicher, Warteschlange"
+      },
+      "raspberrypi": {
+        "title": "Raspberry Pi",
+        "sub": "Agent – Temperatur, Unterspannung, SD-Karte"
       }
     },
     "new": {
@@ -6559,7 +6564,8 @@
       "mailflow": "Mail-Durchsatz",
       "quarantine": "Quarantäne",
       "clamav": "ClamAV-Signaturen",
-      "mc_containers": "mailcow-Container"
+      "mc_containers": "mailcow-Container",
+      "pi_power": "Stromversorgung"
     },
     "txt": {
       "aborted": "abgebrochen",
@@ -6983,7 +6989,18 @@
       "clamav_old": "ClamAV-Signaturen seit {n} Tagen nicht aktualisiert",
       "mc_ctr_down": "läuft nicht: {list}",
       "mc_hint_auth": "API-Schlüssel prüfen und die Adresse dieser Node in mailcow bei „API-Zugriff erlauben von“ eintragen",
-      "mc_quarantine": "{s} Spam, {v} Viren"
+      "mc_quarantine": "{s} Spam, {v} Viren",
+      "pi_power_ok": "in Ordnung",
+      "pi_undervolt": "Unterspannung – Netzteil und Kabel prüfen",
+      "pi_undervolt_seen": "Unterspannung seit dem Start aufgetreten",
+      "pi_throttled": "gedrosselt",
+      "pi_throttled_seen": "seit dem Start gedrosselt gewesen",
+      "inodes_used": "Inodes {n} %",
+      "zfs_frag": "Fragmentierung {n} %",
+      "btrfs_devices": "Geräte: {n}",
+      "btrfs_meta": "Metadaten {n} %",
+      "btrfs_missing": "fehlende Geräte: {n}",
+      "btrfs_errors": "Gerätefehler: {n} (btrfs device stats)"
     }
   }
 }

@@ -5922,7 +5922,8 @@
       "poe_fault": "PoE fault",
       "trap_received": "SNMP trap received (until acknowledged)",
       "guest_mem": "VM memory (as Proxmox sees it, incl. guest cache)",
-      "mail_queue": "Mail queue: deferred mails"
+      "mail_queue": "Mail queue: deferred mails",
+      "fs_inodes": "File system: inodes used"
     },
     "cat": {
       "system": "System",
@@ -6003,6 +6004,10 @@
       "mailcow": {
         "title": "mailcow",
         "sub": "API – containers, storage, queue"
+      },
+      "raspberrypi": {
+        "title": "Raspberry Pi",
+        "sub": "Agent – temperature, under-voltage, SD card"
       }
     },
     "new": {
@@ -6559,7 +6564,8 @@
       "mailflow": "Mail flow",
       "quarantine": "Quarantine",
       "clamav": "ClamAV signatures",
-      "mc_containers": "mailcow containers"
+      "mc_containers": "mailcow containers",
+      "pi_power": "Power supply"
     },
     "txt": {
       "aborted": "aborted",
@@ -6983,7 +6989,18 @@
       "clamav_old": "ClamAV signatures not updated for {n} days",
       "mc_ctr_down": "not running: {list}",
       "mc_hint_auth": "check the API key and add this node's address to \"Allow API access from\" in mailcow",
-      "mc_quarantine": "{s} spam, {v} viruses"
+      "mc_quarantine": "{s} spam, {v} viruses",
+      "pi_power_ok": "fine",
+      "pi_undervolt": "under-voltage – check power supply and cable",
+      "pi_undervolt_seen": "under-voltage occurred since boot",
+      "pi_throttled": "throttled",
+      "pi_throttled_seen": "was throttled since boot",
+      "inodes_used": "inodes {n} %",
+      "zfs_frag": "fragmentation {n} %",
+      "btrfs_devices": "devices: {n}",
+      "btrfs_meta": "metadata {n} %",
+      "btrfs_missing": "missing devices: {n}",
+      "btrfs_errors": "device errors: {n} (btrfs device stats)"
     }
   }
 }

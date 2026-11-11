@@ -319,7 +319,7 @@ func sectionErrors(rep *m64proto.Report) error {
 var sectionPrefixes = map[string][]string{
 	m64proto.SecCPU: {"cpu"}, m64proto.SecMem: {"mem", "swap"}, m64proto.SecLoad: {"load"}, m64proto.SecFS: {"fs:"},
 	m64proto.SecDisk: {"disk:"}, m64proto.SecSmart: {"disk:"}, m64proto.SecNet: {"if:"}, m64proto.SecBond: {"bond:"},
-	m64proto.SecRAID: {"raid:"}, m64proto.SecZFS: {"zfs:"}, m64proto.SecTemp: {"temp:"}, m64proto.SecSystemd: {"systemd"},
+	m64proto.SecRAID: {"raid:", "btrfs:"}, m64proto.SecZFS: {"zfs:"}, m64proto.SecTemp: {"temp:", "power"}, m64proto.SecSystemd: {"systemd"},
 	m64proto.SecUpdates: {"updates"}, m64proto.SecReboot: {"reboot"}, m64proto.SecLocal: {"local:"}, m64proto.SecWinSvc: {"winsvc"},
 }
 

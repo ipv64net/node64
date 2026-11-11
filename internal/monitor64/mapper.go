@@ -32,6 +32,7 @@ const (
 	RuleMem       = model.RuleMem
 	RuleSwap      = model.RuleSwap
 	RuleFS        = model.RuleFS
+	RuleFSInodes  = model.RuleFSInodes
 	RuleStore     = model.RuleStore
 	RuleDiskTemp  = model.RuleDiskTemp
 	RuleNVMeTemp  = model.RuleNVMeTemp
@@ -40,6 +41,36 @@ const (
 	RuleIfErrRate = model.RuleIfErrRate
 	RuleTemp      = model.RuleTemp
 )
+
+// mapPower: Stromversorgung eines Raspberry Pi. Unterspannung jetzt ist kritisch, seit dem Start aufgetreten eine
+// Warnung (bleibt bis zum Neustart des Pi); Drosselung jetzt ist eine Warnung, fruehere steht nur im Text.
+func mapPower(flags uint32) Service {
+	sv := Service{Key: "power", Name: model.T("monitor64.svc.pi_power"), Kind: "power", Default: true,
+		Metrics: []Metric{{Name: "undervoltage", Value: float64(flags & m64proto.PowerUnderVolt)}}}
+	seen := flags >> m64proto.PowerSeenShift
+	slow := m64proto.PowerFreqCapped | m64proto.PowerThrottled | m64proto.PowerSoftTemp
+	var parts []string
+	switch {
+	case flags&m64proto.PowerUnderVolt != 0:
+		sv.Facts = append(sv.Facts, Fact{Code: "device_crit", Text: model.T("monitor64.txt.pi_undervolt")})
+		parts = append(parts, model.T("monitor64.txt.pi_undervolt"))
+	case seen&m64proto.PowerUnderVolt != 0:
+		sv.Facts = append(sv.Facts, Fact{Code: "device_warn", Text: model.T("monitor64.txt.pi_undervolt_seen")})
+		parts = append(parts, model.T("monitor64.txt.pi_undervolt_seen"))
+	}
+	switch {
+	case flags&slow != 0:
+		sv.Facts = append(sv.Facts, Fact{Code: "device_warn", Text: model.T("monitor64.txt.pi_throttled")})
+		parts = append(parts, model.T("monitor64.txt.pi_throttled"))
+	case seen&slow != 0:
+		parts = append(parts, model.T("monitor64.txt.pi_throttled_seen"))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, model.T("monitor64.txt.pi_power_ok"))
+	}
+	sv.Text = strings.Join(parts, " · ")
+	return sv
+}
 
 // MapReport bildet einen Bericht auf Dienste ab; prev ist der vorige Bericht desselben Zugangs (nil = erster).
 func MapReport(prev, cur *m64proto.Report) []Service {
@@ -92,9 +123,18 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 	for _, z := range cur.ZFS {
 		out = append(out, mapZFS(z))
 	}
+	for i, b := range cur.Btrfs {
+		if i >= maxBtrfs { // wie der Agent selbst; ein fremder Agent schickt sonst beliebig viele
+			break
+		}
+		out = append(out, mapBtrfs(b))
+	}
 	for _, t := range cur.Temps {
 		out = append(out, Service{Key: "temp:" + t.Name, Name: model.T("monitor64.svc.temp", "name", firstNonEmpty(t.Label, t.Name)), Kind: "temp", Default: true,
 			Metrics: []Metric{{Name: "temp", Value: round2(t.C), Unit: "°C", Rule: RuleTemp}}})
+	}
+	if p := cur.Power; p != nil {
+		out = append(out, mapPower(p.Flags))
 	}
 	if s := cur.Systemd; s != nil {
 		sv := Service{Key: "systemd", Name: model.T("monitor64.svc.systemd"), Kind: "systemd", Default: true,
@@ -198,8 +238,12 @@ func mapFS(f m64proto.FS) Service {
 			Metric{Name: "free", Value: float64(f.Avail), Unit: "B", Max: float64(f.Total)})
 		s.Text = model.T("monitor64.txt.free_of", "free", bytesText(f.Avail), "total", bytesText(f.Total))
 	}
-	if f.InodesTotal > 0 {
-		s.Metrics = append(s.Metrics, Metric{Name: "inodes", Value: round2(float64(f.InodesTotal-min(f.InodesFree, f.InodesTotal)) / float64(f.InodesTotal) * 100), Unit: "%"})
+	if f.InodesTotal > 0 { // btrfs und FAT melden keine Inodes: dort gibt es die Grenze nicht
+		in := round2(float64(f.InodesTotal-min(f.InodesFree, f.InodesTotal)) / float64(f.InodesTotal) * 100)
+		s.Metrics = append(s.Metrics, Metric{Name: "inodes", Value: in, Unit: "%", Rule: RuleFSInodes})
+		if in >= 50 { // im Text erst, wenn es auffaellt
+			s.Text = model.Join(s.Text, model.T("monitor64.txt.inodes_used", "n", fmt.Sprintf("%.0f", in)))
+		}
 	}
 	if f.ReadOnly {
 		s.Text = model.Join(s.Text, model.T("monitor64.txt.readonly"))
@@ -509,11 +553,52 @@ func mapZFS(z m64proto.ZPool) Service {
 	if z.Size > 0 { // ohne Groesse (z. B. node_exporter) kein "0 B frei"
 		s.Text = model.Join(model.Raw(z.Health), model.T("monitor64.txt.free", "v", bytesText(z.Free)))
 	}
+	if z.FragPct > 0 {
+		s.Metrics = append(s.Metrics, Metric{Name: "frag", Value: round2(z.FragPct), Unit: "%"})
+		s.Text = model.Join(s.Text, model.T("monitor64.txt.zfs_frag", "n", fmt.Sprintf("%.0f", z.FragPct)))
+	}
 	if !strings.EqualFold(z.Health, "ONLINE") {
 		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: strings.TrimSpace(model.Raw(z.Health) + " " + hostText(z.Errors))})
 	} else if e := zfsErrors(z.Errors); e != "" {
 		s.Facts = append(s.Facts, Fact{Code: "zfs_degraded", Text: hostText(e)}) // ONLINE, aber Daten-/Pruefsummenfehler
 	}
+	return s
+}
+
+// maxBtrfs: hoechstens so viele btrfs-Dateisysteme je Bericht (wie im Agent).
+const maxBtrfs = 32
+
+// mapBtrfs: ein Dienst je btrfs-Dateisystem (nicht je Subvolume). Ein fehlendes Geraet zaehlt wie ein degradiertes
+// RAID; Fehlerzaehler der Geraete (bleiben bis "btrfs device stats -z") sind eine Warnung. Die Belegung der
+// Mount-Punkte steht bei den Dateisystemen.
+func mapBtrfs(b m64proto.Btrfs) Service {
+	id := firstNonEmpty(b.Label, b.UUID)
+	if b.Label == "" && len(id) > 8 {
+		id = id[:8]
+	}
+	s := Service{Key: "btrfs:" + id, Name: "Btrfs " + model.Raw(id), Kind: "btrfs", Default: true,
+		Metrics: []Metric{{Name: "errors", Value: float64(b.Errors)}, {Name: "devices", Value: float64(b.Devices)}, {Name: "missing", Value: float64(b.Missing)}}}
+	var parts []string
+	if b.Profile != "" {
+		parts = append(parts, model.Raw(b.Profile))
+	}
+	parts = append(parts, model.T("monitor64.txt.btrfs_devices", "n", b.Devices))
+	if b.MetaTotal > 0 {
+		meta := round2(float64(min(b.MetaUsed, b.MetaTotal)) / float64(b.MetaTotal) * 100)
+		s.Metrics = append(s.Metrics, Metric{Name: "metadata", Value: meta, Unit: "%"})
+		parts = append(parts, model.T("monitor64.txt.btrfs_meta", "n", fmt.Sprintf("%.0f", meta)))
+	}
+	if b.Missing > 0 {
+		t := model.T("monitor64.txt.btrfs_missing", "n", b.Missing)
+		s.Facts = append(s.Facts, Fact{Code: "raid_degraded", Text: t})
+		parts = append(parts, t)
+	}
+	if b.Errors > 0 {
+		t := model.T("monitor64.txt.btrfs_errors", "n", b.Errors)
+		s.Facts = append(s.Facts, Fact{Code: "device_warn", Text: t})
+		parts = append(parts, t)
+	}
+	s.Text = strings.Join(parts, " · ")
 	return s
 }
 
@@ -573,7 +658,7 @@ func delta(old, cur uint64) (uint64, bool) {
 
 func kindOrder(k string) int {
 	order := []string{"uptime", "cpu", "load", "mem", "swap", "temp", "systemd", "updates", "reboot", "ups", "printer", "supply", "tray", "fs",
-		"store", "zfs", "raid", "disk", "if", "bond", "poe", "wlan", "fan", "psu", "hw", "winsvc", "local", "oid", "traps"}
+		"store", "zfs", "btrfs", "raid", "disk", "if", "bond", "poe", "wlan", "fan", "psu", "hw", "winsvc", "local", "oid", "traps"}
 	for i, o := range order {
 		if o == k {
 			return i

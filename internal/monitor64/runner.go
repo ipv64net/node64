@@ -73,6 +73,7 @@ var factKinds = map[string][]string{
 	"ctrl":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"temp":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"zfs":     {eval.KindRAIDDegraded},
+	"btrfs":   {eval.KindRAIDDegraded, eval.KindDeviceWarn},
 	"bond":    {eval.KindBondMemberDown, eval.KindBondLACP},
 	"updates": {eval.KindUpdatesSecurity},
 	"reboot":  {eval.KindRebootRequired},

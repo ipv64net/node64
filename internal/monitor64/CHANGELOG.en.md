@@ -1,5 +1,13 @@
 # Monitor64 – Changes
 
+## 0.1.7 – 2026-11-11
+
+- **Inodes:** every file system with an inode limit (ext4, XFS …) now has its own threshold "File system: inodes used" (warning from 80 %, critical from 90 %) – not a separate service, the value belongs to the file system and is shown in the text from 50 %. File systems without a fixed limit (Btrfs, FAT) do not have the value.
+- **Btrfs:** one service "Btrfs <label>" per mounted file system with profile (single, raid1 …), number of devices and metadata usage; a missing device is reported like a degraded RAID, the devices' error counters (as in `btrfs device stats`) as a warning. Subvolumes of the same file system still appear only once. Comes with agent 0.1.1 and via SSH right away.
+- **ZFS:** the pool's fragmentation is shown in the service and in the history.
+- **Raspberry Pi:** own tile in the wizard; new service "Power supply": under-voltage now = critical, occurred since boot = warning, throttling = warning (firmware state as in `vcgencmd get_throttled`). Comes with agent 0.1.1 and via SSH right away.
+- **Agent 0.1.1:** the 32-bit ARM file now also runs on Raspberry Pi Zero and Pi 1 (ARMv6); the install script recognises `armv6l`.
+
 ## 0.1.6 – 2026-11-11
 
 - New access **mailcow** (own tile in the wizard) via the mailcow API with a read-only key: containers (Postfix, Dovecot, Rspamd, SOGo …; any that is not running is reported), usage of the mail storage (vmail), mail queue with the largest target domains (uses the threshold "Mail queue: deferred mails") and quarantine. In mailcow the node's address must be listed under "Allow API access from".

@@ -83,7 +83,9 @@ type Report struct {
 	SMART   []SMART       `json:"smart,omitempty"`
 	RAID    []RAID        `json:"raid,omitempty"`
 	ZFS     []ZPool       `json:"zfs,omitempty"`
+	Btrfs   []Btrfs       `json:"btrfs,omitempty"` // gehoert zum Abschnitt raid
 	Temps   []Temp        `json:"temp,omitempty"`
+	Power   *Power        `json:"power,omitempty"` // Raspberry Pi (gehoert zum Abschnitt temp)
 	Systemd *Systemd      `json:"systemd,omitempty"`
 	Updates *Updates      `json:"updates,omitempty"`
 	Reboot  *Reboot       `json:"reboot,omitempty"`
@@ -236,6 +238,21 @@ type ZPool struct {
 	ScanText string  `json:"scan,omitempty"`   // letzter Scrub
 }
 
+// Btrfs ist ein eingehaengtes btrfs-Dateisystem (aus /sys/fs/btrfs): Geraete, fehlende Geraete, Summe der
+// Fehlerzaehler aller Geraete (wie "btrfs device stats") und die Belegung der zugeteilten Daten- und Metadaten-Bloecke.
+type Btrfs struct {
+	UUID      string `json:"uuid"`
+	Label     string `json:"label,omitempty"`
+	Profile   string `json:"profile,omitempty"` // Profil der Daten: single, dup, raid1, raid10 ...
+	Devices   int    `json:"devices"`
+	Missing   int    `json:"missing,omitempty"`
+	Errors    uint64 `json:"errors,omitempty"`
+	DataTotal uint64 `json:"data_total,omitempty"`
+	DataUsed  uint64 `json:"data_used,omitempty"`
+	MetaTotal uint64 `json:"meta_total,omitempty"`
+	MetaUsed  uint64 `json:"meta_used,omitempty"`
+}
+
 // Temp ist ein Temperatursensor (hwmon, thermal_zone; Pi: cpu-thermal).
 type Temp struct {
 	Name  string   `json:"name"` // stabiler Schluessel, z. B. "coretemp/Package id 0"
@@ -244,6 +261,20 @@ type Temp struct {
 	High  *float64 `json:"high,omitempty"`
 	Crit  *float64 `json:"crit,omitempty"`
 }
+
+// Power: Stromversorgung eines Raspberry Pi. Flags wie "vcgencmd get_throttled": die unteren Bits gelten jetzt, die
+// oberen "seit dem Start aufgetreten".
+type Power struct {
+	Flags uint32 `json:"flags"`
+}
+
+const (
+	PowerUnderVolt  uint32 = 1 << 0 // Unterspannung
+	PowerFreqCapped uint32 = 1 << 1 // Takt begrenzt
+	PowerThrottled  uint32 = 1 << 2 // gedrosselt
+	PowerSoftTemp   uint32 = 1 << 3 // weiche Temperaturgrenze
+	PowerSeenShift         = 16     // dieselben Bits um 16 nach oben: seit dem Start aufgetreten
+)
 
 // Systemd: fehlgeschlagene Units.
 type Systemd struct {

@@ -125,7 +125,7 @@ jobs:
           mkdir -p "$out"
           for p in linux/amd64 linux/arm64 linux/arm windows/amd64 freebsd/amd64 freebsd/arm64; do
             os="${p%/*}"; arch="${p#*/}"; name="$arch"; goarm=""; ext=""
-            if [ "$arch" = "arm" ]; then name=armv7; goarm=7; fi
+            if [ "$arch" = "arm" ]; then name=armv7; goarm=6; fi # eine 32-Bit-ARM-Datei, laeuft auch auf ARMv6 (Raspberry Pi Zero/1)
             if [ "$os" = "windows" ]; then ext=.exe; fi
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch GOARM=$goarm go build -trimpath -ldflags="-s -w -X main.Version=$AV" -o "$out/monitor64-agent-$os-$name$ext" ./cmd/monitor64-agent
           done

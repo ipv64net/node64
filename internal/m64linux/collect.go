@@ -190,8 +190,12 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 		}
 		addErr(r, m64proto.SecRAID, err)
 	}
+	if want(m64proto.SecRAID) {
+		r.Btrfs = readBtrfs(c.src)
+	}
 	if want(m64proto.SecTemp) {
 		r.Temps = readTemps(c.src)
+		r.Power = readPower(c.src)
 	}
 	if want(m64proto.SecZFS) {
 		c.collectZFS(ctx, r)

@@ -1,5 +1,13 @@
 # Monitor64 – Änderungen
 
+## 0.1.7 – 2026-11-11
+
+- **Inodes:** Jedes Dateisystem mit Inode-Grenze (ext4, XFS …) hat jetzt eine eigene Schwelle „Dateisystem: Inodes belegt“ (Warnung ab 80 %, kritisch ab 90 %) – kein eigener Dienst, der Wert gehört zum Dateisystem und steht ab 50 % auch im Text. Dateisysteme ohne feste Grenze (Btrfs, FAT) haben den Wert nicht.
+- **Btrfs:** je eingehängtem Dateisystem ein Dienst „Btrfs <Label>“ mit Profil (single, raid1 …), Anzahl der Geräte und Belegung der Metadaten; ein fehlendes Gerät wird wie ein degradiertes RAID gemeldet, Fehlerzähler der Geräte (wie `btrfs device stats`) als Warnung. Subvolumes desselben Dateisystems erscheinen weiterhin nur einmal. Kommt mit dem Agent ab 0.1.1 und per SSH sofort.
+- **ZFS:** Die Fragmentierung des Pools steht im Dienst und im Verlauf.
+- **Raspberry Pi:** eigene Kachel im Assistenten; neuer Dienst „Stromversorgung“: Unterspannung jetzt = kritisch, seit dem Start aufgetreten = Warnung, Drosselung = Warnung (Stand der Firmware wie `vcgencmd get_throttled`). Kommt mit dem Agent ab 0.1.1 und per SSH sofort.
+- **Agent 0.1.1:** Die 32-Bit-ARM-Datei läuft jetzt auch auf Raspberry Pi Zero und Pi 1 (ARMv6); das Installationsskript erkennt `armv6l`.
+
 ## 0.1.6 – 2026-11-11
 
 - Neuer Zugang **mailcow** (eigene Kachel im Assistenten) über die mailcow-API mit Nur-Lese-Schlüssel: Container (Postfix, Dovecot, Rspamd, SOGo …; jeder, der nicht läuft, wird gemeldet), Belegung des Mail-Speichers (vmail), Mail-Warteschlange mit den größten Ziel-Domains (nutzt die Schwelle „Mail-Warteschlange: zurückgestellte Mails“) und Quarantäne. In mailcow muss die Adresse der Node unter „API-Zugriff erlauben von“ stehen.

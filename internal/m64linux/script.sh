@@ -208,8 +208,27 @@ for m64_h in /sys/class/hwmon/hwmon*; do
 	[ "$m64_n" = drivetemp ] && continue
 	m64_attr "$m64_h/name" "$m64_h/device/name" "$m64_h"/temp*_input "$m64_h"/temp*_label \
 		"$m64_h"/temp*_crit "$m64_h"/temp*_max
+	# Raspberry Pi ohne get_throttled: Unterspannungs-Alarm (gilt seit dem letzten Lesen)
+	[ "$m64_n" = rpi_volt ] && [ ! -e "/sys/devices/platform/soc/soc:firmware/get_throttled" ] && m64_attr "$m64_h/in0_lcrit_alarm"
 	m64_link "$m64_h/device"
 done
+# btrfs: Geraete, fehlende Geraete, Fehlerzaehler (error_stats zeilenweise als <datei>/<zaehler>) und Belegung
+for m64_b in /sys/fs/btrfs/*; do
+	[ -d "$m64_b/allocation" ] || continue
+	m64_attr "$m64_b/label" "$m64_b"/devinfo/*/missing "$m64_b/allocation/data/total_bytes" "$m64_b/allocation/data/bytes_used" \
+		"$m64_b/allocation/metadata/total_bytes" "$m64_b/allocation/metadata/bytes_used" "$m64_b"/allocation/data/*/total_bytes
+	for m64_p in "$m64_b"/devices/*; do
+		[ -e "$m64_p" ] && m64_flag "$m64_p"
+	done
+	for m64_p in "$m64_b"/devinfo/*/error_stats; do
+		[ -f "$m64_p" ] && [ -r "$m64_p" ] || continue
+		while read -r m64_k m64_v; do
+			case $m64_k in *_errs) printf '%s/%s\t%s\n' "$m64_p" "$m64_k" "$m64_v" ;; esac
+		done 2>/dev/null <"$m64_p"
+	done
+done
+# Raspberry Pi: Unterspannung und Drosselung (wie vcgencmd get_throttled)
+m64_attr "/sys/devices/platform/soc/soc:firmware/get_throttled"
 for m64_z in /sys/class/thermal/thermal_zone*; do
 	m64_attr "$m64_z/type" "$m64_z/temp" "$m64_z"/trip_point_*_type "$m64_z"/trip_point_*_temp
 done

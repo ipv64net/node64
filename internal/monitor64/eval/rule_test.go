@@ -201,6 +201,7 @@ func TestDefaultsTable(t *testing.T) {
 		dur        time.Duration
 	}{
 		{KindFSUsed, 80, 90, Up, 0},
+		{KindFSInodes, 80, 90, Up, 0},
 		{KindStoreUsed, 80, 90, Up, 0},
 		{KindMemUsed, 80, 90, Up, 5 * time.Minute},
 		{KindGuestMem, -1, -1, Up, 5 * time.Minute}, // nur Anzeige: Proxmox zaehlt den Cache des Gastes mit

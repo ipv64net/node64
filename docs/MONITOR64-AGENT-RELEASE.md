@@ -28,7 +28,7 @@ agents.json.sig             Signatur (base64 ed25519 über die Datei – wie man
 monitor64-agent-*, install.sh, install.ps1, SHA256SUMS    aktueller Stand zusätzlich direkt im Ordner
 ```
 
-Plattformen: `linux-amd64`, `linux-arm64`, `linux-armv7` (GOARCH `arm`, GOARM 7), `windows-amd64` (`.exe`),
+Plattformen: `linux-amd64`, `linux-arm64`, `linux-armv7` (GOARCH `arm`, GOARM 6 – eine Datei für 32-Bit-ARM, läuft auch auf ARMv6 wie Raspberry Pi Zero/Pi 1; der Name bleibt wegen der Auto-Updates), `windows-amd64` (`.exe`),
 `freebsd-amd64`, `freebsd-arm64`.
 
 `agents.json` (unbekannte Felder werden ignoriert, neue Plattformen stören alte Nodes nicht):

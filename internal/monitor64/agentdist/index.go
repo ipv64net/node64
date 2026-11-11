@@ -46,7 +46,8 @@ type Platform struct {
 	GOARM    string // nur arm
 }
 
-// Platforms: Linux amd64/arm64/armv7, Windows amd64, FreeBSD amd64/arm64.
+// Platforms: Linux amd64/arm64/armv7 (die armv7-Datei ist fuer ARMv6 gebaut: auch Raspberry Pi Zero/1), Windows amd64,
+// FreeBSD amd64/arm64.
 var Platforms = []Platform{{"linux", "amd64", ""}, {"linux", "arm64", ""}, {"linux", "arm", "7"}, {"windows", "amd64", ""},
 	{"freebsd", "amd64", ""}, {"freebsd", "arm64", ""}}
 

@@ -273,7 +273,9 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 	if b, err := src.ReadFile("/proc/mdstat"); err == nil {
 		r.RAID = ParseMdstat(b)
 	}
+	r.Btrfs = readBtrfs(src)
 	r.Temps = readTemps(src)
+	r.Power = readPower(src)
 
 	if zl, ok := cmd["zpool_list"]; ok {
 		pools := ParseZpoolList(zl)

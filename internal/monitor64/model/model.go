@@ -10,6 +10,7 @@ const (
 	RuleGuestMem  = "guest.mem" // RAM einer VM aus Sicht des Hypervisors (mit Cache des Gastes)
 	RuleSwap      = "swap.used"
 	RuleFS        = "fs.used"
+	RuleFSInodes  = "fs.inodes" // Inodes eines Dateisystems belegt in %
 	RuleStore     = "store.used"
 	RuleDiskTemp  = "disk.temp"
 	RuleNVMeTemp  = "disk.temp_nvme"

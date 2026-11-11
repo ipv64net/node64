@@ -10,6 +10,7 @@ const (
 	KindGuestMem      = "guest.mem"      // RAM einer VM aus Sicht des Hypervisors in % (zaehlt den Cache des Gastes mit)
 	KindSwapUsed      = "swap.used"      // Swap belegt in %
 	KindFSUsed        = "fs.used"        // Dateisystem belegt in % (oder GB frei)
+	KindFSInodes      = "fs.inodes"      // Inodes eines Dateisystems belegt in %
 	KindStoreUsed     = "store.used"     // Datastore/Pool belegt in % (oder GB frei)
 	KindFSTrendDays   = "fs.trend_days"  // Trend: voll in N Tagen
 	KindDiskTemp      = "disk.temp"      // Plattentemperatur in °C
@@ -110,6 +111,7 @@ func Defaults() Table {
 	const m = time.Minute
 	return fill(Table{
 		KindFSUsed:        num(L(80), L(90), Up, 0, DefaultHyst),
+		KindFSInodes:      num(L(80), L(90), Up, 0, DefaultHyst),
 		KindStoreUsed:     num(L(80), L(90), Up, 0, DefaultHyst),
 		KindFSTrendDays:   num(L(7), L(2), Down, 0, 1),
 		KindMemUsed:       num(L(80), L(90), Up, 5*m, DefaultHyst),

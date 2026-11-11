@@ -1,5 +1,5 @@
 #!/bin/sh
-# Monitor64-Agent installieren (Linux amd64/arm64/armv7; FreeBSD, OPNsense, pfSense und TrueNAS CORE amd64/arm64).
+# Monitor64-Agent installieren (Linux amd64/arm64/armv6/armv7 - eine Datei fuer 32-Bit-ARM, auch Raspberry Pi Zero/1; FreeBSD, OPNsense, pfSense und TrueNAS CORE amd64/arm64).
 # Den Befehl mit dem Schluessel der Node zeigt Node64 im Assistenten "Host hinzufuegen", z. B.:
 #
 #   curl -fsSL https://node64.de/agent/install.sh | sh -s -- --key "ssh-ed25519 AAAA... node64@nas"
@@ -78,7 +78,7 @@ esac
 case "$(uname -m)" in
 x86_64 | amd64) ARCH=amd64 ;;
 aarch64 | arm64) ARCH=arm64 ;;
-armv7* | armv8l | armhf) ARCH=armv7 ;;
+armv6* | armv7* | armv8l | armhf) ARCH=armv7 ;; # die armv7-Datei ist fuer ARMv6 gebaut und laeuft auf beiden
 *) die "unsupported architecture: $(uname -m)" ;;
 esac
 [ "$OS-$ARCH" != freebsd-armv7 ] || die "unsupported architecture on FreeBSD: $(uname -m)"

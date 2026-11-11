@@ -30,6 +30,7 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindSwapUsed, Group: "system", Unit: "%"},
 	{Kind: eval.KindTempSystem, Group: "system", Unit: "°C"},
 	{Kind: eval.KindFSUsed, Group: "storage", Unit: "%", Store: true},
+	{Kind: eval.KindFSInodes, Group: "storage", Unit: "%"},
 	{Kind: eval.KindStoreUsed, Group: "storage", Unit: "%", Store: true},
 	{Kind: eval.KindFSTrendDays, Group: "storage", Unit: "days", Down: true, NoFor: true},
 	{Kind: eval.KindDiskTemp, Group: "disks", Unit: "°C"},
@@ -116,7 +117,7 @@ func svcCategory(kind string) string {
 		return "mail"
 	case "fs":
 		return "fs"
-	case "zfs", "raid", "store", "ds", "ctrl":
+	case "zfs", "btrfs", "raid", "store", "ds", "ctrl":
 		return "storage"
 	case "disk":
 		return "disks"
@@ -155,6 +156,7 @@ var hostKinds = []hostKind{
 	{Kind: "linux-agent", Icon: "bi-ubuntu", Access: "agent"},
 	{Kind: "windows", Icon: "bi-windows", Access: "agent"},
 	{Kind: "freebsd", Icon: "bi-shield-check", Access: "agent"},
+	{Kind: "raspberrypi", Icon: "bi-cpu", Access: "agent"},
 	{Kind: "ssh", Icon: "bi-terminal", Access: "ssh"},
 	{Kind: "pve", Icon: "bi-hdd-rack", Access: "pve"},
 	{Kind: "pbs", Icon: "bi-archive", Access: "pbs"},

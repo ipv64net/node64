@@ -318,7 +318,7 @@ networks:
 
 Das Modul *Monitor64* (in den Einstellungen einschalten, standardmäßig aus – ausgeschaltet läuft nichts und es ist kein Port offen) überwacht Systeme mit Schwellen und Verlauf, leichter als CheckMK oder Zabbix:
 
-- **Zugänge:** Monitor64-Agent für Linux, Windows und FreeBSD/OPNsense (die Node fragt ab; für Hosts hinter NAT oder VPS baut der Agent die Verbindung selbst auf), Linux ohne Agent per SSH, Proxmox VE, Proxmox Backup Server, Proxmox Mail Gateway, mailcow, Docker, TrueNAS, Unraid, Server-BMC (Redfish), USV über NUT, Prometheus-Exporter (`node_exporter`, `windows_exporter`, eigene Metriken) und SNMP v1/v2c/v3 mit Geräteprofilen und Traps. Ein Host kann mehrere Zugänge haben.
+- **Zugänge:** Monitor64-Agent für Linux (auch Raspberry Pi ab Pi Zero/Pi 1), Windows und FreeBSD/OPNsense (die Node fragt ab; für Hosts hinter NAT oder VPS baut der Agent die Verbindung selbst auf), Linux ohne Agent per SSH, Proxmox VE, Proxmox Backup Server, Proxmox Mail Gateway, mailcow, Docker, TrueNAS, Unraid, Server-BMC (Redfish), USV über NUT, Prometheus-Exporter (`node_exporter`, `windows_exporter`, eigene Metriken) und SNMP v1/v2c/v3 mit Geräteprofilen und Traps. Ein Host kann mehrere Zugänge haben.
 - **Dienste:** werden erkannt und nie automatisch übernommen; verschwundene Dienste bleiben gemeldet, bis man sie entfernt.
 - **Schwellen:** Standard für alle, Abweichungen je Gruppe oder Tag, eigene Werte am Host; mit Dauer, Hysterese, „GB frei“ und Trend „voll in N Tagen“. Feste Regeln für SMART, RAID/ZFS, Bonding, Updates, Gäste und Container.
 - **Probleme und Meldungen:** Ablauf je Problem mit Person, Quittieren, Wartungsfenster; eine Meldung je Host und Runde über die Benachrichtigungskanäle der Node, Entwarnung an dieselben Kanäle.
