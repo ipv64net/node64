@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Neuer Zugang Proxmox Mail Gateway – Dienste, Mail-Warteschlange (mit Schwelle), Durchsatz, Quarantäne, ClamAV-Signaturen, Cluster und Updates; Anmeldung mit einem Benutzer der Rolle „Auditor“.
+
 ## 1.5.3 – 2026-11-11
 
 - Monitor64: Hängende Zugänge melden „nicht erreichbar“ statt still auf OK zu bleiben; ausdrücklich gewählte Standardkanäle bekommen alle Meldungen; Erinnerung für nicht erreichbare Hosts; nach einem Neustart kein „unbekannt“ bei Push-Hosts; Pausieren sofort sichtbar; Prometheus-Label `service` mit Namen; Cluster-Abgleich robuster (Quittierungen, Verlauf, Zuständigkeit, Schlüssel).

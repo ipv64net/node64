@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: new access Proxmox Mail Gateway – services, mail queue (with threshold), mail flow, quarantine, ClamAV signatures, cluster and updates; login with a user of the role "Auditor".
+
 ## 1.5.3 – 2026-11-11
 
 - Monitor64: hanging accesses report "unreachable" instead of silently staying OK; explicitly chosen default channels get all messages; reminder for unreachable hosts; no "unknown" for push hosts after a restart; pausing visible right away; Prometheus label `service` with names; more robust cluster sync (acknowledgements, history, responsibility, keys).
