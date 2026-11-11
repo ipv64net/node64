@@ -66,6 +66,9 @@ type Advanced struct {
 
 	// PROXY-Protokoll zum Ziel (#52, nur TLS durchreichen): "" = aus, v1, v2 (proxyVersion)
 	ProxyProtocol string `json:"proxy_protocol,omitempty"`
+
+	// NoProbe: Ziel nicht auf Erreichbarkeit pruefen (z. B. Dienst ohne Weboberflaeche; Forum 5100)
+	NoProbe bool `json:"no_probe,omitempty"`
 }
 
 // PROXY-Protokoll zum Ziel (Advanced.ProxyProtocol bei TLS durchreichen, Stream.ProxyProtocol bei TCP-Streams): der

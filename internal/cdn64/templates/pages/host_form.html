@@ -141,7 +141,7 @@
 						<div class="col-md-8"><input class="form-control form-control-sm font-monospace{{if index $d.Errors "geo"}} is-invalid{{end}}" id="geo_countries" name="geo_countries" value="{{$d.GeoText}}" placeholder="DE, AT, CH" maxlength="400" list="geo-cc" autocomplete="off">
 							{{with index $d.Errors "geo"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
 					</div>
-					{{if $d.Countries}}<datalist id="geo-cc">{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
+					{{if $d.Countries}}<datalist id="geo-cc"><option value="EU">{{.T "cdn64.f.geo_eu"}}</option>{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
 					<div class="form-text">{{.T "cdn64.f.geo_hint"}}</div>
 					{{end}}
 					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect") (eq $h.Kind "status")}}
@@ -154,6 +154,9 @@
 					{{end}}
 					<hr>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $h.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
+					{{if or (eq $h.Kind "proxy") (eq $h.Kind "passthrough")}}<input type="hidden" name="has_probe" value="1">
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="probe" id="probe"{{if not $h.Advanced.NoProbe}} checked{{end}}><label class="form-check-label" for="probe">{{.T "cdn64.f.probe"}}</label></div>
+					<div class="form-text">{{.T "cdn64.f.probe_hint"}}</div>{{end}}
 				</div>
 				{{if eq $h.Kind "proxy"}}
 				<div class="tab-pane fade" id="tab-locations" role="tabpanel">

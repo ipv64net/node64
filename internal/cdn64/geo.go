@@ -62,13 +62,24 @@ type geoSets struct {
 // normalizeGeo prueft Modus und Laender (Grossbuchstaben, ohne Doppelte); ohne Modus keine Laender.
 func (a *Advanced) normalizeGeo() error { return normalizeGeo(&a.GeoMode, &a.GeoCountries) }
 
+// geoEU: die 27 Mitgliedstaaten der EU (Kuerzel EU in der Laendersperre).
+var geoEU = []string{"AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"}
+
 func normalizeGeo(mode *string, countries *[]string) error {
 	if *mode != geoBlock && *mode != geoAllow {
 		*mode, *countries = "", nil
 		return nil
 	}
 	var out []string
-	for _, c := range *countries {
+	var in []string
+	for _, c := range *countries { // EU steht fuer die 27 Mitgliedstaaten (#54)
+		if strings.EqualFold(strings.TrimSpace(c), "EU") {
+			in = append(in, geoEU...)
+			continue
+		}
+		in = append(in, c)
+	}
+	for _, c := range in {
 		c = strings.ToUpper(strings.TrimSpace(c))
 		if c == "" || slices.Contains(out, c) {
 			continue

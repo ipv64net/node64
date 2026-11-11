@@ -575,6 +575,9 @@ func hostFromForm(r *http.Request, h *Host) {
 		h.Advanced.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_down")))
 		h.Advanced.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_up")))
 	}
+	if r.PostFormValue("has_probe") == "1" { // Erreichbarkeit pruefen (Proxy-Host, TLS durchreichen)
+		h.Advanced.NoProbe = !on("probe")
+	}
 	if r.PostFormValue("has_pp") == "1" { // PROXY-Kopf zum Ziel (TLS durchreichen)
 		h.Advanced.ProxyProtocol = r.PostFormValue("adv_proxy_protocol")
 	}

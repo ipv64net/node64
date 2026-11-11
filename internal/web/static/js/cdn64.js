@@ -158,4 +158,24 @@
 	if (reload) {
 		setTimeout(function () { window.location.reload(); }, 1000 * (parseInt(reload.getAttribute("data-reload"), 10) || 5));
 	}
+
+	// Laendersperre: Vorschlaege auch nach dem Komma (#54) - die Liste traegt den bisherigen Text vorn, sonst schlaegt
+	// der Browser nach dem ersten Land nichts mehr vor
+	var geo = document.getElementById("geo_countries"), geoList = document.getElementById("geo-cc");
+	if (geo && geoList) {
+		var base = Array.prototype.map.call(geoList.options, function (o) { return [o.value, o.textContent]; });
+		var fill = function () {
+			var v = geo.value, i = Math.max(v.lastIndexOf(","), v.lastIndexOf(" "));
+			var pre = v.slice(0, i + 1); // genau wie getippt, so passt der Vorschlag zum bisherigen Text
+			geoList.replaceChildren();
+			base.forEach(function (b) {
+				var o = document.createElement("option");
+				o.value = pre + b[0];
+				o.textContent = b[1];
+				geoList.appendChild(o);
+			});
+		};
+		geo.addEventListener("input", fill);
+		geo.addEventListener("focus", fill);
+	}
 })();

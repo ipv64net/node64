@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.55.0 – 2026-11-11
+
+### New
+- Reachability check per proxy host or TLS passthrough host can be switched off ("Check whether the target is reachable" under Details) – for targets without a web interface, e.g. a database; then no "unreachable" badge and no metric (forum 5100). API: `advanced.no_probe`.
+- Country blocking: `EU` stands for the 27 EU member states (expanded when saving), and suggestions also work after the first country (#54).
+
 ## 1.54.1 – 2026-11-10
 
 ### Fixed

@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.55.0 – 2026-11-11
+
+### Neu
+- Erreichbarkeitsprüfung je Proxy-Host bzw. TLS-durchreichen-Host abschaltbar („Ziel auf Erreichbarkeit prüfen“ unter Details) – für Ziele ohne Weboberfläche, z. B. eine Datenbank; dann keine Anzeige „nicht erreichbar“ und keine Kennzahl (Forum 5100). API: `advanced.no_probe`.
+- Ländersperre: `EU` steht für die 27 EU-Staaten (wird beim Speichern ausgeklappt), und die Vorschläge funktionieren auch nach dem ersten Land (#54).
+
 ## 1.54.1 – 2026-11-10
 
 ### Behoben

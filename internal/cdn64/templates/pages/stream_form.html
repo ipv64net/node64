@@ -63,7 +63,7 @@
 					<div class="col-md-8"><input class="form-control form-control-sm font-monospace{{if index $d.Errors "geo"}} is-invalid{{end}}" id="geo_countries" name="geo_countries" value="{{$d.GeoText}}" placeholder="DE, AT, CH" maxlength="400" list="geo-cc" autocomplete="off">
 						{{with index $d.Errors "geo"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
 				</div>
-				{{if $d.Countries}}<datalist id="geo-cc">{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
+				{{if $d.Countries}}<datalist id="geo-cc"><option value="EU">{{.T "cdn64.f.geo_eu"}}</option>{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
 				<div class="form-text mb-3">{{.T "cdn64.f.geo_hint"}}</div>
 				<input type="hidden" name="has_bw" value="1">
 				<div class="row g-2 mb-1" data-bw>
