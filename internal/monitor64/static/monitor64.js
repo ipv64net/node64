@@ -788,6 +788,7 @@ function pageHost() {
 		if (n.length) {
 			html = '<div class="card mb-3 new-svc"><div class="card-body py-2"><div class="d-flex flex-wrap align-items-center gap-2 mb-2"><i class="bi bi-stars text-primary"></i><strong>' + esc(L('host.new_n', { n: n.length })) + '</strong><span class="small text-body-secondary">' + esc(L('host.new_hint')) + '</span>' +
 				'<div class="ms-auto d-flex gap-2"><button class="btn btn-sm btn-primary" type="button" data-new="1"><i class="bi bi-check2"></i> ' + esc(L('host.adopt')) + '</button><button class="btn btn-sm btn-outline-secondary" type="button" data-new="-1"><i class="bi bi-eye-slash"></i> ' + esc(L('host.ignore')) + '</button></div></div>' +
+				(n.length > 1 ? '<div class="mb-1"><button class="btn btn-sm btn-link p-0 me-3" type="button" data-newall="1">' + esc(L('new.all')) + '</button><button class="btn btn-sm btn-link p-0" type="button" data-newall="0">' + esc(L('new.none')) + '</button></div>' : '') +
 				'<div class="row g-1">' + n.map(function (s, i) { return '<div class="col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64n' + i + '" data-newsel="' + esc(s.key) + '"' + (newSel[s.key] === false ? '' : ' checked') + '><label class="form-check-label small" for="m64n' + i + '">' + esc(tx(s.name) || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></label></div></div>'; }).join('') + '</div></div></div>';
 		}
 		var gone = H.services.filter(function (s) { return s.vanished; });
@@ -1527,6 +1528,11 @@ function pageHost() {
 				confirmBox(L('acc.delete'), L('acc.delete_confirm', { n: accLabel(acc.type) }), L('acc.delete'), function () { return api('DELETE', au).then(function () { toast(L('acc.deleted_toast')); return reload(); }).catch(fail); });
 				break;
 			}
+			return;
+		}
+		var na = ev.target.closest('[data-newall]');
+		if (na) { // neue Dienste: alle bzw. keine auswaehlen
+			$$('#m64-new input[data-newsel]').forEach(function (x) { x.checked = na.dataset.newall === '1'; newSel[x.dataset.newsel] = x.checked; });
 			return;
 		}
 		var nb = ev.target.closest('[data-new]');

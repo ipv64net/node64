@@ -183,8 +183,8 @@ func TestDockerPollerMapping(t *testing.T) {
 	// zweite Abfrage: CPU, Raten; inspect bleibt gemerkt (Zustand unveraendert)
 	*clock = clock.Add(30 * time.Second)
 	f.set(func(f *fakeDocker) {
-		// 2 s CPU-Zeit in 20 s Systemzeit bei 4 Kernen = 0,4 Kerne = 10 % von 4
-		f.stats[dkID("aaa")] = dkStats(3e9, 120e9, 2<<30, 512<<20, 4<<30, 1000+30*1000, 2000+30*500, 30*4096, 30*8192)
+		// 12 s CPU-Zeit in 120 s Systemzeit (30 s x 4 Kerne) = 0,4 Kerne = 10 % von 4
+		f.stats[dkID("aaa")] = dkStats(13e9, 220e9, 2<<30, 512<<20, 4<<30, 1000+30*1000, 2000+30*500, 30*4096, 30*8192)
 	})
 	s = p.Poll(context.Background())
 	web = dkByName(s)["web"]
@@ -202,7 +202,7 @@ func TestDockerPollerMapping(t *testing.T) {
 		in["HostConfig"] = map[string]any{"NanoCpus": 500000000}
 		f.inspect[dkID("aaa")] = in
 		f.list[0]["Status"] = "Up 1 hour (unhealthy)" // Zustand anders: inspect neu
-		f.stats[dkID("aaa")] = dkStats(3e9+2e8, 140e9, 2<<30, 512<<20, 4<<30, 0, 0, 0, 0)
+		f.stats[dkID("aaa")] = dkStats(13e9+12e8, 340e9, 2<<30, 512<<20, 4<<30, 0, 0, 0, 0)
 	})
 	s = p.Poll(context.Background())
 	web = dkByName(s)["web"]
@@ -319,5 +319,23 @@ func TestValidateDockerSystem(t *testing.T) {
 	}
 	if !ValidKey("docker/my-app_1.web") || ValidKey("docker/") || ValidKey("docker/-x") || ValidKey("docker/a/b") {
 		t.Error("ValidKey docker")
+	}
+}
+
+// Podman meldet in system_cpu_usage nur die verstrichene Zeit (nicht x Kerne): CPU dann ueber die Uhr.
+func TestDockerPollerPodmanCPU(t *testing.T) {
+	f, p, clock := newFakeDocker(t)
+	f.set(func(f *fakeDocker) {
+		f.list = []map[string]any{dkEntry("aaa", "web", "running", "Up 1 hour", nil)}
+		f.inspect[dkID("aaa")] = dkInspect(0, 0, false, clock.Add(-time.Hour).Format(time.RFC3339Nano), "")
+		f.stats[dkID("aaa")] = dkStats(10e9, 100e9, 1, 0, 1<<30, 0, 0, 0, 0)
+	})
+	p.Poll(context.Background())
+	*clock = clock.Add(30 * time.Second)
+	// 30 s CPU-Zeit in 30 s (ein Kern voll), system_cpu_usage nur +30 s: 1 von 4 Kernen = 25 %
+	f.set(func(f *fakeDocker) { f.stats[dkID("aaa")] = dkStats(40e9, 130e9, 1, 0, 1<<30, 0, 0, 0, 0) })
+	web := dkByName(p.Poll(context.Background()))["web"]
+	if math.Abs(web.CPU-0.25) > 1e-9 {
+		t.Fatalf("podman cpu: %v", web.CPU)
 	}
 }

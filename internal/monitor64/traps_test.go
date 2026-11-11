@@ -554,11 +554,18 @@ func TestTrapsForgottenWhenDisabled(t *testing.T) {
 	if rec := e.do("PUT", au, map[string]any{"config": map[string]any{"snmp_version": "2c"}}); rec.Code != 200 {
 		t.Fatalf("traps off: %d %s", rec.Code, rec.Body)
 	}
-	m.syncTraps(ctx)
-	rt = rtOf()
-	rt.mu.Lock()
-	kept := rt.Traps
-	rt.mu.Unlock()
+	// eine gerade laufende Runde kann noch einmal die alte Kopie schreiben; die naechste Synchronisierung raeumt sie ab
+	var kept *hostTraps
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		m.syncTraps(ctx)
+		rt = rtOf()
+		rt.mu.Lock()
+		kept = rt.Traps
+		rt.mu.Unlock()
+		if kept == nil || time.Now().After(deadline) {
+			break
+		}
+	}
 	if kept != nil {
 		t.Fatalf("runtime copy kept after traps off: %+v", kept)
 	}

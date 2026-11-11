@@ -521,7 +521,10 @@ func (d *dockerSSH) stdioConn(c *ssh.Client) (net.Conn, error) {
 	stderr := &sshErrBuf{}
 	s.Stderr = stderr
 	cmd := "docker system dial-stdio"
-	if d.sock != dockerSSHSocket {
+	switch {
+	case strings.Contains(d.sock, "/podman/"): // Podman (/run/podman/podman.sock, /run/user/<uid>/podman/podman.sock)
+		cmd = "podman --url unix://" + d.sock + " system dial-stdio" // Pfad nur aus dockerSockRe
+	case d.sock != dockerSSHSocket:
 		cmd = "docker -H unix://" + d.sock + " system dial-stdio" // Pfad nur aus dockerSockRe
 	}
 	if err := s.Start(cmd); err != nil {

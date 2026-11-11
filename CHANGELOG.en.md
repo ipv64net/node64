@@ -5,6 +5,8 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Monitor64: own logo.
+- Monitor64: "all"/"none" buttons for new services; monitor containers with Podman too (Docker-compatible API via `podman.socket`).
+- SSO login: the node also trusts its own CAs for the SSO provider – e.g. authentik with a certificate from the own CA (so far "The SSO provider is not reachable …").
 
 ## 1.5.1 – 2026-11-10
 

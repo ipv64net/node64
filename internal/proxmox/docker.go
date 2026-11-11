@@ -743,7 +743,13 @@ func (p *DockerPoller) build(now time.Time, jobs []*dockerJob) []Resource {
 				dt := now.Sub(old.t).Seconds()
 				cpuD := dockerDelta(old.cpuTotal, cur.cpuTotal)
 				cores := 0.0
-				if sysD := dockerDelta(old.cpuSystem, cur.cpuSystem); sysD > 0 && cur.cpuTotal >= old.cpuTotal {
+				// system_cpu_usage ist bei Docker die Zeit aller Kerne des Hosts (~ dt x online), bei Podman nur die
+				// verstrichene Zeit (~ dt): deutlich unter dt x online -> wie ohne system_cpu_usage rechnen
+				sysD := dockerDelta(old.cpuSystem, cur.cpuSystem)
+				if online > 1 && dt > 0 && float64(sysD) < dt*1e9*float64(online)/2 {
+					sysD = 0
+				}
+				if sysD > 0 && cur.cpuTotal >= old.cpuTotal {
 					cores = float64(cpuD) / float64(sysD) * float64(online)
 				} else if dt > 0 && cur.cpuTotal >= old.cpuTotal {
 					cores = float64(cpuD) / (dt * 1e9) // ohne system_cpu_usage: Nanosekunden je Sekunde

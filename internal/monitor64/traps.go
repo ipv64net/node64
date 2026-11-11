@@ -602,12 +602,10 @@ func (m *Module) syncTraps(ctx context.Context) {
 	for _, h := range hosts {
 		known[h.ID] = true
 	}
-	var gone []string
 	for uid := range t.hosts { // Stand von Hosts ohne Traps (entfernt bzw. ausgeschaltet) vergessen
 		if !known[uid] {
 			delete(t.hosts, uid)
 			delete(t.lastRun, uid)
-			gone = append(gone, uid)
 		}
 	}
 	for uid := range t.addrs {
@@ -617,7 +615,7 @@ func (m *Module) syncTraps(ctx context.Context) {
 	}
 	t.known = known
 	t.mu.Unlock()
-	m.forgetTraps(gone)
+	m.forgetTraps(known)
 	if stopped || len(hosts) == 0 {
 		t.closeReceiver()
 		return
@@ -678,15 +676,19 @@ func (t *trapMgr) setRetry() {
 }
 
 // forgetTraps vergisst den gemerkten Trap-Stand im Laufzeitstand von Hosts, die keine Traps mehr nutzen (sonst kaeme
-// er beim Wiedereinschalten samt Meldung zurueck). Wartet auf eine laufende Runde des Hosts.
-func (m *Module) forgetTraps(uids []string) {
-	for _, uid := range uids {
-		m.rtMu.Lock()
-		rt := m.rts[uid]
-		m.rtMu.Unlock()
-		if rt == nil {
-			continue
+// er beim Wiedereinschalten samt Meldung zurueck). Bei jedem Abgleich fuer alle Hosts ausser known: eine Runde bzw. ein
+// neu gestarteter Laufzeitstand (Kopie fuer den Neustart) kann den Stand nach dem ersten Vergessen noch einmal
+// schreiben. Wartet auf eine laufende Runde des Hosts.
+func (m *Module) forgetTraps(known map[string]bool) {
+	m.rtMu.Lock()
+	var rts []*hostRT
+	for uid, rt := range m.rts {
+		if !known[uid] {
+			rts = append(rts, rt)
 		}
+	}
+	m.rtMu.Unlock()
+	for _, rt := range rts {
 		rt.mu.Lock()
 		if rt.Traps != nil {
 			rt.Traps, rt.dirty = nil, true

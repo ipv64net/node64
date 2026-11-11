@@ -3,6 +3,9 @@
 ## 0.1.2 – 2026-11-11
 
 - Eigenes Logo (hell und dunkel) in der Übersicht und bei den Modulen.
+- Neue Dienste beim Host: Knöpfe „alle“ und „keine“ über der Auswahl.
+- Docker-Zugang funktioniert auch mit Podman (Docker-kompatible API über `podman.socket`, lokal oder per `ssh://…/run/podman/podman.sock`). Die CPU-Last der Container stimmt dabei: Podman meldet die Systemzeit anders als Docker, bisher zeigte ein Container mit einem belegten Kern bis zu 100 %.
+- SNMP-Traps ausgeschaltet: Der gemerkte Trap-Stand verschwindet sofort, auch wenn gerade eine Abfrage lief (bisher bis zur nächsten Runde).
 
 ## 0.1.1 – 2026-11-10
 

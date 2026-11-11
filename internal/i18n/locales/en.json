@@ -5994,7 +5994,7 @@
       "api_hint": "Read-only (role PVEAuditor or Audit). Proxmox VE only lists pending updates with the Sys.Modify permission – without it the \"Updates\" service stays empty. For bonding, per-port errors and temperatures, add SSH or the agent afterwards.",
       "node": "Node name (empty = the node behind the address, fixed on first contact)",
       "pin": "Pin fingerprint (certificate SHA-256 or SSH host key, optional)",
-      "docker_hint": "Local: unix:///var/run/docker.sock (mount the socket into the Node64 container). Remote: tcp://host:2375, https://host:2376 with TLS or ssh://user@host.",
+      "docker_hint": "Local: unix:///var/run/docker.sock (mount the socket into the Node64 container). Remote: tcp://host:2375, https://host:2376 with TLS or ssh://user@host. Podman: enable podman.socket (systemctl enable --now podman.socket), then unix:///run/podman/podman.sock or ssh://user@host/run/podman/podman.sock.",
       "test": "Test connection",
       "testing": "checking …",
       "test_ok": "connected – {n} services found, answer in {ms} ms",
