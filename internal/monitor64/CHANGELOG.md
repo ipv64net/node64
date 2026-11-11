@@ -1,5 +1,10 @@
 # Monitor64 – Änderungen
 
+## 0.1.8 – 2026-11-11
+
+- **Raspberry Pi, Stromversorgung korrigiert (Agent 0.1.2 und SSH):** Die Werte kommen jetzt von `vcgencmd get_throttled` (Unterspannung und Drosselung, jetzt und seit dem Start) und, wo das Programm fehlt oder der Zugriff nicht erlaubt ist, vom Unterspannungs-Alarm des Kernels (nur „jetzt“). Die bisher gelesene Datei `get_throttled` unter `/sys` ist im Pi-Kernel veraltet: Das Lesen schrieb einmal je Start eine Warnung ins Kernel-Log, „seit dem Start“ stimmte damit nicht, und ab Kernel 6.12 (Raspberry Pi OS 13) gibt es sie nicht mehr.
+- Für „seit dem Start“ per SSH muss der Abfrage-Benutzer `vcgencmd` ausführen dürfen (Gruppe `video`); der Agent läuft als root und braucht nichts.
+
 ## 0.1.7 – 2026-11-11
 
 - **Inodes:** Jedes Dateisystem mit Inode-Grenze (ext4, XFS …) hat jetzt eine eigene Schwelle „Dateisystem: Inodes belegt“ (Warnung ab 80 %, kritisch ab 90 %) – kein eigener Dienst, der Wert gehört zum Dateisystem und steht ab 50 % auch im Text. Dateisysteme ohne feste Grenze (Btrfs, FAT) haben den Wert nicht.

@@ -6,7 +6,7 @@
 #   file:PFAD   Inhalt einer Datei (/proc/...)
 #   attr        Zeilen "PFAD<TAB>WERT" fuer einzeilige Dateien aus /sys (WERT 1 = vorhanden bzw. Symlink-Ziel);
 #               "PFAD.hex<TAB>HEX" fuer Binaerdateien (vpd_pg80)
-#   df, df_i, zpool_list, zpool_list_rc, zpool_status, systemd_failed, systemd_state, needs_restarting,
+#   df, df_i, vcgencmd_throttled, zpool_list, zpool_list_rc, zpool_status, systemd_failed, systemd_state, needs_restarting,
 #   updates:MGR, updates_sec:MGR, smart:GERAET, note ("ABSCHNITT TEXT"), end
 #   err:ABSCHNITT, err:smart:GERAET   nicht lesbar (Zeitlimit, Exit-Code), eine Zeile Text
 # Zeilen aus Dateien und Programmen, die wie ein Abschnittskopf beginnen, bekommen ein Leerzeichen davor.
@@ -208,8 +208,8 @@ for m64_h in /sys/class/hwmon/hwmon*; do
 	[ "$m64_n" = drivetemp ] && continue
 	m64_attr "$m64_h/name" "$m64_h/device/name" "$m64_h"/temp*_input "$m64_h"/temp*_label \
 		"$m64_h"/temp*_crit "$m64_h"/temp*_max
-	# Raspberry Pi ohne get_throttled: Unterspannungs-Alarm (gilt seit dem letzten Lesen)
-	[ "$m64_n" = rpi_volt ] && [ ! -e "/sys/devices/platform/soc/soc:firmware/get_throttled" ] && m64_attr "$m64_h/in0_lcrit_alarm"
+	# Raspberry Pi: Unterspannungs-Alarm des Kernels (nur "jetzt")
+	[ "$m64_n" = rpi_volt ] && m64_attr "$m64_h/in0_lcrit_alarm"
 	m64_link "$m64_h/device"
 done
 # btrfs: Geraete, fehlende Geraete, Fehlerzaehler (error_stats zeilenweise als <datei>/<zaehler>) und Belegung
@@ -227,11 +227,20 @@ for m64_b in /sys/fs/btrfs/*; do
 		done 2>/dev/null <"$m64_p"
 	done
 done
-# Raspberry Pi: Unterspannung und Drosselung (wie vcgencmd get_throttled)
-m64_attr "/sys/devices/platform/soc/soc:firmware/get_throttled"
 for m64_z in /sys/class/thermal/thermal_zone*; do
 	m64_attr "$m64_z/type" "$m64_z/temp" "$m64_z"/trip_point_*_type "$m64_z"/trip_point_*_temp
 done
+
+# Raspberry Pi: Unterspannung und Drosselung seit dem Start (braucht Zugriff auf /dev/vcio: root bzw. Gruppe video).
+# Die Datei get_throttled unter /sys ist im Pi-Kernel veraltet (Lesen schreibt eine Warnung ins Kernel-Log).
+if m64_have vcgencmd; then
+	m64_o=$(m64_run TERM 3 vcgencmd get_throttled 2>/dev/null)
+	case $m64_o in throttled=*)
+		m64_sec vcgencmd_throttled
+		m64_out
+		;;
+	esac
+fi
 
 if m64_have zpool; then
 	m64_o=$(m64_run TERM 5 zpool list -Hp -o name,size,alloc,free,frag,health 2>/dev/null)

@@ -13,12 +13,13 @@ import (
 
 // Zeitlimits je Programm (wie im Skript).
 const (
-	timeoutShort   = 10 * time.Second // systemctl, zpool
-	timeoutSmart   = 20 * time.Second // smartctl je Platte bzw. --scan-open
-	timeoutUpdates = 90 * time.Second // Paketverwalter
-	timeoutNeeds   = 30 * time.Second // needs-restarting (Python)
-	timeoutStatfs  = 5 * time.Second  // statfs je Mount (haengende Mounts)
-	timeoutRefresh = 10 * time.Minute // Erneuern im Hintergrund insgesamt
+	timeoutShort    = 10 * time.Second // systemctl, zpool
+	timeoutSmart    = 20 * time.Second // smartctl je Platte bzw. --scan-open
+	timeoutUpdates  = 90 * time.Second // Paketverwalter
+	timeoutNeeds    = 30 * time.Second // needs-restarting (Python)
+	timeoutStatfs   = 5 * time.Second  // statfs je Mount (haengende Mounts)
+	timeoutVcgencmd = 3 * time.Second  // vcgencmd get_throttled (Raspberry Pi)
+	timeoutRefresh  = 10 * time.Minute // Erneuern im Hintergrund insgesamt
 
 	timeoutNeedsRestart = 10 * time.Minute // Puffer fuer needs-restarting
 	slowRetry           = 5 * time.Minute  // gescheiterter langsamer Abschnitt: so bald neu versuchen
@@ -195,7 +196,7 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 	}
 	if want(m64proto.SecTemp) {
 		r.Temps = readTemps(c.src)
-		r.Power = readPower(c.src)
+		r.Power = c.collectPower(ctx)
 	}
 	if want(m64proto.SecZFS) {
 		c.collectZFS(ctx, r)
@@ -407,6 +408,17 @@ func (c *collector) collectSystemd(ctx context.Context, r *m64proto.Report) {
 		state = ExecResult{}
 	}
 	r.Systemd = newSystemd(failed.Stdout, state.Stdout)
+}
+
+// collectPower: Stromversorgung eines Raspberry Pi (vcgencmd, sonst nur der Alarm des Kernels).
+func (c *collector) collectPower(ctx context.Context) *m64proto.Power {
+	var out []byte
+	if c.has("vcgencmd") {
+		if res, err := c.run(ctx, timeoutVcgencmd, "vcgencmd", "get_throttled"); err == nil && res.Code == 0 {
+			out = res.Stdout
+		}
+	}
+	return powerFrom(out, c.src)
 }
 
 func (c *collector) collectReboot(ctx context.Context, r *m64proto.Report) {

@@ -7,18 +7,33 @@ import (
 	"github.com/ipv64net/node64/internal/m64proto"
 )
 
-// piThrottled ist der Stand der Raspberry-Pi-Firmware (wie "vcgencmd get_throttled", als Hex-Zahl).
-const piThrottled = "/sys/devices/platform/soc/soc:firmware/get_throttled"
+// Stromversorgung eines Raspberry Pi. Zwei Quellen (Stand: Kernel-Quellen raspberrypi/linux und Doku zu vcgencmd):
+//
+//   - "vcgencmd get_throttled" ("throttled=0x50005"): alle Flags, die oberen Bits gelten seit dem Start. Braucht das
+//     Programm (Raspberry Pi OS) und Zugriff auf /dev/vcio (root bzw. Gruppe video).
+//   - hwmon-Geraet rpi_volt, in0_lcrit_alarm: 1, solange der Kernel bei seiner Abfrage alle zwei Sekunden eine
+//     Unterspannung sieht – also nur "jetzt", ohne Drosselung und ohne "seit dem Start".
+//
+// Die Datei /sys/devices/platform/soc/soc:firmware/get_throttled wird bewusst nicht gelesen: Der Pi-Kernel fuehrt sie
+// als veraltet (erster Lesezugriff schreibt eine Warnung mit Stacktrace ins Kernel-Log), ab Kernel 6.12 fehlt sie.
 
-// readPower liest die Stromversorgung eines Raspberry Pi: Unterspannung und Drosselung, jetzt und seit dem Start.
-// Ohne die Datei der Firmware (Kernel ohne Raspberry-Pi-Treiber) bleibt der Unterspannungs-Alarm des hwmon-Geraets
-// rpi_volt (meldet nur "seit dem letzten Lesen"). nil = kein Raspberry Pi bzw. nichts lesbar.
-func readPower(src source) *m64proto.Power {
-	if s := strings.TrimPrefix(strings.ToLower(readStr(src, piThrottled)), "0x"); s != "" {
-		if v, err := strconv.ParseUint(s, 16, 32); err == nil {
-			return &m64proto.Power{Flags: uint32(v)}
-		}
+// ParseThrottled liest die Ausgabe von "vcgencmd get_throttled".
+func ParseThrottled(out []byte) (uint32, bool) {
+	s := strings.TrimSpace(string(out))
+	_, val, ok := strings.Cut(s, "throttled=")
+	if !ok {
+		return 0, false
 	}
+	val = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(val)), "0x")
+	v, err := strconv.ParseUint(val, 16, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(v), true
+}
+
+// readPowerHwmon liest den Unterspannungs-Alarm von rpi_volt (nil = kein Raspberry Pi bzw. kein Alarm-Wert).
+func readPowerHwmon(src source) *m64proto.Power {
 	for _, h := range src.ReadDir("/sys/class/hwmon") {
 		base := "/sys/class/hwmon/" + h
 		if readStr(src, base+"/name") != "rpi_volt" {
@@ -33,4 +48,18 @@ func readPower(src source) *m64proto.Power {
 		return nil
 	}
 	return nil
+}
+
+// powerFrom fuehrt beide Quellen zusammen: vcgencmd (wenn lesbar) traegt alle Flags, der Alarm des Kernels ergaenzt
+// "Unterspannung jetzt".
+func powerFrom(throttled []byte, src source) *m64proto.Power {
+	hw := readPowerHwmon(src)
+	if v, ok := ParseThrottled(throttled); ok {
+		p := &m64proto.Power{Flags: v}
+		if hw != nil {
+			p.Flags |= hw.Flags
+		}
+		return p
+	}
+	return hw
 }

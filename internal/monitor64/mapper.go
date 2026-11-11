@@ -43,7 +43,8 @@ const (
 )
 
 // mapPower: Stromversorgung eines Raspberry Pi. Unterspannung jetzt ist kritisch, seit dem Start aufgetreten eine
-// Warnung (bleibt bis zum Neustart des Pi); Drosselung jetzt ist eine Warnung, fruehere steht nur im Text.
+// Warnung (bleibt bis zum Neustart des Pi); Drosselung jetzt ist eine Warnung, fruehere steht nur im Text. "Seit dem
+// Start" und die Drosselung kennt nur vcgencmd; ohne das Programm meldet der Kernel allein "Unterspannung jetzt".
 func mapPower(flags uint32) Service {
 	sv := Service{Key: "power", Name: model.T("monitor64.svc.pi_power"), Kind: "power", Default: true,
 		Metrics: []Metric{{Name: "undervoltage", Value: float64(flags & m64proto.PowerUnderVolt)}}}

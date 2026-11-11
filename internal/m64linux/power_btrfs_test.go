@@ -14,28 +14,56 @@ func files(kv ...string) map[string][]byte {
 	return m
 }
 
-// Raspberry Pi: Stand der Firmware (get_throttled) bzw. Unterspannungs-Alarm des hwmon-Geraets rpi_volt.
-func TestReadPower(t *testing.T) {
+// Raspberry Pi: vcgencmd get_throttled traegt alle Flags, der Alarm des hwmon-Geraets rpi_volt nur "Unterspannung jetzt".
+func TestPowerFrom(t *testing.T) {
+	volt := func(alarm string) map[string][]byte {
+		return files("/sys/class/hwmon/hwmon0/name", "cpu_thermal", "/sys/class/hwmon/hwmon1/name", "rpi_volt", "/sys/class/hwmon/hwmon1/in0_lcrit_alarm", alarm)
+	}
 	for _, tc := range []struct {
-		name  string
-		files map[string][]byte
-		want  *uint32
+		name      string
+		throttled string
+		files     map[string][]byte
+		want      *uint32
 	}{
-		{"kein Pi", files("/sys/class/hwmon/hwmon0/name", "coretemp"), nil},
-		{"alles gut", files(piThrottled, "0\n"), u32(0)},
-		{"Unterspannung jetzt und seit Start", files(piThrottled, "50005\n"), u32(0x50005)},
-		{"mit 0x", files(piThrottled, "0x50000"), u32(0x50000)},
-		{"unlesbar, hwmon ohne Alarm", files(piThrottled, "xyz", "/sys/class/hwmon/hwmon1/name", "rpi_volt", "/sys/class/hwmon/hwmon1/in0_lcrit_alarm", "0"), u32(0)},
-		{"nur hwmon mit Alarm", files("/sys/class/hwmon/hwmon0/name", "cpu_thermal", "/sys/class/hwmon/hwmon1/name", "rpi_volt", "/sys/class/hwmon/hwmon1/in0_lcrit_alarm", "1\n"), u32(m64proto.PowerUnderVolt)},
-		{"hwmon ohne Alarm-Datei", files("/sys/class/hwmon/hwmon1/name", "rpi_volt"), nil},
+		{"kein Pi", "", files("/sys/class/hwmon/hwmon0/name", "coretemp"), nil},
+		{"vcgencmd alles gut", "throttled=0x0\n", volt("0\n"), u32(0)},
+		{"vcgencmd Unterspannung jetzt und seit Start", "throttled=0x50005\n", volt("1"), u32(0x50005)},
+		{"vcgencmd nur seit Start", "throttled=0x50000", volt("0"), u32(0x50000)},
+		{"vcgencmd alt, Kernel sieht Unterspannung", "throttled=0x50000", volt("1"), u32(0x50001)},
+		{"vcgencmd ohne hwmon", "throttled=0x80008", files(), u32(0x80008)},
+		{"vcgencmd ohne Zugriff (leer), hwmon ohne Alarm", "", volt("0"), u32(0)},
+		{"vcgencmd mit Fehlertext, hwmon mit Alarm", "VCHI initialization failed", volt("1\n"), u32(m64proto.PowerUnderVolt)},
+		{"hwmon ohne Alarm-Datei", "", files("/sys/class/hwmon/hwmon1/name", "rpi_volt"), nil},
+		{"Unsinn", "throttled=zz", files(), nil},
 	} {
-		got := readPower(newMapSource(tc.files))
+		got := powerFrom([]byte(tc.throttled), newMapSource(tc.files))
 		switch {
 		case tc.want == nil && got != nil:
 			t.Errorf("%s: %+v, erwartet nil", tc.name, got)
 		case tc.want != nil && (got == nil || got.Flags != *tc.want):
 			t.Errorf("%s: %+v, erwartet %#x", tc.name, got, *tc.want)
 		}
+	}
+}
+
+// Das Skript fuer SSH liefert die Ausgabe von vcgencmd als eigenen Abschnitt und den Alarm des Kernels als Zeile.
+func TestScriptPower(t *testing.T) {
+	out := "\n<<<m64:start>>>\n1\n\n<<<m64:attr>>>\n/sys/class/hwmon/hwmon1/name\trpi_volt\n/sys/class/hwmon/hwmon1/in0_lcrit_alarm\t0\n" +
+		"\n<<<m64:vcgencmd_throttled>>>\nthrottled=0x50000\n\n<<<m64:end>>>\n"
+	r, err := ParseScriptOutput([]byte(out), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Power == nil || r.Power.Flags != 0x50000 {
+		t.Errorf("Power = %+v", r.Power)
+	}
+	// ohne vcgencmd bleibt der Alarm des Kernels
+	r, err = ParseScriptOutput([]byte("\n<<<m64:start>>>\n1\n\n<<<m64:attr>>>\n/sys/class/hwmon/hwmon1/name\trpi_volt\n/sys/class/hwmon/hwmon1/in0_lcrit_alarm\t1\n\n<<<m64:end>>>\n"), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Power == nil || r.Power.Flags != m64proto.PowerUnderVolt {
+		t.Errorf("nur hwmon: Power = %+v", r.Power)
 	}
 }
 

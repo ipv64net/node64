@@ -65,7 +65,7 @@ var mgrNameRE = regexp.MustCompile(`^[a-z]{2,16}$`)
 func knownSection(name string) bool {
 	switch name {
 	case "start", "end", "attr", "note", "df", "df_i", "zpool_list", "zpool_list_rc", "zpool_status",
-		"systemd_failed", "systemd_state", "needs_restarting":
+		"systemd_failed", "systemd_state", "needs_restarting", "vcgencmd_throttled":
 		return true
 	}
 	kind, rest, ok := strings.Cut(name, ":")
@@ -275,7 +275,7 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 	}
 	r.Btrfs = readBtrfs(src)
 	r.Temps = readTemps(src)
-	r.Power = readPower(src)
+	r.Power = powerFrom(cmd["vcgencmd_throttled"], src)
 
 	if zl, ok := cmd["zpool_list"]; ok {
 		pools := ParseZpoolList(zl)

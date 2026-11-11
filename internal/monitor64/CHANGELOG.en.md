@@ -1,5 +1,10 @@
 # Monitor64 – Changes
 
+## 0.1.8 – 2026-11-11
+
+- **Raspberry Pi, power supply corrected (agent 0.1.2 and SSH):** the values now come from `vcgencmd get_throttled` (under-voltage and throttling, now and since boot) and, where the program is missing or access is not allowed, from the kernel's under-voltage alarm ("now" only). The file `get_throttled` under `/sys` read so far is deprecated in the Pi kernel: reading it wrote a warning to the kernel log once per boot, "since boot" was not correct with it, and from kernel 6.12 (Raspberry Pi OS 13) it no longer exists.
+- For "since boot" via SSH the monitoring user must be allowed to run `vcgencmd` (group `video`); the agent runs as root and needs nothing.
+
 ## 0.1.7 – 2026-11-11
 
 - **Inodes:** every file system with an inode limit (ext4, XFS …) now has its own threshold "File system: inodes used" (warning from 80 %, critical from 90 %) – not a separate service, the value belongs to the file system and is shown in the text from 50 %. File systems without a fixed limit (Btrfs, FAT) do not have the value.
