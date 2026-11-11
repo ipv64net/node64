@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- AI interface (MCP): Monitor64 as its own area with four read-only tools – overview, host with services and values, problems, maintenance.
+
 - Monitor64: own logo.
 - Monitor64: "all"/"none" buttons for new services; monitor containers with Podman too (Docker-compatible API via `podman.socket`).
 - Monitor64: SNMP ports of MikroTik switches and routers (RouterOS, e.g. CRS305) now show up.

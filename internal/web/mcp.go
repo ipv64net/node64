@@ -34,7 +34,7 @@ const (
 func (s *Server) mcpRoutes() {
 	s.mcpCounter = mcp.NewCounter()
 	s.mcpLimit = newIPLimiter(mcpRate, mcpRate)
-	s.mcpHandler = mcp.NewHandler(mcp.Options{Backend: mcpBackend{s}, Version: s.Version, Counter: s.mcpCounter, Logger: s.log.With("module", "mcp")})
+	s.mcpHandler = mcp.NewHandler(mcp.Options{Backend: mcpBackend{s}, Version: s.Version, Counter: s.mcpCounter, Logger: s.log.With("module", "mcp"), T: s.mcpT()})
 	s.mux.HandleFunc("/mcp", s.mcpServe)
 	s.mux.Handle("GET /settings/mcp", s.auth(s.mcpSettings))
 	s.mux.Handle("POST /settings/mcp", s.auth(s.mcpSettingsSave))
@@ -135,6 +135,14 @@ func mcpErr(w http.ResponseWriter, status int, msg string) {
 }
 
 // mcpServe prueft Schalter, Quelle, Schluessel und Rate-Limit und gibt an den MCP-Handler weiter.
+// mcpT: Uebersetzer fuer MCP (Texte von Monitor64); nil ohne Sprachdateien.
+func (s *Server) mcpT() func(lang, key string, args ...any) string {
+	if s.I18n == nil {
+		return nil
+	}
+	return s.I18n.T
+}
+
 func (s *Server) mcpServe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !s.mcpEnabled(ctx) {

@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- KI-Schnittstelle (MCP): Monitor64 als eigener Bereich mit vier lesenden Werkzeugen – Übersicht, Host mit Diensten und Messwerten, Probleme, Wartungen.
+
 - Monitor64: eigenes Logo.
 - Monitor64: Knöpfe „alle“/„keine“ bei neuen Diensten; Container auch mit Podman überwachen (Docker-kompatible API über `podman.socket`).
 - Monitor64: SNMP-Ports von MikroTik-Switches und -Routern (RouterOS, z. B. CRS305) erscheinen jetzt.

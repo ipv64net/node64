@@ -5024,6 +5024,7 @@
     "revoke_confirm": "Schlüssel widerrufen? Anwendungen, die ihn nutzen, verlieren sofort den Zugriff.",
     "area_node": "Node",
     "area_healthchecks": "Healthchecks",
+    "area_monitor64": "Monitor64",
     "area_proxmox": "Proxmox VE",
     "area_dns64": "DNS64",
     "area_proxy64": "PROXY64",

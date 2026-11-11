@@ -32,6 +32,7 @@ const (
 	AreaDNS64         = "dns64"
 	AreaProxy64       = "proxy64"
 	AreaHoneypot      = "honeypot"
+	AreaMonitor64     = "monitor64"
 	AreaDynDNS        = "dyndns"
 	AreaCerts         = "certs"
 	AreaNotifications = "notifications"
@@ -39,12 +40,12 @@ const (
 )
 
 // Areas in der Reihenfolge der Oberflaeche.
-var Areas = []string{AreaNode, AreaHealthchecks, AreaDNS64, AreaProxy64, AreaHoneypot, AreaDynDNS, AreaCerts, AreaNotifications, AreaAudit}
+var Areas = []string{AreaNode, AreaHealthchecks, AreaMonitor64, AreaDNS64, AreaProxy64, AreaHoneypot, AreaDynDNS, AreaCerts, AreaNotifications, AreaAudit}
 
 // ModuleOf: Modul, das fuer den Bereich laufen muss ("" = Kern, entscheidet Backend.Available).
 var ModuleOf = map[string]string{
 	AreaHealthchecks: "healthchecks", AreaDNS64: "dns64", AreaProxy64: "cdn64",
-	AreaHoneypot: "honeypot", AreaDynDNS: "dyndns",
+	AreaHoneypot: "honeypot", AreaDynDNS: "dyndns", AreaMonitor64: "monitor64",
 }
 
 // ValidArea sagt, ob es den Bereich gibt.
@@ -93,6 +94,8 @@ type Options struct {
 	Version string
 	Counter *Counter     // Zaehler fuer Prometheus (nil = keine)
 	Logger  *slog.Logger // nil = kein Log
+	// T uebersetzt Schluessel (Texte von Monitor64 kommen als "i18n:..."); nil = Schluessel bleiben stehen
+	T func(lang, key string, args ...any) string
 }
 
 // Instructions: Hinweise des Servers an die KI-Anwendung.
