@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: own logo.
+
 ## 1.5.1 – 2026-11-10
 
 - PROXY64: a location's access lists and blocks can no longer be bypassed with spelling variants of the path (`/SECURE`, `/secure.`, `/secure%20` …) – important for targets like IIS or Windows.

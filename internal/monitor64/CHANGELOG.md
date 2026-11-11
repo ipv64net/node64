@@ -1,5 +1,9 @@
 # Monitor64 – Änderungen
 
+## 0.1.2 – 2026-11-11
+
+- Eigenes Logo (hell und dunkel) in der Übersicht und bei den Modulen.
+
 ## 0.1.1 – 2026-11-10
 
 - Übersicht, Ansicht „Liste“: Hosts stehen nach Gruppen zusammen (Gruppenzeile mit Anzahl wie bei den Kacheln). Ein

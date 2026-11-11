@@ -1,5 +1,9 @@
 # Monitor64 – Changes
 
+## 0.1.2 – 2026-11-11
+
+- Own logo (light and dark) in the overview and in the module list.
+
 ## 0.1.1 – 2026-11-10
 
 - Overview, "List" view: hosts stay together by group (group row with count, as with the tiles). Clicking a column

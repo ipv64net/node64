@@ -44,7 +44,7 @@ var migrationFS embed.FS
 const Name = "monitor64"
 
 const (
-	version = "0.1.1"
+	version = "0.1.2"
 
 	// EnvLoadGen startet den Lastgenerator mit N Schein-Hosts (nur Entwicklung, nie in der Oberflaeche).
 	EnvLoadGen = "NODE64_MONITOR64_LOADGEN"
@@ -123,7 +123,7 @@ func (m *Module) SetNotifier(fn func(notify.Alert)) { m.dispatchFn = fn }
 
 // Info beschreibt das Modul.
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.monitor64", Icon: "bi-activity", Path: "/monitor64", Available: true, Order: 15,
+	return module.Info{Name: Name, TitleKey: "nav.monitor64", Icon: "bi-activity", Image: "monitor64.svg", Path: "/monitor64", Available: true, Order: 15,
 		Version: version, Changelog: changelog, ChangelogEN: changelogEN}
 }
 

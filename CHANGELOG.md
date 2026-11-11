@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: eigenes Logo.
+
 ## 1.5.1 – 2026-11-10
 
 - PROXY64: Zugriffslisten und Sperren einer Location lassen sich nicht mehr über Schreibvarianten des Pfads umgehen (`/SECURE`, `/secure.`, `/secure%20` …) – wichtig bei Zielen wie IIS oder Windows.
