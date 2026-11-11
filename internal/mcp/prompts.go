@@ -32,6 +32,9 @@ func addPrompts(srv *sdk.Server, o Options, id Identity) {
 				"1. get_check and list_incidents: state, start/end of the outage, reason.",
 				"2. check_history (include_failures=true) for the affected range.",
 			}
+			if has(AreaMonitor64) {
+				steps = append(steps, "3. monitor64_problems (status=all, range=24h) and monitor64_host for affected systems: CPU, RAM, disks, ports or containers at that time.")
+			}
 			if has(AreaProxy64) {
 				steps = append(steps, "4. proxy_hosts and proxy_access_log (status=5xx or rejected) in the same period.")
 			}
@@ -53,6 +56,9 @@ func addPrompts(srv *sdk.Server, o Options, id Identity) {
 		}
 		if has(AreaHealthchecks) {
 			steps = append(steps, "- list_checks, list_incidents (limit 50) and check_history (range=7d) for checks with incidents: availability and outages.")
+		}
+		if has(AreaMonitor64) {
+			steps = append(steps, "- monitor64_overview and monitor64_problems (status=all, range=7d): systems with problems, open issues, monitor64_maintenance.")
 		}
 		if has(AreaDNS64) {
 			steps = append(steps, "- dns64_summary (range=7d) and dns64_top (kind=blocked, range=7d).")

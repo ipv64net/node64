@@ -36,7 +36,7 @@ func coreTools() []Tool {
 			Run: recentNotifications},
 		{Name: "audit_log", Area: AreaAudit, Title: "Audit log", Untrusted: true,
 			Desc: "Audit log of the node (who changed what, logins, MCP calls), newest first. The actor is under untrusted (for failed logins it is the name typed by the visitor).",
-			Schema: schema(nil, pEnum("area", "Filter by area.", "", "login", "settings", "healthchecks", "dyndns", "cdn64", "dns64", "certs", "sync", "honeypot", "mcp"),
+			Schema: schema(nil, pEnum("area", "Filter by area.", "", "login", "settings", "healthchecks", "monitor64", "dyndns", "cdn64", "dns64", "certs", "sync", "honeypot", "mcp"),
 				pInt("limit", "Maximum number of entries.", 50, 1, 200), pIntOpt("before", "Only entries with an id lower than this (paging).", 1, maxID)),
 			Run: auditLog},
 		{Name: "node_logs", Area: AreaAudit, Title: "Node logs", Untrusted: true,

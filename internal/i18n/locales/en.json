@@ -1841,6 +1841,7 @@
       "login": "Sign-in",
       "settings": "Settings",
       "healthchecks": "Healthchecks",
+      "monitor64": "Monitor64",
       "dyndns": "DynDNS",
       "cdn64": "PROXY64",
       "dns64": "DNS64",
