@@ -266,11 +266,12 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Me
 				chk.ChannelUIDs = nil // Kanaele hier oder dort nicht im Cluster: Zuordnung bleibt je Node
 			}
 			c.Op, c.Check, c.ChangedAt = "upsert", chk, upd
+		case !del.IsZero(): // nur mit echtem Loeschvermerk (wie bei Wartungsfenstern)
+			c.Op, c.ChangedAt = "delete", del
 		default:
-			c.Op = "delete"
-			if !del.IsZero() {
-				c.ChangedAt = del
-			}
+			// weg ohne Loeschvermerk (z. B. Docker/Proxmox-Checks anderer Nodes, die das Update entfernt hat): nicht als
+			// Loeschung mit der alten Zeit ausliefern - eine aeltere Node wuerde sonst ihren noch laufenden Check loeschen
+			continue
 		}
 		out.Items = append(out.Items, c)
 	}

@@ -1357,7 +1357,9 @@ func (m *Module) apiDiscover(w http.ResponseWriter, r *http.Request) {
 	rt.mu.Lock()
 	rt.LastDisc = time.Time{}
 	rt.mu.Unlock()
-	pctx, cancel := context.WithTimeout(ctx, testTimeout)
+	// eigene Runde wie die geplante (gleiches Zeitlimit, unabhaengig von der Anfrage): bricht der Besucher ab oder
+	// braucht ein Zugang laenger als das Test-Zeitlimit, zaehlte das sonst als Ausfall des Zugangs
+	pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobTimeout(time.Duration(h.IntervalSec)*time.Second))
 	defer cancel()
 	m.poll(pctx, rt)
 	rows, _ = m.store.Services(ctx, h.UID)

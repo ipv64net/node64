@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 3.1.1 – 2026-11-11
+
+- Clusters with older nodes (1.4): after the update to 1.5, a node no longer serves the Docker and Proxmox checks of other nodes removed during the update as deletions – an older node would otherwise have deleted its still running check.
+- When an unlinked node deletes a check, the forwarding node passes the deletion on to IPv64.net even if it no longer had the check itself (so far it stayed there).
+
 ## 3.1.0 – 2026-11-11
 
 - Status pages: health checks and Monitor64 systems are shown separately – on the page as their own sections "Services" and "Systems" (each with its groups), in the editor with their own heading in the list and in the picker. Both on one page remain possible.

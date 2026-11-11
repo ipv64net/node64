@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -129,6 +130,7 @@ func (s *Server) parseTemplates() error {
 		"split":    strings.Fields,
 		"contains": strings.Contains,
 		"darkimg":  darkImage,
+		"checkURL": checkURL,
 		"dict":     dict,
 		"seq": func(n int) []int {
 			out := make([]int, n)
@@ -361,4 +363,13 @@ func (s *Server) housekeeping(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// checkURL: Seite zu einem Token im Benachrichtigungsprotokoll - Monitor64-Meldungen ("m64:<host>") fuehren zum Host,
+// alle anderen zum Healthcheck.
+func checkURL(token string) string {
+	if uid, ok := strings.CutPrefix(token, "m64:"); ok {
+		return "/monitor64/host/" + url.PathEscape(uid)
+	}
+	return "/healthchecks/" + url.PathEscape(token)
 }

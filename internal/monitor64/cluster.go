@@ -50,6 +50,7 @@ var ClusterCalls = []string{callSeries, callRepoll, callReach, callTrap, callSpa
 
 var (
 	clusterScanEvery = 2 * time.Second  // eigene Aenderungen suchen
+	scanOverlap      = 15 * time.Minute // so weit zurueck sucht jeder Lauf nach eigenen Aenderungen
 	clusterTick      = 30 * time.Second // Blick auf die Mitglieder (Uebernahme, Rueckgabe, Probleme, Schluessel)
 	clusterReloadLag = 300 * time.Millisecond
 
@@ -108,7 +109,8 @@ type clusterRT struct {
 	mu        sync.Mutex
 	since     map[string]time.Time // erreichbar seit (Nullzeit: schon beim ersten Blick erreichbar)
 	known     map[string]bool
-	roles     map[string]int // Host -> letzte Rolle dieser Node (Wechsel erkennen)
+	roles     map[string]int       // Host -> letzte Rolle dieser Node (Wechsel erkennen)
+	ownerSeen map[string]ownerSeen // Host -> zustaendige Node und seit wann (Uebernahmen nicht im Takt hin und her)
 	views     map[string]map[string]*stateEntry
 	viewsInit bool
 	started   time.Time
@@ -1087,6 +1089,12 @@ func (m *Module) clusterScan(ctx context.Context) {
 	}
 	m.cl.csMu.Lock()
 	defer m.cl.csMu.Unlock()
+	if mem := m.hooks().Members; mem != nil && len(mem(ctx, ClusterItemConfig)) == 0 {
+		// ohne andere Nodes nichts zu melden (sonst 15 Abfragen alle 2 s auf jeder Node); kommt der Cluster (wieder),
+		// sucht der erste Lauf von vorn
+		m.cl.scanFrom, m.cl.eventMax = "", 0
+		return
+	}
 	m.clusterRetry()
 	start := time.Now()
 	from := m.cl.scanFrom
@@ -1178,5 +1186,7 @@ func (m *Module) clusterScan(ctx context.Context) {
 		return // Zeitpunkt und Ereignis-Nummer bleiben: der naechste Lauf findet die nicht gemeldeten Eintraege wieder
 	}
 	m.cl.eventMax = evMax
-	m.cl.scanFrom = ts(start.Add(-10 * time.Second)) // Schreibstellen mit etwas aelterer Zeit nicht verpassen
+	// Schreibstellen mit aelterer Zeit nicht verpassen: updated_at entsteht vor dem Warten auf die einzige
+	// Schreibverbindung (Sicherung mit VACUUM INTO, lange Transaktion) - doppelt Gefundenes faengt csync ab
+	m.cl.scanFrom = ts(start.Add(-scanOverlap))
 }

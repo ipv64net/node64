@@ -53,6 +53,7 @@ type sync2State struct {
 	swept  time.Time
 	due    map[string]time.Time // je Mitglied: naechste Wiederholung abgelehnter Eintraege (fehlt = sofort)
 	tries  map[string]int       // je Mitglied: Wiederholungen ohne Erfolg (Abstand verdoppelt sich)
+	reset  time.Time            // zuletzt wegen einer eigenen Aenderung zurueckgesetzt
 	warned map[string]bool      // Ablehnung schon gemeldet (Mitglied, Eintrag, Zeitpunkt): Wiederholungen nur Debug
 	// apply: Pruefen (newer), Uebernehmen und Eintragen eines Stands am Stueck (Abholen bei mehreren Mitgliedern
 	// nebenher, Schalter hier): sonst ueberholte ein aelterer Stand einen juengeren
@@ -94,8 +95,11 @@ func (m *Manager) ClusterChangeErr(ctx context.Context, module, item, id string,
 	origin, at, ok := ClusterOrigin(ctx)
 	if !ok {
 		origin, at = m.d.NodeID(), time.Now()
-		m.pull.s2.mu.Lock() // Aenderung hier: abgelehnte Eintraege gleich wieder versuchen
-		m.pull.s2.due, m.pull.s2.tries = nil, nil
+		m.pull.s2.mu.Lock() // Aenderung hier: abgelehnte Eintraege gleich wieder versuchen - hoechstens alle 5 min
+		// (Monitor64 meldet laufend eigene Staende; sonst griffe die Wartezeit nie und jeder Abruf holte alles neu)
+		if now := time.Now(); now.Sub(m.pull.s2.reset) >= syncRetryReset {
+			m.pull.s2.due, m.pull.s2.tries, m.pull.s2.reset = nil, nil, now
+		}
 		m.pull.s2.mu.Unlock()
 	}
 	changed, err := m.logSync(module, item, id, deleted, origin, at)
@@ -476,3 +480,6 @@ func (m *Manager) firstReject(key string) bool {
 	s.warned[key] = true
 	return true
 }
+
+// syncRetryReset: so oft setzt eine eigene Aenderung die Wartezeit fuer abgelehnte Eintraege hoechstens zurueck.
+const syncRetryReset = 5 * time.Minute

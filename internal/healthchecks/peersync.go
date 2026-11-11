@@ -153,6 +153,9 @@ func (m *Module) peerChannels(ctx context.Context, local []int64, uids []string,
 }
 
 // DeletePeerCheck loescht einen Check, den eine andere Node geloescht hat (nicht, wenn er hier danach geaendert wurde).
+// true auch, wenn er hier schon fehlt: die Loeschung gilt, und eine weiterleitende Node gibt sie an den hub weiter
+// (sonst bliebe dort z. B. ein Docker-Check einer nicht verknuepften Node stehen, den diese Node beim Update schon
+// entfernt hatte).
 func (m *Module) DeletePeerCheck(ctx context.Context, token string, deletedAt time.Time, origin string) (bool, error) {
 	cur, err := m.st.Check(ctx, token)
 	if err != nil {
@@ -168,6 +171,6 @@ func (m *Module) DeletePeerCheck(ctx context.Context, token string, deletedAt ti
 	}
 	// Zeitpunkt der Loeschung wie bei der Urheberin (spaetere, aeltere Aenderungen holen ihn nicht zurueck)
 	_, err = m.st.w.ExecContext(ctx, `INSERT INTO hc_tombstones (token, revision, deleted_at) VALUES (?, 0, ?)
-		ON CONFLICT(token) DO UPDATE SET deleted_at = excluded.deleted_at`, token, ft(deletedAt))
-	return cur != nil, err
+		ON CONFLICT(token) DO UPDATE SET deleted_at = excluded.deleted_at WHERE excluded.deleted_at > hc_tombstones.deleted_at`, token, ft(deletedAt))
+	return err == nil, err
 }

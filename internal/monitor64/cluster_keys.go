@@ -97,7 +97,10 @@ func (m *Module) oldKeys(ctx context.Context) []string {
 }
 
 func (m *Module) keyGet(ctx context.Context) (json.RawMessage, bool, error) {
-	at := m.st.SettingOr(ctx, setKeyCluster, "")
+	at, _, err := m.st.Setting(ctx, setKeyCluster)
+	if err != nil {
+		return nil, false, err // Lesefehler nicht als Loeschung ausliefern
+	}
 	if at == "" {
 		return nil, false, nil
 	}
@@ -427,7 +430,7 @@ func (m *Module) clusterKeys(ctx context.Context, s *clusterSnap) {
 			if signer, err := m.nodeSigner(ctx); err == nil {
 				enc := m.st.SettingOr(ctx, setNodeKey, "")
 				if pem, err := m.box.Decrypt(enc); err == nil {
-					_ = m.useKey(ctx, pem, signer, time.Now(), true)
+					_ = m.useKey(ctx, pem, signer, m.keyTime(ctx), true)
 				}
 			}
 		}
@@ -613,7 +616,7 @@ func (m *Module) RotateKey(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return m.useKey(ctx, string(pem), signer, time.Now(), true)
+	return m.useKey(ctx, string(pem), signer, m.keyTime(ctx), true)
 }
 
 // importKey uebernimmt den Schluessel aus einem Konfig-Import wie einen Wechsel (der bisherige bleibt unter den alten,
@@ -632,7 +635,7 @@ func (m *Module) importKey(ctx context.Context, pem string) error {
 	if m.currentKeyFP(ctx) == transport.Fingerprint(signer.PublicKey()) {
 		return nil
 	}
-	return m.useKey(ctx, pem, signer, time.Now(), true)
+	return m.useKey(ctx, pem, signer, m.keyTime(ctx), true)
 }
 
 // ClusterJoined: diese Node ist einem Cluster beigetreten (peer.Joiner) - sie uebernimmt den Schluessel des Clusters,
@@ -676,4 +679,17 @@ func (m *Module) keyInfo(ctx context.Context) (keyInfo, error) {
 		out.OldKeys = append(out.OldKeys, transport.Fingerprint(o.PublicKey()))
 	}
 	return out, nil
+}
+
+// keyTime: Zeitstempel fuer einen neuen Cluster-Schluessel - nie vor dem des aktuellen. Verglichen wird ueber die
+// Uhr der erzeugenden Node; ging die beim aktuellen Schluessel vor, wuerde ein spaeterer Wechsel sonst ueberall
+// zurueckgedreht.
+func (m *Module) keyTime(ctx context.Context) time.Time {
+	now := time.Now()
+	if at := m.st.SettingOr(ctx, setKeyCluster, ""); at != "" {
+		if own, err := time.Parse(time.RFC3339Nano, at); err == nil && !now.After(own) {
+			return own.Add(time.Millisecond)
+		}
+	}
+	return now
 }

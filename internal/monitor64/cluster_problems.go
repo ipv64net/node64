@@ -58,7 +58,9 @@ func (m *Module) problemGet(ctx context.Context, uid string) (json.RawMessage, b
 		return nil, false, err
 	}
 	p.Notified = m.channelListToCluster(ctx, p.Notified)
-	p.Events = m.eventsWhere(ctx, `problem_uid = ? ORDER BY ts, id LIMIT `+strconv.Itoa(problemEventsMax), uid)
+	// die neuesten Eintraege (die aeltesten haben die anderen laengst; sonst kaeme ab 500 nichts Neues mehr an)
+	p.Events = m.eventsWhere(ctx, `problem_uid = ? ORDER BY ts DESC, id DESC LIMIT `+strconv.Itoa(problemEventsMax), uid)
+	slices.Reverse(p.Events)
 	b, err := json.Marshal(p)
 	return b, err == nil, err
 }
@@ -89,8 +91,17 @@ func (m *Module) problemApply(ctx context.Context, uid string, data json.RawMess
 	if err != nil {
 		return err
 	}
-	keepClosed := false
+	keepClosed, localNewer := false, false
 	if cur != nil {
+		// hier neuer (z. B. gerade quittiert, noch nicht gemeldet): Quittierung behalten und den eigenen Stand melden,
+		// statt ihn zu ueberschreiben und als abgeglichen zu merken (dann ginge die Quittierung ueberall verloren)
+		if parseTS(cur.Updated).After(parseTS(in.Updated)) {
+			localNewer = true
+			if in.Ack == "" {
+				in.Ack = cur.Ack
+			}
+			in.Updated = cur.Updated
+		}
 		if stateRank[cur.Worst] > stateRank[in.Worst] {
 			in.Worst = cur.Worst
 		}
@@ -125,6 +136,10 @@ func (m *Module) problemApply(ctx context.Context, uid string, data json.RawMess
 		m.csyncSet(ctx, "problem", uid, m.problemStamp(ctx, uid))
 		m.clusterChange(context.Background(), ClusterItemStatus, "problem:"+uid, false)
 		return supersededErr{"problem closed here"}
+	}
+	if localNewer {
+		m.clusterChange(context.Background(), ClusterItemStatus, "problem:"+uid, false)
+		return nil
 	}
 	m.csyncSet(ctx, "problem", uid, m.problemStamp(ctx, uid))
 	return nil

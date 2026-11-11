@@ -132,7 +132,7 @@
 			<td data-label="{{$.T "common.time"}}" class="text-nowrap">{{$.Time .Time}}</td>
 			<td data-label="{{$.T "nf.channel"}}">{{.Channel}}</td>
 			<td data-label="{{$.T "common.type"}}"><code>{{.Kind}}</code></td>
-			<td data-label="{{$.T "nf.subject"}}" class="text-break">{{if .CheckToken}}<a href="/healthchecks/{{.CheckToken}}">{{.Subject}}</a>{{else}}{{.Subject}}{{end}}</td>
+			<td data-label="{{$.T "nf.subject"}}" class="text-break">{{if .CheckToken}}<a href="{{checkURL .CheckToken}}">{{.Subject}}</a>{{else}}{{.Subject}}{{end}}</td>
 			<td data-label="{{$.T "nf.result"}}">{{if .OK}}<span class="badge text-bg-success">{{$.T "nf.ok"}}</span>{{else}}<span class="badge text-bg-danger">{{$.T "nf.failed"}}</span> <span class="small text-danger text-break">{{.Error}}</span>{{end}}</td>
 		</tr>
 		{{end}}

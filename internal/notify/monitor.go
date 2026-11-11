@@ -136,8 +136,13 @@ func (d *Dispatcher) composeMonitor(lang string, a Alert, m Message) Message {
 	case KindMonitorFlapping:
 		status = "flapping"
 	}
+	pl := make([]MonitorLine, len(lines)) // Webhook ohne eigenen Inhalt: Namen und Details uebersetzt wie im Text
+	for i, l := range lines {
+		l.Name, l.Detail = d.tx(lang, l.Name), d.tx(lang, l.Detail)
+		pl[i] = l
+	}
 	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "status": status, "time": m.Time.UTC().Format(time.RFC3339), "name": a.Data["host"],
-		"severity": a.Data["severity"], "lines": lines, "counts": counts, "url": m.URL, "title": m.Title, "text": m.Text,
+		"severity": a.Data["severity"], "lines": pl, "counts": counts, "url": m.URL, "title": m.Title, "text": m.Text,
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
 	return m
 }

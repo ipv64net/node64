@@ -91,7 +91,11 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 		rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = old.Trackers, old.Kinds, old.Failures, old.Missing, old.Provider
 		rt.Rising, rt.Local, rt.Trend, rt.Traps, rt.SeenUp = old.Rising, old.Local, old.Trend, old.Traps, old.SeenUp
 		old.mu.Unlock()
-		rt.view = old.getView()
+		if v := old.getView(); v != nil { // Ansicht mit dem neuen Host (Pause, Name, Gruppe gleich sichtbar)
+			nv := *v
+			nv.Host = h
+			rt.view = &nv
+		}
 		rt.dirty = true
 	} else if raw, _ := m.store.Runtime(ctx, h.UID); len(raw) > 0 {
 		var saved struct {

@@ -259,12 +259,9 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 // dispatchLocked startet einen faelligen Auftrag (oder zaehlt ihn als verspaetet) und plant den naechsten Lauf.
 func (s *Scheduler) dispatchLocked(ctx context.Context, j *job, now time.Time) {
-	// naechster Lauf auf dem Raster (verpasste Laeufe nicht nachholen)
-	next := j.next.Add(j.interval)
-	for !next.After(now) {
-		next = next.Add(j.interval)
-	}
-	j.next = next
+	// naechster Lauf auf dem Raster (verpasste Laeufe nicht nachholen); auch nach RunNow wieder auf dem eigenen Versatz -
+	// sonst liefen nach "alle neu pruefen" (Speichern von Schwellen, Wartung) alle Hosts fuer immer im Gleichschritt
+	j.next = firstRun(now, j.key, j.interval)
 	if j.gen != 0 {
 		heap.Push(&s.h, j)
 	}

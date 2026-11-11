@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 3.1.1 – 2026-11-11
+
+- Cluster mit älteren Nodes (1.4): Nach dem Update auf 1.5 liefert eine Node die beim Update entfernten Docker- und Proxmox-Checks anderer Nodes nicht mehr als Löschung aus – eine ältere Node hätte sonst ihren noch laufenden Check gelöscht.
+- Löscht eine nicht verknüpfte Node einen Check, gibt die weiterleitende Node die Löschung an IPv64.net weiter, auch wenn sie den Check selbst schon nicht mehr hatte (bisher blieb er dort stehen).
+
 ## 3.1.0 – 2026-11-11
 
 - Statusseiten: Healthchecks und Monitor64-Systeme stehen getrennt – auf der Seite als eigene Abschnitte „Dienste“ und „Systeme“ (je mit ihren Gruppen), im Editor mit eigener Überschrift in der Liste und in der Auswahl. Beides auf einer Seite bleibt möglich.

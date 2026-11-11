@@ -147,7 +147,7 @@ func (m *Module) overview(ctx context.Context) ovData {
 		if v.Maint != nil {
 			o.Maint = &maintBrief{Reason: v.Maint.Reason, End: v.Maint.End}
 		}
-		unreach := v.View == eval.ViewUnreachable
+		unreach := v.View == eval.ViewUnreachable && !h.Paused // pausiert: keine Probleme mehr zeigen
 		if unreach {
 			o.Unreach = unreachText(v)
 			d.Unreachable++
@@ -169,7 +169,7 @@ func (m *Module) overview(ctx context.Context) ovData {
 			if s.Vanished {
 				o.Vanished++
 			}
-			if st != eval.OK && !s.ShowOnly {
+			if st != eval.OK && !s.ShowOnly && !h.Paused {
 				o.Problems++
 				if !unreach {
 					p := ovProblem{HostUID: h.UID, Host: h.Name, Key: s.Key, Name: s.Name, State: stateName(st), Detail: firstNonEmpty(s.Cause, s.Text), Acked: s.Acked, Maint: v.Maint != nil}
@@ -521,7 +521,7 @@ func (m *Module) apiSeries(w http.ResponseWriter, r *http.Request) {
 	to, from := now, now.Add(-24*time.Hour)
 	if d, ok := ranges[q.Get("range")]; ok {
 		off, _ := strconv.Atoi(q.Get("off"))
-		if off < 0 || off > 1000 {
+		if off < 0 || off > 1000 || time.Duration(off) > (100*365*24*time.Hour)/d { // hoechstens 100 Jahre zurueck (kein Ueberlauf)
 			off = 0
 		}
 		to = now.Add(-time.Duration(off) * d)

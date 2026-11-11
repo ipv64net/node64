@@ -142,7 +142,11 @@ func recentNotifications(c *call, a map[string]any) (map[string]any, error) {
 		}
 		o := obj{"time": ts(m["time"]), "channel_id": i64(m, "channel_id"), "channel": clean(str(m, "channel"), 80), "kind": str(m, "kind"), "ok": boolean(m, "ok")}
 		if t := str(m, "check_token"); t != "" {
-			o["check_id"] = shortID(t)
+			if uid, ok := strings.CutPrefix(t, "m64:"); ok { // Monitor64-Meldung: Host statt Check
+				o["monitor64_host_id"] = uid
+			} else {
+				o["check_id"] = shortID(t)
+			}
 		}
 		o["untrusted"] = obj{"subject": clean(str(m, "subject"), 200), "error": clean(str(m, "error"), 300)}
 		out = append(out, o)

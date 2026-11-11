@@ -102,6 +102,7 @@ func TestClusterScanRetriesFailedChange(t *testing.T) {
 	ctx := context.Background()
 	b := newBus(t)
 	a := b.newNode("node-a", "A", 1, false)
+	b.newNode("node-b", "B", 2, false) // ohne andere Nodes sucht die Node nicht (nichts zu melden)
 	a.m.clusterScan(ctx)
 	a.failChange.Store(true)
 	h := &Host{Name: "h", Address: "192.0.2.51", Kind: "ssh", IntervalSec: 60}
@@ -393,5 +394,26 @@ func TestTrapStateOnTakeover(t *testing.T) {
 	rt.mu.Unlock()
 	if s := a.m.traps.snapshot(h.UID, true); !ok || s == nil || s.Pending != 1 || s.Total != 4 || len(s.List) != 1 || len(svc.Facts) != 1 || rt.Traps == nil || rt.Traps.Pending != 1 {
 		t.Fatalf("after takeover: %+v, facts %d", s, len(svc.Facts))
+	}
+}
+
+// Ohne andere Nodes sucht clusterScan nicht (sonst 15 Abfragen alle 2 s auf jeder einzelnen Node); kommt eine dazu,
+// meldet der erste Lauf alles.
+func TestClusterScanIdleWithoutMembers(t *testing.T) {
+	ctx := context.Background()
+	b := newBus(t)
+	a := b.newNode("node-a", "A", 1, false)
+	h := &Host{Name: "h", Address: "192.0.2.52", Kind: "ssh", IntervalSec: 60}
+	if err := a.m.store.SaveHost(ctx, h, testActor); err != nil {
+		t.Fatal(err)
+	}
+	a.m.clusterScan(ctx)
+	if _, ok := a.logged(ClusterItemConfig, "host:"+h.UID); ok || a.m.cl.scanFrom != "" {
+		t.Fatal("scanned without members")
+	}
+	b.newNode("node-b", "B", 2, false)
+	a.m.clusterScan(ctx)
+	if _, ok := a.logged(ClusterItemConfig, "host:"+h.UID); !ok {
+		t.Fatal("host not reported after a member joined")
 	}
 }

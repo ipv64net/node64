@@ -155,7 +155,8 @@ type Round struct {
 	Host        HostRef        `json:"host"`
 	Unreachable bool           `json:"unreachable"`
 	Maintenance bool           `json:"maintenance"`
-	Quiet       bool           `json:"quiet"` // Ruhezeit (nur fuer Erinnerungen; Rest macht der Dispatcher)
+	Quiet       bool           `json:"quiet"`                // Ruhezeit (nur fuer Erinnerungen; Rest macht der Dispatcher)
+	HostAcked   bool           `json:"host_acked,omitempty"` // "nicht erreichbar" quittiert (keine Erinnerung)
 	Services    []ServiceInput `json:"services"`
 }
 
@@ -249,7 +250,8 @@ type HostMemory struct {
 	Unreach   bool                      `json:"unreach,omitzero"`    // "nicht erreichbar" gemeldet
 	UnreachAt time.Time                 `json:"unreach_at,omitzero"` //
 	HostChans []string                  `json:"host_chans,omitempty"`
-	Maint     bool                      `json:"maint,omitzero"` // letzte Runde in Wartung
+	HostSent  time.Time                 `json:"host_sent,omitzero"` // zuletzt "nicht erreichbar" gemeldet (Erinnerung)
+	Maint     bool                      `json:"maint,omitzero"`     // letzte Runde in Wartung
 	Svcs      map[string]*ServiceMemory `json:"svcs,omitempty"`
 }
 
@@ -356,8 +358,21 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 		// Dienste (Unbekannt) werden nicht gemeldet und nicht mitgeschrieben.
 		if !hm.Unreach {
 			chans := rt.Route(Crit)
-			hm.Unreach, hm.UnreachAt, hm.HostChans = true, at, chans
+			hm.Unreach, hm.UnreachAt, hm.HostChans, hm.HostSent = true, at, chans, at
 			add(Line{Kind: LineUnreachable, State: Crit, Since: at}, chans)
+			break
+		}
+		// Erinnerung wie bei Kritisch (nicht erreichbar zaehlt als Kritisch), solange nicht quittiert
+		if hm.HostSent.IsZero() { // Gedaechtnis von vor dem Update: ab jetzt zaehlen, nicht sofort erinnern
+			hm.HostSent = at
+		}
+		if iv := rt.remind(Crit); iv > 0 && !r.HostAcked && !r.Quiet && at.Sub(hm.HostSent) >= iv {
+			chans := hm.HostChans
+			if len(chans) == 0 {
+				chans = rt.Route(Crit)
+			}
+			add(Line{Kind: LineUnreachable, State: Crit, Since: hm.UnreachAt}, chans)
+			hm.HostSent = at
 		}
 
 	case hm.Unreach || afterMaint:
@@ -366,7 +381,7 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 		if hm.Unreach {
 			base = hm.HostChans
 			add(Line{Kind: LineReachable, State: OK, Prev: Crit, Since: hm.UnreachAt}, hm.HostChans)
-			hm.Unreach, hm.UnreachAt, hm.HostChans = false, time.Time{}, nil
+			hm.Unreach, hm.UnreachAt, hm.HostChans, hm.HostSent = false, time.Time{}, nil, time.Time{}
 		}
 		for _, in := range r.Services {
 			s := hm.Svcs[in.Key]

@@ -2,6 +2,7 @@ package monitor64
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -72,6 +73,9 @@ func (s *clusterSnap) name(id string) string {
 
 // clusterRefresh liest die Mitglieder und merkt, seit wann sie ununterbrochen erreichbar sind.
 func (m *Module) clusterRefresh(ctx context.Context) *clusterSnap {
+	// auch aus Seiten und API aufgerufen: eine abgebrochene Anfrage darf keinen Stand "ohne Cluster" hinterlassen
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
 	now := m.cl.clock()
 	s := &clusterSnap{Self: m.clusterSelf(), SelfName: m.st.SettingOr(ctx, "node.name", ""), Peers: map[string]ClusterPeer{}, Stable: map[string]bool{}, At: now}
 	var list []ClusterPeer
@@ -294,14 +298,50 @@ func (m *Module) clusterOwners(ctx context.Context, s *clusterSnap) {
 	if err != nil {
 		return
 	}
+	now := m.cl.clock()
+	m.cl.mu.Lock()
+	if m.cl.ownerSeen == nil {
+		m.cl.ownerSeen = map[string]ownerSeen{}
+	}
+	for _, h := range hosts {
+		cur := ownerOf(h, s.Self)
+		if o, ok := m.cl.ownerSeen[h.UID]; !ok || o.node != cur {
+			// beim ersten Blick zaehlt die Zustaendigkeit als alt (ein echter Ausfall wird sofort uebernommen)
+			since := time.Time{}
+			if ok {
+				since = now
+			}
+			m.cl.ownerSeen[h.UID] = ownerSeen{node: cur, since: since}
+		}
+	}
+	m.cl.mu.Unlock()
 	for _, h := range hosts {
 		next, how := decideOwner(h, s)
 		if next == "" {
 			continue
 		}
+		if how == "takeover" {
+			// gerade erst gewechselt (z. B. getrennte Verbindung nur zwischen zwei Nodes: jede sieht die andere offline):
+			// nicht sofort zurueckholen, sonst wechselte die Zustaendigkeit in jedem Takt
+			m.cl.mu.Lock()
+			o := m.cl.ownerSeen[h.UID]
+			m.cl.mu.Unlock()
+			if !o.since.IsZero() && now.Sub(o.since) < takeoverHold {
+				continue
+			}
+		}
 		m.setOwner(ctx, h, next, how, s)
 	}
 }
+
+// ownerSeen: zustaendige Node eines Hosts und seit wann diese Node sie so sieht.
+type ownerSeen struct {
+	node  string
+	since time.Time
+}
+
+// takeoverHold: so lange nach einem Wechsel der Zustaendigkeit keine erneute Uebernahme durch diese Node.
+const takeoverHold = 5 * time.Minute
 
 // setOwner traegt eine neue zustaendige Node ein (Ereignis im Verlauf des Hosts, Meldung an den Cluster).
 func (m *Module) setOwner(ctx context.Context, h *Host, node, how string, s *clusterSnap) {
@@ -332,7 +372,10 @@ var errOwnerNoHost = errors.New("monitor64 cluster: owner entry before its host"
 func (m *Module) ownerGet(ctx context.Context, uid string) (json.RawMessage, bool, error) {
 	var node string
 	err := m.st.Reader().QueryRowContext(ctx, `SELECT owner_node FROM m64_hosts WHERE uid = ? AND deleted = 0`, uid).Scan(&node)
-	if err != nil || node == "" {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, err // Lesefehler nicht als Loeschung ausliefern
+	}
+	if node == "" {
 		return nil, false, nil
 	}
 	e := ownerEntry{Node: node, Events: m.eventsWhere(ctx, `host_uid = ? AND problem_uid = '' AND kind IN (?, ?) ORDER BY ts DESC, id DESC LIMIT `+strconv.Itoa(ownerEventsKeep),

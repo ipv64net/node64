@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: hanging accesses report "unreachable" instead of silently staying OK; explicitly chosen default channels get all messages; reminder for unreachable hosts; no "unknown" for push hosts after a restart; pausing visible right away; Prometheus label `service` with names; more robust cluster sync (acknowledgements, history, responsibility, keys).
+- Health checks: in a cluster with older nodes, the update no longer deletes Docker/Proxmox checks on the older nodes.
+- Notifications: Monitor64 entries in the log lead to the host (so far nowhere).
 - Monitor64: card on the dashboard; problems appear under "Recent incidents" together with the health checks.
 - PROXY64: with the reachability check switched off, the host no longer stays red ("unreachable") in the overview; health checks on the target still work.
 - PROXY64: security – location access lists can no longer be bypassed via `/%5Cadmin` (IIS/Windows targets); host headers no longer override anything on the node's own pages (no-store, X-Frame-Options, login); a gRPC header no longer bypasses the limit to the target.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -371,11 +372,10 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	if h.Paused {
 		return
 	}
-	// Datenbank-Schritte mit eigenem Zeitlimit: ein langsamer Zugang darf die Runde nicht abbrechen.
-	dbctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
-	defer cancel()
 	// Cluster: nur die zustaendige Node fragt ab und meldet (cluster_owner.go)
-	role, owner := m.clusterRole(dbctx, rt)
+	rctx, rcancel := context.WithTimeout(context.Background(), dbTimeout)
+	role, owner := m.clusterRole(rctx, rt)
+	rcancel()
 	if role == roleIdle {
 		m.idleView(rt, owner)
 		return
@@ -393,6 +393,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	partial := map[string]error{}  // Zugang hat nur teilweise geantwortet
 	var accViews []AccessView
 	var accInputs []eval.Access
+	pushWaiting := false
 	for _, a := range rt.accs {
 		name := accessName(a.row.Type)
 		av := AccessView{UID: a.row.UID, Type: a.row.Type, Name: name}
@@ -412,7 +413,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		if err != nil && len(svcs) == 0 && errors.Is(err, transport.ErrNotConnected) && m.sinceStart() < pushStartGrace {
 			// Push-Agent nach dem Start der Node noch nicht wieder verbunden (er wartet bis 5 min, bevor er es neu
 			// versucht): nicht als Ausfall zaehlen, sonst meldet jeder Neustart alle Push-Hosts "nicht erreichbar"
-			failedAcc[a.row.UID] = true
+			failedAcc[a.row.UID], pushWaiting = true, true
 			av.Error = i18nText("monitor64.detail.push_waiting")
 		} else if err != nil && len(svcs) == 0 {
 			rt.Failures[a.row.UID]++
@@ -437,6 +438,15 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 		}
 	}
+	// Push-Agents nach dem Start der Node noch nicht wieder da und sonst nichts geliefert: die Runde auslassen statt
+	// alle Werte nach 3 Intervallen "unbekannt" zu melden (der Agent wartet bis 5 min, bevor er neu verbindet)
+	if pushWaiting && len(found) == 0 {
+		return
+	}
+	// Datenbank-Schritte mit eigenem Zeitlimit, erst nach dem Abfragen: ein langsamer Zugang (bis zu 30 s) darf die
+	// Runde nicht abbrechen - sonst bliebe ein haengender Zugang ohne Meldung und der Host auf dem letzten Stand
+	dbctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	defer cancel()
 	// SNMP-Traps: eigener Dienst des Hosts, solange ein SNMP-Zugang Traps nutzt
 	if s, acc, ok := m.trapService(rt); ok {
 		found[s.Key] = got{svc: s, via: accessName("snmp"), acc: acc, rank: accessRank("snmp")}
@@ -603,6 +613,15 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind)
 			st := tr.Status(e, now)
+			if ok && st.State == eval.Unknown {
+				// Dienst kommt weiter, nur dieser Wert seit 3 Intervallen nicht (gestoppte VM mit Warnung zu CPU/RAM):
+				// gewollt weggelassen - die Warnung gilt nicht mehr, statt 7 Tage "unbekannt" (kurz fehlend, z. B. erste
+				// Runde ohne Rate, bleibt der letzte Zustand)
+				delete(rt.Kinds, key)
+				delete(rt.Trackers, key)
+				rt.dirty = true
+				continue
+			}
 			ms = append(ms, eval.MetricStatus{Name: name, Status: st, Notify: e.Notify()})
 		}
 		// Zustandsregeln (Facts)
@@ -771,6 +790,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	if role == roleReport {
 		m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
 		round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
+		if op := open[""]; op != nil {
+			round.HostAcked = op.Acked
+		}
 		m.notifyMu.Lock()
 		if m.notifier == nil {
 			m.notifyMu.Unlock()
@@ -992,24 +1014,18 @@ func (m *Module) dispatch(ctx context.Context, h *Host, msg eval.Message, unreac
 		data["after_maint"] = "1"
 	}
 	base := notify.CheckInfo{Token: "m64:" + h.UID, Name: h.Name, Type: "monitor64", Target: h.Address, Local: true, NotifyDown: true, NotifyUp: true, Critical: msg.CritInQuiet}
-	// Ist "Standardkanaele" irgendwo im Routing dieses Hosts gewaehlt, folgen die Standardkanaele diesem Weg; ein
-	// zusaetzlich ausdruecklich gewaehlter Standardkanal bekaeme sonst dieselbe Zeile doppelt (getrennte Meldungen).
-	cfg := m.config()
-	routeDefault := false
-	for _, c := range eval.ResolveRouting(cfg.notify, cfg.notifyOverrides, hostRef(h)).Channels {
-		if c.ID == defaultChannels && (c.Warn || c.Crit) {
-			routeDefault = true
-		}
-	}
+	// Geht diese Meldung an "Standardkanaele", bekommen die Standardkanaele sie auf diesem Weg; ein zusaetzlich
+	// ausdruecklich gewaehlter Standardkanal bekaeme sonst dieselbe Zeile doppelt (getrennte Meldungen). Geht sie nicht
+	// an "Standardkanaele" (z. B. Warnung, wenn die Standardkanaele nur Kritisch bekommen), zaehlt der ausdruecklich
+	// gewaehlte Kanal ganz normal - sonst ginge die Meldung verloren.
+	withDefault := slices.Contains(msg.Channels, defaultChannels)
 	var defaults map[int64]bool
-	if routeDefault {
+	if withDefault {
 		defaults = m.defaultChannelIDs(ctx)
 	}
-	withDefault := false
 	var explicit []int64
 	for _, id := range msg.Channels {
 		if id == defaultChannels {
-			withDefault = true
 			continue
 		}
 		if n, err := strconv.ParseInt(id, 10, 64); err == nil && !defaults[n] {

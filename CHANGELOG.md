@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Hängende Zugänge melden „nicht erreichbar“ statt still auf OK zu bleiben; ausdrücklich gewählte Standardkanäle bekommen alle Meldungen; Erinnerung für nicht erreichbare Hosts; nach einem Neustart kein „unbekannt“ bei Push-Hosts; Pausieren sofort sichtbar; Prometheus-Label `service` mit Namen; Cluster-Abgleich robuster (Quittierungen, Verlauf, Zuständigkeit, Schlüssel).
+- Healthchecks: Im Cluster mit älteren Nodes löscht das Update keine Docker-/Proxmox-Checks mehr auf den älteren Nodes.
+- Benachrichtigungen: Im Protokoll führen Monitor64-Meldungen zum Host (bisher ins Leere).
 - Monitor64: Karte im Dashboard; Probleme stehen unter „Letzte Störungen“ zusammen mit den Healthchecks.
 - PROXY64: Bei abgeschalteter Erreichbarkeitsprüfung bleibt der Host nicht mehr rot („nicht erreichbar“) in der Übersicht stehen; Healthchecks aufs Ziel gehen trotzdem.
 - PROXY64: Sicherheit – Location-Zugriffslisten nicht mehr per `/%5Cadmin` umgehbar (IIS/Windows-Ziele); Kopfzeilen des Hosts überschreiben auf Seiten der Node nichts mehr (no-store, X-Frame-Options, Anmeldung); gRPC-Kopf hebelt die Begrenzung ans Ziel nicht mehr aus.

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -78,7 +79,7 @@ func m64Overview(c *call, _ map[string]any) (map[string]any, error) {
 		m := asObj(e)
 		h := obj{"id": str(m, "uid"), "name": clean(str(m, "name"), 120), "address": clean(str(m, "address"), 200), "kind": str(m, "kind"),
 			"group": clean(str(m, "group"), 80), "tags": strs(m, "tags"), "state": str(m, "state"), "paused": boolean(m, "paused"),
-			"services": i64(m, "services"), "problems": i64(m, "problems"), "vanished": i64(m, "vanished"), "new_services": boolean(m, "new")}
+			"services": i64(m, "services"), "problems": i64(m, "problems"), "vanished": i64(m, "vanished"), "new_services": i64(m, "new")}
 		if boolean(m, "has_cpu") {
 			h["cpu_percent"] = round(num(m, "cpu"), 1)
 		}
@@ -139,8 +140,10 @@ func m64Host(c *call, a map[string]any) (map[string]any, error) {
 			v := obj{"name": str(mx, "name"), "value": round(num(mx, "value"), 3), "unit": str(mx, "unit")}
 			if st := asObj(mx["status"]); len(st) > 0 {
 				v["state"] = str(st, "level")
-				if th, ok := st["threshold"].(float64); ok && str(st, "level") != "ok" {
-					v["threshold"] = th // Schwelle der aktiven Stufe
+				if n, ok := st["threshold"].(json.Number); ok && str(st, "level") != "ok" { // Antworten kommen mit UseNumber
+					if th, err := n.Float64(); err == nil {
+						v["threshold"] = th // Schwelle der aktiven Stufe
+					}
 				}
 			}
 			metrics = append(metrics, v)

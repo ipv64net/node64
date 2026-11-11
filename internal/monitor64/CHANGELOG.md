@@ -2,6 +2,18 @@
 
 ## 0.1.4 – 2026-11-11
 
+- Hängt ein Zugang (Docker-Daemon, PVE-API oder BMC antwortet nicht), wird die Runde nicht mehr verworfen: Der Host wird wie erwartet „nicht erreichbar“ und gemeldet, statt auf dem letzten Stand (oft OK) stehen zu bleiben.
+- Benachrichtigungen: Ein ausdrücklich gewählter Kanal, der zugleich Standardkanal ist, bekommt Meldungen auch dann, wenn „Standardkanäle“ für diese Stufe nicht gewählt ist (bisher gingen sie verloren, im Verlauf stand trotzdem „gemeldet“).
+- Nicht erreichbare Hosts werden wie kritische Dienste erinnert (Standard: täglich), solange das Problem nicht quittiert ist.
+- Nach einem Neustart der Node melden Push-Hosts nicht mehr „unbekannt“, solange ihr Agent noch nicht wieder verbunden ist.
+- Pausieren zeigt den Host sofort als pausiert, auch in Übersicht, Dashboard und Kennzahlen; seine alten Probleme stehen dort nicht mehr.
+- Ein Wert, der bewusst nicht mehr kommt (z. B. CPU einer gestoppten VM), bleibt nicht mehr 7 Tage „unbekannt“, wenn er zuletzt eine Warnung hatte.
+- „Alle neu prüfen“ nach dem Speichern bringt die Hosts nicht mehr dauerhaft in den Gleichschritt (Lastspitzen).
+- „Dienste erkennen“ zählt einen Abbruch der Seite oder einen langsamen Zugang nicht mehr als Ausfall.
+- Prometheus: Das Label `service` trägt den Namen (englisch) statt eines internen Textschlüssels; ebenso die Zeilen im Webhook ohne eigenen Inhalt.
+- Cluster: Eine Quittierung, die eine andere Node gerade überschreibt, geht nicht mehr verloren; bei mehr als 500 Einträgen kommen die neuesten bei den anderen Nodes an; Änderungen während einer langen Sicherung werden nicht mehr verpasst; nach einem Wechsel der Zuständigkeit holt eine Node den Host nicht im 30-Sekunden-Takt zurück (getrennte Verbindung nur zwischen zwei Nodes); ein Schlüsselwechsel wird nicht mehr durch eine vorgehende Uhr einer anderen Node zurückgedreht; abgebrochene Anfragen der Oberfläche und Lesefehler stören den Cluster nicht mehr. Einzelne Nodes ohne Cluster fragen die Datenbank nicht mehr alle 2 s ab.
+- Verlauf: Ein weit zurückliegender Zeitraum (Jahr) zeigt keine falschen Zeiten mehr.
+
 - IPv6 durchgängig: Die Adresse eines Hosts nimmt IPv6 jetzt auch mit Port (`[2001:db8::1]:2222`) an; bisher wurde diese Schreibweise beim Speichern verstümmelt. Ungültige Adressen werden gleich abgelehnt.
 - IPv6 ohne eckige Klammern funktioniert jetzt auch in der Adresse eines Prometheus-Exporters (`fd00::1`) und bei Docker über `tcp://` bzw. `ssh://`; bei `ssh://user@fd00::1` wurde bisher still der letzte Block als Port gelesen.
 - Link-Local-Adressen mit Zone (`fe80::1%eth0`) funktionieren jetzt auch bei den Zugängen über HTTPS (Proxmox VE, Proxmox Backup Server, TrueNAS, Unraid, Server-BMC) und Prometheus.

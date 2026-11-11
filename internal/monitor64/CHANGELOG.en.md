@@ -2,6 +2,18 @@
 
 ## 0.1.4 – 2026-11-11
 
+- If an access hangs (Docker daemon, PVE API or BMC not answering), the round is no longer discarded: the host becomes "unreachable" and is notified as expected instead of staying at its last state (often OK).
+- Notifications: an explicitly chosen channel that is also a default channel now gets messages even when "default channels" is not chosen for that level (so far they were lost while the history still said "notified").
+- Unreachable hosts are reminded like critical services (default: daily) as long as the problem is not acknowledged.
+- After a node restart, push hosts no longer report "unknown" while their agent has not reconnected yet.
+- Pausing shows the host as paused right away, also in the overview, dashboard and metrics; its old problems no longer appear there.
+- A value that deliberately stops (e.g. CPU of a stopped VM) no longer stays "unknown" for 7 days when it last had a warning.
+- "Check all again" after saving no longer puts hosts into lockstep for good (load peaks).
+- "Discover services" no longer counts a cancelled page or a slow access as an outage.
+- Prometheus: the `service` label carries the name (English) instead of an internal text key; so do the lines in the webhook without custom body.
+- Cluster: an acknowledgement another node is just overwriting is no longer lost; with more than 500 entries the newest reach the other nodes; changes during a long backup are no longer missed; after a change of responsibility a node no longer takes the host back every 30 seconds (connection broken between just two nodes); a key change is no longer reverted by another node's clock running ahead; cancelled UI requests and read errors no longer disturb the cluster. Single nodes without a cluster no longer query the database every 2 s.
+- History: a range far back (year) no longer shows wrong times.
+
 - IPv6 throughout: a host's address now also accepts IPv6 with a port (`[2001:db8::1]:2222`); this form used to be mangled on save. Invalid addresses are rejected right away.
 - IPv6 without square brackets now also works in the address of a Prometheus exporter (`fd00::1`) and for Docker via `tcp://` or `ssh://`; with `ssh://user@fd00::1` the last block used to be read as the port silently.
 - Link-local addresses with a zone (`fe80::1%eth0`) now also work for the HTTPS accesses (Proxmox VE, Proxmox Backup Server, TrueNAS, Unraid, server BMC) and Prometheus.
