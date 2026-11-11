@@ -5,6 +5,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Monitor64: Neuer Zugang FRITZ!Box (TR-064) – Internetverbindung, DSL-Werte, Durchsatz, FRITZ!OS-Update.
+
 ## 1.5.5 – 2026-11-11
 
 - Monitor64: Raspberry Pi – die Stromversorgung wird jetzt über `vcgencmd` bzw. den Alarm des Kernels gelesen; die bisherige Abfrage schrieb auf dem Pi eine Warnung ins Kernel-Log und lief auf Raspberry Pi OS 13 ins Leere (Agent 0.1.2).
