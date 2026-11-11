@@ -187,7 +187,7 @@ func TestMCPEndToEnd(t *testing.T) {
 	// Echter MCP-Client
 	cs := mcpClient(t, a, key)
 	names := toolNames(t, cs)
-	want := []string{"audit_log", "check_history", "get_check", "list_checks", "list_incidents", "list_maintenance", "list_modules", "node_logs", "node_status"}
+	want := []string{"audit_log", "check_history", "cluster_status", "get_check", "list_checks", "list_incidents", "list_maintenance", "list_modules", "list_status_pages", "node_logs", "node_status"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools: %v", names)
 	}
@@ -235,7 +235,7 @@ func TestMCPEndToEnd(t *testing.T) {
 
 	// Schluessel nur fuer node: keine Healthchecks-Werkzeuge
 	nodeKey, _, _ := a.store.NewMCPKey(ctx, u.ID, "nur node", []string{"node:read"})
-	if n := toolNames(t, mcpClient(t, a, nodeKey)); !slices.Equal(n, []string{"list_modules", "node_status"}) {
+	if n := toolNames(t, mcpClient(t, a, nodeKey)); !slices.Equal(n, []string{"cluster_status", "list_modules", "node_status"}) {
 		t.Fatalf("node key tools: %v", n)
 	}
 	// Modul aus: Werkzeuge verschwinden
