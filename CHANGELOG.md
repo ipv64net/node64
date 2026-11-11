@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Raspberry Pi – die Stromversorgung wird jetzt über `vcgencmd` bzw. den Alarm des Kernels gelesen; die bisherige Abfrage schrieb auf dem Pi eine Warnung ins Kernel-Log und lief auf Raspberry Pi OS 13 ins Leere (Agent 0.1.2).
+
 ## 1.5.4 – 2026-11-11
 
 - Monitor64: Neuer Zugang Proxmox Mail Gateway – Dienste, Mail-Warteschlange (mit Schwelle), Durchsatz, Quarantäne, ClamAV-Signaturen, Cluster und Updates; Anmeldung mit einem Benutzer der Rolle „Auditor“.

@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: Raspberry Pi – the power supply is now read via `vcgencmd` or the kernel's alarm; the previous query wrote a warning to the kernel log on the Pi and found nothing on Raspberry Pi OS 13 (agent 0.1.2).
+
 ## 1.5.4 – 2026-11-11
 
 - Monitor64: new access Proxmox Mail Gateway – services, mail queue (with threshold), mail flow, quarantine, ClamAV signatures, cluster and updates; login with a user of the role "Auditor".
