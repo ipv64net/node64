@@ -21,6 +21,7 @@
 	var caBox = document.querySelector("[data-ca-box]");
 	var acmeBox = document.querySelector("[data-acme-box]");
 	var selfBox = document.querySelector("[data-self-box]");
+	var keyBox = document.querySelector("[data-key-box]"); // Schluesselart: selbst signiert und Let's Encrypt (#62)
 	var aliasSync = function () {
 		var src = "";
 		srcs.forEach(function (r) { if (r.checked) { src = r.value; } });
@@ -29,6 +30,7 @@
 		if (caBox) { caBox.classList.toggle("d-none", src !== "ca"); }
 		if (acmeBox) { acmeBox.classList.toggle("d-none", src === "ca" || src === "self"); }
 		if (selfBox) { selfBox.classList.toggle("d-none", src !== "self"); }
+		if (keyBox) { keyBox.classList.toggle("d-none", src === "ca"); }
 		if (!preview || !names || !zone) { return; }
 		var z = (zone.value || "").trim().toLowerCase().replace(/\.$/, "");
 		var p = prefix ? (prefix.value || "").trim().toLowerCase().replace(/^\.+|\.+$/g, "") : "";

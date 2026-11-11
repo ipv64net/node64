@@ -86,7 +86,7 @@ type Cert struct {
 	DNSAccount  int64     `json:"dns_account,omitempty"` // source dns
 	CAID        int64     `json:"ca_id,omitempty"`       // source ca
 	Days        int       `json:"days,omitempty"`        // source ca/self: Laufzeit
-	KeyType     string    `json:"key_type,omitempty"`    // source self: ecdsa oder rsa
+	KeyType     string    `json:"key_type,omitempty"`    // self und Lets Encrypt: ecdsa oder rsa ("" = ecdsa)
 	ACMECA      int64     `json:"acme_ca,omitempty"`     // 0 = Let's Encrypt, sonst weitere ACME-Stelle
 	Staging     bool      `json:"staging"`
 	AutoRenew   bool      `json:"auto_renew"`
@@ -528,7 +528,7 @@ type Request struct {
 	DNSAccount  int64    `json:"dns_account"`  // dns: Zugang
 	CAID        int64    `json:"ca_id"`        // ca: eigene CA
 	Days        int      `json:"days"`         // ca/self: Laufzeit (Standard 397, hoechstens 825)
-	KeyType     string   `json:"key_type"`     // self: ecdsa (Standard) oder rsa
+	KeyType     string   `json:"key_type"`     // self und Lets Encrypt (ipv64, alias, http, dns): ecdsa (Standard) oder rsa
 	ACMECA      int64    `json:"acme_ca"`      // weitere ACME-Stelle statt Let's Encrypt (0)
 	Staging     bool     `json:"staging"`
 	AutoRenew   *bool    `json:"auto_renew"` // Standard an
@@ -647,7 +647,17 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 	default:
 		return nil, invalid("source", "unknown source %q", req.Source)
 	}
-	if req.Source != SourceSelf {
+	switch req.Source {
+	case SourceSelf:
+	case SourceIPv64, SourceAlias, SourceHTTP, SourceDNS: // Let's Encrypt: wahlweise RSA (aeltere Geraete, z. B. DSM 6; #62)
+		switch req.KeyType {
+		case "", KeyECDSA:
+			req.KeyType = ""
+		case KeyRSA:
+		default:
+			return nil, invalid("key_type", "ecdsa or rsa")
+		}
+	default:
 		req.KeyType = ""
 	}
 	if req.Source != SourceAlias {
