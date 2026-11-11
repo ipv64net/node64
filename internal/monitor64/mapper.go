@@ -125,7 +125,10 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		}
 		out = append(out, sv)
 	}
-	for _, l := range cur.Local {
+	for i, l := range cur.Local {
+		if i >= maxLocalChecks { // wie der Agent selbst (localMaxChecks); ein fremder Agent schickt sonst beliebig viele
+			break
+		}
 		out = append(out, mapLocal(l))
 	}
 	out = append(out, mapWinSvc(cur.WinSvc)...) // Sammeldienst "Windows-Dienste" plus je Dienst (nicht vorgeschlagen)
@@ -527,7 +530,13 @@ func zfsErrors(raw string) string {
 }
 
 func mapLocal(l m64proto.LocalCheck) Service {
-	l.Text = model.Raw(l.Text) // Name und Text kommen vom Skript auf dem Host
+	l.Text = model.Raw(l.Text)             // Name und Text kommen vom Skript auf dem Host
+	if r := []rune(l.Name); len(r) > 200 { // Name ist Teil des Schluessels: begrenzen
+		l.Name = string(r[:200])
+	}
+	if len(l.Metrics) > 50 {
+		l.Metrics = l.Metrics[:50]
+	}
 	s := Service{Key: "local:" + l.Name, Name: model.Raw(l.Name), Kind: "local", Default: true, Text: l.Text}
 	for _, m := range l.Metrics {
 		s.Metrics = append(s.Metrics, Metric{Name: m.Name, Value: m.Value})

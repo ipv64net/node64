@@ -22,7 +22,7 @@ func newAPITester(typ string, h *Host, cfg accessConfig, secret string) (t apiTe
 	switch typ {
 	case "pve":
 		if addr == "" {
-			addr = "https://" + hostPort(h.Address, 8006)
+			addr = "https://" + apiHostPort(h.Address, 8006)
 		}
 		c, err := apis.NewPVE(apis.PVEConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin, Node: cfg.Node})
 		if err != nil {
@@ -31,7 +31,7 @@ func newAPITester(typ string, h *Host, cfg accessConfig, secret string) (t apiTe
 		return c, func() {}, nil
 	case "pbs":
 		if addr == "" {
-			addr = "https://" + hostPort(h.Address, 8007)
+			addr = "https://" + apiHostPort(h.Address, 8007)
 		}
 		c, err := apis.NewPBS(apis.PBSConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin})
 		if err != nil {

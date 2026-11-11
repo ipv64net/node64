@@ -82,12 +82,19 @@ func TestAPIHostsAndSecrets(t *testing.T) {
 		t.Fatalf("host detail: %+v", hd)
 	}
 	acc := hd.Accesses[0].UID
-	// Aendern ohne Geheimnis: bleibt; clear_secret: entfernt
-	if rec := e.do("PUT", "/api/monitor64/access/"+acc, map[string]any{"config": map[string]any{"url": "https://10.0.0.11:8006", "token_id": "monitor@pve!node64"}}); rec.Code != 200 {
+	// Aendern ohne Geheimnis: bleibt (gleiches Ziel); neues Ziel ohne neues Geheimnis: abgelehnt (es ginge sonst an
+	// das neue Ziel); clear_secret: entfernt
+	if rec := e.do("PUT", "/api/monitor64/access/"+acc, map[string]any{"config": map[string]any{"url": "https://192.0.2.10:8006", "token_id": "monitor@pve!other"}}); rec.Code != 200 {
 		t.Fatalf("access update: %d %s", rec.Code, rec.Body)
 	}
 	if got := e.col(`SELECT secret FROM m64_access WHERE uid = ?`, acc); got != secret {
 		t.Fatal("secret changed without new value")
+	}
+	if rec := e.do("PUT", "/api/monitor64/access/"+acc, map[string]any{"config": map[string]any{"url": "https://10.0.0.11:8006", "token_id": "monitor@pve!node64"}}); rec.Code != 400 || !strings.Contains(rec.Body.String(), "secret_again") {
+		t.Fatalf("new target without secret: %d %s", rec.Code, rec.Body)
+	}
+	if got := e.col(`SELECT secret FROM m64_access WHERE uid = ?`, acc); got != secret {
+		t.Fatal("secret changed by refused update")
 	}
 	if rec := e.do("PUT", "/api/monitor64/access/"+acc, map[string]any{"config": map[string]any{"url": "https://10.0.0.11:8006"}, "clear_secret": true}); rec.Code != 200 || strings.Contains(rec.Body.String(), secret) {
 		t.Fatalf("access clear: %d %s", rec.Code, rec.Body)

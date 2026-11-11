@@ -461,7 +461,7 @@ func (r *Receiver) process(b []byte, from netip.Addr) (reply []byte, ev *Event) 
 			return r.report(pkt, now), nil
 		}
 		if usm, ok := p.SecurityParameters.(*gosnmp.UsmSecurityParameters); ok && p.MsgFlags&gosnmp.AuthNoPriv != 0 &&
-			!r.inTime(engine, user, usm.AuthoritativeEngineBoots, usm.AuthoritativeEngineTime, now) {
+			!r.inTime(engine, user, from.Unmap().WithZone("").String(), usm.AuthoritativeEngineBoots, usm.AuthoritativeEngineTime, now) {
 			r.rejected.Add(1) // ausserhalb des Zeitfensters: wiederholte (mitgeschnittene) Nachricht
 			ev.Rejected = "time"
 			return nil, ev
@@ -536,9 +536,11 @@ func localEngineTime(now time.Time) (uint32, uint32) {
 
 // inTime prueft das Zeitfenster einer authentifizierten v3-Nachricht (RFC 3414 3.2.7). Informs tragen die eigene
 // Engine-ID (Empfaenger autoritativ): Boots gleich, Time hoechstens 150 s daneben. Traps tragen die Engine-ID des
-// Absenders: je Engine-ID und Benutzer zaehlt der zuletzt angenommene Stand – kleinere Boots oder eine Time mehr als
-// 150 s hinter dem fortgeschriebenen Stand sind eine Wiederholung.
-func (r *Receiver) inTime(engine, user string, boots, etime uint32, now time.Time) bool {
+// Absenders: je Engine-ID, Benutzer und Absender-Adresse zaehlt der zuletzt angenommene Stand – kleinere Boots oder
+// eine Time mehr als 150 s hinter dem fortgeschriebenen Stand sind eine Wiederholung. Je Absender, damit ein Host
+// (geklonte VM mit gleicher Engine-ID, oder ein fremder mit erfundenen Boots) nicht die Traps eines anderen sperrt;
+// nach timeStateIdle ohne angenommenen Trap beginnt die Zaehlung neu (Neustart ohne gespeicherte Boots).
+func (r *Receiver) inTime(engine, user, src string, boots, etime uint32, now time.Time) bool {
 	if boots >= maxEngineBoot {
 		return false
 	}
@@ -549,8 +551,12 @@ func (r *Receiver) inTime(engine, user string, boots, etime uint32, now time.Tim
 	}
 	r.tmu.Lock()
 	defer r.tmu.Unlock()
-	key := engine + "\x00" + user
+	key := engine + "\x00" + user + "\x00" + src
 	st := r.times[key]
+	if st != nil && now.Sub(st.at) > timeStateIdle {
+		delete(r.times, key)
+		st = nil
+	}
 	switch {
 	case st == nil:
 		if len(r.times) >= maxTimeStates { // voll: den am laengsten stillen vergessen
@@ -573,6 +579,9 @@ func (r *Receiver) inTime(engine, user string, boots, etime uint32, now time.Tim
 	est := float64(st.time) + max(0, now.Sub(st.at).Seconds()) // fortgeschriebene fremde snmpEngineTime
 	return float64(etime) >= est-timeWindow
 }
+
+// timeStateIdle: so lange gilt der zuletzt angenommene Stand eines Absenders (danach zaehlt ein neuer Stand).
+const timeStateIdle = time.Hour
 
 // headerUser: Platzhalter, damit gosnmp den Kopf ohne Benutzer liest (wird vom Paket ueberschrieben).
 const headerUser = "m64-header-placeholder"
@@ -882,7 +891,16 @@ func (l *limiter) allow(a netip.Addr, known bool, now time.Time) bool {
 				}
 			}
 			if len(l.m) >= l.max {
-				l.m = map[netip.Addr]*bucket{}
+				// noch voll (viele gefaelschte Absender): nicht alle vergessen - sonst bekaeme eine gefaelschte Adresse
+				// eines bekannten Hosts nach jedem Leeren neue Tokens und leerte den Topf der bekannten. Unbekannte
+				// zaehlen dann nur noch im gemeinsamen Topf, ein bekannter verdraengt einen beliebigen Eintrag.
+				if !known {
+					return l.take(&l.unknown, l.grate, l.grate, now)
+				}
+				for k := range l.m {
+					delete(l.m, k)
+					break
+				}
 			}
 		}
 		b = &bucket{tokens: l.burst}

@@ -52,11 +52,12 @@ func normalizeAddress(s, defPort string) (string, bool) {
 		return "", false
 	}
 	if a, err := netip.ParseAddr(s); err == nil && a.Is6() { // IPv6 ohne Klammern (fd00::10), sonst gilt der letzte Block als Port
-		s = "[" + a.String() + "]" // mit Zone scheitert url.Parse unten: abgelehnt
+		s = "[" + a.String() + "]"
 	}
 	if !strings.Contains(s, "://") {
 		s = "https://" + s
 	}
+	s = zoneEscape(s) // Link-Local mit Zone (fe80::1%eth0): in URLs als %25
 	u, err := url.Parse(s)
 	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.Hostname() == "" || u.User != nil {
 		return "", false
@@ -68,7 +69,26 @@ func normalizeAddress(s, defPort string) (string, bool) {
 	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
 		return "", false
 	}
-	return "https://" + net.JoinHostPort(strings.ToLower(u.Hostname()), port), true
+	host := u.Hostname()
+	zone := ""
+	if i := strings.Index(host, "%"); i >= 0 { // Zone (Name der Schnittstelle) nicht klein schreiben
+		host, zone = host[:i], "%25"+host[i+1:]
+	}
+	return "https://" + strings.Replace(net.JoinHostPort(strings.ToLower(host)+zone, port), "%2525", "%25", 1), true
+}
+
+// zoneEscape: in "[fe80::1%eth0]" die Zone als "%25eth0" schreiben (url.Parse verlangt das), schon kodierte bleiben.
+func zoneEscape(s string) string {
+	i, j := strings.Index(s, "["), strings.Index(s, "]")
+	if i < 0 || j < i {
+		return s
+	}
+	h := s[i+1 : j]
+	k := strings.Index(h, "%")
+	if k < 0 || strings.HasPrefix(h[k:], "%25") {
+		return s
+	}
+	return s[:i+1] + h[:k] + "%25" + h[k+1:] + s[j:]
 }
 
 // NormalizePin entfernt Doppelpunkte/Leerzeichen und prueft den Fingerabdruck (64 hex, leer = System-CA).

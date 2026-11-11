@@ -6212,6 +6212,7 @@
       "push_port_bind": "Port {port} for agents in push mode cannot be opened ({error}). The previous port stays open.",
       "push_test_saved": "Push mode: save first. The test uses the connection the agent has opened to the node.",
       "push_inactive": "The access is not active (disabled or not scheduled yet) – there is no agent connection to test.",
+      "secret_again": "The access address, type or fingerprint changed: please enter the secret (password or API token) again – the stored one only goes to the stored target.",
       "test_save_first": "Address or fingerprint were changed: the stored secret is only sent to the stored target. Please save first or enter the secret again.",
       "trap": "Invalid trap request from another node.",
       "trap_owner": "This node does not monitor the host; the trap stays with the receiving node.",

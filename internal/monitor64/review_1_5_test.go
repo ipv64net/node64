@@ -3,6 +3,7 @@ package monitor64
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,5 +100,25 @@ func TestProblemGetSendsNewestEvents(t *testing.T) {
 	}
 	if want := ts(t0.Add(time.Duration(problemEventsMax+19) * time.Second)); last.TS != want {
 		t.Fatalf("newest event missing: %s, want %s", last.TS, want)
+	}
+}
+
+// API-Zugaenge ohne eigene URL: ein Port in der Adresse des Hosts (SSH) gilt nicht fuer die API.
+func TestAPIHostPortIgnoresHostPort(t *testing.T) {
+	for in, want := range map[string]string{"nas:2222": "nas:8006", "[2001:db8::1]:2222": "[2001:db8::1]:8006", "fe80::1%eth0": "[fe80::1%eth0]:8006", "nas": "nas:8006"} {
+		if got := apiHostPort(in, 8006); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Export ohne Passwort: Push-Token nicht im Klartext; mit Passwort verschluesselt und beim Import zurueck.
+func TestExportSealsPushToken(t *testing.T) {
+	cfg := `{"mode":"push","token":"m64p_secret_token_value"}`
+	if out := sealPushToken(nil, cfg); strings.Contains(out, "secret_token") || strings.Contains(out, "token_sealed") {
+		t.Fatalf("without password: %s", out)
+	}
+	if out := sealPushToken(nil, `{"mode":"pull"}`); out != `{"mode":"pull"}` {
+		t.Fatalf("other access changed: %s", out)
 	}
 }

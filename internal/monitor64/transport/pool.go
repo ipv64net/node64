@@ -68,6 +68,7 @@ func (p *Pool) Agent(key string, cfg AgentConfig) (*AgentClient, error) {
 		return nil, ErrClosed
 	}
 	if e := p.entries[key]; e != nil && e.agent != nil && e.sig == sig && sameHostKey(e.conn, cfg.HostKey) {
+		e.conn.setOnHostKey(cfg.OnHostKey)
 		e.keep()
 		p.mu.Unlock()
 		return e.agent, nil
@@ -98,6 +99,7 @@ func (p *Pool) SSH(key string, cfg SSHConfig) (*SSHClient, error) {
 		return nil, ErrClosed
 	}
 	if e := p.entries[key]; e != nil && e.ssh != nil && e.sig == sig && sameHostKey(e.conn, cfg.HostKey) {
+		e.conn.setOnHostKey(cfg.OnHostKey)
 		e.keep()
 		p.mu.Unlock()
 		return e.ssh, nil

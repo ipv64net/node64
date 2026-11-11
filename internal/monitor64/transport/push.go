@@ -66,7 +66,8 @@ const (
 	pushParkedUnverified  = 2                // ... davon aus Netzen ohne erfolgreichen Handshake fuer den Zugang
 	pushParkedPerNet      = 256
 	pushParkedTotal       = 4096
-	pushFailFree          = 20 // Fehlversuche je Netz ohne Sperre
+	pushFailFree          = 20  // Fehlversuche je Netz ohne Sperre
+	pushFail48Free        = 100 // ... je IPv6-/48 (Wechsel des /64 umgeht die Sperre je Netz)
 	pushFailBlock         = 5 * time.Minute
 	pushFailForget        = 10 * time.Minute
 	pushGoodForget        = 24 * time.Hour
@@ -448,7 +449,8 @@ func (l *PushListener) admit(c net.Conn, n, n48 string, now time.Time) bool {
 	if l.closed || l.refusedLocked(n, now) || l.pending >= pushPendingTotal || l.pendNet[n] >= pushPendingPerNet {
 		return false
 	}
-	if !l.goodLocked(n, now) && (l.pending >= pushPendingTotal-pushPendingReserve || (n48 != "" && l.pend48[n48] >= pushPendingPer48)) {
+	if !l.goodLocked(n, now) && (l.pending >= pushPendingTotal-pushPendingReserve || (n48 != "" && l.pend48[n48] >= pushPendingPer48) ||
+		(n48 != "" && l.refusedLocked("48:"+n48, now))) {
 		return false
 	}
 	l.pending++
@@ -593,6 +595,9 @@ func (l *PushListener) handleHello(c net.Conn, n, n48 string) {
 	if b == nil || b.blockedLocked(n, now) {
 		if b == nil && !l.closed {
 			l.failLocked(n, now)
+			if n48 != "" && !l.goodLocked(n, now) { // auch je /48: viele /64 eines Anschlusses umgehen die Sperre je Netz sonst
+				countFail(l.fails, "48:"+n48, now, pushFail48Free, pushFailBlock, pushMaxNets)
+			}
 		}
 		delete(l.conns, c)
 		l.mu.Unlock()

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"math"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gosnmp/gosnmp"
@@ -74,8 +76,9 @@ func statusOf(err error) gosnmp.SNMPError {
 
 // gsConn ist die echte Verbindung ueber gosnmp.
 type gsConn struct {
-	g    *gosnmp.GoSNMP
-	bulk *atomic.Int32 // gelernte Grenze Varbinds je GETBULK (0 = keine; gehoert dem Collector, ueberlebt neue Verbindungen)
+	g      *gosnmp.GoSNMP
+	bulk   *atomic.Int32 // gelernte Grenze Varbinds je GETBULK (0 = keine; gehoert dem Collector, ueberlebt neue Verbindungen)
+	bulkAt *atomic.Int64 // wann gelernt (Unix-Sekunden): nach bulkRelearn wieder mit voller Groesse versuchen
 }
 
 func (c *gsConn) v1() bool { return c.g.Version == gosnmp.Version1 }
@@ -116,6 +119,10 @@ func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]p
 	c.g.Context = ctx
 	n := uint32(max(1, len(oids)))
 	if c.bulk != nil {
+		// gelernte Grenze nur eine Weile: ein einzelner Verlust (WLAN, VPN) drosselt sonst fuer immer
+		if c.bulkAt != nil && c.bulk.Load() > 0 && time.Since(time.Unix(c.bulkAt.Load(), 0)) > bulkRelearn {
+			c.bulk.Store(0)
+		}
 		if lim := uint32(max(0, c.bulk.Load())); lim > 0 && maxRep*n > lim {
 			maxRep = max(1, lim/n)
 		}
@@ -126,6 +133,9 @@ func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]p
 		if err == nil {
 			if shrunk && c.bulk != nil {
 				c.bulk.Store(int32(min(maxRep*n, math.MaxInt32)))
+				if c.bulkAt != nil {
+					c.bulkAt.Store(time.Now().Unix())
+				}
 			}
 			return res, nil
 		}
@@ -135,6 +145,9 @@ func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]p
 		maxRep, shrunk = max(1, maxRep/2), true
 	}
 }
+
+// bulkRelearn: so lange gilt eine gelernte GETBULK-Grenze.
+const bulkRelearn = time.Hour
 
 // isTimeout: Anfrage ohne Antwort (gosnmp meldet "request timeout").
 func isTimeout(err error) bool {
@@ -414,6 +427,20 @@ func getScalars(ctx context.Context, c conn, oids []string) (map[string]pdu, err
 			res, err := c.get(ctx, chunk)
 			if err != nil {
 				var se *snmpError
+				if errors.As(err, &se) && se.status == gosnmp.TooBig && len(chunk) > 1 {
+					// Antwort zu gross fuer den Agenten (kleine Paketgrenze, lange Texte): in zwei Haelften fragen
+					half := len(chunk) / 2
+					for _, part := range [][]string{chunk[:half], chunk[half:]} {
+						sub, err := getScalars(ctx, c, part)
+						for k, v := range sub {
+							out[k] = v
+						}
+						if err != nil {
+							return out, err
+						}
+					}
+					break
+				}
 				if errors.As(err, &se) && se.status == gosnmp.NoSuchName && se.index >= 1 && se.index <= len(chunk) {
 					chunk = append(chunk[:se.index-1], chunk[se.index:]...)
 					continue
@@ -482,11 +509,8 @@ func sortIdx(l []string) {
 		o, _ := parseOID("0." + s)
 		parsed[s] = o
 	}
-	for i := 1; i < len(l); i++ { // Einfuegesortierung genuegt (Tabellen sind meist schon sortiert)
-		for j := i; j > 0 && cmpOID(parsed[l[j]], parsed[l[j-1]]) < 0; j-- {
-			l[j], l[j-1] = l[j-1], l[j]
-		}
-	}
+	// die Indizes kommen aus Maps (zufaellige Reihenfolge): richtig sortieren statt Einfuegesortierung (O(n²))
+	slices.SortFunc(l, func(a, b string) int { return cmpOID(parsed[a], parsed[b]) })
 }
 
 // walkReqLimit: hoechstens so viele Anfragen je Tabellen-Abfrage mit n Spalten.

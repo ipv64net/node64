@@ -280,10 +280,21 @@ func (c *conn) get(ctx context.Context) (*ssh.Client, error) {
 		}
 		c.mu.Unlock()
 	}()
-	if learned != "" && c.cfg.onHostKey != nil {
-		c.cfg.onHostKey(learned)
+	c.mu.Lock()
+	onKey := c.cfg.onHostKey
+	c.mu.Unlock()
+	if learned != "" && onKey != nil {
+		onKey(learned)
 	}
 	return cl, nil
+}
+
+// setOnHostKey: Rueckruf fuer den ersten Hostschluessel ersetzen (Client aus dem Pool wiederverwendet: der alte gehoerte
+// zum Sammler vor dem Neuladen - der gelernte Schluessel kaeme sonst beim neuen nie an, und TOFU liefe erneut).
+func (c *conn) setOnHostKey(f func(string)) {
+	c.mu.Lock()
+	c.cfg.onHostKey = f
+	c.mu.Unlock()
 }
 
 // release gibt die Verbindung nach einer Anfrage frei; broken schliesst sie (naechste Anfrage baut neu auf).

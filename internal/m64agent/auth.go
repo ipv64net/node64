@@ -363,13 +363,14 @@ func (s *keyStore) report(msg string, err error) {
 // Gezaehlt wird je exakter Adresse und je Netz (IPv6 /64): ein Angreifer im selben /64 wie eine Node wird gesperrt,
 // auch wenn er die Adresse wechselt; die Node mit ihrer bekannten Adresse nicht.
 const (
-	failFree     = 5                // so viele Fehlversuche ohne Sperre
-	failBlockMin = time.Minute      // erste Sperre, verdoppelt sich je weiterem Fehlversuch
-	failBlockMax = 30 * time.Minute //
-	failForget   = time.Hour        // Zaehler verfaellt nach so langer Ruhe
-	failMaxIPs   = 4096             // hoechstens so viele Eintraege merken (volle Liste: siehe evict)
-	goodForget   = 24 * time.Hour   // Adresse mit erfolgreicher Anmeldung gilt so lange als bekannt
-	goodMaxIPs   = 1024             // hoechstens so viele bekannte Adressen merken
+	failFree      = 5                // so viele Fehlversuche ohne Sperre
+	failFreeGroup = 25               // ... je IPv6-/48
+	failBlockMin  = time.Minute      // erste Sperre, verdoppelt sich je weiterem Fehlversuch
+	failBlockMax  = 30 * time.Minute //
+	failForget    = time.Hour        // Zaehler verfaellt nach so langer Ruhe
+	failMaxIPs    = 4096             // hoechstens so viele Eintraege merken (volle Liste: siehe evict)
+	goodForget    = 24 * time.Hour   // Adresse mit erfolgreicher Anmeldung gilt so lange als bekannt
+	goodMaxIPs    = 1024             // hoechstens so viele bekannte Adressen merken
 )
 
 // Verbindungen ohne Anmeldung (Handshake laeuft) begrenzen, damit sie die Plaetze angemeldeter Nodes nicht belegen.
@@ -442,7 +443,7 @@ func (l *limiter) refused(p peer, now time.Time) bool {
 	if l.known(p.ip, now) {
 		return false
 	}
-	return l.blocked(p.ip, now) || (p.net != p.ip && l.blocked(p.net, now))
+	return l.blocked(p.ip, now) || (p.net != p.ip && l.blocked(p.net, now)) || (p.grp != "" && l.blocked("grp:"+p.grp, now))
 }
 
 // failPeer zaehlt einen Fehlversuch je exakter Adresse und je Netz (bekannte Adressen nicht: sie werden ohnehin
@@ -455,9 +456,15 @@ func (l *limiter) failPeer(p peer, now time.Time) {
 	if p.net != p.ip {
 		l.fail(p.net, now)
 	}
+	if p.grp != "" { // auch je /48: wer das /64 wechselt, entgeht sonst jeder Sperre und haelt alle Plaetze
+		l.failN("grp:"+p.grp, now, failFreeGroup)
+	}
 }
 
-func (l *limiter) fail(key string, now time.Time) {
+func (l *limiter) fail(key string, now time.Time) { l.failN(key, now, failFree) }
+
+// failN zaehlt einen Fehlversuch und sperrt ab free Versuchen.
+func (l *limiter) failN(key string, now time.Time, free int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.m == nil {
@@ -476,8 +483,8 @@ func (l *limiter) fail(key string, now time.Time) {
 	}
 	st.fails++
 	st.last = now
-	if st.fails >= failFree {
-		d := failBlockMin << min(st.fails-failFree, 10)
+	if st.fails >= free {
+		d := failBlockMin << min(st.fails-free, 10)
 		st.until = now.Add(min(d, failBlockMax))
 	}
 }

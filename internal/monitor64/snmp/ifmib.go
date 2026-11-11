@@ -206,6 +206,11 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 		var parts []string
 		rin, ok1 := c.rate(pre+"in", inOct, r.at)
 		rout, ok2 := c.rate(pre+"out", outOct, r.at)
+		if ok1 && ok2 && speed > 0 && math.Max(rin, rout)*8/1e6 > speed*1.5 {
+			// mehr als die Port-Geschwindigkeit: Zaehler zurueckgesetzt (clear counters, neu angelegte Schnittstelle),
+			// kein Ueberlauf - diese Runde keinen Wert statt einer Spitze
+			ok1 = false
+		}
 		if ok1 && ok2 {
 			inM, outM := rin*8/1e6, rout*8/1e6
 			s.Metrics = append(s.Metrics, model.Metric{Name: "in", Value: round2(inM), Unit: "Mbit/s"}, model.Metric{Name: "out", Value: round2(outM), Unit: "Mbit/s"})
@@ -254,7 +259,10 @@ func (c *Collector) buildPorts(r *round, t table, hc bool) {
 				s.Facts = append(s.Facts, model.Fact{Code: FactIfDown, Text: model.T("monitor64.txt.no_link", "name", in.name)})
 			}
 		}
-		if up && speed > 0 {
+		if !up || in.typ == 71 { // ohne Link (neues Geraet, neu ausgehandelt) bzw. WLAN (Rate schwankt): neu lernen
+			delete(c.maxSpeed, key)
+		}
+		if up && speed > 0 && in.typ != 71 {
 			if mx := c.maxSpeed[key]; mx > 0 && speed < mx {
 				s.Facts = append(s.Facts, model.Fact{Code: FactIfSpeedLow, Text: model.T("monitor64.txt.speed_instead", "now", speedText(speed), "max", speedText(mx))})
 				parts = append(parts, model.T("monitor64.txt.slower", "v", speedText(mx)))

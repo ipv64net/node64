@@ -312,6 +312,11 @@ const (
 	trendEvery     = time.Hour          // Trend "voll in N Tagen" hoechstens so oft neu rechnen
 	dbTimeout      = 20 * time.Second   // Datenbank-Schritte einer Runde (eigenes Zeitlimit, unabhaengig von den Zugaengen)
 	staleKindAfter = 7 * 24 * time.Hour // Messgroesse so lange nicht geliefert: Tracker vergessen
+
+	// Obergrenzen fuer Berichte, die vom ueberwachten Host kommen (nicht vertrauenswuerdig): sonst fuellte ein
+	// manipulierter Agent mit immer neuen Namen je Runde Datenbank und Speicher
+	maxServicesPerAccess = 5000
+	maxLocalChecks       = 2000
 )
 
 // i18nText baut einen uebersetzbaren Text ("i18n:<schluessel>?k=v"); Oberflaeche und Meldungen uebersetzen ihn
@@ -431,6 +436,10 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		accViews = append(accViews, av)
 		accInputs = append(accInputs, eval.Access{Name: a.row.UID, Failures: av.Failures})
 		rank := accessRank(a.row.Type)
+		if len(svcs) > maxServicesPerAccess { // Bericht eines (fremden) Agents bzw. Geraets: nicht beliebig viele Dienste
+			m.log.Warn("monitor64: too many services, rest dropped", "host", h.Name, "access", a.row.UID, "count", len(svcs))
+			svcs = svcs[:maxServicesPerAccess]
+		}
 		for _, s := range svcs {
 			s.Metrics = finiteMetrics(s.Metrics)
 			if g, ok := found[s.Key]; !ok || rank < g.rank {

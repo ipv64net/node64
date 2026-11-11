@@ -39,7 +39,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 	switch typ {
 	case "pve":
 		if addr == "" {
-			addr = "https://" + hostPort(h.Address, 8006)
+			addr = "https://" + apiHostPort(h.Address, 8006)
 		}
 		c, err := apis.NewPVE(apis.PVEConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin, Node: cfg.Node, Seen: m.pveSeen})
 		if err != nil {
@@ -60,7 +60,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 		return ad, nil
 	case "pbs":
 		if addr == "" {
-			addr = "https://" + hostPort(h.Address, 8007)
+			addr = "https://" + apiHostPort(h.Address, 8007)
 		}
 		c, err := apis.NewPBS(apis.PBSConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin})
 		if err != nil {
@@ -99,7 +99,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 func newProm(h *Host, cfg accessConfig, secret string) (*promscrape.Collector, error) {
 	u := cfg.URL
 	if u == "" {
-		u = hostPort(h.Address, promscrape.DefaultPort)
+		u = apiHostPort(h.Address, promscrape.DefaultPort)
 	}
 	return promscrape.New(promscrape.Config{URL: u, User: cfg.User, Secret: secret, Pin: cfg.Pin, Metrics: cfg.Metrics, Map: MapReport})
 }
@@ -116,7 +116,7 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 	switch typ {
 	case "nut":
 		if addr == "" {
-			addr = hostPort(h.Address, 3493)
+			addr = apiHostPort(h.Address, 3493)
 		}
 		c, err := apis.NewNUT(apis.NUTConfig{Address: addr, UPS: splitAddrs(cfg.UPS), User: cfg.User, Password: secret, TLS: cfg.TLS, Pin: cfg.Pin})
 		if err != nil {
@@ -125,7 +125,7 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 		return c, func() {}, nil
 	case "truenas":
 		if addr == "" {
-			addr = "https://" + hostPort(h.Address, 443)
+			addr = "https://" + apiHostPort(h.Address, 443)
 		}
 		c, err := apis.NewTrueNAS(apis.TrueNASConfig{Address: addr, APIKey: secret, User: cfg.User, Pin: cfg.Pin, API: cfg.API})
 		if err != nil {
@@ -134,7 +134,7 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 		return c, c.Close, nil
 	case "unraid":
 		if addr == "" {
-			addr = "http://" + hostPort(h.Address, 80)
+			addr = "http://" + apiHostPort(h.Address, 80)
 		}
 		c, err := apis.NewUnraid(apis.UnraidConfig{Address: addr, APIKey: secret, Pin: cfg.Pin})
 		if err != nil {
@@ -143,7 +143,7 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 		return c, c.Close, nil
 	case "redfish":
 		if addr == "" {
-			addr = "https://" + hostPort(h.Address, 443)
+			addr = "https://" + apiHostPort(h.Address, 443)
 		}
 		c, err := apis.NewRedfish(apis.RedfishConfig{Address: addr, User: cfg.User, Password: secret, Pin: cfg.Pin, Session: cfg.Session})
 		if err != nil {

@@ -6212,6 +6212,7 @@
       "push_port_bind": "Port {port} für Agents im Push-Betrieb lässt sich nicht öffnen ({error}). Der bisherige Port bleibt offen.",
       "push_test_saved": "Push-Betrieb: erst speichern. Getestet wird über die Verbindung, die der Agent zur Node aufgebaut hat.",
       "push_inactive": "Der Zugang ist nicht aktiv (ausgeschaltet oder noch nicht eingeplant) – es gibt keine Verbindung des Agents zum Testen.",
+      "secret_again": "Adresse, Art oder Fingerabdruck des Zugangs wurden geändert: Bitte das Geheimnis (Passwort bzw. API-Token) neu eingeben – das gespeicherte geht nur an das gespeicherte Ziel.",
       "test_save_first": "Adresse bzw. Fingerabdruck wurden geändert: das gespeicherte Geheimnis geht nur an das gespeicherte Ziel. Bitte erst speichern oder das Geheimnis neu eingeben.",
       "trap": "Ungültige Trap-Anfrage einer anderen Node.",
       "trap_owner": "Diese Node überwacht den Host nicht; der Trap bleibt bei der empfangenden Node.",

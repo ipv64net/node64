@@ -75,6 +75,7 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 			}
 			if t.name == "m64_access" {
 				row["secret"] = m.sealSecret(seal, fmt.Sprint(row["secret"]))
+				row["config"] = sealPushToken(seal, fmt.Sprint(row["config"]))
 			}
 			out.Tables[t.name] = append(out.Tables[t.name], row)
 		}
@@ -125,6 +126,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			}
 			if t.name == "m64_access" {
 				row["secret"] = m.unsealSecret(seal, fmt.Sprint(row["secret"]))
+				row["config"] = m.unsealPushToken(ctx, seal, uid, fmt.Sprint(row["config"]))
 			}
 			if t.name == "m64_overrides" && fmt.Sprint(row["scope"]) == "notify" {
 				row["data"] = remapNotifyOverride(ctx, fmt.Sprint(row["data"]))
@@ -253,5 +255,67 @@ func remapNotifyOverride(ctx context.Context, raw string) string {
 	}
 	o.Channels = remapChannelIDs(ctx, o.Channels)
 	b, _ := json.Marshal(o)
+	return string(b)
+}
+
+// sealPushToken: Token des Push-Betriebs im Export wie ein Geheimnis behandeln (collectors.go) - mit Passwort
+// verschluesselt (token_sealed), ohne Passwort weggelassen. Andere Zugaenge bleiben unveraendert.
+func sealPushToken(seal module.SecretSealer, cfg string) string {
+	var c map[string]any
+	if json.Unmarshal([]byte(cfg), &c) != nil {
+		return cfg
+	}
+	tok, ok := c["token"].(string)
+	if !ok || tok == "" {
+		return cfg
+	}
+	delete(c, "token")
+	if seal != nil {
+		c["token_sealed"] = seal.Encrypt(tok)
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return cfg
+	}
+	return string(b)
+}
+
+// unsealPushToken: Gegenstueck beim Import. Ohne Token (Export ohne Passwort) bleibt der Token eines vorhandenen
+// Zugangs mit derselben uid erhalten.
+func (m *Module) unsealPushToken(ctx context.Context, seal module.SecretSealer, uid, cfg string) string {
+	var c map[string]any
+	if json.Unmarshal([]byte(cfg), &c) != nil {
+		return cfg
+	}
+	sealed, hasSealed := c["token_sealed"].(string)
+	if _, hasTok := c["token"]; hasTok && !hasSealed {
+		return cfg // aelterer Export mit Token im Klartext
+	}
+	delete(c, "token_sealed")
+	tok := ""
+	if hasSealed && seal != nil {
+		if plain, err := seal.Decrypt(sealed); err == nil {
+			tok = plain
+		}
+	}
+	if tok == "" {
+		var old string
+		if m.st.Reader().QueryRowContext(ctx, `SELECT config FROM m64_access WHERE uid = ?`, uid).Scan(&old) == nil {
+			var oc map[string]any
+			if json.Unmarshal([]byte(old), &oc) == nil {
+				tok, _ = oc["token"].(string)
+			}
+		}
+	}
+	if tok == "" && !hasSealed {
+		return cfg
+	}
+	if tok != "" {
+		c["token"] = tok
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return cfg
+	}
 	return string(b)
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ipv64net/node64/internal/monitor64/snmp"
+	"github.com/ipv64net/node64/internal/monitor64/transport"
 )
 
 // Zugang SNMP (Paket snmp): Konfiguration pruefen, Geheimnis (Community bzw. v3-Passwoerter als snmp.Secret-JSON)
@@ -76,7 +77,7 @@ func cleanSNMPConfig(typ string, c *accessConfig) error {
 
 // snmpConfig baut die Konfiguration des Sammlers aus Host, Zugang und entschluesseltem Geheimnis.
 func snmpConfig(h *Host, cfg accessConfig, secret string) snmp.Config {
-	return snmp.Config{Address: h.Address, Port: cfg.Port, Version: cfg.SNMPVersion, User: cfg.User, Level: cfg.Level, AuthProto: cfg.AuthProto,
+	return snmp.Config{Address: transport.SplitHost(h.Address), Port: cfg.Port, Version: cfg.SNMPVersion, User: cfg.User, Level: cfg.Level, AuthProto: cfg.AuthProto,
 		PrivProto: cfg.PrivProto, ContextName: cfg.Context, Custom: slices.Clone(cfg.Custom), Profiles: cfg.Profiles, Secret: snmp.ParseSecret(secret)}
 }
 

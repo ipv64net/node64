@@ -167,6 +167,7 @@ type dockerPrev struct {
 	started                          time.Time
 	restarts                         int
 	cpuTotal, cpuSystem              uint64
+	read                             time.Time // Zeitpunkt der stats (genauer als der Beginn der Abfrage)
 	netIn, netOut, blkRead, blkWrite uint64
 	hasStats                         bool
 	restartTimes                     []time.Time // erkannte Neustarts (fuer die Neustart-Schleife)
@@ -372,7 +373,8 @@ type dockerInspect struct {
 
 // dockerStats ist der benutzte Teil von /containers/{id}/stats (one-shot, ohne precpu: Differenzen rechnet der Poller).
 type dockerStats struct {
-	CPU struct {
+	Read time.Time `json:"read"` // Zeitpunkt der Werte (Docker und Podman)
+	CPU  struct {
 		Usage struct {
 			Total  uint64   `json:"total_usage"`
 			PerCPU []uint64 `json:"percpu_usage"`
@@ -721,7 +723,7 @@ func (p *DockerPoller) build(now time.Time, jobs []*dockerJob) []Resource {
 			if lim := dockerCPULimit(in); lim > 0 && lim < r.MaxCPU {
 				r.MaxCPU = lim
 			}
-			cur.hasStats, cur.cpuTotal, cur.cpuSystem = true, st.CPU.Usage.Total, st.CPU.System
+			cur.hasStats, cur.cpuTotal, cur.cpuSystem, cur.read = true, st.CPU.Usage.Total, st.CPU.System, st.Read
 			for _, n := range st.Networks {
 				cur.netIn += n.Rx
 				cur.netOut += n.Tx
@@ -741,12 +743,16 @@ func (p *DockerPoller) build(now time.Time, jobs []*dockerJob) []Resource {
 			}
 			if hasOld && old.hasStats {
 				dt := now.Sub(old.t).Seconds()
+				if !old.read.IsZero() && cur.read.After(old.read) { // Abstand der stats selbst (Abfragen laufen parallel)
+					dt = cur.read.Sub(old.read).Seconds()
+				}
 				cpuD := dockerDelta(old.cpuTotal, cur.cpuTotal)
 				cores := 0.0
 				// system_cpu_usage ist bei Docker die Zeit aller Kerne des Hosts (~ dt x online), bei Podman nur die
-				// verstrichene Zeit (~ dt): deutlich unter dt x online -> wie ohne system_cpu_usage rechnen
+				// verstrichene Zeit (~ dt): naeher an dt als an dt x online -> wie ohne system_cpu_usage rechnen
+				// (Schwelle in der Mitte; bei 2 Kernen lag sie vorher genau auf dem Podman-Wert und flatterte)
 				sysD := dockerDelta(old.cpuSystem, cur.cpuSystem)
-				if online > 1 && dt > 0 && float64(sysD) < dt*1e9*float64(online)/2 {
+				if online > 1 && dt > 0 && float64(sysD) < dt*1e9*float64(1+online)/2 {
 					sysD = 0
 				}
 				if sysD > 0 && cur.cpuTotal >= old.cpuTotal {

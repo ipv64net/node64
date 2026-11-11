@@ -663,9 +663,16 @@ func (m *Module) apiAccessUpdate(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
+	oldType, oldCfg, hadSecret := a.Type, a.Config, a.Secret != ""
 	keep, err := m.buildAccess(a, in, false)
 	if err != nil {
 		m.fail(w, r, err)
+		return
+	}
+	// Ziel (Art, URL, Pin) geaendert und kein neues Geheimnis: das gespeicherte ginge sonst bei der naechsten Abfrage
+	// an das neue Ziel (wie beim Test: "das gespeicherte geht nur an das gespeicherte Ziel")
+	if keep && hadSecret && a.Type != "snmp" && (a.Type != oldType || targetChanged(oldCfg, a.Config)) {
+		m.fail(w, r, errBad("secret_again"))
 		return
 	}
 	if err := m.store.SaveAccess(ctx, a, keep, m.actor(r)); err != nil {

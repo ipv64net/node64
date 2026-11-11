@@ -194,6 +194,12 @@ func accessAddr(addr string, port, def int) string {
 // hostPort ergaenzt den Standard-Port (vorhandenen Port respektieren, IPv6 in Klammern).
 func hostPort(host string, port int) string { return transport.HostPort(host, port) }
 
+// apiHostPort: Adresse fuer einen API-Zugang ohne eigene URL - ein Port in der Adresse des Hosts gilt fuer SSH bzw.
+// den Agent, nicht fuer die API (wie die Vorschlaege in der Oberflaeche: urlHost).
+func apiHostPort(host string, port int) string {
+	return transport.HostPort(transport.SplitHost(host), port)
+}
+
 // withReserve kuerzt das Zeitlimit um collectReserve, damit nach einer abgelaufenen Abfrage noch Zeit fuer die
 // Auswertung bleibt.
 func withReserve(ctx context.Context) (context.Context, context.CancelFunc) {
