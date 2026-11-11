@@ -849,7 +849,7 @@ func TestUDPAgent(t *testing.T) {
 func TestUDPAgentRouterOS(t *testing.T) {
 	m := loadWalk(t, "testdata/switch.walk")
 	a := startAgent(t, m, "testcommunity")
-	a.routerOS = 20
+	a.routerOS.Store(20)
 	c, err := New(Config{Address: "127.0.0.1", Port: a.port(), Version: "2c", Secret: Secret{Community: "testcommunity"},
 		Timeout: 300 * time.Millisecond, Retries: -1})
 	if err != nil {

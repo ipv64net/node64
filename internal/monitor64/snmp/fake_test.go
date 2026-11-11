@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -287,7 +288,7 @@ type udpAgent struct {
 	community string
 	pc        net.PacketConn
 	done      chan struct{}
-	routerOS  int // > 0: wie RouterOS - GETBULK ueber so viele Varbinds still verwerfen, noSuchName ohne Index
+	routerOS  atomic.Int32 // > 0: wie RouterOS - GETBULK ueber so viele Varbinds still verwerfen, noSuchName ohne Index
 }
 
 func startAgent(t testing.TB, m *mib, community string) *udpAgent {
@@ -328,7 +329,7 @@ func (a *udpAgent) serve() {
 			case gosnmp.GetNextRequest:
 				p = a.m.next(v.Name)
 			}
-			if a.routerOS > 0 && req.PDUType == gosnmp.GetRequest && p.Type == gosnmp.NoSuchObject {
+			if a.routerOS.Load() > 0 && req.PDUType == gosnmp.GetRequest && p.Type == gosnmp.NoSuchObject {
 				resp.Error, resp.ErrorIndex = gosnmp.NoSuchName, 0
 				resp.Variables = req.Variables
 				break
@@ -342,7 +343,7 @@ func (a *udpAgent) serve() {
 				resp.Variables = append(resp.Variables, p)
 			}
 		}
-		if req.PDUType == gosnmp.GetBulkRequest && a.routerOS > 0 && int(req.MaxRepetitions)*len(req.Variables) > a.routerOS {
+		if req.PDUType == gosnmp.GetBulkRequest && a.routerOS.Load() > 0 && int(req.MaxRepetitions)*len(req.Variables) > int(a.routerOS.Load()) {
 			continue // zu gross: keine Antwort statt tooBig
 		}
 		if req.PDUType == gosnmp.GetBulkRequest {
