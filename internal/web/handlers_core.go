@@ -286,6 +286,7 @@ type dashboardData struct {
 	API                             *ipv64api.Overview
 	Mismatch                        bool      // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
 	NodeRemoved                     time.Time // auf ipv64.net entfernt (Null = nein)
+	UpdateNewer                     string    // neuere Version (Selbst-Update hat sie gefunden; "" = keine)
 	ConnectedAt, LastSync, LinkedAt time.Time
 	Peers, PeersOnline              int            // Nodes dieser Verknuepfung
 	Cluster                         *dashCluster   // nil = kein Cluster (keine Mitglieder)
@@ -310,6 +311,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	d.NetRxTot, d.NetTxTot, d.NetSince = netstat.Totals(ctx, s.Store)
 	if d.NetRxTot < d.NetRx { // erste Minute nach dem allerersten Start
 		d.NetRxTot, d.NetTxTot = d.NetRx, d.NetTx
+	}
+	if u := s.updateViewOf(ctx); u != nil && u.Latest != nil && u.Latest.Newer { // Hinweis auch im Dashboard (Forum 5047)
+		d.UpdateNewer = u.Latest.Version
 	}
 	hcOn := s.HC != nil && s.Modules != nil && s.Modules.IsRunning(healthchecks.Name) // aus: keine Abfragen
 	if hcOn {

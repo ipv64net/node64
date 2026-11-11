@@ -2294,7 +2294,8 @@ function pageNew() {
 					'<div class="col-md-6">' + field('tsec', L('new.token_secret'), WZ.token_secret, ' data-w="token_secret" type="password" autocomplete="new-password"') + '</div>' +
 					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.token_cmd')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(k.access === 'pve' ?
 						'pveum user add monitor@pve\npveum aclmod / -user monitor@pve -role PVEAuditor\npveum user token add monitor@pve node64 --privsep 0' :
-						'proxmox-backup-manager user create monitor@pbs\nproxmox-backup-manager user generate-token monitor@pbs node64\nproxmox-backup-manager acl update / Audit --auth-id \'monitor@pbs!node64\'') + '</div>' +
+						// PBS: ein Token darf nur, was auch sein Benutzer darf - beide brauchen Audit
+						'proxmox-backup-manager user create monitor@pbs\nproxmox-backup-manager user generate-token monitor@pbs node64\nproxmox-backup-manager acl update / Audit --auth-id monitor@pbs\nproxmox-backup-manager acl update / Audit --auth-id \'monitor@pbs!node64\'') + '</div>' +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.api_hint')) + '</div></div>' +
 					'<div class="col-12"><details' + (WZ.pin || WZ.node ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (DEVAPI.indexOf(k.access) >= 0) {

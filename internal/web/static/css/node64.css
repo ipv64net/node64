@@ -128,7 +128,8 @@ a { color: var(--bs-primary); }
 .beats-fill { justify-content: space-between; gap: 2px; }
 .beat-empty, .beat-empty:hover { background: var(--bs-secondary-bg); cursor: default; transform: none; filter: none; }
 .beat-up { background: var(--bs-success); }
-.beat-down { background: var(--bs-danger); }
+/* gestoert zusaetzlich quer gestreift: bei Rot-Gruen-Schwaeche sonst kaum von OK zu unterscheiden (Forum 5068) */
+.beat-down { background: repeating-linear-gradient(180deg, var(--bs-danger) 0 3px, var(--bs-danger-text-emphasis) 3px 5px); }
 .beat-warning { background: var(--bs-warning); }
 .beat-stabilizing { background: var(--bs-info); }
 .beat-paused, .beat-maintenance, .beat-unknown { background: silver; }

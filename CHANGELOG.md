@@ -4,6 +4,13 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Zertifikate: Let's-Encrypt-Zertifikate wahlweise mit RSA-Schlüssel (RSA 2048) – z. B. für ältere Geräte wie Synology DSM 6, die kein ECDSA importieren (#62).
+- PROXY64: Erreichbarkeitsprüfung je Host abschaltbar (Ziele ohne Weboberfläche); Ländersperre mit Kürzel `EU` und Vorschlägen auch nach dem ersten Land (#54).
+- Honeypot64: Live-Karte mit Schalter „nur neue Angriffe“ (#51).
+- Dashboard zeigt einen Hinweis, wenn eine neue Version verfügbar ist.
+- Healthchecks: gestörte Messpunkte sind zusätzlich gestreift – auch bei Rot-Grün-Schwäche von OK unterscheidbar.
+- Monitor64: PBS-Befehle im Assistenten vergeben `Audit` auch an den Benutzer.
+
 - KI-Schnittstelle (MCP): Monitor64 als eigener Bereich mit vier lesenden Werkzeugen – Übersicht, Host mit Diensten und Messwerten, Probleme, Wartungen.
 - KI-Schnittstelle (MCP): weitere lesende Werkzeuge für DNS64-DHCP (Vergaben, feste Adressen, fremde DHCP-Server), Statusseiten (Zustand je Eintrag) und den Cluster.
 - API: Monitor64 in der API-Doku (OpenAPI, Seite API) – alle Endpunkte unter `/api/monitor64/…` mit Anfragen und Antworten.

@@ -4,6 +4,13 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Certificates: Let's Encrypt certificates optionally with an RSA key (RSA 2048) – e.g. for older devices like Synology DSM 6 that cannot import ECDSA (#62).
+- PROXY64: reachability check per host can be switched off (targets without a web interface); country blocking with the shortcut `EU` and suggestions after the first country (#54).
+- Honeypot64: live map with a "new attacks only" switch (#51).
+- Dashboard shows a notice when a new version is available.
+- Health checks: failed beats are also striped – distinguishable from OK with red-green colour blindness too.
+- Monitor64: PBS commands in the wizard also grant `Audit` to the user.
+
 - AI interface (MCP): Monitor64 as its own area with four read-only tools – overview, host with services and values, problems, maintenance.
 - AI interface (MCP): more read-only tools for DNS64 DHCP (leases, fixed addresses, foreign DHCP servers), status pages (state per entry) and the cluster.
 - API: Monitor64 in the API docs (OpenAPI, page API) – all endpoints under `/api/monitor64/…` with requests and responses.

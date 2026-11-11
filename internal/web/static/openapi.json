@@ -2821,6 +2821,10 @@
           "ai_robots": {
             "type": "boolean",
             "description": "/robots.txt mit Disallow für alle KI-Bots ausliefern, wenn das Ziel keine hat (404). Nur Proxy-Hosts."
+          },
+          "no_probe": {
+            "type": "boolean",
+            "description": "Ziel nicht auf Erreichbarkeit prüfen (Proxy-Host, TLS durchreichen), z. B. für Dienste ohne Weboberfläche: keine Anzeige „nicht erreichbar“, keine Kennzahl node64_cdn64_host_target_up"
           }
         }
       },
@@ -17944,7 +17948,7 @@
                       "rsa"
                     ],
                     "default": "ecdsa",
-                    "description": "bei source self: ECDSA P-256 oder RSA 2048"
+                    "description": "bei source self und den Let's-Encrypt-Quellen (ipv64, alias, http, dns): ECDSA P-256 oder RSA 2048 (z. B. für ältere Geräte wie DSM 6); sonst ignoriert"
                   }
                 }
               }
