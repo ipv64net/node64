@@ -843,7 +843,7 @@ function pageHost() {
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
 				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) + (s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
 					'<td class="d-none d-lg-table-cell spark-cell">' + (sparks[s.key] ? spark(sparks[s.key], st === 'ok' ? '' : 's-' + st) : '') + '</td>' +
-					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary">' + esc(tx(s.via || '')) + '</td></tr>';
+					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary text-nowrap">' + esc(tx(s.via || '')) + '</td></tr>';
 			});
 		});
 		if (!list.length) { html = '<tr><td colspan="6" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
