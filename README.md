@@ -107,6 +107,22 @@ volumes:
   node64-data:
 ```
 
+### Host-Ordner statt Volume (Synology, UGREEN, QNAP …)
+
+Node64 läuft als Benutzer `65532` und braucht Schreibrechte in `/data`. Ein benanntes Volume (wie oben) passt
+immer. Ein Ordner des NAS (`/volume1/docker/node64/data:/data`) gehört meist einem anderen Benutzer – der Container
+bricht dann mit „data dir /data is not writable …“ ab. Am einfachsten den Container als root starten:
+
+```yaml
+    user: "0:0"
+    volumes:
+      - /volume1/docker/node64/data:/data
+```
+
+Node64 übergibt den Ordner beim Start dem Benutzer `65532` und läuft danach als dieser weiter (nicht als root).
+Anderer Benutzer: `NODE64_UID` / `NODE64_GID` (z. B. `1026` / `100`, dann behält der Ordner den NAS-Benutzer).
+Alternativ ohne `user`: Ordner einmal per SSH übergeben (`sudo chown -R 65532:65532 /volume1/docker/node64/data`).
+
 ### Docker-Socket
 
 PROXY64 und DNS64 lesen auf Wunsch Docker-Labels (`node64.proxy.*`, `node64.dns.*`) über die Docker-Engine-API (nur lesende Anfragen). Dazu braucht die Node Zugriff auf den Socket:
@@ -388,10 +404,11 @@ Alternativ `network_mode: host`. `net.ipv4.ping_group_range` gilt trotz des Name
 | `NODE64_LOG_FORMAT` | `text` | `text` oder `json` |
 | `NODE64_ADMIN_USER` / `NODE64_ADMIN_PASSWORD` | leer | Admin beim allerersten Start anlegen; danach ignoriert |
 | `NODE64_TRUST_PROXY` | `false` | `X-Forwarded-For` auswerten, nur hinter eigenem Reverse Proxy |
+| `NODE64_UID` / `NODE64_GID` | `65532` | Nur beim Start als root (`user: "0:0"`): Benutzer, dem `/data` übergeben wird und unter dem Node64 weiterläuft; `0` = als root bleiben |
 
 ## Sicherheit
 
-- Laufzeit-Image `FROM scratch`: kein OS, keine Shell, nur das Binary. Nicht-Root (UID 65532), Root-FS read-only, nur `/data` beschreibbar.
+- Laufzeit-Image `FROM scratch`: kein OS, keine Shell, nur das Binary. Nicht-Root (UID 65532; auch mit `user: "0:0"` legt Node64 root nach dem Übergeben von `/data` ab), Root-FS read-only, nur `/data` beschreibbar.
 - Passwörter mit argon2id, Sitzungen in der Datenbank, CSRF-Schutz, Login-Ratelimit, Security-Header, Content-Security-Policy ohne externe Quellen.
 - Geheimnisse (später Kanal-Tokens, SMTP-Passwörter) werden mit einem Schlüssel aus `/data/secret.key` verschlüsselt. Im Log werden sie maskiert.
 - Vor jeder Datenbank-Migration wird automatisch ein Backup nach `/data/backups` geschrieben.

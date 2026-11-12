@@ -57,6 +57,7 @@ import (
 	"github.com/ipv64net/node64/internal/notify/nfcluster"
 	"github.com/ipv64net/node64/internal/peer"
 	"github.com/ipv64net/node64/internal/ports"
+	"github.com/ipv64net/node64/internal/privdrop"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/selfupdate"
 	"github.com/ipv64net/node64/internal/sonar64"
@@ -104,6 +105,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	privdrop.Drop(cfg.DataDir)                                           // als root gestartet (user: "0:0"): Datenordner uebergeben, als 65532 neu starten
 	selfupdate.Launch(cfg.DataDir, Version)                              // neuere geprueft abgelegte Version starten (exec), sonst weiter
 	if mode := strings.TrimSpace(os.Getenv("NODE64_MODE")); mode != "" { // z. B. honeypot: ohne Oberflaeche (honeypot_mode.go)
 		return runMode(cfg, mode)
@@ -120,7 +122,13 @@ func run() error {
 	log.Info("node64 starting", "version", Version, "data", cfg.DataDir)
 
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		if werr := privdrop.Writable(cfg.DataDir); werr != nil { // mit Abhilfe (Rechte des Host-Ordners)
+			return werr
+		}
 		return fmt.Errorf("data dir %s: %w", cfg.DataDir, err)
+	}
+	if err := privdrop.Writable(cfg.DataDir); err != nil {
+		return err
 	}
 	if err := applyReset(cfg, log); err != nil {
 		return err

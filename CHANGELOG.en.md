@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Startup: host folder as `/data` without permission trouble (Synology, UGREEN …) – with `user: "0:0"` Node64 hands the folder to user 65532 and then keeps running without root (other user via `NODE64_UID`/`NODE64_GID`); if `/data` is not writable, the message names the owner and the fix.
+
 ## 1.5.6 – 2026-11-11
 
 - Monitor64: new access FRITZ!Box (TR-064) – internet connection, DSL values, throughput, FRITZ!OS update.
