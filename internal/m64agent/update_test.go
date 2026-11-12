@@ -318,7 +318,7 @@ func TestUpdateRequestProbe(t *testing.T) {
 			return errors.New("exec format error")
 		},
 		OnUpdated: func(v string) { updated <- v }}, nil)
-	send := func(version string) string {
+	sendOnce := func(version string) string {
 		body := []byte("new " + version)
 		h := signedUpdate(priv, version, runtime.GOOS, runtime.GOARCH, body)
 		hb, _ := json.Marshal(h)
@@ -329,6 +329,16 @@ func TestUpdateRequestProbe(t *testing.T) {
 		defer c.Close()
 		out, _ := runAgent(c, "update", append(append(hb, '\n'), body...))
 		return out
+	}
+	// die Sperre der vorigen Anfrage faellt erst nach deren Antwort - kurz warten statt zu scheitern (CI langsamer)
+	send := func(version string) string {
+		for i := 0; ; i++ {
+			out := sendOnce(version)
+			if !strings.Contains(out, "another update is running") || i == 100 {
+				return out
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 	if out := send("2.0.0"); !strings.Contains(out, "new version does not start") {
 		t.Fatalf("probe failure not reported: %q", out)
