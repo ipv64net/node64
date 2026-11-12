@@ -297,8 +297,12 @@ func TestDispatchDefaultsAndFlags(t *testing.T) {
 	if msgs[2].EventID != "e4" {
 		t.Fatalf("up should have been suppressed: %+v", msgs)
 	}
-	// Zustellprotokoll
+	// Zustellprotokoll (wird erst nach dem Versand geschrieben: kurz warten, CI ist langsamer)
 	dl, _ := st.Deliveries(context.Background(), 10, 0, 0)
+	for i := 0; i < 200 && len(dl) < 3; i++ {
+		time.Sleep(10 * time.Millisecond)
+		dl, _ = st.Deliveries(context.Background(), 10, 0, 0)
+	}
 	if len(dl) != 3 || !dl[0].OK || dl[0].Channel != "default" {
 		t.Fatalf("deliveries: %+v", dl)
 	}
