@@ -217,7 +217,7 @@ func TestSilentConnections(t *testing.T) {
 	}
 
 	// Node meldet sich an (Adresse ist ab dann bekannt)
-	_, addr = startServer(t, Config{KeysFile: keys, MaxConns: 2}, nil)
+	s2, addr := startServer(t, Config{KeysFile: keys, MaxConns: 2}, nil)
 	ca, err := dialAgent(addr, sa, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +234,11 @@ func TestSilentConnections(t *testing.T) {
 	for i := range preAuthMax {
 		open = append(open, silent(addr, "127.0.1."+string(rune('1'+i))))
 	}
-	time.Sleep(100 * time.Millisecond)
+	// warten, bis der Agent alle angenommen hat (CI ist langsamer)
+	gateTotal := func() int { s2.gate.mu.Lock(); defer s2.gate.mu.Unlock(); return s2.gate.total }
+	for i := 0; i < 300 && gateTotal() < preAuthMax; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
 	// fremde Adresse: kein Platz mehr
 	if _, err := dialAgent(addr, sa, &net.TCPAddr{IP: net.ParseIP("127.0.2.1")}); err == nil {
 		t.Fatal("unknown address got a slot beyond the pre-auth limit")
