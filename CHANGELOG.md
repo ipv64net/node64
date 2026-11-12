@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.5.7 – 2026-11-12
+
 - Start: Host-Ordner als `/data` ohne Rechte-Ärger (Synology, UGREEN …) – mit `user: "0:0"` übergibt Node64 den Ordner dem Benutzer 65532 und läuft danach nicht als root weiter (anderer Benutzer über `NODE64_UID`/`NODE64_GID`); ist `/data` nicht beschreibbar, nennt die Meldung Besitzer und Abhilfe.
 
 ## 1.5.6 – 2026-11-11
