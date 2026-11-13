@@ -4,6 +4,7 @@
 
 ### Behoben
 - Vom Besucher abgebrochene Anfragen (z. B. schnelles Scrollen in Immich) werden wie bei nginx als 499 protokolliert und zählen nicht mehr als „Fehler 5xx“ (#120). Echte Fehler des Ziels bleiben 502/504.
+- Asset-Cache: Antworten auf Anfragen mit Cookies werden nur noch abgelegt, wenn das Ziel sie ausdrücklich als öffentlich kennzeichnet (`public`/`s-maxage`); für solche Anfragen ergänzt PROXY64 kein `public` mehr. `s-maxage` wird beachtet.
 
 ## 1.55.1 – 2026-11-11
 

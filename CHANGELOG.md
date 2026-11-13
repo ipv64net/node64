@@ -4,11 +4,13 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
-- PROXY64: Vom Besucher abgebrochene Anfragen zählen als 499 statt als Fehler 5xx (#120).
+- PROXY64: Vom Besucher abgebrochene Anfragen zählen als 499 statt als Fehler 5xx (#120); der Asset-Cache legt Antworten auf Anfragen mit Cookies nur noch ab, wenn das Ziel sie ausdrücklich als öffentlich kennzeichnet.
 - Honeypot64: Die eingestellte Startseite der Web-Falle gilt auch für Anfragen ohne passenden Proxy-Host.
 - DNS64: MAC-Adressen auch ohne MAC-Gruppe (#79); Sortierung nach Zeit in Abfrage-Log, Geräten und Blocklisten (#80, #123); Hinweis „Ports nicht veröffentlicht“ nennt die Host-Firewall.
 - Healthchecks: Meldungen der Module erreichen auch Portal-Kanäle wie Discord, Webhook oder die IPv64 App (#95, #127); Statusseiten ohne Störungen, die ganz in einer Wartung lagen (#75); Tags der Monitor64-Hosts im Filter der Statusseiten (#102); Wartungsfenster gelten auch für Meldungen der ipv64-Server im Hybrid-Modus (#129).
-- Oberfläche: Bei Farbschema „System“ blitzt beim Laden keine helle Seite mehr auf (#124).
+- Oberfläche: Bei Farbschema „System“ blitzt beim Laden keine helle Seite mehr auf (#124); Modul-Logos im Dashboard führen zum Modul (#110); Platzhalter in Eingabefeldern sind blasser und kursiv.
+- Anmeldung: Ersteinrichtung, Zwei-Faktor-Codes und Wiederherstellungscodes sind gegen gleichzeitige Anfragen abgesichert; ein Einmalcode gilt nur noch einmal, und das Limit für Fehlversuche greift auch beim zweiten Faktor zuverlässig.
+- Image: Go 1.27.4 (Sicherheitskorrektur in net/http), go-jose 4.1.6.
 - Start: Mit `user: "0:0"` bleibt der Zugriff auf den Docker-Socket nach dem Wechsel zum Benutzer 65532 erhalten (#121).
 - Monitor64: Fehler behoben – „Abweichung speichern“ unter Schwellen (#107), stehenbleibende Warnung bei „GB frei“ (#109), leere SNMP-Tabelle als fehlgeschlagene Teilabfrage (#98), zweite Platte am gleichen USB-Adapter fehlte (#84), Kategorie „Proxmox“ bei Unraid-VMs (#87); ein geändertes Zertifikat (z. B. FRITZ!Box) lässt sich beim Test neu übernehmen (#121).
 - Monitor64: Der Hinweis zum Proxmox-Token erklärt die Privilegientrennung – mit ihr (Standard in der Oberfläche) braucht auch das Token selbst die Rolle PVEAuditor.

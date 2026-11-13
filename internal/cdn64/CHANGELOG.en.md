@@ -4,6 +4,7 @@
 
 ### Fixed
 - Requests aborted by the visitor (e.g. fast scrolling in Immich) are logged as 499 like nginx and no longer count as "5xx errors" (#120). Real target errors stay 502/504.
+- Asset cache: responses to requests with cookies are only stored if the target explicitly marks them as public (`public`/`s-maxage`); PROXY64 no longer adds `public` for such requests. `s-maxage` is honoured.
 
 ## 1.55.1 – 2026-11-11
 

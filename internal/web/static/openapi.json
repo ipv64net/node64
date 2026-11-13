@@ -6297,6 +6297,12 @@
             "type": "string",
             "description": "Fingerabdruck des Zertifikats (SHA-256 hexadezimal) bzw. SSH-Host-Key (`SHA256:…`, Docker ssh://)"
           },
+          "backup_max_age_h": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8760,
+            "description": "PBS: Höchstalter des letzten Backups je Gruppe in Stunden (leer = 26)"
+          },
           "ups": {
             "type": "string",
             "description": "NUT: USV-Namen, Komma-Liste (leer = alle)",
@@ -6778,6 +6784,14 @@
           "need_confirm": {
             "type": "boolean",
             "description": "Fingerabdruck erst bestätigen (als `pin` bzw. `hostkey` speichern), dann erneut testen"
+          },
+          "peer": {
+            "type": "string",
+            "description": "Tatsächlich verbundene Gegenstelle (IP:Port; SSH und Agent), auch wenn die Anmeldung scheitert"
+          },
+          "key_type": {
+            "type": "string",
+            "description": "Typ des gezeigten SSH-Hostschlüssels (z. B. `ssh-ed25519`)"
           },
           "cert_changed": {
             "type": "boolean",
@@ -27494,7 +27508,7 @@
           "Monitor64"
         ],
         "summary": "Adresse der Node in Richtung eines Hosts",
-        "description": "Quelladresse dieser Node zum Ziel (für `from=\"…\"` in authorized_keys). Es wird kein Paket gesendet. Leer, wenn unbekannt.",
+        "description": "Quelladresse dieser Node zum Ziel (für `from=\"…\"` in authorized_keys). Es wird kein Paket gesendet. Leer, wenn unbekannt; im Docker-Bridge-Netz mit Ziel außerhalb des Bridge-Netzes leer und `bridge` = true (dann die Adresse des Docker-Hosts eintragen).",
         "parameters": [
           {
             "name": "target",
@@ -27519,6 +27533,10 @@
                   "properties": {
                     "addr": {
                       "type": "string"
+                    },
+                    "bridge": {
+                      "type": "boolean",
+                      "description": "Node im Docker-Bridge-Netz: Der Host sieht die Adresse des Docker-Hosts"
                     }
                   }
                 }
