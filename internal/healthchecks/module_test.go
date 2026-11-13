@@ -229,8 +229,10 @@ func TestMaintenanceWindows(t *testing.T) {
 	}
 	var mw Maintenance
 	_ = json.Unmarshal(b, &mw)
-	in := time.Date(2026, 5, 10, 2, 30, 0, 0, time.UTC)
-	out := time.Date(2026, 5, 10, 4, 0, 0, 0, time.UTC)
+	// im Januar wie das Fenster: taeglich gilt die Ortszeit der Node, im Sommer laege es mit TZ=Europe/Berlin eine
+	// Stunde frueher (die Umstellung prueft der Abschnitt weiter unten mit fester Zone)
+	in := time.Date(2026, 1, 10, 2, 30, 0, 0, time.UTC)
+	out := time.Date(2026, 1, 10, 4, 0, 0, 0, time.UTC)
 	if !m.st.InMaintenance(context.Background(), "any", in) || m.st.InMaintenance(context.Background(), "any", out) {
 		t.Fatal("daily window evaluation wrong")
 	}
