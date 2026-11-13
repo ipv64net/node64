@@ -557,3 +557,28 @@ func TestStatusFeedLoadAndKeys(t *testing.T) {
 		t.Fatalf("load: %v %v", hosts, svcs)
 	}
 }
+
+// Tags der Hosts kommen im Editor der Statusseite an (Tag-Filter, #102) - beim Host und bei seinen Diensten.
+func TestStatusTargetsTags(t *testing.T) {
+	ctx := context.Background()
+	m, _, _ := newTestModule(t)
+	h := &Host{Name: "nas01", Address: "10.9.8.7", Kind: "linux", IntervalSec: 60, Tags: []string{"keller", "prod"}}
+	if err := m.store.SaveHost(ctx, h, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.store.UpsertDiscovered(ctx, h.UID, []Service{{Key: "fs:/", Name: "/", Kind: "fs"}}, map[string]bool{"fs:/": true}, SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := m.StatusTargets(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("targets: %+v", targets)
+	}
+	for _, x := range targets {
+		if strings.Join(x.Tags, ",") != "keller,prod" {
+			t.Fatalf("%s: tags %v", x.Source, x.Tags)
+		}
+	}
+}

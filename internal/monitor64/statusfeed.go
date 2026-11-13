@@ -102,13 +102,13 @@ func (m *Module) StatusTargets(ctx context.Context) ([]module.StatusTarget, erro
 		if !validStatusUID(h.UID) { // Quelle waere ungueltig (die Seite liesse sich nicht speichern)
 			continue
 		}
-		out = append(out, module.StatusTarget{Source: StatusSourceHost(h.UID), Host: h.Name, Group: h.Group, Paused: h.Paused})
+		out = append(out, module.StatusTarget{Source: StatusSourceHost(h.UID), Host: h.Name, Group: h.Group, Tags: h.Tags, Paused: h.Paused})
 		list := byHost[h.UID]
 		sort.SliceStable(list, func(i, j int) bool {
 			return strings.ToLower(m.statusSvcName(list[i], "")) < strings.ToLower(m.statusSvcName(list[j], ""))
 		})
 		for _, r := range list {
-			out = append(out, module.StatusTarget{Source: StatusSourceService(h.UID, r.Key), Host: h.Name, Name: m.statusSvcName(r, ""), Group: h.Group, Paused: h.Paused})
+			out = append(out, module.StatusTarget{Source: StatusSourceService(h.UID, r.Key), Host: h.Name, Name: m.statusSvcName(r, ""), Group: h.Group, Tags: h.Tags, Paused: h.Paused})
 		}
 	}
 	return out, nil
