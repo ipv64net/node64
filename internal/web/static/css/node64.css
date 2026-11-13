@@ -412,3 +412,10 @@ th.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
 th.th-sort .th-sort-icon { font-size: .7em; margin-left: .25rem; opacity: .35; }
 th.th-sort[aria-sort="ascending"] .th-sort-icon, th.th-sort[aria-sort="descending"] .th-sort-icon { opacity: .9; }
 th.th-sort:hover .th-sort-icon { opacity: .7; }
+
+/* Platzhalter deutlich von echten Eingaben unterscheiden (blasser, kursiv; Forum 5141) */
+.form-control::placeholder {
+	color: var(--bs-secondary-color);
+	opacity: .6;
+	font-style: italic;
+}

@@ -122,7 +122,7 @@
 			<ul class="list-unstyled mb-0 small">
 			{{range $d.Modules}}
 				<li class="d-flex justify-content-between py-1">
-					<span>{{if .Info.Image}}<img src="/static/img/{{.Info.Image}}" alt="{{$.T .Info.TitleKey}}" height="18" class="align-text-bottom logo logo-light"><img src="/static/img/{{darkimg .Info.Image}}" alt="{{$.T .Info.TitleKey}}" height="18" class="align-text-bottom logo logo-dark">{{else}}<i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}{{end}}{{if .Info.Version}} <a href="/settings/modules" class="text-body-secondary text-decoration-none font-monospace">v{{.Info.Version}}</a>{{end}}</span>
+					<span>{{/* Logo bzw. Name fuehrt zum Modul (laeuft es nicht: zu den Modul-Einstellungen, #110) */}}<a href="{{if and .Running .Info.Path}}{{.Info.Path}}{{else}}/settings/modules{{end}}" class="text-reset text-decoration-none">{{if .Info.Image}}<img src="/static/img/{{.Info.Image}}" alt="{{$.T .Info.TitleKey}}" height="18" class="align-text-bottom logo logo-light"><img src="/static/img/{{darkimg .Info.Image}}" alt="{{$.T .Info.TitleKey}}" height="18" class="align-text-bottom logo logo-dark">{{else}}<i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}{{end}}</a>{{if .Info.Version}} <a href="/settings/modules" class="text-body-secondary text-decoration-none font-monospace">v{{.Info.Version}}</a>{{end}}</span>
 					{{if not .Info.Available}}<span class="badge text-bg-light">{{$.T "nav.soon"}}</span>
 					{{else if .Running}}<span class="badge text-bg-success">{{$.T "common.running"}}</span>
 					{{else if and .Enabled .LastError}}<span class="badge text-bg-danger" title="{{.LastError}}">{{$.T "common.error"}}</span>
