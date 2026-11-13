@@ -80,7 +80,19 @@ func newBridgeDecoy(log *slog.Logger, sink Sink, seed string) *bridgeDecoy {
 	p := *s.personas()
 	p.web = PersonaNginx
 	s.persona.Store(&p)
+	s.plain.Store(bridgePlain.Load())
 	return &bridgeDecoy{s: s}
+}
+
+// bridgePlain: Startseite der Web-Falle (Config.StartPage) gilt auch fuer den Koeder (Forum 5141). Der Koeder hat
+// eine eigene Config ohne Startseite; applyLocked setzt sie hier und am laufenden Koeder.
+var bridgePlain atomic.Bool
+
+func bridgeStartPage(page string) {
+	bridgePlain.Store(page == StartNeutral)
+	if d, ok := hpbridge.Decoy().(*bridgeDecoy); ok {
+		d.s.plain.Store(page == StartNeutral)
+	}
 }
 
 // ServeHTTP: Dienst https bzw. http nach r.TLS, Port aus r.Host (sonst 443/80), Quelle aus r.RemoteAddr (PROXY64

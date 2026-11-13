@@ -344,3 +344,33 @@ func TestBridgeModuleStartStop(t *testing.T) {
 		t.Fatal("nach dem Stop noch angemeldet")
 	}
 }
+
+// Forum 5141: die Startseite der Web-Falle gilt auch fuer den PROXY64-Koeder, beim Anlegen und nach dem Speichern.
+func TestBridgeDecoyStartPage(t *testing.T) {
+	bridgeReset()
+	t.Cleanup(func() { hpbridge.SetDecoy(nil); bridgeStartPage("") })
+	const browser = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+	get := func(d http.Handler) string {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("User-Agent", browser)
+		r.RemoteAddr = "198.51.100.7:4444"
+		r.Host = "unbekannt.example"
+		w := httptest.NewRecorder()
+		d.ServeHTTP(w, r)
+		return w.Body.String()
+	}
+	bridgeStartPage(StartNeutral) // gespeichert, bevor der Koeder angelegt wird (Start)
+	d := newBridgeDecoy(nil, nil, "")
+	hpbridge.SetDecoy(d)
+	if b := get(d); strings.Contains(b, "NODE-07") || !strings.Contains(b, "<title>Sign in</title>") {
+		t.Fatalf("plain start page at start: %.200s", b)
+	}
+	bridgeStartPage(StartGateway) // spaeter umgestellt
+	if b := get(d); !strings.Contains(b, "NODE-07") {
+		t.Fatalf("gateway start page after apply: %.200s", b)
+	}
+	bridgeStartPage(StartNeutral)
+	if b := get(d); strings.Contains(b, "NODE-07") {
+		t.Fatalf("plain start page after apply: %.200s", b)
+	}
+}

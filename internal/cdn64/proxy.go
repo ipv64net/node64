@@ -386,14 +386,18 @@ func (m *Module) reverseProxy(t target, st *hostStats, tr http.RoundTripper, adv
 		Transport: tr,
 		ErrorLog:  log.New(io.Discard, "", 0),
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			st.errors.Add(1)
-			if !errors.Is(err, context.Canceled) {
-				m.log.Debug("target not reachable", "host", r.Host, "target", t.url.Host, "err", err)
-			}
 			status := http.StatusBadGateway
 			var mbe *http.MaxBytesError
 			if errors.As(err, &mbe) {
 				status = http.StatusRequestEntityTooLarge
+			} else if errors.Is(r.Context().Err(), context.Canceled) {
+				// Besucher hat abgebrochen (Issue 120): kein Fehler des Ziels, nichts schreiben - statusWriter.code
+				// meldet 499 wie nginx, zaehlt als 4xx statt 5xx
+				return
+			}
+			st.errors.Add(1)
+			if !errors.Is(err, context.Canceled) {
+				m.log.Debug("target not reachable", "host", r.Host, "target", t.url.Host, "err", err)
 			}
 			hostPage(w, r, adv, status)
 		},

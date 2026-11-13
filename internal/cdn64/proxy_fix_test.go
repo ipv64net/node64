@@ -272,3 +272,41 @@ func TestAccessLoginSafeNext(t *testing.T) {
 		}
 	}
 }
+
+// Issue 120: bricht der Besucher ab, bevor das Ziel antwortet, steht 499 im Log (4xx) statt 502 - kein Fehler des Ziels.
+func TestClientAbortIs499(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.m.SetDataDir(t.TempDir())
+	e.enable(t)
+	release := make(chan struct{})
+	port := fixBackend(t, release)
+	t.Cleanup(func() { close(release) }) // vor srv.Close (Cleanups rueckwaerts), sonst wartet das Ziel ewig
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID = []string{"abbruch.test"}, "127.0.0.1", port, CertNone
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	rctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(rctx, "GET", "http://abbruch.test/slow", nil)
+	if resp, err := e.client(false).Do(req); err == nil {
+		resp.Body.Close()
+		t.Fatal("request must be cancelled")
+	}
+	sdb := e.m.stats2.Load()
+	var s HostStat
+	for i := 0; i < 50; i++ {
+		sums, _ := sdb.sums(ctx, time.Now().Add(-2*time.Hour))
+		if s = sums[h.ID]; s.Requests == 1 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if s.Requests != 1 || s.S4 != 1 || s.S5 != 0 {
+		t.Fatalf("client abort counted: %+v", s)
+	}
+	if n := e.m.statsOf(h.ID).errors.Load(); n != 0 {
+		t.Fatalf("client abort in error counter: %d", n)
+	}
+}

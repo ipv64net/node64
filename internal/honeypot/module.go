@@ -314,6 +314,7 @@ func (m *Module) applyLocked(ctx context.Context) {
 	cfg := m.loadConfig(ctx)
 	hpbridge.SetWanted(cfg.Profile == ProfileProxy) // PROXY64 gibt dann seine unzuordenbaren/schaedlichen Anfragen ab
 	hpbridge.SetBlockWanted(!cfg.NoLocalBlock)      // PROXY64 sperrt erkannte Angreifer lokal (Sofort-Sperre)
+	bridgeStartPage(cfg.StartPage)                  // Startseite auch fuer den PROXY64-Koeder
 	m.st.SetLimits(time.Duration(cfg.RetentionDays)*24*time.Hour, cfg.MaxEvents)
 	svcs, warns := m.resolve(ctx, cfg)
 	run := cfg.Config
