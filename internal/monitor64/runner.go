@@ -196,6 +196,7 @@ type SvcView struct {
 	Vanished bool         `json:"vanished,omitempty"`
 	ShowOnly bool         `json:"show_only,omitempty"`
 	Acked    bool         `json:"acked,omitempty"`
+	Detail   string       `json:"detail,omitempty"` // "smart": alle SMART-Werte abrufbar (smartdetail.go)
 	Metrics  []MetricView `json:"metrics,omitempty"`
 }
 
@@ -245,6 +246,7 @@ type hostRT struct {
 
 	viewMu         sync.Mutex // eigene Sperre: die Oberflaeche wartet nicht auf eine laufende Abfrage
 	view           *HostView
+	smart          map[string]*model.SmartDetail // Dienst -> zuletzt gelesene SMART-Werte (nur im Speicher)
 	lastSave       time.Time
 	lastSavedState eval.State
 	lastSavedView  eval.HostView
@@ -548,6 +550,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	var states []eval.State
 	var inputs []eval.ServiceInput
 	newCount := 0
+	smartNew, smartKeep := map[string]*model.SmartDetail{}, map[string]bool{}
 	for _, r := range rows {
 		if r.Adopted == 0 {
 			newCount++
@@ -561,6 +564,13 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		sv := SvcView{Key: r.Key, Name: firstNonEmpty(r.Name, g.svc.Name, r.Key), Kind: r.Kind, Adopted: 1, Vanished: !r.VanishedAt.IsZero(), Via: g.via, Acked: acked}
 		if ok {
 			sv.Text = g.svc.Text
+		}
+		smartKeep[r.Key] = true
+		if ok && g.svc.Smart != nil {
+			smartNew[r.Key] = g.svc.Smart
+		}
+		if smartNew[r.Key] != nil || rt.smartOf(r.Key) != nil {
+			sv.Detail = "smart"
 		}
 		hostRules := parseHostRules(r.HostRule)
 		var ms []eval.MetricStatus
@@ -833,6 +843,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 
 	// 5. Stand fuer die Oberflaeche und speichern
 	sort.SliceStable(views, func(i, j int) bool { return kindOrder(views[i].Kind) < kindOrder(views[j].Kind) })
+	rt.setSmart(smartNew, smartKeep, now)
 	rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win,
 		Cluster: m.clusterSelfRef(role)})
 	m.saveRuntime(dbctx, rt, hostMem)

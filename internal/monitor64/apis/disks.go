@@ -45,6 +45,7 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 	}
 	type res struct {
 		sm  *smartData
+		raw smartResp
 		bad bool
 	}
 	results := make([]res, len(list))
@@ -63,7 +64,7 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 			return
 		}
 		d := parseSmart(r)
-		results[i].sm = &d
+		results[i].sm, results[i].raw = &d, r
 	})
 	out := make([]model.Service, 0, len(list))
 	seen := map[string]bool{}
@@ -73,6 +74,9 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 			continue // gleiche Seriennummer und WWN zweimal (Multipath): einmal
 		}
 		svc := diskService(keys[i], d, results[i].sm, results[i].bad, s.sectors)
+		if sm := results[i].sm; sm != nil { // alle Werte zum Nachschlagen (Dialog in der Dienste-Tabelle)
+			svc.Smart = smartDetailOf(results[i].raw, d, sm.passed, now)
+		}
 		seen[svc.Key] = true
 		out = append(out, svc)
 	}

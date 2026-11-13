@@ -3,6 +3,7 @@ package m64linux
 import (
 	"encoding/json"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ipv64net/node64/internal/m64proto"
@@ -96,6 +97,8 @@ type smartJSON struct {
 	ScsiModelName string `json:"scsi_model_name"`
 	ScsiProduct   string `json:"scsi_product"`
 	SerialNumber  string `json:"serial_number"`
+	Firmware      string `json:"firmware_version"`
+	ScsiRevision  string `json:"scsi_revision"`
 	UserCapacity  struct {
 		Bytes uint64 `json:"bytes"`
 	} `json:"user_capacity"`
@@ -109,38 +112,164 @@ type smartJSON struct {
 	} `json:"smart_status"`
 	Temperature *struct {
 		Current *float64 `json:"current"`
+		Trip    *float64 `json:"drive_trip"`
 	} `json:"temperature"`
 	PowerOnTime *struct {
 		Hours *uint64 `json:"hours"`
 	} `json:"power_on_time"`
 	ATAAttrs *struct {
 		Table []struct {
-			ID    int `json:"id"`
-			Value int `json:"value"`
-			Raw   struct {
-				Value uint64 `json:"value"`
+			ID     int    `json:"id"`
+			Name   string `json:"name"`
+			Value  int    `json:"value"`
+			Worst  int    `json:"worst"`
+			Thresh int    `json:"thresh"`
+			Failed string `json:"when_failed"`
+			Raw    struct {
+				Value  uint64 `json:"value"`
+				String string `json:"string"`
 			} `json:"raw"`
 		} `json:"table"`
 	} `json:"ata_smart_attributes"`
 	NVMeLog *struct {
-		CriticalWarning *uint64  `json:"critical_warning"`
-		Temperature     *float64 `json:"temperature"`
-		PercentageUsed  *float64 `json:"percentage_used"`
-		PowerOnHours    *uint64  `json:"power_on_hours"`
-		MediaErrors     *uint64  `json:"media_errors"`
+		CriticalWarning *uint64   `json:"critical_warning"`
+		Temperature     *float64  `json:"temperature"`
+		Spare           *float64  `json:"available_spare"`
+		SpareThresh     *float64  `json:"available_spare_threshold"`
+		PercentageUsed  *float64  `json:"percentage_used"`
+		UnitsRead       *float64  `json:"data_units_read"`
+		UnitsWritten    *float64  `json:"data_units_written"`
+		HostReads       *float64  `json:"host_reads"`
+		HostWrites      *float64  `json:"host_writes"`
+		BusyTime        *float64  `json:"controller_busy_time"`
+		PowerCycles     *float64  `json:"power_cycles"`
+		PowerOnHours    *uint64   `json:"power_on_hours"`
+		UnsafeShutdowns *float64  `json:"unsafe_shutdowns"`
+		MediaErrors     *uint64   `json:"media_errors"`
+		ErrLogEntries   *float64  `json:"num_err_log_entries"`
+		WarnTempTime    *float64  `json:"warning_temp_time"`
+		CritTempTime    *float64  `json:"critical_comp_time"`
+		TempSensors     []float64 `json:"temperature_sensors"`
 	} `json:"nvme_smart_health_information_log"`
-	ScsiGrownDefects *uint64 `json:"scsi_grown_defect_list"`
+	PowerCycles      *float64 `json:"power_cycle_count"`
+	ScsiGrownDefects *uint64  `json:"scsi_grown_defect_list"`
 	ScsiErrorLog     *struct {
-		Read *struct {
-			Uncorrected *uint64 `json:"total_uncorrected_errors"`
-		} `json:"read"`
-		Write *struct {
-			Uncorrected *uint64 `json:"total_uncorrected_errors"`
-		} `json:"write"`
+		Read   *scsiErrCounters `json:"read"`
+		Write  *scsiErrCounters `json:"write"`
+		Verify *scsiErrCounters `json:"verify"`
 	} `json:"scsi_error_counter_log"`
+	ScsiStartStop *struct {
+		StartStop  *float64 `json:"accumulated_start_stop_cycles"`
+		LoadUnload *float64 `json:"accumulated_load_unload_cycles"`
+	} `json:"scsi_start_stop_cycle_counter"`
 	ScsiEndurance *struct {
 		Used *float64 `json:"current_percentage_used_endurance_indicator"`
 	} `json:"scsi_percentage_used_endurance_indicator"`
+}
+
+// scsiErrCounters ist eine Zeile des SCSI-Fehlerzaehlers (lesen, schreiben, pruefen).
+type scsiErrCounters struct {
+	Corrected   *float64 `json:"total_errors_corrected"`
+	Uncorrected *uint64  `json:"total_uncorrected_errors"`
+}
+
+// smartRows haengt die Werte zum Nachschlagen an (alle ATA-Attribute, NVMe- und SCSI-Werte); ausgewertet wird davon
+// nichts. Schluessel der Werte wie in smartctl -j.
+func smartRows(s *m64proto.SMART, j *smartJSON) {
+	s.Firmware = clip(j.Firmware)
+	if s.Firmware == "" {
+		s.Firmware = clip(j.ScsiRevision)
+	}
+	if j.ATAAttrs != nil {
+		for _, a := range j.ATAAttrs.Table {
+			if len(s.Attrs) >= m64proto.MaxSmartRows {
+				break
+			}
+			row := m64proto.SMARTAttr{ID: a.ID, Name: clip(a.Name), Value: a.Value, Worst: a.Worst, Thresh: a.Thresh, Raw: clip(a.Raw.String)}
+			if row.Raw == "" {
+				row.Raw = strconv.FormatUint(a.Raw.Value, 10)
+			}
+			if f := strings.ToLower(strings.TrimSpace(a.Failed)); f == "now" || f == "past" {
+				row.Fail = f
+			}
+			s.Attrs = append(s.Attrs, row)
+		}
+	}
+	add := func(key string, v *float64, unit string) {
+		if v != nil && len(s.Values) < m64proto.MaxSmartRows {
+			s.Values = append(s.Values, m64proto.SMARTValue{Key: key, Value: *v, Unit: unit})
+		}
+	}
+	u64 := func(v *uint64) *float64 {
+		if v == nil {
+			return nil
+		}
+		f := float64(*v)
+		return &f
+	}
+	mul := func(v *float64, by float64) *float64 {
+		if v == nil {
+			return nil
+		}
+		f := *v * by
+		return &f
+	}
+	if n := j.NVMeLog; n != nil {
+		add("critical_warning", u64(n.CriticalWarning), "hex")
+		add("temperature", n.Temperature, "°C")
+		add("available_spare", n.Spare, "%")
+		add("available_spare_threshold", n.SpareThresh, "%")
+		add("percentage_used", n.PercentageUsed, "%")
+		add("data_units_read", mul(n.UnitsRead, 512000), "B") // eine Einheit = 1000 Bloecke zu 512 Byte
+		add("data_units_written", mul(n.UnitsWritten, 512000), "B")
+		add("host_reads", n.HostReads, "")
+		add("host_writes", n.HostWrites, "")
+		add("controller_busy_time", n.BusyTime, "min")
+		add("power_cycles", n.PowerCycles, "")
+		add("power_on_hours", u64(n.PowerOnHours), "h")
+		add("unsafe_shutdowns", n.UnsafeShutdowns, "")
+		add("media_errors", u64(n.MediaErrors), "")
+		add("num_err_log_entries", n.ErrLogEntries, "")
+		add("warning_temp_time", n.WarnTempTime, "min")
+		add("critical_comp_time", n.CritTempTime, "min")
+		for i, t := range n.TempSensors {
+			if i < 8 && t > 0 && t < 150 {
+				add("temperature_sensor_"+strconv.Itoa(i+1), &t, "°C")
+			}
+		}
+		return
+	}
+	if j.ATAAttrs != nil {
+		return // ATA: die Tabelle sagt alles
+	}
+	// SCSI/SAS
+	if t := j.Temperature; t != nil && t.Current != nil && *t.Current > 0 && *t.Current < 150 {
+		add("temperature", t.Current, "°C")
+		add("drive_trip_temperature", t.Trip, "°C")
+	}
+	if j.PowerOnTime != nil {
+		add("power_on_hours", u64(j.PowerOnTime.Hours), "h")
+	}
+	add("power_cycles", j.PowerCycles, "")
+	if c := j.ScsiStartStop; c != nil {
+		add("start_stop_cycles", c.StartStop, "")
+		add("load_unload_cycles", c.LoadUnload, "")
+	}
+	add("grown_defects", u64(j.ScsiGrownDefects), "")
+	if e := j.ScsiErrorLog; e != nil {
+		for _, x := range []struct {
+			name string
+			c    *scsiErrCounters
+		}{{"read", e.Read}, {"write", e.Write}, {"verify", e.Verify}} {
+			if x.c != nil {
+				add(x.name+"_corrected", x.c.Corrected, "")
+				add(x.name+"_uncorrected", u64(x.c.Uncorrected), "")
+			}
+		}
+	}
+	if j.ScsiEndurance != nil {
+		add("percentage_used", j.ScsiEndurance.Used, "%")
+	}
 }
 
 // ParseSmartctl liest "smartctl -j -a <dev>" (smartmontools >= 7). dev ist der abgefragte Name (Fallback, falls
@@ -192,6 +321,8 @@ func ParseSmartctl(dev string, b []byte) m64proto.SMART {
 			firstErr = m.String
 		}
 	}
+
+	smartRows(&s, &j)
 
 	if j.SmartStatus != nil && j.SmartStatus.Passed != nil {
 		s.Passed = ptrBool(*j.SmartStatus.Passed)

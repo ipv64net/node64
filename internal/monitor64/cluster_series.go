@@ -20,6 +20,7 @@ import (
 //   - repoll: Anstoss (Trap an eine nicht zustaendige Node): die zustaendige fragt den Host sofort ab.
 //   - reach: Zugaenge eines Hosts von dieser Node aus testen ("von node02 auch erreichbar") fuer die Wahl der
 //     Ersatz-Nodes.
+//   - smart: alle zuletzt gelesenen SMART-Werte einer Platte (liegen nur im Speicher der zustaendigen Node).
 //   - sparks: Mini-Verlaeufe (24 Std.) fuer Uebersicht und Host-Seite einer anderen Node, gebuendelt je Node
 //     (cluster_sparks.go).
 
@@ -110,6 +111,8 @@ func (m *Module) HandleClusterCall(ctx context.Context, from, name string, body 
 		return map[string]bool{"ok": true}, nil
 	case callTrap: // Trap an eine nicht zustaendige Node (traps_cluster.go)
 		return m.handleTrapCall(ctx, from, body)
+	case callSmart: // alle SMART-Werte einer Platte fuer den Dialog einer anderen Node (smartdetail.go)
+		return m.handleSmartCall(body)
 	case callSparks: // Mini-Verlaeufe fuer die Uebersicht einer anderen Node (cluster_sparks.go)
 		return m.handleSparksCall(ctx, body)
 	case callReach:

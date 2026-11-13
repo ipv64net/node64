@@ -324,7 +324,9 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 				r.SMART = append(r.SMART, m64proto.SMART{Device: s.dev, Error: m64proto.Hint(m64proto.HintNoOutputOf, "smartctl")})
 				continue
 			}
-			r.SMART = append(r.SMART, ParseSmartctl(s.dev, s.body))
+			sm := ParseSmartctl(s.dev, s.body)
+			sm.ReadAt = now.Unix()
+			r.SMART = append(r.SMART, sm)
 		}
 		fillSmartSerials(r.SMART, r.Disks)
 	}

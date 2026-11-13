@@ -51,4 +51,6 @@ type Service struct {
 	Text    string   `json:"text,omitempty"`
 	// Default: beim Erkennen standardmaessig angeboten (false z. B. fuer Ports ohne Link, die noch nie verbunden waren)
 	Default bool `json:"default"`
+	// Smart: alle SMART-Werte einer Platte zum Nachschlagen (smart.go); nur im Speicher, nie gespeichert oder verteilt
+	Smart *SmartDetail `json:"-"`
 }

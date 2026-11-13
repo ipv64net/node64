@@ -491,7 +491,9 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 			out.smart = append(out.smart, m64proto.SMART{Device: d.Name, Error: errText(err)})
 			continue
 		}
-		out.smart = append(out.smart, ParseSmartctl(d.Name, res.Stdout))
+		sm := ParseSmartctl(d.Name, res.Stdout)
+		sm.ReadAt = c.now().Unix()
+		out.smart = append(out.smart, sm)
 	}
 	if ds, err := readDisks(c.src); err == nil { // Seriennummer schlafender Platten aus /sys
 		fillSmartSerials(out.smart, ds)

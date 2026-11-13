@@ -593,7 +593,9 @@ func (c *collector) collectSmart(ctx context.Context) slowResult {
 			out.smart = append(out.smart, m64proto.SMART{Device: d.Name, Error: errText(err)})
 			continue
 		}
-		out.smart = append(out.smart, m64linux.ParseSmartctl(d.Name, res.Stdout))
+		sm := m64linux.ParseSmartctl(d.Name, res.Stdout)
+		sm.ReadAt = c.now().Unix()
+		out.smart = append(out.smart, sm)
 	}
 	return out
 }

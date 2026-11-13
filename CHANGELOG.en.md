@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: disks show all SMART values as a dialog at the push of a button (attribute table or NVMe/SAS values, model, serial number, firmware) – complete with agent 0.1.4, via SSH and via Proxmox VE/PBS.
+
 ## 1.5.8 – 2026-11-13
 
 - PROXY64: requests aborted by the visitor count as 499 instead of 5xx errors (#120); the asset cache only stores responses to requests with cookies if the target explicitly marks them as public.

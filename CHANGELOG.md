@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Platten zeigen auf Knopfdruck alle SMART-Werte als Dialog (Attribut-Tabelle bzw. NVMe-/SAS-Werte, Modell, Seriennummer, Firmware) – vollständig mit Agent 0.1.4, per SSH und über Proxmox VE/PBS.
+
 ## 1.5.8 – 2026-11-13
 
 - PROXY64: Vom Besucher abgebrochene Anfragen zählen als 499 statt als Fehler 5xx (#120); der Asset-Cache legt Antworten auf Anfragen mit Cookies nur noch ab, wenn das Ziel sie ausdrücklich als öffentlich kennzeichnet.

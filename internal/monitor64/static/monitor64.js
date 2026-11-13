@@ -250,6 +250,60 @@ function txT(s, depth) {
 	});
 }
 function quote(t) { return L('quote', { t: tx(t) }); }
+// ---------- SMART-Werte einer Platte (Dialog) ----------
+// smartLabel: Name eines bekannten Werts (Schluessel wie in smartctl -j); unbekannte bleiben, wie sie sind.
+function smartLabel(k) {
+	var m = /^temperature_sensor_(\d+)$/.exec(k);
+	if (m) { return L('smart.v.temperature_sensor', { n: m[1] }); }
+	var t = { critical_warning: L('smart.v.critical_warning'), temperature: L('smart.v.temperature'), available_spare: L('smart.v.available_spare'),
+		available_spare_threshold: L('smart.v.available_spare_threshold'), percentage_used: L('smart.v.percentage_used'), data_units_read: L('smart.v.data_units_read'),
+		data_units_written: L('smart.v.data_units_written'), host_reads: L('smart.v.host_reads'), host_writes: L('smart.v.host_writes'),
+		controller_busy_time: L('smart.v.controller_busy_time'), power_cycles: L('smart.v.power_cycles'), power_on_hours: L('smart.v.power_on_hours'),
+		unsafe_shutdowns: L('smart.v.unsafe_shutdowns'), media_errors: L('smart.v.media_errors'), num_err_log_entries: L('smart.v.num_err_log_entries'),
+		warning_temp_time: L('smart.v.warning_temp_time'), critical_comp_time: L('smart.v.critical_comp_time'), drive_trip_temperature: L('smart.v.drive_trip_temperature'),
+		start_stop_cycles: L('smart.v.start_stop_cycles'), load_unload_cycles: L('smart.v.load_unload_cycles'), grown_defects: L('smart.v.grown_defects'),
+		read_corrected: L('smart.v.read_corrected'), read_uncorrected: L('smart.v.read_uncorrected'), write_corrected: L('smart.v.write_corrected'),
+		write_uncorrected: L('smart.v.write_uncorrected'), verify_corrected: L('smart.v.verify_corrected'), verify_uncorrected: L('smart.v.verify_uncorrected'),
+		reallocated: L('smart.v.reallocated'), pending: L('smart.v.pending'), uncorrectable: L('smart.v.uncorrectable'), crc_errors: L('smart.v.crc_errors') };
+	return Object.prototype.hasOwnProperty.call(t, k) ? t[k] : k;
+}
+function smartVal(v) {
+	if (v.text) { return v.text; }
+	switch (v.unit) {
+	case 'hex': return '0x' + Math.max(0, Math.round(v.value)).toString(16).toUpperCase();
+	case 'h': return fmtNum(v.value, 0) + ' h';
+	case 'min': return fmtNum(v.value, 0) + ' min';
+	}
+	return fmtVal(v.value, v.unit);
+}
+// smartHTML: Kopf (Modell, Seriennummer, Firmware, Gesamtzustand, Zeitpunkt), ATA-Attribute und einzelne Werte.
+function smartHTML(d) {
+	var num = function (x) { return x === undefined || x === null ? '<span class="text-body-tertiary">–</span>' : esc(String(x)); };
+	var head = [[L('smart.model'), d.model], [L('smart.serial'), d.serial], [L('smart.firmware'), d.firmware], [L('smart.size'), d.size ? fmtBytes(d.size) : ''],
+		[L('smart.type'), (d.type || '').toUpperCase()]].filter(function (x) { return x[1]; });
+	var health = d.passed === true ? '<span class="badge text-bg-success">' + esc(L('smart.passed')) + '</span>' : d.passed === false ? '<span class="badge text-bg-danger">' + esc(L('smart.failed')) + '</span>' :
+		'<span class="badge text-bg-secondary">' + esc(L('smart.unknown')) + '</span>';
+	var html = '<dl class="row small mb-3">' + head.map(function (x) { return '<dt class="col-sm-3 text-body-secondary fw-normal">' + esc(x[0]) + '</dt><dd class="col-sm-9 mb-1">' + esc(x[1]) + '</dd>'; }).join('') +
+		'<dt class="col-sm-3 text-body-secondary fw-normal">' + esc(L('smart.health')) + '</dt><dd class="col-sm-9 mb-1">' + health + '</dd>' +
+		'<dt class="col-sm-3 text-body-secondary fw-normal">' + esc(L('smart.read_at')) + '</dt><dd class="col-sm-9 mb-1">' + esc(fmtTime(d.at)) + '</dd></dl>';
+	if ((d.attrs || []).length) {
+		html += '<div class="table-responsive"><table class="table table-sm small align-middle mb-3"><thead><tr><th class="text-end">' + esc(L('smart.col_id')) + '</th><th>' + esc(L('smart.col_attr')) + '</th><th class="text-end">' + esc(L('smart.col_value')) +
+			'</th><th class="text-end">' + esc(L('smart.col_worst')) + '</th><th class="text-end">' + esc(L('smart.col_thresh')) + '</th><th>' + esc(L('smart.col_raw')) + '</th></tr></thead><tbody>' +
+			d.attrs.map(function (a) {
+				var f = a.failed === 'now' ? ' <span class="badge text-bg-danger">' + esc(L('smart.failed_now')) + '</span>' : a.failed === 'past' ? ' <span class="badge text-bg-warning">' + esc(L('smart.failed_past')) + '</span>' : '';
+				return '<tr' + (a.failed === 'now' ? ' class="table-danger"' : a.failed === 'past' ? ' class="table-warning"' : '') + '><td class="text-end text-body-secondary">' + num(a.id) + '</td><td>' + esc(a.name || '') + f + '</td><td class="text-end">' + num(a.value) +
+					'</td><td class="text-end">' + num(a.worst) + '</td><td class="text-end">' + num(a.thresh) + '</td><td class="text-break"><code>' + esc(a.raw || '') + '</code></td></tr>';
+			}).join('') + '</tbody></table></div>';
+	}
+	if ((d.values || []).length) {
+		html += '<div class="table-responsive"><table class="table table-sm small align-middle mb-2"><tbody>' + d.values.map(function (v) {
+			return '<tr><td class="text-body-secondary">' + esc(v.key ? smartLabel(v.key) : v.name || '') + '</td><td class="text-end text-break">' + esc(smartVal(v)) + '</td></tr>';
+		}).join('') + '</tbody></table></div>';
+	}
+	if (!(d.attrs || []).length && !(d.values || []).length) { html += '<div class="small text-body-secondary">' + esc(L('smart.none')) + '</div>'; }
+	if (d.partial) { html += '<div class="small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(L('smart.partial')) + '</div>'; }
+	return html;
+}
 function fmtBytes(b) {
 	if (b === null || b === undefined) { return '–'; }
 	var u = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'], i = 0;
@@ -865,13 +919,22 @@ function pageHost() {
 			rows.forEach(function (s) {
 				var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state;
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
-				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) + (s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
+				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) +
+					(s.detail === 'smart' ? ' <button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1 fw-normal" type="button" data-smart="' + esc(s.key) + '" title="' + esc(L('smart.btn_title')) + '"><i class="bi bi-table"></i> SMART</button>' : '') +
+					(s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
 					'<td class="d-none d-lg-table-cell spark-cell">' + (sparks[s.key] ? spark(sparks[s.key], st === 'ok' ? '' : 's-' + st) : '') + '</td>' +
 					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary text-nowrap">' + esc(tx(s.via || '')) + '</td></tr>';
 			});
 		});
 		if (!list.length) { html = '<tr><td colspan="6" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
 		setHTML($('#m64-svcs'), html);
+	}
+	// openSmart: alle zuletzt gelesenen SMART-Werte einer Platte als Dialog (liegen nur im Speicher der Node).
+	function openSmart(key) {
+		var s = H.services.filter(function (x) { return x.key === key; })[0];
+		return api('GET', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/smart?key=' + encodeURIComponent(key)).then(function (r) {
+			modal(L('smart.title', { n: s ? svcName(s) : key }), smartHTML(r.smart || {}), [{ label: L('close') }], true);
+		});
 	}
 	function accSummary(a) {
 		var c = a.config || {}, p = [];
@@ -1587,6 +1650,8 @@ function pageHost() {
 			lock(ig, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [ig.dataset.ign], state: 1 }).then(function () { toast(L('host.adopted_toast', { n: 1 })); return reload(); }); }).catch(fail);
 			return;
 		}
+		var sb = ev.target.closest('[data-smart]');
+		if (sb) { lock(sb, function () { return openSmart(sb.dataset.smart); }).catch(fail); return; }
 		var tr = ev.target.closest('tr[data-svc]');
 		if (tr) { history.replaceState(null, '', '#svc=' + encodeURIComponent(tr.dataset.svc)); openDetail(tr.dataset.svc); }
 	});

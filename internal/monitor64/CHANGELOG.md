@@ -1,5 +1,13 @@
 # Monitor64 – Änderungen
 
+## 0.1.11 – 2026-11-13
+
+- Dienste-Tabelle: Platten haben einen Knopf „SMART“. Er zeigt alle zuletzt gelesenen SMART-Werte als Dialog – bei SATA-Platten die ganze Attribut-Tabelle (ID, Name, Wert, schlechtester Wert, Schwelle, Rohwert; Attribute unter der Schwelle sind markiert), bei NVMe und SAS die einzelnen Werte, dazu Modell, Seriennummer, Firmware, Gesamtzustand und Zeitpunkt der Messung.
+- Vollständig über den Agent ab 0.1.4 (Linux, FreeBSD), per SSH und über Proxmox VE bzw. Proxmox Backup Server. Windows und ältere Agents zeigen die ausgewerteten Werte (Temperatur, Betriebsstunden, Sektoren …).
+- Die Werte liegen nur im Speicher der Node (der letzte Satz je Platte, kein Verlauf, nichts in der Datenbank); nach einem Neustart sind sie mit der nächsten SMART-Abfrage wieder da. Im Cluster antwortet die zuständige Node.
+- API: `GET /api/monitor64/hosts/{uid}/smart?key=<Dienst>`; Dienste mit SMART-Werten tragen `detail: "smart"`.
+- **Agent 0.1.4:** liefert je Platte alle SMART-Attribute bzw. NVMe-/SAS-Werte, die Firmware und den Zeitpunkt des Lesens.
+
 ## 0.1.10 – 2026-11-13
 
 Fehlerbehebungen aus den Meldungen auf GitHub:

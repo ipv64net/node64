@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/proxmox"
@@ -217,10 +218,80 @@ type smartResp struct {
 }
 
 type smartAttr struct {
-	ID    json.RawMessage `json:"id"`
-	Name  string          `json:"name"`
-	Raw   json.RawMessage `json:"raw"`
-	Value json.RawMessage `json:"value"`
+	ID        json.RawMessage `json:"id"`
+	Name      string          `json:"name"`
+	Raw       json.RawMessage `json:"raw"`
+	Value     json.RawMessage `json:"value"`
+	Worst     json.RawMessage `json:"worst"`
+	Threshold json.RawMessage `json:"threshold"`
+	Fail      string          `json:"fail"`
+}
+
+// maxSmartRows begrenzt die Zeilen des Satzes zum Nachschlagen.
+const maxSmartRows = 64
+
+// smartDetailOf baut aus der Antwort von disks/smart den Satz mit allen Werten zum Nachschlagen (model.SmartDetail):
+// ATA-Attribute mit ID als Tabelle, benannte Werte (PBS bei NVMe) und die Zeilen des Texts (Proxmox VE bei NVMe und
+// SAS) als Werte mit dem Namen vom Geraet.
+func smartDetailOf(r smartResp, d diskEntry, passed *bool, at time.Time) *model.SmartDetail {
+	out := &model.SmartDetail{Model: clipText(strings.TrimSpace(d.Model)), Serial: clipText(d.serial()), Size: uint64(max(d.Size, 0)), Passed: passed, At: at}
+	optInt := func(b json.RawMessage) *int {
+		if n, err := strconv.Atoi(strings.TrimSpace(rawText(b))); err == nil && len(b) > 0 {
+			return &n
+		}
+		return nil
+	}
+	value := func(name, text string) {
+		if name = strings.TrimSpace(name); name != "" && len(out.Values) < maxSmartRows {
+			out.Values = append(out.Values, model.SmartValue{Name: clipText(name), Text: clipText(strings.TrimSpace(text))})
+		}
+	}
+	for _, a := range r.Attributes {
+		id, err := strconv.Atoi(strings.TrimSpace(rawText(a.ID)))
+		if err != nil || id == 0 {
+			value(a.Name, firstNonEmpty(rawText(a.Value), rawText(a.Raw)))
+			continue
+		}
+		if len(out.Attrs) >= maxSmartRows {
+			continue
+		}
+		row := model.SmartAttr{ID: id, Name: clipText(a.Name), Value: optInt(a.Value), Worst: optInt(a.Worst), Thresh: optInt(a.Threshold), Raw: clipText(rawText(a.Raw))}
+		switch f := strings.ToLower(a.Fail); {
+		case strings.Contains(f, "now"):
+			row.Failed = "now"
+		case strings.Contains(f, "past"):
+			row.Failed = "past"
+		}
+		out.Attrs = append(out.Attrs, row)
+	}
+	for _, line := range strings.Split(r.Text, "\n") {
+		if k, v, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(v) != "" {
+			value(k, v)
+		}
+	}
+	switch {
+	case len(out.Attrs) > 0:
+		out.Type = "ata"
+	case d.kind() == "nvme" || strings.Contains(d.DevPath, "nvme"):
+		out.Type = "nvme"
+	}
+	if len(out.Attrs) == 0 && len(out.Values) == 0 {
+		return nil
+	}
+	return out
+}
+
+// clipText kuerzt Text vom Geraet fuer den Satz zum Nachschlagen.
+func clipText(s string) string {
+	const n = 128
+	if len(s) <= n {
+		return s
+	}
+	i := n
+	for i > 0 && s[i]&0xC0 == 0x80 {
+		i--
+	}
+	return s[:i]
 }
 
 // smartData sind die ausgewerteten SMART-Werte einer Platte (nil = nicht bekannt).

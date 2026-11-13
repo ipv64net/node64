@@ -71,6 +71,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/monitor64/hosts/{uid}/services/adopt", api(m.apiServicesAdopt))
 	mux.Handle("POST /api/monitor64/hosts/{uid}/services/remove", api(m.apiServicesRemove))
 	mux.Handle("PUT /api/monitor64/hosts/{uid}/service", api(m.apiServiceUpdate))
+	mux.Handle("GET /api/monitor64/hosts/{uid}/smart", api(m.apiSmart))
 
 	mux.Handle("PUT /api/monitor64/access/{uid}", api(m.apiAccessUpdate))
 	mux.Handle("DELETE /api/monitor64/access/{uid}", api(m.apiAccessDelete))

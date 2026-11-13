@@ -376,6 +376,9 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 		if a.smart != nil {
 			sm := a.smart
 			var parts []string
+			if sm.Error == "" {
+				a.s.Smart = smartDetail(sm, cur.Time)
+			}
 			if sm.Error != "" {
 				parts = append(parts, model.T("monitor64.txt.smart_unreadable"))
 				a.s.Facts = append(a.s.Facts, Fact{Code: "smart_unreadable", Text: hostText(sm.Error)})

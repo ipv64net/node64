@@ -7299,6 +7299,13 @@
           "acked": {
             "type": "boolean"
           },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "smart"
+            ],
+            "description": "Weitere Werte abrufbar: `smart` = alle SMART-Werte über `GET /monitor64/hosts/{uid}/smart?key=`"
+          },
           "metrics": {
             "type": "array",
             "items": {
@@ -8955,6 +8962,117 @@
             "description": "Port für Agents im Push-Betrieb (sofort; fehlt = unverändert)",
             "minimum": 1,
             "maximum": 65535
+          }
+        }
+      },
+      "Monitor64Smart": {
+        "type": "object",
+        "description": "Alle zuletzt gelesenen SMART-Werte einer Platte",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Schlüssel des Dienstes"
+          },
+          "smart": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "ata, nvme, scsi …"
+              },
+              "model": {
+                "type": "string"
+              },
+              "serial": {
+                "type": "string"
+              },
+              "firmware": {
+                "type": "string"
+              },
+              "size": {
+                "type": "integer",
+                "description": "Bytes"
+              },
+              "passed": {
+                "type": "boolean",
+                "description": "Gesamtzustand (fehlt = unbekannt)"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Zeitpunkt der Messung"
+              },
+              "partial": {
+                "type": "boolean",
+                "description": "Die Quelle liefert nur die ausgewerteten Werte, nicht alle Attribute"
+              },
+              "attrs": {
+                "type": "array",
+                "description": "ATA-Attribute",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "integer",
+                      "description": "normierter Wert"
+                    },
+                    "worst": {
+                      "type": "integer"
+                    },
+                    "thresh": {
+                      "type": "integer",
+                      "description": "Schwelle (0 = keine)"
+                    },
+                    "raw": {
+                      "type": "string",
+                      "description": "Rohwert"
+                    },
+                    "failed": {
+                      "type": "string",
+                      "enum": [
+                        "now",
+                        "past"
+                      ],
+                      "description": "unter der Schwelle (jetzt bzw. früher)"
+                    }
+                  }
+                }
+              },
+              "values": {
+                "type": "array",
+                "description": "NVMe-, SCSI- bzw. einzelne Werte",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "description": "bekannter Wert wie in smartctl -j, z. B. `available_spare`"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "sonst der Name vom Gerät"
+                    },
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "description": "%, °C, B, h, min, hex oder leer"
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "Wert als Text, wenn er keine Zahl ist"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -29739,6 +29857,57 @@
                       "type": "integer"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/monitor64/hosts/{uid}/smart": {
+      "get": {
+        "tags": [
+          "Monitor64"
+        ],
+        "summary": "SMART-Werte einer Platte",
+        "description": "Alle zuletzt gelesenen SMART-Werte einer Platte (Dienste mit `detail: \"smart\"`): ATA-Attribute bzw. NVMe-/SCSI-Werte, dazu Modell, Seriennummer, Firmware, Gesamtzustand und Zeitpunkt der Messung. Die Werte liegen nur im Speicher (kein Verlauf); im Cluster antwortet die zuständige Node. 404, solange noch nichts gelesen wurde.",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "description": "UID des Hosts",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "description": "Schlüssel des Dienstes, z. B. `disk:S4EWNX0M123456`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Monitor64Smart"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden (`not_found`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Monitor64Error"
                 }
               }
             }

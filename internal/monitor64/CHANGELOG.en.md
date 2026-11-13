@@ -1,5 +1,13 @@
 # Monitor64 – Changes
 
+## 0.1.11 – 2026-11-13
+
+- Services table: disks have a "SMART" button. It shows all SMART values read last as a dialog – for SATA disks the whole attribute table (ID, name, value, worst, threshold, raw value; attributes below their threshold are marked), for NVMe and SAS the individual values, plus model, serial number, firmware, overall health and the time of the reading.
+- Complete via the agent from 0.1.4 (Linux, FreeBSD), via SSH and via Proxmox VE or Proxmox Backup Server. Windows and older agents show the evaluated values (temperature, power-on hours, sectors …).
+- The values are kept in the node's memory only (the last set per disk, no history, nothing in the database); after a restart they are back with the next SMART query. In a cluster the responsible node answers.
+- API: `GET /api/monitor64/hosts/{uid}/smart?key=<service>`; services with SMART values carry `detail: "smart"`.
+- **Agent 0.1.4:** delivers all SMART attributes or NVMe/SAS values per disk, the firmware and the time of the reading.
+
 ## 0.1.10 – 2026-11-13
 
 Bug fixes from the reports on GitHub:
