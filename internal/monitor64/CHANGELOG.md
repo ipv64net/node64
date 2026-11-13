@@ -10,6 +10,8 @@ Fehlerbehebungen aus den Meldungen auf GitHub:
 - Platten: Zwei Platten an gleichen USB-Adaptern melden oft dieselbe Seriennummer (die des Adapters) und fielen zu einem Dienst zusammen – die zweite fehlte. Jetzt zählt in dem Fall die Seriennummer aus SMART bzw. der Gerätename; die bisher angezeigte Platte erscheint dadurch einmalig als neuer Dienst (#84).
 - Dienste-Tabelle: Die Kategorie heißt „Gäste und Backups“ statt „Proxmox“ – sie gilt auch für VMs auf Unraid und TrueNAS (#87).
 - Geändertes Zertifikat (z. B. FRITZ!Box nach neuem Namen): Der Zugang erklärt jetzt, was zu tun ist, und „Verbindung testen“ bietet „Neuen Fingerabdruck übernehmen“ an; danach das Geheimnis erneut eingeben und speichern (#121).
+- Statusseiten: Die Tags der Monitor64-Hosts stehen im Tag-Filter des Editors (#102).
+- Assistent Proxmox VE/PBS: Der Hinweis zum Token erklärt die Privilegientrennung – ein Token mit Privilegientrennung braucht die Rolle selbst, es gilt die Schnittmenge aus Benutzer und Token.
 - **Agent 0.1.3 (Linux):** Dateisysteme stehen nicht mehr alle als „nur lesbar“ da – der Agent liest das jetzt aus Sicht des Hosts statt aus seiner eigenen, gehärteten Umgebung (#97).
 - **Agent 0.1.3:** startet auf UGREEN-NAS (UGOS): ein dort für alle Dienste gesetztes `GODEBUG` wird nicht mehr geerbt. Die Installation prüft nach dem Start, ob der Dienst läuft, und zeigt sonst die letzten Log-Zeilen. Dass UGOS Upgrades über `apt` sperrt, ist ein Hinweis statt einer fehlgeschlagenen Teilabfrage – auch per SSH (#96).
 - **Agent 0.1.3:** Unter SELinux (Fedora, RHEL, Rocky …) kennzeichnet die Installation den Programmordner als `bin_t`, damit das automatische Update nicht mehr mit „permission denied“ scheitert (#100).

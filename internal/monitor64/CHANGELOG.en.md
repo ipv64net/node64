@@ -10,6 +10,8 @@ Bug fixes from the reports on GitHub:
 - Disks: two disks on identical USB adapters often report the same serial number (the adapter's) and collapsed into one service – the second was missing. In that case the serial number from SMART or the device name is used now; the disk shown so far therefore appears once as a new service (#84).
 - Services table: the category is called "Guests and backups" instead of "Proxmox" – it also applies to VMs on Unraid and TrueNAS (#87).
 - Changed certificate (e.g. FRITZ!Box after a new name): the access now explains what to do, and "Test connection" offers "Accept new fingerprint"; afterwards enter the secret again and save (#121).
+- Status pages: the tags of Monitor64 hosts are available in the editor's tag filter (#102).
+- Wizard Proxmox VE/PBS: the token hint explains privilege separation – a token with privilege separation needs the role itself, the intersection of user and token applies.
 - **Agent 0.1.3 (Linux):** file systems are no longer all shown as "read-only" – the agent now reads this from the host's point of view instead of its own hardened environment (#97).
 - **Agent 0.1.3:** starts on UGREEN NAS (UGOS): a `GODEBUG` set there for all services is no longer inherited. The installation checks after the start whether the service is running and shows the last log lines otherwise. UGOS locking upgrades via `apt` is a note instead of a failed partial query – also via SSH (#96).
 - **Agent 0.1.3:** under SELinux (Fedora, RHEL, Rocky …) the installation labels the program folder `bin_t` so that the automatic update no longer fails with "permission denied" (#100).
