@@ -20,10 +20,11 @@ type StatusFeed interface {
 
 // StatusTarget ist ein Eintrag zur Auswahl im Editor.
 type StatusTarget struct {
-	Source string // Quelle des Eintrags
-	Host   string // Name des Hosts
-	Name   string // Name des Dienstes ("" = der Host selbst)
-	Group  string // Gruppe des Hosts
+	Source string   // Quelle des Eintrags
+	Host   string   // Name des Hosts
+	Name   string   // Name des Dienstes ("" = der Host selbst)
+	Group  string   // Gruppe des Hosts
+	Tags   []string // Tags des Hosts (Filter im Editor)
 	Paused bool
 }
 

@@ -4,6 +4,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>{{.Title}} · {{.T "app.name"}}</title>
+	{{if not .Theme}}<script src="/static/js/theme.js?v={{.Version}}"></script>{{end}}
 	<link rel="icon" href="/static/img/favicon.png">
 	<link rel="stylesheet" href="/static/css/bootstrap.min.css">
 	<link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">

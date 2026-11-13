@@ -89,6 +89,19 @@ func TestResolver(t *testing.T) {
 	}
 }
 
+// Ohne MAC-Regel liefert For trotzdem die MAC aus der Nachbartabelle (Seite Gruppen, #79).
+func TestResolverMACWithoutMACRules(t *testing.T) {
+	r := NewResolver(nil)
+	r.read = func() (map[netip.Addr]string, error) {
+		return map[netip.Addr]string{netip.MustParseAddr("192.168.1.20"): "02:11:22:33:44:55"}, nil
+	}
+	r.Set([]Group{{ID: 1, Name: "Kinder", Members: []Member{{Kind: KindIP, Value: "192.168.1.50"}}}})
+	r.refresh(false) // wie Run
+	if got := r.For(netip.MustParseAddr("192.168.1.20")); got.MAC != "02:11:22:33:44:55" || got.ID != 0 {
+		t.Fatalf("for: %+v", got)
+	}
+}
+
 // IPs: alle Adressen einer MAC aus der Nachbartabelle, ohne Link-Local, sortiert.
 func TestResolverIPs(t *testing.T) {
 	r := NewResolver(nil)

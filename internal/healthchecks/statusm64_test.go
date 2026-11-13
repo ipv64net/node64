@@ -88,8 +88,8 @@ func m64Fake(now time.Time) *fakeM64 {
 	maint.Maintenance = []module.StatusMaint{w1}
 	nas.Maintenance = append(nas.Maintenance, w1)
 	return &fakeM64{
-		targets: []module.StatusTarget{{Source: "m64:host:HOSTUID1", Host: "nas01", Group: "GruppeKeller"},
-			{Source: "m64:svc:HOSTUID1/postgres-geheim", Host: "nas01", Name: "postgres-geheim", Group: "GruppeKeller"},
+		targets: []module.StatusTarget{{Source: "m64:host:HOSTUID1", Host: "nas01", Group: "GruppeKeller", Tags: []string{"m64tag", "storage"}},
+			{Source: "m64:svc:HOSTUID1/postgres-geheim", Host: "nas01", Name: "postgres-geheim", Group: "GruppeKeller", Tags: []string{"m64tag", "storage"}},
 			{Source: "m64:host:HOSTUID2", Host: "router", Group: "GruppeNetz"}},
 		srcs: map[string]fakeM64Src{
 			"m64:host:HOSTUID1":                {StatusSource: nas},
@@ -383,6 +383,10 @@ func TestStatusM64Editor(t *testing.T) {
 	if !d.M64On || d.M64Off || len(m64) != 3 || m64[0].Value != "m64:host:HOSTUID1" || m64[1].Name != "postgres-geheim" || m64[1].Sub != "nas01" ||
 		m64[0].Group != statusM64Group || !containsStr(d.HCGroups, statusM64Group) || d.Checks[0].Token != chk {
 		t.Fatalf("form: %+v", d)
+	}
+	// Tags der Monitor64-Hosts stehen im Filter und am Eintrag (#102)
+	if !containsStr(d.Tags, "m64tag") || !containsStr(d.Tags, "storage") || m64[0].Tags != "m64tag,storage" || m64[2].Tags != "" {
+		t.Fatalf("tags: %v %+v", d.Tags, m64)
 	}
 	// hinzufuegen: bekannte Eintraege, unbekannte fallen weg, nichts doppelt
 	v := baseForm(&StatusPage{Title: "Mit Monitor64"})

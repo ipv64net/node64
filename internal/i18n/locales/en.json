@@ -3707,7 +3707,7 @@
     },
     "pub": {
       "refused": "{n} queries from networks not allowed were rejected (last {ip}, {time}). If the network is yours, add it under “Additional allowed client networks”.",
-      "missing": "Docker bridge network: DNS64 listens inside the container, but these ports are not published on the Docker host – the home network cannot reach them: {ports}.",
+      "missing": "Docker bridge network: DNS64 listens inside the container, but these ports do not arrive via the Docker host – probably not published: {ports}. If they are in docker run or compose, the host firewall (e.g. ufw) often blocks the path from the container to the host that the node checks – then this notice does not apply.",
       "run": "docker run:",
       "compose": "docker compose:",
       "host": "Alternatively network_mode: host – then nothing needs to be published, and DNS64 sees the real device addresses.",

@@ -3707,7 +3707,7 @@
     },
     "pub": {
       "refused": "{n} Anfragen aus nicht erlaubten Netzen abgewiesen (zuletzt {ip}, {time}). Gehört das Netz zu dir, unter „Weitere erlaubte Client-Netze“ eintragen.",
-      "missing": "Docker-Bridge-Netz: DNS64 lauscht im Container, aber diese Ports sind auf dem Docker-Host nicht veröffentlicht – das Heimnetz erreicht sie nicht: {ports}.",
+      "missing": "Docker-Bridge-Netz: DNS64 lauscht im Container, aber diese Ports kommen über den Docker-Host nicht an – vermutlich nicht veröffentlicht: {ports}. Stehen sie in docker run bzw. compose, blockt oft die Firewall des Hosts (z. B. ufw) den Weg vom Container zum Host, über den die Node prüft – dann trifft der Hinweis nicht zu.",
       "run": "docker run:",
       "compose": "docker compose:",
       "host": "Alternativ network_mode: host – dann braucht es keine Veröffentlichung, und DNS64 sieht die echten Adressen der Geräte.",

@@ -14,8 +14,9 @@
 			root.setAttribute("data-bs-theme", window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 		}
 	}
-	// Ohne Cookie folgt das Schema dem System
-	if (!root.getAttribute("data-bs-theme")) {
+	// Ohne Cookie folgt das Schema dem System (dunkel setzt schon das Skript im head, sonst blitzt es hell auf, #124)
+	var saved = cookie("node64_theme");
+	if (saved !== "light" && saved !== "dark") {
 		apply(cookie("node64_theme"));
 		window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
 			if (!cookie("node64_theme")) { apply(""); }

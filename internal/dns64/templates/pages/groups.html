@@ -237,7 +237,7 @@
 						<td class="font-monospace text-break">{{.IP}}{{if and $d.HC .Host}} <a class="btn btn-sm btn-link p-0 ms-1" href="/healthchecks/new?type=icmp&amp;target={{.IP}}&amp;name={{if .Name}}{{.Name}}{{else}}{{.IP}}{{end}}" title="{{$.T "dns64.groups.as_check"}}" aria-label="{{$.T "dns64.groups.as_check"}}"><i class="bi bi-heart-pulse"></i></a>{{end}}</td>
 						<td class="font-monospace">{{if .MAC}}{{.MAC}}{{else}}<span class="text-body-tertiary" title="{{$.T "dns64.groups.no_mac"}}">–</span>{{end}}</td>
 						<td class="text-end">{{.Queries}}</td>
-						<td class="text-nowrap">{{$.Ago .Last}}</td>
+						<td class="text-nowrap" data-sort="{{.Last.UnixMilli}}" title="{{$.Time .Last}}">{{$.Ago .Last}}</td>
 						<td>{{if $d.Groups}}<form method="post" action="/dns64/groups/assign" class="d-flex gap-1 m-0">
 							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><input type="hidden" name="mac" value="{{.MAC}}"><input type="hidden" name="label" value="{{.Name}}">
 							<select class="form-select form-select-sm" style="width:auto" name="group_id" aria-label="{{$.T "dns64.groups.group"}}">

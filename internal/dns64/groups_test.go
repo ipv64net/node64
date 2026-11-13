@@ -3,9 +3,11 @@ package dns64
 import (
 	"context"
 	"errors"
+	"html/template"
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,5 +138,26 @@ func TestHostAddr(t *testing.T) {
 		if got := err == nil && hostAddr(tc.anon, ip); got != tc.want {
 			t.Errorf("%s: %v", tc.ip, got)
 		}
+	}
+}
+
+// Geraeteliste: "vor 5 min" sortiert per data-sort nach dem Zeitstempel (#80).
+type groupsView struct{ tview }
+
+func (groupsView) Ago(time.Time) string { return "ago" }
+
+func TestGroupsPageDevicesSortByTime(t *testing.T) {
+	tpl, err := template.New("groups").ParseFS(templateFS, "templates/pages/groups.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := time.UnixMilli(1762000000123)
+	var sb strings.Builder
+	v := groupsView{tview{CSRF: "c", Data: pageData{Running: true, Devices: []deviceView{{IP: "192.168.1.20", MAC: "02:11:22:33:44:55", Queries: 3, Last: last}}}}}
+	if err := tpl.ExecuteTemplate(&sb, "content", v); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.String(), `data-sort="1762000000123"`) || !strings.Contains(sb.String(), "02:11:22:33:44:55") {
+		t.Fatalf("devices:\n%s", sb.String())
 	}
 }

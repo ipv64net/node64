@@ -385,7 +385,7 @@
 				tb.append(tr0);
 				return;
 			}
-			var today = new Date().toDateString();
+			var today = new Date().toDateString(); // heute nur die Uhrzeit; sortiert wird per data-sort nach dem Zeitstempel (#123)
 			d.rows.forEach(function (r) {
 				var dt = new Date(r.t);
 				var time = dt.toDateString() === today ? dt.toLocaleTimeString(locale)
@@ -421,7 +421,7 @@
 				var action = el("td", { "class": "text-end" });
 				if (r.status === "blocked") { action.append(releaseButton(r.domain)); }
 				else if (r.status === "allowed" || r.status === "cached") { action.append(blockButton(r.domain)); }
-				tr.append(el("td", { "class": "text-nowrap" }, time), client, domain, el("td", { "class": "text-nowrap" }, r.qtype + (r.proto && r.proto !== "udp" ? " · " + t("proto." + r.proto) : "")), st,
+				tr.append(el("td", { "class": "text-nowrap", "data-sort": String(dt.getTime()), title: dt.toLocaleString(locale) }, time), client, domain, el("td", { "class": "text-nowrap" }, r.qtype + (r.proto && r.proto !== "udp" ? " · " + t("proto." + r.proto) : "")), st,
 					el("td", { "class": "text-body-secondary text-truncate", style: "max-width:22rem", title: details }, details),
 					el("td", { "class": "text-end text-nowrap" }, r.ms < 1 ? "<1 ms" : pf.format(r.ms) + " ms"), action);
 				tb.append(tr);
@@ -454,7 +454,9 @@
 			if (!tr || l.enabled === false) { return; } // ausgeschaltete Freigabe-Liste: Abzeichen "aus" bleibt
 			var loaded = l.updatedAt && l.updatedAt.indexOf("0001") !== 0;
 			tr.querySelector(".l-rules").textContent = nf.format(l.rules);
-			tr.querySelector(".l-updated").textContent = loaded ? ago(new Date(l.updatedAt)) : "–";
+			var upd = tr.querySelector(".l-updated");
+			upd.textContent = loaded ? ago(new Date(l.updatedAt)) : "–";
+			if (loaded) { upd.setAttribute("data-sort", String(new Date(l.updatedAt).getTime())); } else { upd.removeAttribute("data-sort"); } // "vor 5 min" nach Zeit sortieren (#80)
 			var status = tr.querySelector(".l-status");
 			status.replaceChildren();
 			if (l.error) { status.append(el("span", { "class": "badge text-bg-danger text-wrap", title: l.error }, t("error") + ": " + l.error)); }

@@ -249,12 +249,15 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 	sort.SliceStable(d.Checks, func(i, j int) bool { return strings.ToLower(d.Checks[i].Name) < strings.ToLower(d.Checks[j].Name) })
 	// Monitor64 hinten in der Reihenfolge von Monitor64 (je Host der Host, dann seine Dienste)
 	for _, t := range m64 {
-		o := statusCheckOpt{M64: true, Value: t.Source, Name: t.Host, Group: statusM64Group, Paused: t.Paused, OnPage: on[t.Source], Type: "hc.status.m64_host"}
+		o := statusCheckOpt{M64: true, Value: t.Source, Name: t.Host, Tags: strings.Join(t.Tags, ","), Group: statusM64Group, Paused: t.Paused, OnPage: on[t.Source], Type: "hc.status.m64_host"}
 		if t.Name != "" {
 			o.Name, o.Sub, o.Type = t.Name, t.Host, "hc.status.m64_service"
 		}
 		d.Checks = append(d.Checks, o)
 		groups[statusM64Group] = true
+		for _, tg := range t.Tags { // Tags der Monitor64-Hosts gehoeren mit in den Filter (#102)
+			tags[tg] = true
+		}
 	}
 	statusMarkSections(d.Checks, func(i int) bool { return d.Checks[i].M64 }, func(i int, k string) { d.Checks[i].Sec = k })
 	d.Tags, d.HCGroups = sortedKeys(tags), sortedKeys(groups)

@@ -276,13 +276,12 @@ type Match struct {
 func (r *Resolver) For(ip netip.Addr) Match {
 	ip = ip.Unmap().WithZone("")
 	c := r.cur.Load()
-	var mac string
-	if c.macs {
+	// MAC immer aus dem vorhandenen Stand (Run liest ihn alle 30 s, die Seite Gruppen zeigt sie, #79); sofort neu
+	// lesen nur, wenn es MAC-Regeln gibt
+	mac := r.mac(ip)
+	if c.macs && mac == "" && ip.IsValid() && !ip.IsLoopback() {
+		r.refresh(true) // neues Geraet: Tabelle neu lesen (hoechstens alle 5 s)
 		mac = r.mac(ip)
-		if mac == "" && ip.IsValid() && !ip.IsLoopback() {
-			r.refresh(true) // neues Geraet: Tabelle neu lesen (hoechstens alle 5 s)
-			mac = r.mac(ip)
-		}
 	}
 	for _, g := range c.groups {
 		if (mac != "" && g.macs[mac]) || g.ips[ip] {
