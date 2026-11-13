@@ -346,6 +346,42 @@ func statusMaintFor(mw Maintenance, token string) bool {
 	return len(mw.Tokens) == 0 || contains(mw.Tokens, token)
 }
 
+// statusInMaint: die Stoerung lag ganz in einem Termin eines Wartungsfensters des Checks (laufende bis now). Solche
+// Ausfaelle sind erwartet und wurden nicht gemeldet: keine Stoerung auf der Statusseite.
+func statusInMaint(wins []Maintenance, token string, start, end, now time.Time, loc *time.Location) bool {
+	if end.IsZero() || end.After(now) {
+		end = now
+	}
+	to := end
+	if !to.After(start) {
+		to = start.Add(time.Second)
+	}
+	for _, mw := range wins {
+		if !statusMaintFor(mw, token) {
+			continue
+		}
+		for _, o := range statusMaintOccurrences(mw, start, to, loc) {
+			if !o.from.After(start) && !o.to.Before(end) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// statusDropMaint laesst die Stoerungen weg, die ganz in einer Wartung lagen (Liste und Balken).
+func statusDropMaint(incs map[string][]statusIncidentRow, wins []Maintenance, now time.Time, loc *time.Location) {
+	for tok, list := range incs {
+		kept := list[:0]
+		for _, i := range list {
+			if !statusInMaint(wins, tok, i.start, i.end, now, loc) {
+				kept = append(kept, i)
+			}
+		}
+		incs[tok] = kept
+	}
+}
+
 // statusTokenChunks ruft fn fuer Teilmengen der Tokens auf (Platzhalter "?,?,..."): wenige Abfragen auch bei
 // 1000 Eintraegen, innerhalb der Grenzen von SQLite und ueber den Index (token, ...).
 func statusTokenChunks(tokens []string, fn func(ph string, args []any) error) error {
@@ -712,6 +748,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	if err != nil {
 		return nil, err
 	}
+	statusDropMaint(incs, wins, now, loc)
 	occ := make([][]statusSpan, len(wins))
 	for i, mw := range wins {
 		occ[i] = statusMaintOccurrences(mw, bounds[0], now, loc)
@@ -1090,6 +1127,7 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	if err != nil {
 		return nil, err
 	}
+	statusDropMaint(incs, wins, now, loc)
 	downs := statusMinutes(statusOverlap(bounds, statusDownSpans(incs[c.Token], now)))
 	occ := make([][]statusSpan, len(wins))
 	for i, mw := range wins {
@@ -1108,11 +1146,21 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	if !p.ShowHistory {
 		return d, nil
 	}
-	list, err := m.st.Incidents(ctx, c.Token, 5)
+	list, err := m.st.Incidents(ctx, c.Token, 20) // ohne die ganz in einer Wartung (weggelassen), hoechstens 5
 	if err != nil {
 		return nil, err
 	}
 	for _, i := range list {
+		var end time.Time
+		if !i.Open {
+			end = i.EndedAt
+		}
+		if statusInMaint(wins, c.Token, i.StartedAt, end, now, loc) {
+			continue
+		}
+		if len(d.Incidents) == 5 {
+			break
+		}
 		vi := StatusViewIncid{Item: label, Start: i.StartedAt, Reason: statusReason(tr, i.Reason)}
 		if !i.Open {
 			vi.End = i.EndedAt

@@ -1526,6 +1526,39 @@ func (c *Live) TestServerChannel(ctx context.Context, remoteID int64, lang strin
 	return errors.New("test not confirmed by ipv64")
 }
 
+// SendServerChannel (notify.Dispatcher.SetHubChannelSender) bittet den hub, eine Meldung der Node (z. B. Monitor64)
+// ueber einen Portal-Kanal zu senden, dessen Geheimnisse nur bei ipv64 liegen (Webhook, Discord, IPv64 App ...).
+// Ohne Verbindung oder bei einem hub, der das noch nicht kann: notify.ErrUnavailable (Kanal nicht gestoert).
+func (c *Live) SendServerChannel(_ context.Context, ch *notify.Channel, m notify.Message) error {
+	if ch.RemoteID <= 0 {
+		return fmt.Errorf("%w: channel not synced with ipv64 yet", notify.ErrUnavailable)
+	}
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s == nil {
+		return fmt.Errorf("%w: not connected to ipv64", notify.ErrUnavailable)
+	}
+	resp, err := s.request("notify", map[string]any{"channel_id": ch.RemoteID, "kind": string(m.Kind), "title": m.Title, "text": m.Text, "url": m.URL,
+		"event_id": m.EventID, "check": m.Check, "priority": m.Priority, "time": m.Time, "payload": m.Payload})
+	if err != nil {
+		return notify.Temporary(err) // Verbindung weg: spaeter erneut
+	}
+	var res struct {
+		Error string `json:"error"`
+	}
+	_ = json.Unmarshal(resp.Data, &res)
+	switch res.Error {
+	case "":
+		return nil
+	case "channel not available": // aelterer hub (nur ipv64-Mail/-SMS) oder Kanal dort aus
+		return fmt.Errorf("%w: channel not sent by ipv64 for this node (only stored at ipv64)", notify.ErrUnavailable)
+	case "database error", "rate limited":
+		return notify.Temporary(errors.New(res.Error))
+	}
+	return errors.New(res.Error)
+}
+
 // ---------------------------------------------------------------- Stellvertreter-Nodes (lokale Gruppe)
 
 // ProxyReady: verbunden mit einem hub, der Stellvertreter-Nodes annimmt.

@@ -557,6 +557,45 @@ func TestStatusMaintenance(t *testing.T) {
 	}
 }
 
+// Ausfaelle ganz in einem Wartungsfenster sind keine Stoerungen (#75): nicht in der Liste, nicht im Balken und nicht
+// in der Detailansicht; ragt der Ausfall aus dem Fenster heraus, bleibt er eine Stoerung.
+func TestStatusIncidentInMaintenance(t *testing.T) {
+	m, _ := newStatusModule(t)
+	now := statusFixNow(t, m)
+	a := statusAddCheck(t, m, "A", scheduler.Runtime{State: scheduler.StateUp, LastCheck: now})
+	ctx := context.Background()
+	start := now.Add(-5 * time.Hour)
+	if err := m.st.MaintenanceInsert(ctx, &Maintenance{Name: "Update", StartAt: start, EndAt: start.Add(2 * time.Hour), Tokens: []string{a.Token}, Active: true}); err != nil {
+		t.Fatal(err)
+	}
+	statusIncident(t, m, a.Token, start.Add(10*time.Minute), start.Add(40*time.Minute))              // ganz in der Wartung
+	statusIncident(t, m, a.Token, start.Add(90*time.Minute), start.Add(150*time.Minute))             // ueber das Ende hinaus
+	statusIncident(t, m, a.Token, start.Add(-30*time.Hour), start.Add(-30*time.Hour+20*time.Minute)) // ohne Wartung
+	p := statusSavePage(t, m, &StatusPage{Slug: "wartung-stoerung", Title: "W", Enabled: true, Days: 30, ShowHistory: true,
+		Groups: []StatusGroup{{Items: []StatusItem{{Token: a.Token, Label: "Alpha"}}}}}, "")
+	v, err := m.statusView(ctx, p, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Incidents) != 2 || !v.Incidents[0].Start.Equal(start.Add(90*time.Minute)) || !v.Incidents[1].Start.Equal(start.Add(-30*time.Hour)) {
+		t.Fatalf("incidents: %+v", v.Incidents)
+	}
+	d, err := m.statusItemDetail(ctx, p, v.Groups[0].Items[0].ID, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Incidents) != 2 {
+		t.Fatalf("detail incidents: %+v", d.Incidents)
+	}
+	down := 0
+	for _, h := range d.Hours {
+		down += h.DownMins
+	}
+	if down != 60 {
+		t.Fatalf("down minutes in the last 24 h: %d, want 60 (outage in maintenance not counted)", down)
+	}
+}
+
 func statusSourceHourly(t *testing.T, m *Module, token, source, hour string, count, up int) {
 	t.Helper()
 	if _, err := m.st.w.Exec(`INSERT INTO hc_source_hourly (token, source, hour, count, up_count, avg_ms) VALUES (?,?,?,?,?,20)`, token, source, hour, count, up); err != nil {

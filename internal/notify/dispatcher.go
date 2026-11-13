@@ -96,6 +96,15 @@ type Dispatcher struct {
 	hubDirect   func() bool // der hub ueberlaesst der Node die Meldungen ihrer Direct-Checks (wire.NotifyDirect)
 	apiReady    func() bool
 	remote      func(ctx context.Context) []*Channel
+	hubChannel  func(ctx context.Context, ch *Channel, m Message) error // Portal-Kanal ueber den hub (Geheimnisse nur bei ipv64)
+}
+
+// SetHubChannelSender installiert den Versand ueber den hub fuer Portal-Kanaele, deren Geheimnisse nur bei ipv64
+// liegen (Webhook, Discord, IPv64 App ...): so kommen auch Meldungen der Module (z. B. Monitor64) dort an.
+func (d *Dispatcher) SetHubChannelSender(send func(ctx context.Context, ch *Channel, m Message) error) {
+	d.hookMu.Lock()
+	d.hubChannel = send
+	d.hookMu.Unlock()
 }
 
 // SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
@@ -1087,20 +1096,27 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels.Load() && send != nil && apiType(ch.Type) {
 		s, ok = apiSender(send), true // Server-Kanal direkt ueber die ipv64-API (nur Local-, Direct- und unverknuepft)
 	} else {
+		s, ok = d.senders[ch.Type]
 		if ch.Execution == "server" && !d.sendServerChannels.Load() {
 			// anderer Portal-Kanal (z. B. Webhook, Telegram): die Node sendet selbst mit den Werten aus dem Sync;
-			// fehlt ein Geheimnis, das nur bei ipv64 liegt, ist der Weg nicht verfuegbar (Kanal nicht gestoert)
+			// fehlt ein Geheimnis, das nur bei ipv64 liegt, sendet der hub, sonst ist der Weg nicht verfuegbar
+			// (Kanal nicht gestoert)
 			cp := *ch
 			cp.Config = make(map[string]string, len(ch.Config))
 			for k, v := range ch.Config {
 				cp.Config[k] = v
 			}
 			if err := cp.Validate(); err != nil {
-				d.record(ctx, ch, m, fmt.Errorf("%w: %v (only stored at ipv64)", ErrUnavailable, err))
-				return
+				d.hookMu.RLock()
+				hub := d.hubChannel
+				d.hookMu.RUnlock()
+				if hub == nil {
+					d.record(ctx, ch, m, fmt.Errorf("%w: %v (only stored at ipv64)", ErrUnavailable, err))
+					return
+				}
+				s, ok = apiSender(hub), true
 			}
 		}
-		s, ok = d.senders[ch.Type]
 	}
 	if !ok {
 		d.record(ctx, ch, m, fmt.Errorf("no sender for type %s", ch.Type))

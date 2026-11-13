@@ -3,6 +3,8 @@ package notify
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -126,6 +128,76 @@ func TestServerChannelSentLocally(t *testing.T) {
 	defer mu.Unlock()
 	if api != 0 {
 		t.Fatalf("api path used for webhook/telegram: %d", api)
+	}
+	chans, _ := st.Channels(ctx)
+	for _, c := range chans {
+		if c.LastError != "" {
+			t.Fatalf("%s must not be marked failing: %q", c.Name, c.LastError)
+		}
+	}
+}
+
+// Portal-Kanal, dessen Geheimnis nur bei ipv64 liegt (#95, #127): Meldungen der Module (z. B. Monitor64) gehen ueber
+// den hub statt mit "delivery path not available" liegen zu bleiben; Kanaele mit allen Werten sendet die Node selbst.
+func TestServerChannelViaHub(t *testing.T) {
+	d, st, rec := testDispatcher(t, nil)
+	ctx := context.Background()
+	hook := &Channel{Type: TypeWebhook, Name: "Portal-Webhook", Config: map[string]string{"url": "http://x/", "method": "POST"}, Enabled: true, Default: true, NotifyDown: true, NotifyUp: true, Lang: "de", Execution: "server", RemoteID: 3}
+	tg := &Channel{Type: TypeTelegram, Name: "Portal-Telegram", Config: map[string]string{"chat_id": "7"}, Enabled: true, Default: true, NotifyDown: true, NotifyUp: true, Lang: "de", Execution: "server", RemoteID: 4}
+	for _, c := range []*Channel{hook, tg} {
+		if err := st.Insert(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.SetAPISender(func(context.Context, *Channel, Message) error { return nil }, func() bool { return true })
+	var mu sync.Mutex
+	var hub []Message
+	var hubIDs []int64
+	d.SetHubChannelSender(func(_ context.Context, ch *Channel, m Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+		hub, hubIDs = append(hub, m), append(hubIDs, ch.RemoteID)
+		return nil
+	})
+	d.Dispatch(Alert{EventID: "m1", Kind: KindDown, Check: CheckInfo{Token: "t", Name: "Web", NotifyDown: true, NotifyUp: true, Local: true}})
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(hub)
+		mu.Unlock()
+		if n > 0 && len(rec.list()) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if got := rec.list(); len(got) != 1 {
+		t.Fatalf("webhook must be sent locally once: %v", got)
+	}
+	mu.Lock()
+	if len(hub) != 1 || hubIDs[0] != 4 || hub[0].Title == "" || hub[0].EventID != "m1" {
+		mu.Unlock()
+		t.Fatalf("telegram must go via the hub once: %v %+v", hubIDs, hub)
+	}
+	mu.Unlock()
+	list, _ := st.Deliveries(ctx, 10, 0, tg.ID)
+	if len(list) != 1 || !list[0].OK {
+		t.Fatalf("delivery via hub: %+v", list)
+	}
+	// hub nicht erreichbar oder zu alt: Weg nicht verfuegbar, Kanal nicht gestoert
+	d.SetHubChannelSender(func(context.Context, *Channel, Message) error {
+		return fmt.Errorf("%w: not connected to ipv64", ErrUnavailable)
+	})
+	d.Dispatch(Alert{EventID: "m2", Kind: KindUp, Check: CheckInfo{Token: "t", Name: "Web", NotifyDown: true, NotifyUp: true, Local: true}})
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if list, _ = st.Deliveries(ctx, 10, 0, tg.ID); len(list) == 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(list) != 2 || list[0].OK || !strings.Contains(list[0].Error, "not connected") {
+		t.Fatalf("unavailable hub: %+v", list)
 	}
 	chans, _ := st.Channels(ctx)
 	for _, c := range chans {
