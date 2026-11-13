@@ -111,6 +111,28 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash, lang, tz
 	return s.UserByID(ctx, id)
 }
 
+// ErrSetupDone: es gibt schon einen Benutzer, die Ersteinrichtung ist erledigt.
+var ErrSetupDone = errors.New("setup already done")
+
+// CreateFirstUser legt den ersten Benutzer an (Ersteinrichtung): Pruefung und Anlage in einer Anweisung, damit
+// gleichzeitige Anfragen nicht zwei Konten anlegen. Gibt es schon einen Benutzer, kommt ErrSetupDone.
+func (s *Store) CreateFirstUser(ctx context.Context, username, passwordHash, lang, tz string) (*User, error) {
+	uid := make([]byte, 16)
+	_, _ = rand.Read(uid)
+	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at)
+		SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)`,
+		hex.EncodeToString(uid), username, passwordHash, lang, tz, Now())
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return nil, ErrSetupDone
+	}
+	id, _ := res.LastInsertId()
+	s.userChanged(ctx, id)
+	return s.UserByID(ctx, id)
+}
+
 // SetLoginCluster haengt den Cluster an Benutzer und Anmeldung an (internal/usercluster, vor dem Start; nil = ohne).
 func (s *Store) SetLoginCluster(f func(ctx context.Context, item, id string, deleted bool)) {
 	s.loginCluster = f

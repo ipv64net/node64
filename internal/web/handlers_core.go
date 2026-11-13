@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/ipv64api"
@@ -98,7 +99,12 @@ func (s *Server) setupSubmit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	u, err := s.Store.CreateUser(ctx, f["username"], hash, v.Lang, f["timezone"])
+	// Pruefung und Anlage atomar: von gleichzeitigen Anfragen legt nur die erste ein Konto an
+	u, err := s.Store.CreateFirstUser(ctx, f["username"], hash, v.Lang, f["timezone"])
+	if errors.Is(err, store.ErrSetupDone) {
+		s.errorPage(w, r, http.StatusForbidden, "errors.setup_done")
+		return
+	}
 	if err != nil {
 		s.fail(w, r, err)
 		return

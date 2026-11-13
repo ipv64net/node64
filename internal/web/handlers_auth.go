@@ -59,36 +59,58 @@ func (s *Server) loginTOTPSubmit(w http.ResponseWriter, r *http.Request) {
 	keys := []string{"totp:" + ipKey(ip), "totp:user:" + strconv.FormatInt(u.ID, 10)}
 	v := s.view(r, "login.title")
 	v.Form["next"] = safeNext(r.PostFormValue("next"))
-	if wait := s.limiter.retryAfter(keys...); wait > 0 {
+	// Versuch vor der Pruefung verbuchen (bei Erfolg zurueck) wie beim Passwort: sonst kaemen parallele Anfragen alle durch
+	if wait := s.limiter.take(keys...); wait > 0 {
 		secs := int(wait.Seconds()) + 1
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
 		v.Flash = &Flash{Kind: "warning", Text: v.T("login.ratelimited", "seconds", secs)}
 		s.render(w, r, http.StatusTooManyRequests, "login_totp", v)
 		return
 	}
 	code := strings.TrimSpace(r.PostFormValue("code"))
-	ok := totp.Verify(u.TOTPSecret, code, time.Now())
+	ok := false
+	if step, hit := totp.VerifyStep(u.TOTPSecret, code, time.Now()); hit {
+		// jeder Zeitschritt nur einmal: derselbe Code gilt in seinem Fenster nicht ein zweites Mal
+		used, err := s.Store.UseTOTPStep(ctx, u.ID, step)
+		if err != nil {
+			s.limiter.refund(keys...)
+			s.fail(w, r, err)
+			return
+		}
+		ok = used
+	}
 	if !ok && len(code) >= 10 {
-		// Wiederherstellungscode
-		rec, _ := s.Store.UserTOTPRecovery(ctx, u.ID)
-		hashes := strings.Split(rec, ",")
-		if rest, used := totp.UseRecovery(code, hashes); used {
-			// nur anmelden, wenn der verbrauchte Code auch gespeichert ist (sonst waere er wiederverwendbar)
-			if err := s.Store.SetUserTOTP(ctx, u.ID, u.TOTPSecret, strings.Join(rest, ",")); err != nil {
+		// Wiederherstellungscode: nur verbrauchen, wenn die gelesene Liste noch gespeichert ist (sonst neu lesen;
+		// so gilt ein Code auch bei gleichzeitigen Anfragen nur einmal)
+		for try := 0; try < 3 && !ok; try++ {
+			rec, err := s.Store.UserTOTPRecovery(ctx, u.ID)
+			if err != nil {
+				s.limiter.refund(keys...)
 				s.fail(w, r, err)
 				return
 			}
-			ok = true
+			rest, found := totp.UseRecovery(code, strings.Split(rec, ","))
+			if !found {
+				break
+			}
+			if ok, err = s.Store.UseTOTPRecovery(ctx, u.ID, rec, strings.Join(rest, ",")); err != nil {
+				s.limiter.refund(keys...)
+				s.fail(w, r, err)
+				return
+			}
+		}
+		if ok {
 			s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.recovery_code", IP: ip})
 		}
 	}
 	if !ok {
-		s.limiter.fail(keys...)
 		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.totp_failed", IP: ip})
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.totp_failed")}
 		s.render(w, r, http.StatusUnauthorized, "login_totp", v)
 		return
 	}
+	s.limiter.refund(keys...)
 	if err := s.Store.SetSessionTOTP(ctx, sess.ID, true); err != nil {
 		s.fail(w, r, err)
 		return
@@ -136,14 +158,22 @@ func (s *Server) twoFAEnable(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "twofa.title")
 	key := pendingKey + strconv.FormatInt(u.ID, 10)
 	secret := s.Store.SettingOr(ctx, key, "")
-	if secret == "" || !totp.Verify(secret, r.PostFormValue("code"), time.Now()) {
+	step, hit := totp.VerifyStep(secret, r.PostFormValue("code"), time.Now())
+	if secret == "" || !hit {
 		s.flash(w, r, "danger", v.T("twofa.code_wrong"))
 		http.Redirect(w, r, "/settings/2fa", http.StatusSeeOther)
 		return
 	}
 	codes, hashes := totp.NewRecoveryCodes(8)
-	if err := s.Store.SetUserTOTP(ctx, u.ID, secret, strings.Join(hashes, ",")); err != nil {
+	// der Code zum Einschalten gilt danach nicht noch einmal fuer die Anmeldung; nur einmal einschalten (gleichzeitige
+	// Anfragen wuerden sonst Wiederherstellungscodes zeigen, die nicht gespeichert sind)
+	enabled, err := s.Store.EnableUserTOTP(ctx, u.ID, secret, strings.Join(hashes, ","), step)
+	if err != nil {
 		s.fail(w, r, err)
+		return
+	}
+	if !enabled {
+		http.Redirect(w, r, "/settings/2fa", http.StatusSeeOther)
 		return
 	}
 	_ = s.Store.SetSetting(ctx, key, "")

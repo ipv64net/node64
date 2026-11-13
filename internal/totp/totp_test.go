@@ -48,3 +48,22 @@ func TestSecretAndRecovery(t *testing.T) {
 		t.Fatal("used code must not work again")
 	}
 }
+
+func TestVerifyStep(t *testing.T) {
+	secret := enc.EncodeToString([]byte("12345678901234567890"))
+	now := time.Unix(1111111109, 0) // Schritt 37037036
+	want := now.Unix() / Period
+	for _, d := range []int64{-1, 0, 1} {
+		code, _ := Code(secret, now.Add(time.Duration(d)*Period*time.Second))
+		step, ok := VerifyStep(secret, code, now)
+		if !ok || step != want+d {
+			t.Fatalf("offset %d: step %d ok %v, want %d", d, step, ok, want+d)
+		}
+	}
+	if _, ok := VerifyStep(secret, "000000", now); ok {
+		t.Fatal("wrong code")
+	}
+	if c, _ := Code("", now); Verify("", c, now) {
+		t.Fatal("empty secret must never verify")
+	}
+}

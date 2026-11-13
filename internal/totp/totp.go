@@ -53,20 +53,28 @@ func Code(secret string, t time.Time) (string, error) {
 
 // Verify prueft einen Code mit einem Fenster von +-1 Periode.
 func Verify(secret, code string, t time.Time) bool {
+	_, ok := VerifyStep(secret, code, t)
+	return ok
+}
+
+// VerifyStep prueft wie Verify und liefert zusaetzlich den getroffenen Zeitschritt (Zaehler nach RFC 6238). Der
+// Aufrufer merkt sich den verbrauchten Schritt und nimmt danach nur groessere an, damit ein Code nur einmal gilt.
+func VerifyStep(secret, code string, t time.Time) (int64, bool) {
 	code = strings.ReplaceAll(strings.TrimSpace(code), " ", "")
-	if len(code) != Digits {
-		return false
+	if len(code) != Digits || strings.TrimSpace(secret) == "" { // ohne Geheimnis gilt kein Code
+		return 0, false
 	}
 	for _, d := range []int{0, -1, 1} {
-		want, err := Code(secret, t.Add(time.Duration(d)*Period*time.Second))
+		at := t.Add(time.Duration(d) * Period * time.Second)
+		want, err := Code(secret, at)
 		if err != nil {
-			return false
+			return 0, false
 		}
 		if subtle.ConstantTimeCompare([]byte(want), []byte(code)) == 1 {
-			return true
+			return at.Unix() / Period, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // URL liefert den otpauth-Link fuer QR-Codes.
