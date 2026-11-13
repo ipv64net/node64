@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.5.9 – 2026-11-13
+
 - Interface: new design as default – sidebar with groups (overview, modules, system), orange accent, Inter and JetBrains Mono fonts, light and dark on equal footing (community draft). The previous look stays available under Settings → Appearance → Design → "Classic".
 - Healthchecks: the image of the empty check list no longer overflows the screen on phones.
 - Monitor64: new access UniFi (API of the Network Application, API key or read-only admin) – devices, ports with PoE, internet connection, clients, alarms, updates.
