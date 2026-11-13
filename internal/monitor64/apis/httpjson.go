@@ -331,6 +331,7 @@ func webStatusError(status int, body []byte, where string) *webError {
 		Message any `json:"message"`
 		Error   any `json:"error"`
 		Msg     any `json:"msg"` // mailcow
+		Detail  any `json:"detail"`
 		Errors  []struct {
 			Message string `json:"message"`
 		} `json:"errors"` // GraphQL
@@ -341,6 +342,13 @@ func webStatusError(status int, body []byte, where string) *webError {
 			gql = env.Errors[0].Message
 		}
 		e.Detail = devText(firstNonEmpty(jsonMsg(env.Message), jsonMsg(env.Error), jsonMsg(env.Msg), gql))
+		// RouterOS: {"error":400,"message":"Bad Request","detail":"no such command or directory (wifi)"} – der
+		// eigentliche Grund steht in detail, message wiederholt nur den Status
+		if _, isNum := env.Error.(float64); isNum {
+			if d := jsonMsg(env.Detail); d != "" {
+				e.Detail = devText(d)
+			}
+		}
 	}
 	return e
 }

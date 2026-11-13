@@ -1,5 +1,13 @@
 # Monitor64 – Changes
 
+## 0.1.12 – 2026-11-13
+
+- New access **MikroTik** (its own tile in the wizard) via the REST API of RouterOS version 7 and later: CPU, RAM, flash, uptime and version; temperatures, fans, power supplies, voltage and power (as far as the device has sensors); interfaces with state, throughput and error rate; number of connected Wi-Fi clients; BGP connections (a configured connection without an established session warns) and OSPF neighbors; RouterOS update available and RouterBOOT.
+- Read-only: Monitor64 sends GET requests only. The user belongs in a group with `read,api,rest-api`; the wizard shows the commands for user and certificate (the `www-ssl` service accepts no connection without a certificate). Fingerprint pin as with the other HTTPS accesses, the password is stored encrypted.
+- Whether an update is available is only shown after the router has checked for itself (scheduler or manually) – Monitor64 does not trigger the check.
+- RouterOS 6 has no REST API; SNMP with the MikroTik profile remains the way there.
+- Tested against RouterOS 7.25.1 (CHR).
+
 ## 0.1.11 – 2026-11-13
 
 - Services table: disks have a "SMART" button. It shows all SMART values read last as a dialog – for SATA disks the whole attribute table (ID, name, value, worst, threshold, raw value; attributes below their threshold are marked), for NVMe and SAS the individual values, plus model, serial number, firmware, overall health and the time of the reading.

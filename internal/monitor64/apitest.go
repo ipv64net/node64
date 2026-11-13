@@ -52,7 +52,7 @@ func newAPITester(typ string, h *Host, cfg accessConfig, secret string) (t apiTe
 			return nil, nil, err
 		}
 		return c, c.Close, nil
-	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow", "fritzbox":
+	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow", "fritzbox", "mikrotik":
 		return newDeviceAPI(typ, h, cfg, secret)
 	}
 	return nil, nil, fmt.Errorf("monitor64: no api access %q", typ)
@@ -61,7 +61,7 @@ func newAPITester(typ string, h *Host, cfg accessConfig, secret string) (t apiTe
 // isAPIAccess: Zugang ueber eine API (Test mit Fingerabdruck und Bestaetigung).
 func isAPIAccess(typ string) bool {
 	switch typ {
-	case "pve", "pbs", "pmg", "mailcow", "fritzbox", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp": // snmp: eigener Test (testSNMP)
+	case "pve", "pbs", "pmg", "mailcow", "fritzbox", "mikrotik", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp": // snmp: eigener Test (testSNMP)
 		return true
 	}
 	return false

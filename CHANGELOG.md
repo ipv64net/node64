@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Neuer Zugang MikroTik (RouterOS ab 7, REST-API, nur lesend) – System, Sensoren, Schnittstellen, WLAN-Clients, BGP/OSPF, Update-Stand.
+
 - Monitor64: Platten zeigen auf Knopfdruck alle SMART-Werte als Dialog (Attribut-Tabelle bzw. NVMe-/SAS-Werte, Modell, Seriennummer, Firmware) – vollständig mit Agent 0.1.4, per SSH und über Proxmox VE/PBS.
 
 ## 1.5.8 – 2026-11-13

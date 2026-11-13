@@ -1,5 +1,13 @@
 # Monitor64 – Änderungen
 
+## 0.1.12 – 2026-11-13
+
+- Neuer Zugang **MikroTik** (eigene Kachel im Assistenten) über die REST-API von RouterOS ab Version 7: CPU, RAM, Flash, Laufzeit und Version; Temperaturen, Lüfter, Netzteile, Spannung und Leistung (soweit das Gerät Sensoren hat); Schnittstellen mit Zustand, Durchsatz und Fehlerrate; Zahl der angemeldeten WLAN-Clients; BGP-Verbindungen (eine eingerichtete Verbindung ohne aufgebaute Sitzung warnt) und OSPF-Nachbarn; RouterOS-Update verfügbar und RouterBOOT.
+- Nur lesend: Monitor64 stellt ausschließlich GET-Abfragen. Der Benutzer gehört in eine Gruppe mit `read,api,rest-api`; der Assistent zeigt die Befehle für Benutzer und Zertifikat (der Dienst `www-ssl` nimmt ohne Zertifikat keine Verbindung an). Fingerabdruck-Pin wie bei den anderen HTTPS-Zugängen, das Passwort liegt verschlüsselt.
+- Ob ein Update bereitsteht, zeigt der Router erst, nachdem er selbst gesucht hat (Zeitplan oder von Hand) – Monitor64 stößt die Suche nicht an.
+- RouterOS 6 hat keine REST-API; dort bleibt SNMP mit dem MikroTik-Profil.
+- Gegen RouterOS 7.25.1 (CHR) getestet.
+
 ## 0.1.11 – 2026-11-13
 
 - Dienste-Tabelle: Platten haben einen Knopf „SMART“. Er zeigt alle zuletzt gelesenen SMART-Werte als Dialog – bei SATA-Platten die ganze Attribut-Tabelle (ID, Name, Wert, schlechtester Wert, Schwelle, Rohwert; Attribute unter der Schwelle sind markiert), bei NVMe und SAS die einzelnen Werte, dazu Modell, Seriennummer, Firmware, Gesamtzustand und Zeitpunkt der Messung.

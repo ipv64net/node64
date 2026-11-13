@@ -59,7 +59,7 @@ function parseNum(s) {
 	return isFinite(v) ? v : NaN;
 }
 // Geraete-APIs (Prometheus, NUT, TrueNAS, Unraid, Redfish, Proxmox Mail Gateway, mailcow): zusaetzliche Felder je Zugangsart.
-var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish', 'pmg', 'mailcow', 'fritzbox'];
+var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish', 'pmg', 'mailcow', 'fritzbox', 'mikrotik'];
 var DEVSPEC = {
 	prom: { url: 'http://{a}:9100/metrics', user: true, extra: ['metrics'] },
 	nut: { url: '{a}:3493', user: true, extra: ['ups', 'tls'] },
@@ -68,7 +68,8 @@ var DEVSPEC = {
 	redfish: { url: 'https://{a}', user: true, extra: ['session'] },
 	pmg: { url: 'https://{a}:8006', user: true, extra: [] },
 	mailcow: { url: 'https://{a}', user: false, extra: [] },
-	fritzbox: { url: 'https://{a}:49443', user: true, extra: [] }
+	fritzbox: { url: 'https://{a}:49443', user: true, extra: [] },
+	mikrotik: { url: 'https://{a}', user: true, extra: [] }
 };
 // urlHost: Host-Teil einer URL aus der Adresse eines Hosts - ein Port der Adresse entfaellt, IPv6 kommt in Klammern
 // ("nas:2222" -> "nas", "2001:db8::1" und "[2001:db8::1]:22" -> "[2001:db8::1]").
@@ -81,8 +82,13 @@ function urlHost(a) {
 }
 function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', urlHost(addr) || '10.0.0.21'); }
 // Texte je Art und Feld (ausgeschrieben, damit die Pruefung der Texte sie findet)
-function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish'), pmg: L('acc.secret_pmg'), mailcow: L('acc.secret_mailcow'), fritzbox: L('acc.secret_fritzbox') }[t]; }
-function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish'), pmg: L('new.hint_pmg'), mailcow: L('new.hint_mailcow'), fritzbox: L('new.hint_fritzbox') }[t]; }
+function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish'), pmg: L('acc.secret_pmg'), mailcow: L('acc.secret_mailcow'), fritzbox: L('acc.secret_fritzbox'), mikrotik: L('acc.secret_mikrotik') }[t]; }
+function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish'), pmg: L('new.hint_pmg'), mailcow: L('new.hint_mailcow'), fritzbox: L('new.hint_fritzbox'), mikrotik: L('new.hint_mikrotik') }[t]; }
+// devCmd: Befehle zum Einrichten auf dem Geraet (Nur-Lese-Benutzer), sofern die Art welche hat.
+function devCmd(t) {
+	return { mikrotik: '/user/group/add name=monitor64 policy=read,api,rest-api\n/user/add name=monitor64 group=monitor64 password="<' + L('new.cmd_password') + '>"\n' +
+		'/certificate/add name=monitor64 common-name=monitor64 days-valid=3650\n/certificate/sign monitor64\n/ip/service/set www-ssl certificate=monitor64 disabled=no' }[t] || '';
+}
 function devText(k) {
 	return { ups: L('acc.ups'), tls: L('acc.tls'), api: L('acc.api'), session: L('acc.session'), metrics: L('acc.metrics'), tls_auto: L('acc.tls_auto'), tls_require: L('acc.tls_require'), tls_off: L('acc.tls_off'),
 		api_auto: L('acc.api_auto'), api_jsonrpc: L('acc.api_jsonrpc'), api_rest: L('acc.api_rest') }[k];
@@ -2403,6 +2409,7 @@ function pageNew() {
 					(DEVSPEC[ta].user ? '<div class="col-md-6">' + field('duser', L('acc.user'), WZ.duser, ' data-w="duser" maxlength="32"') + '</div>' : '') +
 					'<div class="col-md-6">' + field('dsec', L('acc.secret'), WZ.dsecret, ' data-w="dsecret" type="password" autocomplete="new-password"') + '</div>' +
 					'<div class="col-12 small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(devHint(ta)) + '<div class="mt-1">' + esc(devSecretHint(ta)) + '</div></div>' +
+					(devCmd(ta) ? '<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.dev_cmd')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(devCmd(ta)) + '</div></div>' : '') +
 					'<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' +
 					devFields(WZ, 'w', ta) + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (k.access === 'snmp') {
@@ -2492,7 +2499,7 @@ function pageNew() {
 		if (pref === CLW.self && !back.length) { return Promise.resolve(); }
 		return api('PUT', '/api/monitor64/cluster/hosts/' + encodeURIComponent(hostUID), { preferred_node: pref, backup_nodes: back }).catch(function () { clFailed = true; });
 	}
-	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', btrfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', wan: 'network', dsl: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local', mailq: 'mail', mail: 'mail', quarantine: 'mail' }; return m[k] || 'other'; }
+	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', btrfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', wan: 'network', dsl: 'network', routing: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local', mailq: 'mail', mail: 'mail', quarantine: 'mail' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
 		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if ((r.addr || '') !== WZ.nodeAddr || !!r.bridge !== !!WZ.nodeBridge) { collect(); WZ.nodeAddr = r.addr || ''; WZ.nodeBridge = !!r.bridge; render(); } }).catch(failQuiet);

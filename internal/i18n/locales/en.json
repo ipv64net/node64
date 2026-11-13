@@ -5616,7 +5616,8 @@
       "secret_mailcow": "API key (read-only).",
       "secret_fritzbox": "Password of the FRITZ!Box user.",
       "backup_max_age": "Maximum backup age (hours)",
-      "backup_max_age_hint": "If a group's last backup is older, it counts as too old. Empty = 26 hours; for weekly backups e.g. 170."
+      "backup_max_age_hint": "If a group's last backup is older, it counts as too old. Empty = 26 hours; for weekly backups e.g. 170.",
+      "secret_mikrotik": "Password of the RouterOS user."
     },
     "access": {
       "agent": "Agent",
@@ -5632,7 +5633,8 @@
       "redfish": "Redfish (BMC: iDRAC, iLO …)",
       "pmg": "Proxmox Mail Gateway",
       "mailcow": "mailcow",
-      "fritzbox": "FRITZ!Box"
+      "fritzbox": "FRITZ!Box",
+      "mikrotik": "MikroTik"
     },
     "sd": {
       "vanished": "This service is no longer delivered. It stays a warning until you remove it.",
@@ -6016,6 +6018,10 @@
       "fritzbox": {
         "title": "FRITZ!Box",
         "sub": "TR-064 – internet, DSL, update"
+      },
+      "mikrotik": {
+        "title": "MikroTik",
+        "sub": "RouterOS 7 (REST API) – system, interfaces, update"
       }
     },
     "new": {
@@ -6087,7 +6093,10 @@
       "docker_host_ip": "<IP of the Docker host>",
       "from_bridge": "The node runs in the Docker bridge network: the host does not see the container's address but the Docker host's. Please put the Docker host's LAN address into from=\"…\".",
       "test_peer": "connected to {a}",
-      "test_keytype": "host key {k}"
+      "test_keytype": "host key {k}",
+      "hint_mikrotik": "For RouterOS version 7 and later (REST API over HTTPS). On the router, create a dedicated user in a group with only read, api and rest-api, and give the www-ssl service a certificate – without one RouterOS accepts no HTTPS connection. The commands below do both (in the router's terminal). The certificate is self-signed – confirm the fingerprint during the test. Monitor64 only reads and triggers nothing; whether an update is available is only shown after the router has checked for itself. RouterOS 6 has no REST API – use SNMP there.",
+      "dev_cmd": "Set up on the device",
+      "cmd_password": "password"
     },
     "nf": {
       "where": "Where to",
@@ -6584,7 +6593,8 @@
       "clamav": "ClamAV signatures",
       "mc_containers": "mailcow containers",
       "pi_power": "Power supply",
-      "fb_wan": "Internet connection"
+      "fb_wan": "Internet connection",
+      "wlan_clients": "Wi-Fi clients"
     },
     "txt": {
       "aborted": "aborted",
@@ -7039,7 +7049,19 @@
       "fb_wan_up": "connected for {t}",
       "fb_rates": "{d} down / {u} up",
       "fb_dsl_down": "DSL not in sync ({s})",
-      "fb_dsl": "sync {d} down / {u} up · noise margin {sd} / {su} dB"
+      "fb_dsl": "sync {d} down / {u} up · noise margin {sd} / {su} dB",
+      "mt_hint_auth": "check user and password; the group needs read, api and rest-api, and an address restriction (address) must allow this node",
+      "mt_hint_perm": "the user's group lacks permissions (read, api, rest-api) or the REST API is switched off for HTTPS",
+      "mt_system": "RouterOS {v} · up for {t}",
+      "mt_system_plain": "RouterOS {v}",
+      "mt_state": "{name}: {s}",
+      "mt_clients": "{n} connected",
+      "mt_bgp": "{up} of {n} sessions established",
+      "mt_bgp_down": "not established: {list}",
+      "mt_ospf": "{n} neighbors, {full} full",
+      "mt_update": "RouterOS update available: {v} (installed {cur})",
+      "mt_update_unknown": "RouterOS {v} – update status unknown (the router has not checked for updates since it started)",
+      "mt_routerboot": "RouterBOOT {cur}, {v} is ready"
     },
     "smart": {
       "title": "SMART values: {n}",
