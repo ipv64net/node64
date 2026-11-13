@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{.Lang}}"{{if .Theme}} data-bs-theme="{{.Theme}}"{{end}}{{if .FontSize}} data-fs="{{.FontSize}}"{{end}}{{if .NavMini}} class="nav-mini"{{end}}>
+<html lang="{{.Lang}}" data-design="{{.Design.Name}}"{{if .Theme}} data-bs-theme="{{.Theme}}"{{end}}{{if .FontSize}} data-fs="{{.FontSize}}"{{end}}{{if .NavMini}} class="nav-mini"{{end}}>
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,51 +8,11 @@
 	<link rel="icon" href="/static/img/favicon.png">
 	<link rel="stylesheet" href="/static/css/bootstrap.min.css">
 	<link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+	<link rel="stylesheet" href="/static/css/{{.Design.CSS}}?v={{.Version}}">
 	<link rel="stylesheet" href="/static/css/node64.css?v={{.Version}}">
 </head>
 <body>
-{{if .User}}
-<header class="navbar navbar-expand topbar border-bottom px-3">
-	<div class="topbar-start d-flex align-items-center">
-		<button class="btn btn-outline-secondary me-2" type="button" id="navToggle" aria-controls="sidenav" aria-label="{{.T "nav.toggle"}}" title="{{.T "nav.toggle"}}"><i class="bi bi-list"></i></button>
-		<a class="navbar-brand d-flex align-items-center" href="/">
-			<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="28">
-			<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="28">
-		</a>
-	</div>
-	<nav aria-label="breadcrumb" class="topbar-crumbs d-none d-md-block ms-3 border-start ps-3 min-w-0">
-		<ol class="breadcrumb mb-0">
-			{{range .Crumbs}}{{if .URL}}<li class="breadcrumb-item"><a href="{{.URL}}">{{.Label}}</a></li>{{else}}<li class="breadcrumb-item active" aria-current="page">{{.Label}}</li>{{end}}{{end}}
-		</ol>
-	</nav>
-	<span class="topbar-crumb-mobile d-md-none ms-2 small">{{.LastCrumb}}</span>
-	<div class="ms-auto d-flex align-items-center gap-2">
-		<button class="btn btn-outline-secondary btn-sm theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
-		<span class="d-none d-sm-inline text-body-secondary small"><i class="bi bi-person-circle"></i> {{.User.Username}}</span>
-		<form method="post" action="/logout" class="m-0">
-			<input type="hidden" name="_csrf" value="{{.CSRF}}">
-			<button class="btn btn-outline-secondary btn-sm" type="submit" title="{{.T "nav.logout"}}"><i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">{{.T "nav.logout"}}</span></button>
-		</form>
-	</div>
-</header>
-<div class="d-flex app-body">
-	<aside class="sidebar d-none d-lg-flex flex-column border-end">
-		{{template "navlist" .}}
-	</aside>
-	<div class="offcanvas offcanvas-start sidebar-offcanvas" tabindex="-1" id="sidenav">
-		<div class="offcanvas-header border-bottom">
-			<span class="fw-semibold">{{.T "nav.menu"}}</span>
-			<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-		</div>
-		<div class="offcanvas-body p-0 d-flex flex-column">
-			{{template "navlist" .}}
-		</div>
-	</div>
-	<main class="flex-grow-1 p-3 p-lg-4 content">
-		{{if .Flash}}<div class="alert alert-{{.Flash.Kind}} alert-dismissible fade show" role="alert">{{.Flash.Text}}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{{end}}
-		{{template "content" .}}
-	</main>
-</div>
+{{if .User}}{{if eq .Design.Frame "classic"}}{{template "frame_classic" .}}{{else}}{{template "frame_sidebar" .}}{{end}}
 {{else}}
 <main class="auth-wrap">
 	<div class="auth-card card shadow-sm">

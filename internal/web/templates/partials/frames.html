@@ -1,0 +1,79 @@
+{{/* Rahmen fuer angemeldete Nutzer je Design (Design.Frame, layout.html); gemeinsam: Menue (navlist), Brotkrumen,
+     ausfahrendes Menue und Inhalt. */}}
+{{define "frame_sidebar"}}
+<div class="app-shell">
+	<aside class="sidebar d-none d-lg-flex flex-column">
+		<a class="sidebar-brand" href="/" title="{{.T "app.name"}}">
+			<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="26">
+			<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="26">
+			<img src="/static/img/favicon.png" alt="Node64" class="brand-mark" height="28" width="28">
+		</a>
+		{{template "navlist" .}}
+	</aside>
+	{{template "sidenav" .}}
+	<div class="app-main">
+		<header class="topbar">
+			<button class="btn btn-outline-secondary" type="button" id="navToggle" aria-controls="sidenav" aria-label="{{.T "nav.toggle"}}" title="{{.T "nav.toggle"}}"><i class="bi bi-layout-sidebar"></i></button>
+			<a class="topbar-brand d-lg-none" href="/">
+				<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="24">
+				<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="24">
+			</a>
+			<nav aria-label="breadcrumb" class="topbar-crumbs d-none d-md-block">{{template "crumbs" .}}</nav>
+			<span class="topbar-crumb-mobile d-md-none small">{{.LastCrumb}}</span>
+			<div class="ms-auto d-flex align-items-center gap-2">
+				<button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}" aria-label="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
+				<span class="topbar-user d-none d-sm-inline-flex"><span class="topbar-avatar" aria-hidden="true">{{printf "%.2s" .User.Username}}</span>{{.User.Username}}</span>
+				<form method="post" action="/logout" class="m-0">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<button class="btn btn-outline-secondary" type="submit" title="{{.T "nav.logout"}}" aria-label="{{.T "nav.logout"}}"><i class="bi bi-box-arrow-right"></i><span class="d-none d-xl-inline ms-1">{{.T "nav.logout"}}</span></button>
+				</form>
+			</div>
+		</header>
+		{{template "page_main" .}}
+	</div>
+</div>
+{{end}}
+{{define "frame_classic"}}{{/* Design bis 1.5.8 */}}
+<header class="navbar navbar-expand topbar border-bottom px-3">
+	<div class="topbar-start d-flex align-items-center">
+		<button class="btn btn-outline-secondary me-2" type="button" id="navToggle" aria-controls="sidenav" aria-label="{{.T "nav.toggle"}}" title="{{.T "nav.toggle"}}"><i class="bi bi-list"></i></button>
+		<a class="navbar-brand d-flex align-items-center" href="/">
+			<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="28">
+			<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="28">
+		</a>
+	</div>
+	<nav aria-label="breadcrumb" class="topbar-crumbs d-none d-md-block ms-3 border-start ps-3 min-w-0">{{template "crumbs" .}}</nav>
+	<span class="topbar-crumb-mobile d-md-none ms-2 small">{{.LastCrumb}}</span>
+	<div class="ms-auto d-flex align-items-center gap-2">
+		<button class="btn btn-outline-secondary btn-sm theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
+		<span class="d-none d-sm-inline text-body-secondary small"><i class="bi bi-person-circle"></i> {{.User.Username}}</span>
+		<form method="post" action="/logout" class="m-0">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<button class="btn btn-outline-secondary btn-sm" type="submit" title="{{.T "nav.logout"}}"><i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">{{.T "nav.logout"}}</span></button>
+		</form>
+	</div>
+</header>
+<div class="d-flex app-body">
+	<aside class="sidebar d-none d-lg-flex flex-column border-end">
+		{{template "navlist" .}}
+	</aside>
+	{{template "sidenav" .}}
+	{{template "page_main" .}}
+</div>
+{{end}}
+{{define "crumbs"}}<ol class="breadcrumb mb-0">
+	{{range .Crumbs}}{{if .URL}}<li class="breadcrumb-item"><a href="{{.URL}}">{{.Label}}</a></li>{{else}}<li class="breadcrumb-item active" aria-current="page">{{.Label}}</li>{{end}}{{end}}
+</ol>{{end}}
+{{define "sidenav"}}<div class="offcanvas offcanvas-start sidebar-offcanvas" tabindex="-1" id="sidenav">
+	<div class="offcanvas-header border-bottom">
+		<span class="fw-semibold">{{.T "nav.menu"}}</span>
+		<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+	</div>
+	<div class="offcanvas-body p-0 d-flex flex-column">
+		{{template "navlist" .}}
+	</div>
+</div>{{end}}
+{{define "page_main"}}<main class="flex-grow-1 p-3 p-lg-4 content">
+	{{if .Flash}}<div class="alert alert-{{.Flash.Kind}} alert-dismissible fade show" role="alert">{{.Flash.Text}}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{{end}}
+	{{template "content" .}}
+</main>{{end}}

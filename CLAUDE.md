@@ -8,7 +8,8 @@ für ipv64.net (`deploy/web`, PHP). Allgemeine Regeln (Sicherheit, Rollout, Uplo
 ## Aufbau
 - `cmd/node64/main.go` verdrahtet die Module; Module unter `internal/<name>` mit eigenen Templates
   (`templates/pages/*.html`), `CHANGELOG.md`/`CHANGELOG.en.md` und Version (`Version`/`module.Info`).
-- Oberfläche: Go `html/template`, Bootstrap 5, Vanilla-JS in `internal/web/static/js`, CSS in `node64.css`.
+- Oberfläche: Go `html/template`, Bootstrap 5, Vanilla-JS in `internal/web/static/js`, CSS gemeinsam in `node64.css`, je Design in
+  `design-*.css` (Liste `designs` in `internal/web/view.go`).
 - Texte immer zweisprachig in `internal/i18n/locales/de.json` und `en.json` (verschachtelt). Platzhalter `{name}`.
 - Check-Parameter werden streng dekodiert (`checks.decode` mit `DisallowUnknownFields`): neue Felder in den
   Params-Structs ergänzen und Node, hubs und Portal gemeinsam ausrollen.

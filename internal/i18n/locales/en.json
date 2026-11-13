@@ -66,6 +66,9 @@
     }
   },
   "nav": {
+    "group_overview": "Overview",
+    "group_modules": "Modules",
+    "group_system": "System",
     "local_dns": "Local DNS",
     "dhcp": "DHCP",
     "plan": "Account class: {name}",
@@ -1713,6 +1716,10 @@
   },
   "settings": {
     "appearance": "Appearance",
+    "design": "Design",
+    "design_new": "New",
+    "design_classic": "Classic",
+    "design_hint": "Applies to this browser. “Classic” is the look up to version 1.5.8.",
     "font_size": "Font size",
     "fs_sm": "Small",
     "fs_md": "Normal",

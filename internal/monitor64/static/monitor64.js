@@ -709,7 +709,8 @@ function pageOverview() {
 
 // ---------- Diagramme ----------
 var RANGES = { '6h': L('chart.r6h'), '24h': L('chart.r24h'), '7d': L('chart.r7d'), '30d': L('chart.r30d'), '1y': L('chart.r1y') };
-function chartColors() { return [cssVar('--bs-primary') || '#0d6efd', cssVar('--ipv64-orange') || '#f59c1a', cssVar('--bs-success') || '#198754', cssVar('--bs-info') || '#0dcaf0']; }
+// Diagrammfarben je Design (--n64-chart-*, node64.css); fehlen sie, wie bisher die Bootstrap-Farben
+function chartColors() { return [cssVar('--n64-chart-1') || cssVar('--bs-primary') || '#0d6efd', cssVar('--n64-chart-2') || cssVar('--ipv64-orange') || '#f59c1a', cssVar('--n64-chart-3') || cssVar('--bs-success') || '#198754', cssVar('--n64-chart-4') || cssVar('--bs-info') || '#0dcaf0']; }
 function tickFmt(span) {
 	return function (v) {
 		var d = new Date(v * 1000);
@@ -735,7 +736,7 @@ function lineChart(canvas, opt) {
 	if (!window.Chart) { return null; }
 	var txt = cssVar('--bs-secondary-color'), grid = cssVar('--bs-border-color'), cols = chartColors();
 	var ds = opt.series.map(function (s, i) {
-		return { label: s.label, data: s.data, borderColor: cols[i % cols.length], backgroundColor: i === 0 ? 'rgba(' + (cssVar('--bs-primary-rgb') || '13,110,253') + ',.08)' : 'transparent', fill: i === 0 && opt.series.length === 1, borderWidth: 1.6, pointRadius: 0, tension: 0.25, spanGaps: false };
+		return { label: s.label, data: s.data, borderColor: cols[i % cols.length], backgroundColor: i === 0 ? 'rgba(' + (cssVar('--n64-chart-1-rgb') || cssVar('--bs-primary-rgb') || '13,110,253') + ',.08)' : 'transparent', fill: i === 0 && opt.series.length === 1, borderWidth: 1.6, pointRadius: 0, tension: 0.25, spanGaps: false };
 	});
 	[['warn', cssVar('--bs-warning')], ['crit', cssVar('--bs-danger')]].forEach(function (x) {
 		var v = opt[x[0]];

@@ -130,8 +130,8 @@
 		return {
 			ok: css.getPropertyValue("--bs-success").trim() || "#198754",
 			bad: css.getPropertyValue("--bs-danger").trim() || "#dc3545",
-			pri: css.getPropertyValue("--bs-primary").trim() || "#0d6efd",
-			info: css.getPropertyValue("--bs-info").trim() || "#0dcaf0"
+			pri: css.getPropertyValue("--n64-chart-1").trim() || css.getPropertyValue("--bs-primary").trim() || "#0d6efd",
+			info: css.getPropertyValue("--n64-chart-4").trim() || css.getPropertyValue("--bs-info").trim() || "#0dcaf0"
 		};
 	}
 

@@ -4,10 +4,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Oberfläche: Neues Design als Standard – Seitenleiste mit Gruppen (Übersicht, Module, System), Orange als Akzent, Schriften Inter und JetBrains Mono, Hell und Dunkel gleichwertig (Entwurf aus der Community). Das bisherige Aussehen bleibt unter Einstellungen → Darstellung → Design → „Klassisch“ wählbar.
+- Healthchecks: Das Bild der leeren Check-Liste läuft auf dem Handy nicht mehr über den Rand.
 - Monitor64: Neuer Zugang UniFi (API der Network Application, API-Schlüssel oder Nur-Lese-Admin) – Geräte, Ports mit PoE, Internetverbindung, Clients, Alarme, Updates.
-
 - Monitor64: Neuer Zugang MikroTik (RouterOS ab 7, REST-API, nur lesend) – System, Sensoren, Schnittstellen, WLAN-Clients, BGP/OSPF, Update-Stand.
-
 - Monitor64: Platten zeigen auf Knopfdruck alle SMART-Werte als Dialog (Attribut-Tabelle bzw. NVMe-/SAS-Werte, Modell, Seriennummer, Firmware) – vollständig mit Agent 0.1.4, per SSH und über Proxmox VE/PBS.
 
 ## 1.5.8 – 2026-11-13

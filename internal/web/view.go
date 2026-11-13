@@ -21,6 +21,7 @@ type View struct {
 	s        *Server
 	Lang     string
 	Theme    string
+	Design   Design // Oberflaechen-Design (Cookie node64_design), siehe designs
 	FontSize string // sm, lg, xl oder leer
 	NavMini  bool   // Seitenleiste eingeklappt (nur Symbole, ab lg)
 	Path     string
@@ -42,6 +43,34 @@ type View struct {
 	loc      *time.Location
 }
 
+// Design ist ein Oberflaechen-Design (Einstellungen > Darstellung > Design). Ein weiteres Design ist ein Eintrag in
+// designs plus Stylesheet (Farbwerte und Bootstrap-Anpassungen, Vertrag in node64.css); Frame waehlt den Rahmen fuer
+// angemeldete Nutzer in layout.html ("sidebar" oder "classic", ein neuer Rahmen braucht dort einen Zweig).
+type Design struct {
+	Key   string // Wert im Cookie node64_design, leer = Standard
+	Name  string // fuer data-design und Element-IDs
+	Label string // Textschluessel
+	Icon  string // Bootstrap-Icon in den Einstellungen
+	CSS   string // Stylesheet unter /static/css/, vor node64.css geladen
+	Frame string
+}
+
+// designs: das erste ist der Standard (ohne Cookie oder bei unbekanntem Wert).
+var designs = []Design{
+	{Key: "", Name: "new", Label: "settings.design_new", Icon: "bi-layout-sidebar", CSS: "design-new.css", Frame: "sidebar"},
+	{Key: "classic", Name: "classic", Label: "settings.design_classic", Icon: "bi-window", CSS: "design-classic.css", Frame: "classic"}, // bis 1.5.8
+}
+
+// designFor liefert das Design zum Cookie-Wert, unbekannte Werte = Standard.
+func designFor(key string) Design {
+	for _, d := range designs {
+		if d.Key == key {
+			return d
+		}
+	}
+	return designs[0]
+}
+
 type NavItem struct {
 	Key       string
 	Path      string
@@ -51,7 +80,8 @@ type NavItem struct {
 	Enabled   bool
 	Sub       bool // Unterpunkt (eingerueckt)
 	Active    bool
-	Hidden    bool // Modul in den Einstellungen ausgeschaltet: nicht im Menue
+	Hidden    bool   // Modul in den Einstellungen ausgeschaltet: nicht im Menue
+	Head      string // Ueberschrift der Gruppe vor diesem Punkt (Textschluessel), leer = keine
 }
 
 // Crumb ist ein Element der Brotkrumen in der Kopfzeile (URL leer = aktuelle Seite).
@@ -198,6 +228,9 @@ func (v *View) Err(field string) string { return v.Errors[field] }
 // Val liefert den letzten Eingabewert eines Formularfelds.
 func (v *View) Val(field string) string { return v.Form[field] }
 
+// Designs: Auswahl in den Einstellungen.
+func (v *View) Designs() []Design { return designs }
+
 // Languages liefert die verfuegbaren Sprachen.
 func (v *View) Languages() []string { return v.s.I18n.Languages() }
 
@@ -267,6 +300,10 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 	if c, err := r.Cookie(themeCookie); err == nil && (c.Value == "light" || c.Value == "dark") {
 		v.Theme = c.Value
 	}
+	v.Design = designs[0]
+	if c, err := r.Cookie(designCookie); err == nil {
+		v.Design = designFor(c.Value)
+	}
 	if c, err := r.Cookie(navCookie); err == nil && c.Value == "mini" {
 		v.NavMini = true
 	}
@@ -287,7 +324,7 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 }
 
 func (s *Server) nav(r *http.Request) []NavItem {
-	items := []NavItem{{Key: "nav.dashboard", Path: "/", Icon: "bi-speedometer2", Available: true, Enabled: true}}
+	items := []NavItem{{Key: "nav.dashboard", Path: "/", Icon: "bi-speedometer2", Available: true, Enabled: true, Head: "nav.group_overview"}}
 	link := NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true, Sub: true}
 	for _, m := range s.Modules.List(r.Context()) {
 		// in der Navigation nur Symbole (auch eingeklappt); die Logos der Module stehen auf ihren Seiten
@@ -302,6 +339,13 @@ func (s *Server) nav(r *http.Request) []NavItem {
 				NavItem{Key: "nav.dhcp", Path: "/dns64/dhcp", Icon: "bi-router", Available: true, Enabled: m.Running, Sub: true})
 		}
 	}
+	for i := 1; i < len(items); i++ { // Gruppe "Module" vor dem ersten sichtbaren Modul
+		if !items[i].Hidden {
+			items[i].Head = "nav.group_modules"
+			break
+		}
+	}
+	system := len(items) // ab hier Gruppe "System"
 	if s.Certs != nil {
 		items = append(items, NavItem{Key: "nav.certificates", Path: "/certificates", Icon: "bi-shield-lock", Available: true, Enabled: true})
 	}
@@ -320,6 +364,7 @@ func (s *Server) nav(r *http.Request) []NavItem {
 		NavItem{Key: "nav.logs", Path: "/logs", Icon: "bi-terminal", Available: true, Enabled: true},
 		NavItem{Key: "nav.api", Path: "/api/docs", Icon: "bi-code-slash", Available: true, Enabled: true},
 	)
+	items[system].Head = "nav.group_system"
 	best := -1 // nur der genaueste Treffer ist aktiv (Statusseiten unter /healthchecks/...); gleich lang: der Unterpunkt
 	for i := range items {
 		p := items[i].Path

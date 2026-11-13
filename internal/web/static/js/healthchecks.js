@@ -325,7 +325,7 @@
 		var note = document.getElementById("hc-chart-note");
 		var css = getComputedStyle(document.documentElement);
 		var color = function (name, fallback) { return (css.getPropertyValue(name) || fallback).trim(); };
-		var palette = [color("--bs-primary", "#0d6efd"), "#198754", "#fd7e14", "#6f42c1", "#20c997", "#d63384"];
+		var palette = [color("--n64-chart-1", color("--bs-primary", "#0d6efd")), "#198754", "#fd7e14", "#6f42c1", "#20c997", "#d63384"]; // Reihe 1 je Design
 		var steps = { "1h": 6e5, "6h": 36e5, "24h": 3 * 36e5, "7d": 864e5, "30d": 5 * 864e5, "1y": 30 * 864e5 };
 		var spans = { "1h": 36e5, "6h": 6 * 36e5, "24h": 24 * 36e5, "7d": 7 * 864e5, "30d": 30 * 864e5, "1y": 365 * 864e5 };
 		// Farben fuer Zustaende im Diagramm: gestoert rot, Uebergangsphasen gelb/orange, pausiert grau

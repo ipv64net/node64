@@ -1,0 +1,142 @@
+/* Node64: klassisches Design (bis 1.5.8), Bootstrap-5.3-Anpassungen im ipv64-Look.
+   Farben wie im ipv64-Portal (Bootstrap-4-Palette, Orange als Markenfarbe). Gemeinsame Regeln beider Designs in
+   node64.css (danach geladen, Vertrag dort). */
+
+@font-face {
+	font-family: "Open Sans";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("fonts/open-sans-v34-latin-regular.woff2") format("woff2");
+}
+
+:root, [data-bs-theme="light"] {
+	--bs-primary: #007bff;
+	--bs-primary-rgb: 0, 123, 255;
+	--bs-success: #28a745;
+	--bs-success-rgb: 40, 167, 69;
+	--bs-danger: #dc3545;
+	--bs-danger-rgb: 220, 53, 69;
+	--bs-warning: #ffc107;
+	--bs-warning-rgb: 255, 193, 7;
+	--bs-info: #17a2b8;
+	--bs-info-rgb: 23, 162, 184;
+	--bs-body-font-family: "Twemoji Country Flags", "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--ipv64-orange: #f59c1a;
+	--ipv64-dark: #272828;
+	--sidebar-width: 15rem;
+	--sidebar-bg: var(--bs-tertiary-bg);
+}
+[data-bs-theme="dark"] {
+	--bs-body-bg: #121417;
+	--bs-tertiary-bg: #1b1f24;
+	--bs-secondary-bg: #23282e;
+	--bs-border-color: #343a40;
+	--sidebar-bg: #1b1f24;
+	/* graue Schrift etwas heller als bei Bootstrap (0.75 / 0.5), besser lesbar */
+	--bs-secondary-color: rgba(222, 226, 230, .85);
+	--bs-tertiary-color: rgba(222, 226, 230, .65);
+}
+/* Vertrag mit node64.css: Diagrammfarben wie bis 1.5.8 (Bootstrap-Blau, Orange, Gruen, Tuerkis), Pillen silbern und rund */
+:root {
+	--n64-chart-1: var(--bs-primary);
+	--n64-chart-1-rgb: var(--bs-primary-rgb);
+	--n64-chart-2: var(--ipv64-orange);
+	--n64-chart-3: var(--bs-success);
+	--n64-chart-4: var(--bs-info);
+	--n64-beat-neutral: silver;
+	--n64-beat-radius: 50rem;
+}
+
+.btn-primary { --bs-btn-bg: var(--bs-primary); --bs-btn-border-color: var(--bs-primary); --bs-btn-hover-bg: #0069d9; --bs-btn-hover-border-color: #0062cc; --bs-btn-active-bg: #0062cc; }
+.btn-outline-primary { --bs-btn-color: var(--bs-primary); --bs-btn-border-color: var(--bs-primary); --bs-btn-hover-bg: var(--bs-primary); --bs-btn-hover-border-color: var(--bs-primary); }
+.btn-success { --bs-btn-bg: var(--bs-success); --bs-btn-border-color: var(--bs-success); --bs-btn-hover-bg: #218838; --bs-btn-hover-border-color: #1e7e34; }
+.text-bg-success { background-color: var(--bs-success) !important; }
+.text-bg-danger { background-color: var(--bs-danger) !important; }
+.text-bg-info { background-color: var(--bs-info) !important; }
+.text-bg-warning { background-color: var(--bs-warning) !important; }
+a { color: var(--bs-primary); }
+
+/* Layout: Topbar, Sidebar links, Inhalt */
+/* Kopfzeile genau so hoch wie die Kante, an der die Seitenleiste klebt (sonst springt sie je nach Seitenlaenge) */
+.topbar { background: var(--bs-body-bg); min-height: 3.6rem; position: sticky; top: 0; z-index: 1020; }
+.app-body { min-height: calc(100vh - 3.6rem); }
+.sidebar { width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); background: var(--sidebar-bg); position: sticky; top: 3.6rem; height: calc(100vh - 3.6rem); overflow-y: auto; scrollbar-width: thin; }
+.sidebar-offcanvas { width: var(--sidebar-width); }
+.sidebar .nav-link, .sidebar-offcanvas .nav-link { color: var(--bs-body-color); padding: .55rem 1rem; border-left: 3px solid transparent; }
+.sidebar .nav-link .bi, .sidebar-offcanvas .nav-link .bi { width: 1.4rem; display: inline-block; }
+.sidebar .nav-link:hover, .sidebar-offcanvas .nav-link:hover { background: var(--bs-secondary-bg); }
+.sidebar .nav-link.active, .sidebar-offcanvas .nav-link.active { border-left-color: var(--ipv64-orange); font-weight: 600; background: var(--bs-secondary-bg); }
+.sidebar .nav-link.disabled, .sidebar-offcanvas .nav-link.disabled { opacity: .55; }
+.content { min-width: 0; } /* volle Breite auf allen Seiten */
+.sidebar-nav { padding-top: .5rem; padding-bottom: .5rem; }
+.nav-head { display: none; } /* Gruppenueberschriften nur im neuen Design */
+.sidebar-footer { padding: 1rem; border-top: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color); }
+.sidebar-logo { margin-bottom: .5rem; }
+
+/* Brotkrumen in der Kopfzeile; ab lg buendig mit dem Inhalt (Logo-Bereich = Seitenleiste) */
+@media (min-width: 992px) {
+	.topbar .topbar-start { width: calc(var(--sidebar-width) - 1rem); flex: 0 0 auto; }
+	.topbar .navbar-brand { margin-right: 0; }
+	.topbar .topbar-crumbs { margin-left: 0 !important; padding-left: 1.5rem !important; border-left: 0 !important; }
+	/* Seitenleiste eingeklappt: nur Symbole (Beschriftung als Tooltip), Zustand im Cookie node64_nav */
+	.sidebar { transition: width .2s ease, flex-basis .2s ease; overflow-x: hidden; }
+	.nav-mini { --sidebar-width: 4rem; }
+	.nav-mini .topbar .topbar-start { width: auto; }
+	.nav-mini .topbar .topbar-crumbs { margin-left: 1rem !important; border-left: 1px solid var(--bs-border-color) !important; padding-left: 1rem !important; }
+	.nav-mini .sidebar .nav-label, .nav-mini .sidebar .sidebar-footer { display: none; }
+	.nav-mini .sidebar .nav-link { padding-left: 0; padding-right: 0; text-align: center; white-space: nowrap; }
+	.nav-mini .sidebar .nav-link .bi { width: auto; font-size: 1.1rem; }
+	.nav-mini .sidebar .nav-link.nav-sub .bi { font-size: .95rem; }
+	.nav-mini .sidebar .nav-img { height: 20px; margin-right: 0; }
+}
+/* Healthchecks-Herz in Rot */
+.bi-heart-pulse { color: var(--bs-danger); }
+/* Tabellen ausserhalb von Karten: leichter Schatten (nicht im Karten-Modus auf dem Handy) */
+@media (min-width: 768px) {
+	.table-shadow { box-shadow: var(--bs-box-shadow-sm); border: 1px solid var(--bs-border-color-translucent); border-radius: .5rem; background: var(--bs-body-bg); }
+	.table-shadow > .table { margin-bottom: 0; }
+	.table-shadow > .table > :not(caption) > * > :first-child { padding-left: .75rem; }
+}
+/* Kopieren in die Zwischenablage */
+.btn-copy.copied { color: var(--bs-success); border-color: var(--bs-success); }
+.topbar-crumbs .breadcrumb { font-size: .9rem; flex-wrap: nowrap; white-space: nowrap; }
+.topbar-crumbs .breadcrumb-item { overflow: hidden; text-overflow: ellipsis; }
+.topbar-crumbs .breadcrumb-item:last-child { max-width: 40vw; font-weight: 600; }
+.topbar-crumbs .breadcrumb-item a { color: var(--bs-secondary-color); text-decoration: none; }
+.topbar-crumbs .breadcrumb-item a:hover { color: var(--bs-body-color); }
+.topbar-crumb-mobile { max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+
+/* Kennzahl-Kacheln (Aufbau in node64.css): farbiger Rand links, Symbol rechts */
+.stat { border-left: 4px solid var(--bs-secondary-border-subtle); height: 100%; color: var(--bs-body-color); container-type: inline-size; }
+.stat-value { font-size: 1.6rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-icon { flex: 0 0 auto; margin-left: auto; font-size: 1.8rem; line-height: 1; opacity: .5; color: var(--bs-secondary-color); }
+.stat-ok { border-left-color: var(--bs-success); }
+.stat-down { border-left-color: var(--bs-danger); }
+.stat-warn { border-left-color: var(--bs-warning); }
+.stat-info { border-left-color: var(--bs-info); }
+.stat-primary { border-left-color: var(--bs-primary); }
+.stat-muted { border-left-color: var(--bs-secondary); }
+.stat-ok .stat-icon { color: var(--bs-success); }
+.stat-down .stat-icon { color: var(--bs-danger); }
+.stat-warn .stat-icon { color: var(--bs-warning); }
+.stat-info .stat-icon { color: var(--bs-info); }
+.stat-primary .stat-icon { color: var(--bs-primary); }
+@container (max-width: 12rem) {
+	.stat-icon { font-size: 1.4rem; }
+}
+@media (max-width: 575.98px) {
+	.stat-icon { font-size: 1.4rem; }
+}
+.dash-board .stat { border-left-width: 3px; }
+.dash-board .stat-icon { font-size: 1rem; }
+
+/* Healthchecks: Zustaende als volle Flaeche */
+.hc-state-up { background: var(--bs-success) !important; color: #fff; }
+.hc-state-down, .hc-state-flapping { background: var(--bs-danger) !important; color: #fff; }
+.hc-state-stabilizing, .hc-state-dependent { background: var(--bs-info) !important; color: #fff; }
+.hc-state-degraded { background: var(--bs-warning) !important; color: #212529; }
+.hc-state-pending, .hc-state-paused, .hc-state-quota { background: var(--bs-secondary) !important; color: #fff; }
+
+/* Unterpunkt im Menue (z. B. Healthchecks-Sync unter Healthchecks) */
+.nav-link.nav-sub { padding-left: 2.6rem; padding-top: .2rem; padding-bottom: .2rem; }

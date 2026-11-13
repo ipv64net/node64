@@ -29,6 +29,23 @@
 	document.querySelectorAll("input[name=ui_theme]").forEach(function (r) {
 		r.addEventListener("change", function () { setCookie("node64_theme", r.value); apply(r.value); });
 	});
+	// Design: anderes Layout, deshalb neu laden - per GET (die Seite kann die Antwort auf ein POST sein, reload schickte
+	// das Formular erneut) und ohne #Anker (sonst nur Sprung statt Laden); danach zurueck zum Abschnitt Darstellung
+	document.querySelectorAll("input[name=ui_design]").forEach(function (r) {
+		r.addEventListener("change", function () {
+			setCookie("node64_design", r.value);
+			try { sessionStorage.setItem("node64_goto", "appearance"); } catch (e) { /* ohne Speicher oben beginnen */ }
+			window.location.assign("/settings");
+		});
+	});
+	try {
+		var go = sessionStorage.getItem("node64_goto");
+		if (go) {
+			sessionStorage.removeItem("node64_goto");
+			var el = document.getElementById(go);
+			if (el) { el.scrollIntoView(); }
+		}
+	} catch (e) { /* kein sessionStorage */ }
 	document.querySelectorAll("input[name=ui_fs]").forEach(function (r) {
 		r.addEventListener("change", function () {
 			setCookie("node64_fs", r.value);

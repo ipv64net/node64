@@ -53,12 +53,13 @@
 		var bar = function (lbl, k, color) {
 			return { type: "bar", label: lbl, data: pts.map(function (p) { return p[k]; }), backgroundColor: color, borderRadius: 3, stack: "r", yAxisID: "y" };
 		};
-		var sets = [bar(L.requests, "ok", css("--bs-primary", "#0d6efd"))];
+		// Farben je Design (--n64-chart-*, node64.css): Anfragen Reihe 1, Datenmenge Reihe 4; fehlen sie, die Bootstrap-Farben
+		var sets = [bar(L.requests, "ok", css("--n64-chart-1", css("--bs-primary", "#0d6efd")))];
 		if (any("c4")) { sets.push(bar(L.c4 || "4xx", "c4", css("--bs-secondary-color", "#adb5bd"))); }
 		if (any("err")) { sets.push(bar(L.errors || "5xx", "err", css("--bs-warning", "#ffc107"))); }
 		sets.push(bar(L.blocked, "blocked", css("--bs-danger", "#dc3545")));
 		if (showDecoy || any("decoy")) { sets.push(bar(L.decoy || "Honeypot", "decoy", css("--bs-purple", "#6f42c1"))); }
-		sets.push({ type: "line", label: L.bytes, data: pts.map(function (p) { return p.bytes; }), borderColor: css("--bs-info", "#0dcaf0"), backgroundColor: css("--bs-info", "#0dcaf0"),
+		sets.push({ type: "line", label: L.bytes, data: pts.map(function (p) { return p.bytes; }), borderColor: css("--n64-chart-4", css("--bs-info", "#0dcaf0")), backgroundColor: css("--n64-chart-4", css("--bs-info", "#0dcaf0")),
 			pointRadius: 0, tension: 0.3, yAxisID: "y1" });
 		if (any("up")) {
 			sets.push({ type: "line", label: L.up || "Upload", data: pts.map(function (p) { return p.up; }), borderColor: css("--bs-success", "#198754"), backgroundColor: css("--bs-success", "#198754"),
