@@ -486,7 +486,7 @@
       "verify_target": "Zertifikat des Ziels prüfen (nur https)",
       "verify_target_hint": "Aus: auch selbstsignierte Zertifikate (Proxmox, UniFi, NAS) gehen – wie beim NPM.",
       "cache_assets": "Cache Assets",
-      "cache_assets_hint": "Bilder, CSS, JS und Schriften im Speicher halten.",
+      "cache_assets_hint": "Bilder, CSS, JS und Schriften im Speicher halten. Bei Anfragen mit Cookies nur, wenn das Ziel die Antwort als public kennzeichnet.",
       "block_exploits": "Block Common Exploits",
       "limits_on": "Schutz vor Überlastung aktiv: Grenzen je IP-Adresse (Verbindungen, Anfragen), Sperre bei Dauerbeschuss und eine Platzgrenze beim Ziel",
       "block_exploits_hint": "Typische Angriffe (SQL- und Datei-Injection, Path-Traversal, Log4Shell, .git/.env) mit 403 abweisen. Anmeldungen per OAuth/OIDC (z. B. Home Assistant, Keycloak, Authelia) und WebDAV bleiben frei; Adressen der Freigabeliste sind ausgenommen.",

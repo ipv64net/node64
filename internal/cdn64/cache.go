@@ -14,8 +14,10 @@ import (
 
 // Cache Assets: statische Dateien (Bilder, CSS, JS, Schriften) eines Hosts im Speicher halten, wie die
 // Option im Nginx Proxy Manager. Gecacht wird nur, was oeffentlich ist: GET ohne Anmeldung und ohne Cookie in
-// der Antwort, Status 200, hoechstens 2 MB, nicht "private"/"no-store". Gesamtgroesse begrenzt, aelteste
-// Eintraege fallen zuerst heraus. Beim Abschalten des Moduls wird alles freigegeben.
+// der Antwort, Status 200, hoechstens 2 MB, nicht "private"/"no-store". Antworten auf Anfragen mit Cookie (Sitzung)
+// nur, wenn das Ziel sie ausdruecklich freigibt ("public" oder "s-maxage"), sonst kaemen persoenliche Inhalte an
+// andere. Gesamtgroesse begrenzt, aelteste Eintraege fallen zuerst heraus. Beim Abschalten des Moduls wird alles
+// freigegeben.
 
 const (
 	cacheMaxObject = 2 << 20
@@ -77,6 +79,17 @@ func cacheable(r *http.Request) bool {
 		return false
 	}
 	return assetExt[strings.ToLower(path.Ext(r.URL.Path))]
+}
+
+// sharedOK: das Ziel gibt die Antwort ausdruecklich fuer geteilte Caches frei ("public" oder "s-maxage").
+func sharedOK(cc string) bool {
+	for _, part := range strings.Split(strings.ToLower(cc), ",") {
+		part = strings.TrimSpace(part)
+		if part == "public" || strings.HasPrefix(part, "s-maxage=") {
+			return true
+		}
+	}
+	return false
 }
 
 // cacheKey: Host, Pfad und Abfrage, dazu das Verfahren, das PROXY64 waehlen wuerde, und die Komprimierungen, die der
@@ -155,7 +168,7 @@ func (c *assetCache) stats() (entries, bytes int, hits, miss int64) {
 	return len(c.items), c.size, c.hits, c.miss
 }
 
-// ttlOf: Lebensdauer nach den Angaben des Ziels; ok = false, wenn nicht gecacht werden darf.
+// ttlOf: Lebensdauer nach den Angaben des Ziels (s-maxage vor max-age); ok = false, wenn nicht gecacht werden darf.
 func ttlOf(h http.Header) (time.Duration, bool) {
 	cc := strings.ToLower(h.Get("Cache-Control"))
 	if strings.Contains(cc, "no-store") || strings.Contains(cc, "private") || strings.Contains(cc, "no-cache") || h.Get("Set-Cookie") != "" {
@@ -164,25 +177,34 @@ func ttlOf(h http.Header) (time.Duration, bool) {
 	if v := h.Get("Vary"); v != "" && !strings.EqualFold(strings.TrimSpace(v), "Accept-Encoding") {
 		return 0, false
 	}
+	age := ""
 	for _, part := range strings.Split(cc, ",") {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(part), "max-age="); ok {
-			n, err := strconv.Atoi(v)
-			if err != nil || n <= 0 {
-				return 0, false
-			}
-			d := time.Duration(n) * time.Second
-			if d > cacheMaxTTL {
-				d = cacheMaxTTL
-			}
-			return d, true
+		part = strings.TrimSpace(part)
+		if v, ok := strings.CutPrefix(part, "s-maxage="); ok {
+			age = v
+			break
+		}
+		if v, ok := strings.CutPrefix(part, "max-age="); ok && age == "" {
+			age = v
 		}
 	}
-	return cacheTTL, true
+	if age == "" {
+		return cacheTTL, true
+	}
+	n, err := strconv.Atoi(age)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	d := time.Duration(n) * time.Second
+	if d > cacheMaxTTL {
+		d = cacheMaxTTL
+	}
+	return d, true
 }
 
 // storable: Antwort mit diesen Koepfen kaeme in den Cache (dann lohnt die staerkere Komprimierung).
-func storable(h http.Header) bool {
-	if _, ok := ttlOf(h); !ok {
+func storable(r *http.Request, h http.Header) bool {
+	if _, ok := ttlOf(h); !ok || (r.Header.Get("Cookie") != "" && !sharedOK(h.Get("Cache-Control"))) {
 		return false
 	}
 	cl, err := strconv.ParseInt(h.Get("Content-Length"), 10, 64)
@@ -197,7 +219,7 @@ type recorder struct {
 	over   bool
 	failed bool   // Schreibfehler zum Browser
 	origCC string // Cache-Control des Ziels (vor der Ergaenzung fuer den Browser)
-	prot   bool   // hinter einer Zugriffsliste: "private" statt "public"
+	prot   bool   // hinter einer Zugriffsliste oder mit Cookie: "private" statt "public"
 }
 
 func (w *recorder) WriteHeader(code int) {
@@ -271,7 +293,10 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			}
 			return
 		}
-		rec := &recorder{ResponseWriter: w, prot: prot, over: personal} // je Benutzer: nur Cache-Control, nichts ablegen
+		// mit Cookie: aus dem Cache nur, was dort liegt (oeffentlich: anonym geholt oder vom Ziel freigegeben); die
+		// Antwort des Ziels bekommt kein "public" und kommt nur mit ausdruecklicher Freigabe in den Cache
+		cookie := r.Header.Get("Cookie") != ""
+		rec := &recorder{ResponseWriter: w, prot: prot || cookie, over: personal} // je Benutzer: nur Cache-Control, nichts ablegen
 		r, body := httpcompress.Track(r)
 		next.ServeHTTP(rec, r)
 		// nur vollstaendig vom Ziel gelesen und ohne Fehler (abgebrochen: komprimiert ohne Content-Length nicht erkennbar)
@@ -284,7 +309,7 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			orig.Del("Cache-Control")
 		}
 		ttl, ok := ttlOf(orig)
-		if !ok {
+		if !ok || (cookie && !sharedOK(rec.origCC)) {
 			return
 		}
 		if cl := w.Header().Get("Content-Length"); cl != "" && cl != strconv.Itoa(len(rec.buf)) {

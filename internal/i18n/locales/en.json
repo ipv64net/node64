@@ -486,7 +486,7 @@
       "verify_target": "Verify the target's certificate (https only)",
       "verify_target_hint": "Off: self-signed certificates (Proxmox, UniFi, NAS) work too – like NPM.",
       "cache_assets": "Cache assets",
-      "cache_assets_hint": "Keep images, CSS, JS and fonts in memory.",
+      "cache_assets_hint": "Keep images, CSS, JS and fonts in memory. For requests with cookies only if the target marks the response as public.",
       "block_exploits": "Block common exploits",
       "limits_on": "Overload protection active: limits per IP address (connections, requests), ban on sustained floods and a slot limit at the target",
       "block_exploits_hint": "Reject typical attacks (SQL and file injection, path traversal, Log4Shell, .git/.env) with 403. Sign-ins via OAuth/OIDC (e.g. Home Assistant, Keycloak, Authelia) and WebDAV stay allowed; addresses on the allow list are exempt.",

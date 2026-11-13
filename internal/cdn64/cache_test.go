@@ -47,6 +47,62 @@ func TestCacheProtected(t *testing.T) {
 	}
 }
 
+// Anfrage mit Cookie: ohne Freigabe des Ziels kein Eintrag (die Antwort ginge sonst anonym an andere) und kein
+// "public"; mit "public" wird abgelegt. Anonyme Anfragen wie bisher, ihr Eintrag bedient auch Cookie-Anfragen.
+func TestCacheCookie(t *testing.T) {
+	var hits atomic.Int64
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "text/css")
+		if strings.HasPrefix(r.URL.Path, "/pub") {
+			w.Header().Set("Cache-Control", "public, max-age=60")
+		}
+		if r.Header.Get("Cookie") != "" {
+			_, _ = io.WriteString(w, "/* geheim */")
+			return
+		}
+		_, _ = io.WriteString(w, "body{}")
+	}))
+	defer up.Close()
+	port, _ := strconv.Atoi(up.URL[strings.LastIndex(up.URL, ":")+1:])
+	_, h := cacheModule(t, port)
+	get := func(p, cookie string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "http://app.test"+p, nil)
+		if cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	for i, x := range []struct {
+		path, cookie, cc, cache, body string
+		hits                          int64
+	}{
+		{"/x.css", "sid=1", "private, max-age=", "MISS", "/* geheim */", 1}, // ohne Cache-Control: nicht ablegen
+		{"/x.css", "", "public, max-age=", "MISS", "body{}", 2},             // anonym: vom Ziel, nicht die Cookie-Antwort
+		{"/x.css", "", "public, max-age=", "HIT", "body{}", 2},              // anonym wie bisher
+		{"/x.css", "sid=1", "public, max-age=", "HIT", "body{}", 2},         // oeffentlicher Eintrag bedient auch Cookies
+		{"/pub.css", "sid=1", "public, max-age=60", "MISS", "/* geheim */", 3},
+		{"/pub.css", "", "public, max-age=60", "HIT", "/* geheim */", 3}, // vom Ziel freigegeben: abgelegt
+	} {
+		rec := get(x.path, x.cookie)
+		hd := rec.Header()
+		if !strings.HasPrefix(hd.Get("Cache-Control"), x.cc) || hd.Get("X-Cache-Status") != x.cache || rec.Body.String() != x.body ||
+			hits.Load() != x.hits {
+			t.Fatalf("%d: %v %q hits %d", i, hd, rec.Body.String(), hits.Load())
+		}
+	}
+	if hd := (http.Header{"Cache-Control": {"public, s-maxage=30, max-age=600"}}); !sharedOK(hd.Get("Cache-Control")) {
+		t.Fatal("s-maxage/public not recognised")
+	} else if ttl, ok := ttlOf(hd); !ok || ttl.Seconds() != 30 {
+		t.Fatalf("s-maxage ttl %v %v", ttl, ok)
+	}
+	if sharedOK("max-age=60") || sharedOK("") {
+		t.Fatal("no public/s-maxage is not shared")
+	}
+}
+
 // cacheModule: nur was proxyHandler fuer Proxy, Komprimierung und Cache braucht.
 func cacheModule(t *testing.T, port int) (*Module, http.Handler) {
 	t.Helper()

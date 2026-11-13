@@ -477,7 +477,7 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 	}
 	if h.Advanced.Gzip { // vor dem Cache: der legt die fertig komprimierte Fassung ab (was er ablegt, staerker)
 		next = compress(next, httpcompress.Options{Static: func(r *http.Request, hd http.Header) bool {
-			return h.CacheAssets && r.Method == http.MethodGet && cacheable(r) && httpcompress.StaticExt(r.URL.Path) && storable(hd)
+			return h.CacheAssets && r.Method == http.MethodGet && cacheable(r) && httpcompress.StaticExt(r.URL.Path) && storable(r, hd)
 		}})
 	}
 	if h.CacheAssets {
