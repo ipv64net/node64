@@ -2,7 +2,7 @@ module github.com/ipv64net/node64
 
 go 1.27.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/andybalholm/brotli v1.2.8
@@ -10,7 +10,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/go-acme/lego/v4 v4.35.2
-	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/google/nftables v0.3.0

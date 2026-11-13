@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Build (reines Go, kein CGO, Cross-Compile ueber TARGETOS/TARGETARCH; arm/v7 ueber TARGETVARIANT -> GOARM=7)
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
