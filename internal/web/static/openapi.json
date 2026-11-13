@@ -6779,6 +6779,10 @@
             "type": "boolean",
             "description": "Fingerabdruck erst bestätigen (als `pin` bzw. `hostkey` speichern), dann erneut testen"
           },
+          "cert_changed": {
+            "type": "boolean",
+            "description": "Zertifikat passt nicht mehr zum gespeicherten `pin` (z. B. FRITZ!Box mit neuem Zertifikat); `fingerprint` nennt das neue"
+          },
           "trusted": {
             "type": "boolean",
             "description": "Zertifikat von einer bekannten CA bzw. Pin passt"

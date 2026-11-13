@@ -308,6 +308,9 @@ if [ "$m64_updates" = 1 ]; then
 		if m64_try apt-get 0 90 apt-get -s -o Debug::NoLocking=1 dist-upgrade; then
 			m64_sec updates:apt
 			printf '%s\n' "$m64_o" | grep '^Inst '
+		elif m64_run TERM 20 apt-get -s -o Debug::NoLocking=1 dist-upgrade 2>&1 | grep -qi 'operation is not allowed'; then
+			# z. B. UGOS: Updates kommen als Firmware, apt verweigert jedes Upgrade (auch die Simulation)
+			m64_note updates "{m64:upgrade_locked}"
 		else
 			m64_err updates "$m64_e"
 		fi

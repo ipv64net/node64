@@ -26,6 +26,10 @@ func (c *Collector) collectSensors(r *round) {
 		return
 	}
 	t, err := walkColumns(r.ctx, r.c, []string{entSensorType, entSensorScale, entSensorPrec, entSensorValue, entSensorOper}, c.cfg.MaxRep)
+	if emptyTable(t, err) { // Geraet ohne Sensoren (z. B. Drucker): nicht vorhanden statt Teilfehler
+		c.markAbsent("entsensor", r.now, true)
+		return
+	}
 	if err != nil {
 		r.part.add("ENTITY-SENSOR", err, "temp:")
 		return

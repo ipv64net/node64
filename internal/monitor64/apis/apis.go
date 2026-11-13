@@ -62,6 +62,9 @@ type TestResult struct {
 	// NeedConfirm: Zertifikat bzw. Host-Key nicht bestaetigt und kein Pin – Token bzw. Schluessel wurden nicht
 	// gesendet. Nach der Bestaetigung mit Fingerprint als Pin erneut testen.
 	NeedConfirm bool `json:"need_confirm,omitempty"`
+	// CertChanged: das Geraet zeigt ein anderes Zertifikat als das gemerkte (z. B. FRITZ!Box nach neuem Namen) –
+	// Zugangsdaten wurden nicht gesendet. Fingerprint ist der neue; die Oberflaeche bietet die Uebernahme an.
+	CertChanged bool `json:"cert_changed,omitempty"`
 }
 
 // PartialError: einzelne Teilabfragen sind fehlgeschlagen, die uebrigen Dienste wurden geliefert.

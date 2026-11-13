@@ -1,5 +1,19 @@
 # Monitor64 – Änderungen
 
+## 0.1.10 – 2026-11-13
+
+Fehlerbehebungen aus den Meldungen auf GitHub:
+
+- Schwellen: „Abweichung speichern“ und die Vorschau funktionieren wieder – bisher passierte nichts („cur is not a function“ in der Browser-Konsole) (#107).
+- Schwelle „GB frei“: Die Warnung blieb stehen, obwohl wieder mehr frei war als die Schwelle („nur noch 1,2 GB frei (Schwelle 1 GB)“). Die geerbte Hysterese von 2 (gedacht in Prozentpunkten) galt dort als 2 GB; geerbt zählt sie jetzt höchstens als ein Zehntel der Schwelle. Eine am Dienst zusammen mit „GB frei“ gesetzte Hysterese gilt unverändert in GB (#109).
+- SNMP: Geräte ohne Sensor- bzw. LAG-Tabelle (z. B. HP LaserJet), die deren Abfrage mit einer leeren Antwort quittieren, melden keine „Teilabfrage fehlgeschlagen: ENTITY-SENSOR: leere Antwort“ mehr (#98).
+- Platten: Zwei Platten an gleichen USB-Adaptern melden oft dieselbe Seriennummer (die des Adapters) und fielen zu einem Dienst zusammen – die zweite fehlte. Jetzt zählt in dem Fall die Seriennummer aus SMART bzw. der Gerätename; die bisher angezeigte Platte erscheint dadurch einmalig als neuer Dienst (#84).
+- Dienste-Tabelle: Die Kategorie heißt „Gäste und Backups“ statt „Proxmox“ – sie gilt auch für VMs auf Unraid und TrueNAS (#87).
+- Geändertes Zertifikat (z. B. FRITZ!Box nach neuem Namen): Der Zugang erklärt jetzt, was zu tun ist, und „Verbindung testen“ bietet „Neuen Fingerabdruck übernehmen“ an; danach das Geheimnis erneut eingeben und speichern (#121).
+- **Agent 0.1.3 (Linux):** Dateisysteme stehen nicht mehr alle als „nur lesbar“ da – der Agent liest das jetzt aus Sicht des Hosts statt aus seiner eigenen, gehärteten Umgebung (#97).
+- **Agent 0.1.3:** startet auf UGREEN-NAS (UGOS): ein dort für alle Dienste gesetztes `GODEBUG` wird nicht mehr geerbt. Die Installation prüft nach dem Start, ob der Dienst läuft, und zeigt sonst die letzten Log-Zeilen. Dass UGOS Upgrades über `apt` sperrt, ist ein Hinweis statt einer fehlgeschlagenen Teilabfrage – auch per SSH (#96).
+- **Agent 0.1.3:** Unter SELinux (Fedora, RHEL, Rocky …) kennzeichnet die Installation den Programmordner als `bin_t`, damit das automatische Update nicht mehr mit „permission denied“ scheitert (#100).
+
 ## 0.1.9 – 2026-11-11
 
 - Neuer Zugang **FRITZ!Box** (eigene Kachel im Assistenten) über die Schnittstelle TR-064: Internetverbindung (verbunden/getrennt, Dauer, externe Adresse, aktueller Durchsatz, Zugangsart und Zustand der Leitung), bei DSL-Anschlüssen Sync-Raten, Störabstand, Dämpfung und CRC-Fehler, Laufzeit und FRITZ!OS-Version der Box sowie „Update verfügbar“.

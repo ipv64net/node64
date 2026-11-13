@@ -743,6 +743,10 @@ function testHTML(r) {
 		return '<span class="text-warning-emphasis"><i class="bi bi-shield-exclamation"></i> ' + esc(L('new.fp_confirm')) + '</span>' + fp +
 			(r.fingerprint ? '<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-fp-confirm="' + esc(r.fingerprint) + '"><i class="bi bi-check2"></i> ' + esc(L('new.fp_accept')) + '</button>' : '');
 	}
+	if (r.cert_changed && r.fingerprint) { // gemerktes Zertifikat passt nicht mehr: neuen Fingerabdruck uebernehmen, Geheimnis neu eingeben
+		return '<span class="text-danger"><i class="bi bi-shield-exclamation"></i> ' + esc(L('new.fp_changed')) + '</span>' + fp +
+			'<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-fp-confirm="' + esc(r.fingerprint) + '"><i class="bi bi-check2"></i> ' + esc(L('new.fp_accept_changed')) + '</button>';
+	}
 	var n = (r.services || []).length, extra = '';
 	if (r.summary || r.version) { extra += '<div class="small text-body-secondary mt-1">' + esc([r.version ? L('new.version', { v: r.version }) : '', r.cluster ? L('new.cluster', { c: r.cluster }) : '', tx(r.summary || '')].filter(Boolean).join(' · ')) + '</div>'; }
 	if (r.warning) { extra += '<div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle"></i> ' + esc(tx(r.warning)) + '</div>'; }
@@ -1922,11 +1926,11 @@ function pageRules() {
 	function ovrForm(o) {
 		var r = (o && o.rule) || {};
 		var tOpts = R.targets.groups.map(function (g) { return ['group|' + g, targetLabel('group', g)]; }).concat(R.targets.tags.map(function (t) { return ['tag|' + t, targetLabel('tag', t)]; }));
-		var cur = o ? o.target_type + '|' + o.target : (tOpts.length ? tOpts[0][0] : '');
-		if (o && !tOpts.some(function (x) { return x[0] === cur; })) { tOpts.push([cur, targetLabel(o.target_type, o.target)]); }
+		var curT = o ? o.target_type + '|' + o.target : (tOpts.length ? tOpts[0][0] : '');
+		if (o && !tOpts.some(function (x) { return x[0] === curT; })) { tOpts.push([curT, targetLabel(o.target_type, o.target)]); }
 		var kinds = (D.kinds || []);
 		var html = '<div class="card mb-3 border-primary"><div class="card-header fw-semibold">' + esc(o ? L('rl.edit') : L('rl.new')) + (o ? '' : ' <span class="small text-body-secondary fw-normal">– ' + esc(L('rl.new_sub')) + '</span>') + '</div><div class="card-body"><div class="row g-2">' +
-			'<div class="col-md-4"><label class="form-label small mb-0" for="m64-nf-t">' + esc(L('rl.for_target')) + '</label><select class="form-select form-select-sm" id="m64-nf-t">' + tOpts.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (x[0] === cur ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select>' +
+			'<div class="col-md-4"><label class="form-label small mb-0" for="m64-nf-t">' + esc(L('rl.for_target')) + '</label><select class="form-select form-select-sm" id="m64-nf-t">' + tOpts.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (x[0] === curT ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select>' +
 			'<div class="input-group input-group-sm mt-1"><select class="form-select" id="m64-nf-tt" aria-label="' + esc(L('rl.new_target')) + '"><option value="group">' + esc(L('f.group')) + '</option><option value="tag">' + esc(L('f.tag')) + '</option></select><input class="form-control" id="m64-nf-tn" maxlength="64" placeholder="' + esc(L('rl.new_target')) + '"></div></div>' +
 			'<div class="col-md-4"><label class="form-label small mb-0" for="m64-nf-k">' + esc(L('rl.value')) + '</label><select class="form-select form-select-sm" id="m64-nf-k">' + kinds.map(function (k) { return '<option value="' + esc(k.kind) + '"' + ((o ? o.kind : 'fs.used') === k.kind ? ' selected' : '') + '>' + esc(kindLabel(k.kind)) + '</option>'; }).join('') + '</select></div>' +
 			'<div class="col-md-4" data-num><label class="form-label small mb-0" for="m64-nf-u">' + esc(L('rl.unit')) + '</label><select class="form-select form-select-sm" id="m64-nf-u"></select></div>' +
@@ -2067,12 +2071,12 @@ function pageNotify() {
 	function ovrForm(o) {
 		var n = (o && o.notify) || {};
 		var tOpts = N.targets.groups.map(function (g) { return ['group|' + g, targetLabel('group', g)]; }).concat(N.targets.tags.map(function (t) { return ['tag|' + t, targetLabel('tag', t)]; }));
-		var cur = o ? o.target_type + '|' + o.target : (tOpts.length ? tOpts[0][0] : '');
-		if (o && !tOpts.some(function (x) { return x[0] === cur; })) { tOpts.push([cur, targetLabel(o.target_type, o.target)]); }
+		var curT = o ? o.target_type + '|' + o.target : (tOpts.length ? tOpts[0][0] : '');
+		if (o && !tOpts.some(function (x) { return x[0] === curT; })) { tOpts.push([curT, targetLabel(o.target_type, o.target)]); }
 		var chans = [{ id: 'default', name: L('nf.default') }].concat(N.channels.map(function (c) { return { id: String(c.id), name: c.name }; }));
 		function chv(id) { var r = ''; (n.channels || []).forEach(function (c) { if (c.id === id) { r = c.warn ? 'both' : 'crit'; } }); return r; }
 		var html = '<div class="card-body border-top"><div class="row g-2">' +
-			'<div class="col-md-6"><label class="form-label small mb-0" for="m64-no-t">' + esc(L('rl.for_target')) + '</label><select class="form-select form-select-sm" id="m64-no-t">' + tOpts.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (x[0] === cur ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>' +
+			'<div class="col-md-6"><label class="form-label small mb-0" for="m64-no-t">' + esc(L('rl.for_target')) + '</label><select class="form-select form-select-sm" id="m64-no-t">' + tOpts.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (x[0] === curT ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>' +
 			'<div class="col-md-6"><label class="form-label small mb-0" for="m64-no-rep">' + esc(L('nf.channels_mode')) + '</label><select class="form-select form-select-sm" id="m64-no-rep"><option value="0"' + (n.replace ? '' : ' selected') + '>' + esc(L('nf.mode_add')) + '</option><option value="1"' + (n.replace ? ' selected' : '') + '>' + esc(L('nf.mode_replace')) + '</option></select></div>' +
 			'<div class="col-12"><div class="small text-body-secondary mb-1">' + esc(L('nf.channel')) + '</div>' + chans.map(function (c) { var v = chv(c.id); return '<div class="d-flex align-items-center gap-2 mb-1"><span class="small me-auto">' + esc(c.name) + '</span><select class="form-select form-select-sm w-auto" data-och="' + esc(c.id) + '" aria-label="' + esc(c.name) + '"><option value="">–</option><option value="both"' + (v === 'both' ? ' selected' : '') + '>' + esc(ST.warn + ' + ' + ST.crit) + '</option><option value="crit"' + (v === 'crit' ? ' selected' : '') + '>' + esc(L('nf.only_crit')) + '</option></select></div>'; }).join('') + '</div>' +
 			'<div class="col-md-6"><label class="form-label small mb-0" for="m64-no-oc">' + esc(L('nf.only_crit')) + '</label>' + triSel('m64-no-oc', n.only_crit, L('yes'), L('no')) + '</div>' +

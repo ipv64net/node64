@@ -56,6 +56,15 @@ type conn interface {
 	close()
 }
 
+// errEmptyResp: Antwort ohne Werte. Manche Geraete (z. B. HP LaserJet) beantworten die Abfrage einer Tabelle, die
+// sie nicht kennen, so statt mit endOfMibView; bei optionalen Tabellen zaehlt das als "nicht vorhanden" (emptyTable).
+var errEmptyResp = errors.New(model.T("monitor64.txt.resp_empty"))
+
+// emptyTable: die Abfrage einer Tabelle kam leer zurueck und es gibt keine Zeile – die Tabelle fehlt auf dem Geraet.
+func emptyTable(t table, err error) bool {
+	return errors.Is(err, errEmptyResp) && len(t.rows()) == 0
+}
+
 // snmpError ist ein Fehlerstatus in der Antwort (noSuchName, tooBig ...).
 type snmpError struct {
 	status gosnmp.SNMPError
@@ -94,7 +103,7 @@ func (c *gsConn) check(p *gosnmp.SnmpPacket, err error) ([]pdu, error) {
 		return nil, err
 	}
 	if p == nil {
-		return nil, errors.New(model.T("monitor64.txt.resp_empty"))
+		return nil, errEmptyResp
 	}
 	if p.Error != gosnmp.NoError {
 		return nil, &snmpError{status: p.Error, index: int(p.ErrorIndex)}
@@ -590,7 +599,7 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 			return out, err
 		}
 		if len(res) == 0 {
-			return out, errors.New(model.T("monitor64.txt.resp_empty"))
+			return out, errEmptyResp
 		}
 		changed := false
 		for i, p := range res {

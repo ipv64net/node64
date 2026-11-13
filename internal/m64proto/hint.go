@@ -18,6 +18,7 @@ const (
 	HintFormat        = "{m64:format}"         // unbekanntes Format
 	HintNoSystemd     = "{m64:no_systemd}"     // kein systemd
 	HintNoPkgManager  = "{m64:no_pkg_manager}" // kein Paketverwalter erkannt
+	HintUpgradeLocked = "{m64:upgrade_locked}" // System verweigert Upgrades ueber den Paketverwalter (UGOS)
 	HintSecUnknown    = "{m64:sec_unknown}"    // Sicherheitsupdates unbekannt (danach ": " und der Grund)
 	HintNotParsable   = "{m64:not_parsable}"   // keine Auswertung moeglich
 	HintNoOutput      = "{m64:no_output}"      // keine Monitor64-Ausgabe

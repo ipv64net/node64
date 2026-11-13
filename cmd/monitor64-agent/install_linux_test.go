@@ -12,6 +12,10 @@ import (
 // F1-K7: Haertung erlaubt HOME fuer eigene Skripte, /root lesbar, /run nur mit zypper.
 func TestUnitText(t *testing.T) {
 	u := unitText(6465, false)
+	// Issue #96: ein systemweit gesetztes GODEBUG (UGOS) darf den Agent nicht am Start hindern
+	if !strings.Contains(u, "\nUnsetEnvironment=GODEBUG\n") {
+		t.Error("Unit ohne UnsetEnvironment=GODEBUG")
+	}
 	for _, want := range []string{"run --port 6465", "ProtectHome=read-only", "StateDirectory=monitor64-agent",
 		"ProtectSystem=strict", "Restart=always", "ReadWritePaths=" + defaultDir + " " + libDir} {
 		if !strings.Contains(u, want) {

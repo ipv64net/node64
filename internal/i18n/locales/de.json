@@ -5933,7 +5933,7 @@
       "storage": "Speicher",
       "disks": "Platten",
       "network": "Netzwerk",
-      "guests": "Proxmox",
+      "guests": "Gäste und Backups",
       "docker": "Docker",
       "winsvc": "Dienste",
       "local": "Eigene Skripte",
@@ -6079,7 +6079,9 @@
       "unconfirmed": "Der Fingerabdruck des Hosts ist noch nicht bestätigt. Du kannst den Host trotzdem anlegen – das Passwort wird aber erst gesendet, nachdem du den Fingerabdruck am Zugang über „Testen“ verglichen und bestätigt hast. Besser: zurück zu Schritt 2 und dort bestätigen.",
       "hint_pmg": "Im Mail Gateway unter Konfiguration → Benutzerverwaltung einen eigenen Benutzer mit der Rolle „Auditor“ anlegen (Realm „Proxmox Mail Gateway Authentication Server“, ohne zweiten Faktor) und hier mit Realm eintragen, z. B. monitor64@pmg. API-Token kennt das Mail Gateway nicht, deshalb Benutzer und Passwort. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
       "hint_mailcow": "In mailcow unter System → Konfiguration → Zugriff → API den Nur-Lese-Zugriff einschalten, die Adresse dieser Node bei „API-Zugriff erlauben von“ eintragen und den Schlüssel hier einfügen. Achtung: Abfragen mit falschem Schlüssel zählt mailcow als Fehlversuch und kann die Node sperren (Fail2ban).",
-      "hint_fritzbox": "In der FRITZ!Box unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ einschalten und unter System → FRITZ!Box-Benutzer einen eigenen Benutzer anlegen. Für alle Werte braucht er das Recht „FRITZ!Box Einstellungen“ – eine Nur-Lese-Rolle kennt die FRITZ!Box nicht; ohne das Recht kommen Zugangsart, Zustand der Leitung und der Update-Stand. Der Zugriff geht nur aus dem Heimnetz. Das Zertifikat ist selbst signiert – den Fingerabdruck beim Test bestätigen."
+      "hint_fritzbox": "In der FRITZ!Box unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ einschalten und unter System → FRITZ!Box-Benutzer einen eigenen Benutzer anlegen. Für alle Werte braucht er das Recht „FRITZ!Box Einstellungen“ – eine Nur-Lese-Rolle kennt die FRITZ!Box nicht; ohne das Recht kommen Zugangsart, Zustand der Leitung und der Update-Stand. Der Zugriff geht nur aus dem Heimnetz. Das Zertifikat ist selbst signiert – den Fingerabdruck beim Test bestätigen.",
+      "fp_changed": "Das Gerät zeigt ein anderes Zertifikat als das gemerkte (z. B. FRITZ!Box nach neuem Namen oder Update) – Token bzw. Passwort wurden nicht gesendet. Wenn das erwartet ist: neuen Fingerabdruck vergleichen und übernehmen, danach das Geheimnis erneut eingeben und speichern.",
+      "fp_accept_changed": "Neuen Fingerabdruck übernehmen"
     },
     "nf": {
       "where": "Wohin",
@@ -6471,7 +6473,8 @@
       "timeout": "Zeitlimit",
       "too_large": "Ausgabe zu groß ({a} Bytes, höchstens {b})",
       "unknown_error": "unbekannter Fehler",
-      "unreadable": "Ausgabe nicht lesbar"
+      "unreadable": "Ausgabe nicht lesbar",
+      "upgrade_locked": "Updates über die Paketverwaltung sind auf diesem System gesperrt (z. B. UGOS – Aktualisierung nur per Firmware)"
     },
     "snmp": {
       "assembling": "Zusammenbau",
@@ -6969,7 +6972,7 @@
       "warn_from": "Warnung ab {v}",
       "wear": "Verschleiß {v} %",
       "web_auth": "Anmeldung abgelehnt",
-      "web_cert": "Zertifikat passt nicht",
+      "web_cert": "Zertifikat hat sich geändert – am Zugang „Verbindung testen“ und den neuen Fingerabdruck bestätigen",
       "web_net": "nicht erreichbar",
       "web_perm": "keine Berechtigung",
       "web_resp": "unerwartete Antwort",

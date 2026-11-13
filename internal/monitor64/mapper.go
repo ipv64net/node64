@@ -278,7 +278,20 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			prevIO[d.Name] = d
 		}
 	}
+	// Dieselbe Seriennummer an mehreren Platten stammt vom USB-Adapter, nicht von der Platte (gleiche Adapter melden
+	// oft dieselbe): sie taugt dann nicht als Schluessel – die Platten fielen sonst zu einem Dienst zusammen. Es
+	// gilt die Seriennummer aus SMART bzw. der Geraetename.
+	serials := map[string]int{}
 	for _, d := range cur.Disks {
+		if d.Serial != "" {
+			serials[d.Serial]++
+		}
+	}
+	shared := func(serial string) bool { return serial != "" && serials[serial] > 1 }
+	for _, d := range cur.Disks {
+		if shared(d.Serial) {
+			d.Serial = ""
+		}
 		a := get(d.Serial, d.Name, d.Model)
 		a.hasIO = true
 		if p, ok := prevIO[d.Name]; ok && dt > 0 {
@@ -296,7 +309,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 	// Seriennummern aus diskstats (sysfs) – damit auch schlafende Platten ihren Schluessel behalten
 	serialByName := map[string]string{}
 	for _, d := range cur.Disks {
-		if d.Serial != "" {
+		if d.Serial != "" && !shared(d.Serial) {
 			serialByName[d.Name] = d.Serial
 		}
 	}
@@ -313,6 +326,9 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 	for i := range cur.SMART {
 		sm := &cur.SMART[i]
 		devName := strings.TrimPrefix(sm.Device, "/dev/")
+		if shared(sm.Serial) { // vom Agent aus /sys ergaenzt (fillSmartSerials): gleiche Adapter-Seriennummer
+			sm.Serial = ""
+		}
 		if sm.Serial == "" {
 			sm.Serial = serialByName[devName]
 		}
@@ -734,7 +750,8 @@ func diskName(name, model_ string) string {
 var noteKeys = map[string]string{
 	"reading": "monitor64.note.reading", "timeout": "monitor64.note.timeout", "not_found": "monitor64.note.not_found",
 	"format": "monitor64.note.format", "no_systemd": "monitor64.note.no_systemd", "no_pkg_manager": "monitor64.note.no_pkg_manager",
-	"sec_unknown": "monitor64.note.sec_unknown", "not_parsable": "monitor64.note.not_parsable", "no_output": "monitor64.note.no_output",
+	"upgrade_locked": "monitor64.note.upgrade_locked",
+	"sec_unknown":    "monitor64.note.sec_unknown", "not_parsable": "monitor64.note.not_parsable", "no_output": "monitor64.note.no_output",
 	"incomplete": "monitor64.note.incomplete", "no_smart_disks": "monitor64.note.no_smart_disks", "no_json": "monitor64.note.no_json",
 	"smart_unavail": "monitor64.note.smart_unavail", "smart_disabled": "monitor64.note.smart_disabled",
 	"dev_unreadable": "monitor64.note.dev_unreadable", "unreadable": "monitor64.note.unreadable",

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/m64agent"
 	"github.com/ipv64net/node64/internal/m64proto"
@@ -33,6 +34,8 @@ const (
 // /run/zypp.pid, siehe zypperPaths). /home und /root sind nur lesbar: eigene Skripte koennen Zugangsdateien wie
 // /root/.my.cnf lesen (mit vollem Pfad, z. B. mysql --defaults-extra-file=/root/.my.cnf), aber nichts dort aendern.
 // Restart=always startet den Agent nach einem Absturz neu; nach einem Update startet er sich selbst neu (exec).
+// UnsetEnvironment=GODEBUG: manche Systeme setzen GODEBUG fuer alle Dienste (UGOS von Ugreen: tlskyber=0 in
+// /etc/systemd/system.conf); einen dort inzwischen entfernten Schalter quittiert die Go-Laufzeit mit Abbruch beim Start.
 const unitFile = `[Unit]
 Description=Monitor64-Agent (Node64)
 Documentation=https://node64.de/
@@ -44,6 +47,7 @@ Type=simple
 ExecStart=` + libBin + ` run --port %d%s
 Restart=always
 RestartSec=5
+UnsetEnvironment=GODEBUG
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -165,6 +169,7 @@ func doInstall(key string, port int, pf pushFlags) error {
 		}
 	}
 	say("program installed: %s", libBin)
+	selinuxLabel()
 
 	// Hostschluessel (vor dem Start, damit der Fingerabdruck sicher feststeht)
 	hk, err := m64agent.LoadOrCreateHostKey(filepath.Join(defaultDir, "hostkey"))
@@ -183,6 +188,9 @@ func doInstall(key string, port int, pf pushFlags) error {
 				return fmt.Errorf("systemctl %s: %v: %s", strings.Join(a, " "), err, bytes.TrimSpace(out))
 			}
 		}
+		if err := serviceRuns(); err != nil {
+			return err
+		}
 		if pf.noListen {
 			say("service %s started (push only, not listening)", unitName)
 		} else {
@@ -195,6 +203,53 @@ func doInstall(key string, port int, pf pushFlags) error {
 	say("host key fingerprint (compare it in Node64):")
 	fmt.Println("  " + m64agent.Fingerprint(hk.PublicKey()))
 	return nil
+}
+
+// serviceRuns prueft kurz nach dem Start, ob der Dienst laeuft. systemd meldet den Start auch dann als gelungen,
+// wenn das Programm sofort abbricht (Neustart-Schleife) – dann hier ein klarer Fehler mit den letzten Log-Zeilen.
+func serviceRuns() error {
+	time.Sleep(2 * time.Second)
+	if exec.Command("systemctl", "is-active", "--quiet", unitName).Run() == nil {
+		return nil
+	}
+	time.Sleep(2 * time.Second) // einmal nachfassen (langsame Systeme)
+	if exec.Command("systemctl", "is-active", "--quiet", unitName).Run() == nil {
+		return nil
+	}
+	log, _ := exec.Command("journalctl", "-u", unitName, "-n", "8", "--no-pager", "-o", "cat").CombinedOutput()
+	return fmt.Errorf("service %s does not stay up - last log lines:\n%s\nmore: journalctl -u %s", unitName, bytes.TrimSpace(log), unitName)
+}
+
+// selinuxOn: SELinux ist auf diesem System eingeschaltet.
+func selinuxOn() bool {
+	_, err := os.Stat("/sys/fs/selinux/enforce")
+	return err == nil
+}
+
+// selinuxLabel kennzeichnet den Programmordner als bin_t. Unter SELinux (Fedora, RHEL, Rocky ...) laeuft ein Dienst,
+// dessen Programm das Etikett lib_t traegt (Standard unter /usr/local/lib), im engen Bereich init_t und darf seinen
+// Ordner nicht beschreiben – das automatische Update scheitert mit "permission denied". Mit bin_t startet systemd
+// ihn wie andere fremde Dienste (unconfined_service_t); neue Dateien im Ordner erben das Etikett. Ohne semanage
+// bleibt chcon (haelt bis zu einer Neu-Etikettierung des Dateisystems). Alles nach bestem Bemuehen.
+func selinuxLabel() {
+	if !selinuxOn() {
+		return
+	}
+	pat := libDir + "(/.*)?"
+	if sm, err := exec.LookPath("semanage"); err == nil {
+		if exec.Command(sm, "fcontext", "-a", "-t", "bin_t", pat).Run() != nil {
+			_ = exec.Command(sm, "fcontext", "-m", "-t", "bin_t", pat).Run()
+		}
+		if rc, err := exec.LookPath("restorecon"); err == nil && exec.Command(rc, "-R", libDir).Run() == nil {
+			say("SELinux: %s labelled bin_t (semanage fcontext)", libDir)
+			return
+		}
+	}
+	if cc, err := exec.LookPath("chcon"); err == nil && exec.Command(cc, "-R", "-t", "bin_t", libDir).Run() == nil {
+		say("SELinux: %s labelled bin_t (chcon - lasts until the file system is relabelled; install policycoreutils-python-utils for semanage)", libDir)
+		return
+	}
+	say("WARNING: SELinux is on but %s could not be labelled bin_t - automatic updates may be denied", libDir)
 }
 
 func haveSystemd() bool {
@@ -226,6 +281,9 @@ func uninstall(args []string) int {
 	}
 	_ = os.RemoveAll(libDir)
 	_ = os.RemoveAll(stateDir)
+	if p, err := exec.LookPath("semanage"); err == nil && selinuxOn() {
+		_ = exec.Command(p, "fcontext", "-d", libDir+"(/.*)?").Run()
+	}
 	for _, f := range []string{"keys", "hostkey", m64agent.PushFile} {
 		_ = os.Remove(filepath.Join(defaultDir, f))
 	}

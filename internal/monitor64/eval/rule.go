@@ -433,6 +433,33 @@ func (e Effective) Levels() (warn, crit Limit, dir Direction, hyst float64) {
 	return e.Warn, e.Crit, e.Dir, e.Hyst
 }
 
+// stageRank ordnet die Stufen (Standard < Abweichung < Host < Dienst).
+func stageRank(s Stage) int {
+	switch s {
+	case StageOverride:
+		return 1
+	case StageHostKind:
+		return 2
+	case StageService:
+		return 3
+	}
+	return 0
+}
+
+// HystAt liefert die Hysterese fuer eine Schwelle. Im Modus "GB frei" ist eine Hysterese, die von einer Stufe
+// unterhalb der Umstellung auf "GB frei" geerbt ist, in der Einheit des Fuellstands gedacht (Standard: 2
+// Prozentpunkte) – als GB gelesen hielte sie eine Schwelle von 1 GB bis 3 GB frei. Sie gilt dann hoechstens als ein
+// Zehntel der Schwelle. Eine zusammen mit "GB frei" (oder spezifischer) gesetzte Hysterese gilt unveraendert in GB.
+func (e Effective) HystAt(limit float64) float64 {
+	if e.IsState {
+		return 0
+	}
+	if e.Mode == ModeFree && stageRank(e.Origin[FieldHyst]) < stageRank(e.Origin[FieldMode]) {
+		return math.Min(e.Hyst, math.Abs(limit)/10)
+	}
+	return e.Hyst
+}
+
 // Validate prueft die Reihenfolge der Schwellen (oben: Warnung <= Kritisch, unten: Warnung >= Kritisch).
 // Fuer die Vorschau beim Speichern einer Regel.
 func (e Effective) Validate() error {

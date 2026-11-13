@@ -27,6 +27,10 @@ func (c *Collector) collectLAG(r *round) {
 		return
 	}
 	t, err := walkColumns(r.ctx, r.c, []string{lagAggMAC, lagPortSelected, lagPortAttached, lagPortPartnerID, lagPortPartnerK}, c.cfg.MaxRep)
+	if emptyTable(t, err) { // Geraet ohne LAG-MIB: nicht vorhanden statt Teilfehler
+		c.markAbsent("lag", r.now, true)
+		return
+	}
 	if err != nil {
 		r.part.add("LAG-MIB", err, "bond:")
 		return

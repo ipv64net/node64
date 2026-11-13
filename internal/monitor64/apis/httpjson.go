@@ -427,6 +427,7 @@ func certResult(leaf *x509.Certificate, trusted bool, pin string) (res TestResul
 	switch {
 	case p != "" && p != res.Fingerprint:
 		res.Error = model.T("monitor64.txt.cert_changed", "fp", res.Fingerprint)
+		res.CertChanged = true
 		return res, false
 	case p == "" && !trusted:
 		res.NeedConfirm = true // Zugangsdaten nie an ein unbestaetigtes Zertifikat

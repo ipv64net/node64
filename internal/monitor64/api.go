@@ -731,6 +731,7 @@ type testResult struct {
 	Services    []serviceIn `json:"services"`
 	// nur API-Zugaenge (Proxmox VE, PBS, Docker)
 	NeedConfirm bool               `json:"need_confirm,omitempty"` // Fingerabdruck bestaetigen (als Pin speichern), dann erneut testen
+	CertChanged bool               `json:"cert_changed,omitempty"` // Zertifikat passt nicht mehr zum gemerkten Pin (Fingerprint = neues)
 	Trusted     bool               `json:"trusted,omitempty"`      // Zertifikat von einer bekannten CA bzw. Pin passt
 	CertSubject string             `json:"cert_subject,omitempty"`
 	Version     string             `json:"version,omitempty"`
@@ -862,6 +863,7 @@ func (m *Module) testAPIAccess(ctx context.Context, h *Host, a Access, res *test
 	defer done()
 	tr := t.Test(ctx)
 	res.OK, res.Error, res.Fingerprint, res.NeedConfirm, res.Trusted = tr.OK, tr.Error, tr.Fingerprint, tr.NeedConfirm, tr.Trusted
+	res.CertChanged = tr.CertChanged
 	res.CertSubject, res.Version, res.Node, res.Cluster, res.Nodes, res.Summary, res.Warning = tr.CertSubject, tr.Version, tr.Node, tr.Cluster, tr.Nodes, tr.Summary, tr.Warning
 	if !tr.OK || tr.NeedConfirm {
 		res.OK = false

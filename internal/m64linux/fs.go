@@ -36,6 +36,20 @@ func ParseMounts(b []byte) []Mount {
 	return out
 }
 
+// HostReadOnly uebernimmt "nur lesbar" je Mount-Punkt aus der Mount-Liste des Hosts (Namensraum von PID 1). Der
+// letzte Eintrag je Mount-Punkt gilt (darueber gehaengte Dateisysteme); Mounts, die der Host nicht kennt, bleiben.
+func HostReadOnly(own, host []Mount) {
+	ro := map[string]bool{}
+	for _, m := range host {
+		ro[m.Mount] = m.ReadOnly
+	}
+	for i := range own {
+		if v, ok := ro[own[i].Mount]; ok {
+			own[i].ReadOnly = v
+		}
+	}
+}
+
 // unescapeMount loest die Oktal-Escapes aus /proc/mounts auf (\040 Leerzeichen, \011 Tab, \012, \134).
 func unescapeMount(s string) string {
 	if !strings.Contains(s, `\`) {

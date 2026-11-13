@@ -105,13 +105,13 @@ func (t *Tracker) Recheck(e Effective, now time.Time) Status {
 }
 
 func (t *Tracker) step(e Effective, at time.Time) {
-	w, c, dir, h := e.Levels()
+	w, c, dir, _ := e.Levels()
 	v := t.value(e)
 	t.CritSince = sinceOver(t.CritSince, !c.Off && over(v, c.V, dir), at)
 	t.WarnSince = sinceOver(t.WarnSince, !w.Off && over(v, w.V, dir), at)
 	dur := time.Duration(e.For)
-	crit := !c.Off && ((t.Level == Crit && over(v, relaxed(c.V, dir, h), dir)) || held(t.CritSince, at, dur))
-	warn := !w.Off && ((t.Level != OK && over(v, relaxed(w.V, dir, h), dir)) || held(t.WarnSince, at, dur))
+	crit := !c.Off && ((t.Level == Crit && over(v, relaxed(c.V, dir, e.HystAt(c.V)), dir)) || held(t.CritSince, at, dur))
+	warn := !w.Off && ((t.Level != OK && over(v, relaxed(w.V, dir, e.HystAt(w.V)), dir)) || held(t.WarnSince, at, dur))
 	lvl := OK
 	if crit {
 		lvl = Crit

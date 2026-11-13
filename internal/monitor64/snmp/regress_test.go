@@ -146,3 +146,37 @@ func TestAddSeenUp(t *testing.T) {
 		}
 	}
 }
+
+// Issue #98: Ein Geraet ohne ENTITY-SENSOR- bzw. LAG-MIB, das die Abfrage der Tabelle mit einer Antwort ohne Werte
+// quittiert, hat die Tabelle nicht – kein Teilfehler, und die Abfrage ruht wie bei endOfMibView. Bei einer
+// Pflicht-Tabelle (IF-MIB) bleibt die leere Antwort ein Teilfehler, damit die Ports nicht als verschwunden gelten.
+func TestEmptyOptionalTableIsAbsent(t *testing.T) {
+	m := loadWalk(t, "testdata/switch.walk")
+	c, fc, clk := newTestCollector(t, m, Config{})
+	fc.emptyOn = ".1.3.6.1.2.1.99" // ENTITY-SENSOR
+	s, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("leere Sensor-Tabelle ist kein Fehler: %v", err)
+	}
+	if !hasKey(s, "if:Gi1/0/1") || hasKey(s, "temp:CPU") {
+		t.Fatal("Ports muessen kommen, Temperaturen nicht")
+	}
+	if !c.isAbsent("entsensor", *clk) {
+		t.Fatal("ENTITY-SENSOR muss als nicht vorhanden gemerkt sein")
+	}
+	before := fc.reqs
+	fc.emptyOn = ""
+	fc.failOn = ".1.3.6.1.2.1.99" // wuerde scheitern, wird aber nicht mehr gefragt
+	if _, err := c.Collect(context.Background()); err != nil {
+		t.Fatalf("zweite Runde: %v", err)
+	}
+	if fc.reqs == before {
+		t.Fatal("zweite Runde ohne Anfragen")
+	}
+
+	c2, fc2, _ := newTestCollector(t, m, Config{})
+	fc2.emptyOn = normOID(ifAdmin)
+	if _, err := c2.Collect(context.Background()); !apis.IsPartial(err) {
+		t.Fatalf("leere Antwort der IF-MIB muss ein Teilfehler bleiben: %v", err)
+	}
+}

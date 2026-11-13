@@ -185,6 +185,7 @@ type fakeConn struct {
 	isV1    bool
 	reqs    int
 	failOn  string // OID-Praefix, bei dem die Anfrage scheitert (Teilfehler)
+	emptyOn string // OID-Praefix, bei dem GETBULK eine Antwort ohne Werte liefert (wie HP LaserJet bei fehlender Tabelle)
 	fail    bool   // jede Anfrage scheitert (Zeitueberschreitung)
 	maxResp int    // hoechstens so viele Varbinds je Antwort (abgeschnittene GETBULK-Antworten)
 	onReq   func() // vor jeder Anfrage (z. B. Uhr weiterstellen)
@@ -245,6 +246,11 @@ func (f *fakeConn) getBulk(_ context.Context, oids []string, maxRep uint32) ([]p
 	}
 	if err := f.check(oids); err != nil {
 		return nil, err
+	}
+	for _, o := range oids {
+		if f.emptyOn != "" && strings.HasPrefix(normOID(o), f.emptyOn) {
+			return nil, nil
+		}
 	}
 	cur := append([]string(nil), oids...)
 	var out []pdu

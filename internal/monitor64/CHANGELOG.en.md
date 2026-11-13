@@ -1,5 +1,19 @@
 # Monitor64 – Changes
 
+## 0.1.10 – 2026-11-13
+
+Bug fixes from the reports on GitHub:
+
+- Thresholds: "Save override" and the preview work again – nothing happened before ("cur is not a function" in the browser console) (#107).
+- Threshold "GB free": the warning stayed although more was free again than the threshold ("only 1.2 GB free (threshold 1 GB)"). The inherited hysteresis of 2 (meant as percentage points) counted as 2 GB there; when inherited it now counts as at most a tenth of the threshold. A hysteresis set on the service together with "GB free" still applies unchanged in GB (#109).
+- SNMP: devices without a sensor or LAG table (e.g. HP LaserJet) that answer the query with an empty response no longer report "partial query failed: ENTITY-SENSOR: empty response" (#98).
+- Disks: two disks on identical USB adapters often report the same serial number (the adapter's) and collapsed into one service – the second was missing. In that case the serial number from SMART or the device name is used now; the disk shown so far therefore appears once as a new service (#84).
+- Services table: the category is called "Guests and backups" instead of "Proxmox" – it also applies to VMs on Unraid and TrueNAS (#87).
+- Changed certificate (e.g. FRITZ!Box after a new name): the access now explains what to do, and "Test connection" offers "Accept new fingerprint"; afterwards enter the secret again and save (#121).
+- **Agent 0.1.3 (Linux):** file systems are no longer all shown as "read-only" – the agent now reads this from the host's point of view instead of its own hardened environment (#97).
+- **Agent 0.1.3:** starts on UGREEN NAS (UGOS): a `GODEBUG` set there for all services is no longer inherited. The installation checks after the start whether the service is running and shows the last log lines otherwise. UGOS locking upgrades via `apt` is a note instead of a failed partial query – also via SSH (#96).
+- **Agent 0.1.3:** under SELinux (Fedora, RHEL, Rocky …) the installation labels the program folder `bin_t` so that the automatic update no longer fails with "permission denied" (#100).
+
 ## 0.1.9 – 2026-11-11
 
 - New access **FRITZ!Box** (own tile in the wizard) via the TR-064 interface: internet connection (connected/disconnected, duration, external address, current throughput, access type and line state), for DSL lines sync rates, noise margin, attenuation and CRC errors, the box's uptime and FRITZ!OS version, and "update available".

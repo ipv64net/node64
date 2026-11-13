@@ -86,6 +86,12 @@ func ParseAptCheck(b []byte) (pending, security int, err error) {
 // zurueckgehaltene Pakete ("kept back", brauchen neue Abhaengigkeiten) zaehlen. Nur Simulation (-s), ohne Sperre.
 var aptSimArgs = []string{"-s", "-o", "Debug::NoLocking=1", "dist-upgrade"}
 
+// AptUpgradeLocked erkennt, dass das System Upgrades ueber apt grundsaetzlich verweigert (UGOS von Ugreen:
+// "The 'upgrade' operation is not allowed." – auch bei der Simulation). Dort gibt es keine Paket-Updates zu melden.
+func AptUpgradeLocked(out []byte) bool {
+	return strings.Contains(strings.ToLower(string(out)), "operation is not allowed")
+}
+
 // ParseAptSim zaehlt die "Inst"-Zeilen von "apt-get -s dist-upgrade", die ein vorhandenes Paket erneuern
 // ("Inst paket [alte Version] (neue ...)"); neu hinzukommende Abhaengigkeiten (ohne "[...]") zaehlen nicht.
 // Sicherheitsupdates an der Quelle "*-security".

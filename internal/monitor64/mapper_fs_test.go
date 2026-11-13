@@ -108,3 +108,39 @@ func TestMapPower(t *testing.T) {
 		t.Errorf("ohne Pi: %+v", out)
 	}
 }
+
+// Issue #84: Zwei Platten an gleichen USB-Adaptern melden in /sys dieselbe Seriennummer (die des Adapters). Sie
+// duerfen nicht zu einem Dienst zusammenfallen: Schluessel ist dann die Seriennummer aus SMART bzw. der Geraetename.
+func TestMapDisksSharedSerial(t *testing.T) {
+	disks := []m64proto.DiskIO{
+		{Name: "mmcblk0", Serial: "0x1234abcd"},
+		{Name: "sda", Serial: "DD564198838B0", Model: "USB3.0 SATA"},
+		{Name: "sdb", Serial: "DD564198838B0", Model: "USB3.0 SATA"},
+	}
+	out := MapReport(nil, &m64proto.Report{Time: 1, Disks: disks})
+	if svcBy(out, "disk:sda") == nil || svcBy(out, "disk:sdb") == nil || svcBy(out, "disk:DD564198838B0") != nil || svcBy(out, "disk:0x1234abcd") == nil {
+		t.Fatalf("ohne SMART: %v", keysOf(out))
+	}
+	// mit SMART: die echten Seriennummern; fuer sdb hat der Agent die Adapter-Seriennummer eingetragen (kein SMART lesbar)
+	out = MapReport(nil, &m64proto.Report{Time: 1, Disks: disks, SMART: []m64proto.SMART{
+		{Device: "/dev/sda", Serial: "S4EVNX0N123456", Model: "Samsung SSD 860", Passed: bptr(true)},
+		{Device: "/dev/sdb", Serial: "DD564198838B0", Error: "nicht lesbar"},
+	}})
+	a, b := svcBy(out, "disk:S4EVNX0N123456"), svcBy(out, "disk:sdb")
+	if a == nil || b == nil || len(out) != 3 {
+		t.Fatalf("mit SMART: %v", keysOf(out))
+	}
+	// eine Platte allein behaelt die Seriennummer aus /sys als Schluessel (wie bisher)
+	out = MapReport(nil, &m64proto.Report{Time: 1, Disks: disks[:2]})
+	if svcBy(out, "disk:DD564198838B0") == nil {
+		t.Fatalf("einzelne Platte: %v", keysOf(out))
+	}
+}
+
+func keysOf(l []Service) []string {
+	var k []string
+	for _, s := range l {
+		k = append(k, s.Key)
+	}
+	return k
+}

@@ -312,7 +312,13 @@ func (c *collector) collectFS(ctx context.Context, r *m64proto.Report) {
 		root := c.opt.Root
 		st = func(p string) (StatFS, error) { return statfsPath(joinRoot(root, p)) }
 	}
-	fsl, errs := FSFromStatfs(ParseMounts(b), func(p string) (StatFS, error) { return c.statfsTimeout(ctx, st, p) })
+	mounts := ParseMounts(b)
+	// Der Dienst laeuft mit ProtectSystem=strict: im eigenen Mount-Namensraum ist fast alles "ro" eingehaengt. Ob ein
+	// Dateisystem wirklich nur lesbar ist, zeigt der Namensraum von PID 1 (im Container: dessen init).
+	if hb, err := c.src.ReadFile("/proc/1/mounts"); err == nil {
+		HostReadOnly(mounts, ParseMounts(hb))
+	}
+	fsl, errs := FSFromStatfs(mounts, func(p string) (StatFS, error) { return c.statfsTimeout(ctx, st, p) })
 	r.FS = fsl
 	for i, e := range errs {
 		if i >= 5 {
@@ -557,11 +563,13 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	case mgrOpkg:
 		list = &call{"opkg", []string{"list-upgradable"}, zero}
 	}
+	var lastOut []byte // Ausgabe des letzten Aufrufs (stdout und stderr), fuer die Einordnung eines Fehlers
 	runCall := func(k *call) ([]byte, error) {
 		res, err := c.run(ctx, timeoutUpdates, k.name, k.args...)
 		if err != nil {
 			return nil, err
 		}
+		lastOut = append(append([]byte(nil), res.Stdout...), res.Stderr...)
 		if !k.ok(res.Code) {
 			return nil, execErr(k.name, res)
 		}
@@ -586,6 +594,10 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	}
 	lb, err := runCall(list)
 	if err != nil {
+		if mgr == mgrApt && AptUpgradeLocked(lastOut) { // z. B. UGOS: Updates kommen als Firmware, apt verweigert jedes Upgrade
+			out.notes = append(out.notes, m64proto.SectionNote{Section: m64proto.SecUpdates, Note: m64proto.HintUpgradeLocked})
+			return out
+		}
 		fail(err)
 		return out
 	}

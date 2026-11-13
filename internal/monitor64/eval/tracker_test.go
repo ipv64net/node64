@@ -302,3 +302,44 @@ func TestTrackerRecheckAndJSON(t *testing.T) {
 		t.Fatalf("leer: %v", st.State)
 	}
 }
+
+// Issue #109: Im Modus "GB frei" galt die geerbte Hysterese (2, gedacht in Prozentpunkten) als 2 GB – eine Schwelle
+// von 1 GB hielt die Warnung bis 3 GB frei ("nur noch 1,2 GB frei (Schwelle 1 GB)"). Geerbt gilt sie hoechstens als
+// ein Zehntel der Schwelle; eine zusammen mit "GB frei" gesetzte Hysterese gilt unveraendert in GB.
+func TestTrackerFreeModeSmallLimit(t *testing.T) {
+	run := func(e Effective, cases []struct {
+		free float64
+		want State
+	}) {
+		t.Helper()
+		var tr Tracker
+		for i, c := range cases {
+			st := tr.Observe(e, Sample{At: t0.Add(time.Duration(i) * time.Minute), Value: 99, Free: c.free * GB})
+			if st.State != c.want {
+				t.Fatalf("frei %v GB: %v, erwartet %v", c.free, st.State, c.want)
+			}
+		}
+	}
+	type cs = []struct {
+		free float64
+		want State
+	}
+	inherited := eff(KindFSUsed, &Rule{Mode: ptr(ModeFree), WarnFree: L(1)})
+	if h := inherited.HystAt(1); h != 0.1 {
+		t.Fatalf("geerbte Hysterese bei 1 GB = %v", h)
+	}
+	run(inherited, cs{{5, OK}, {0.9, Warn}, {1.05, Warn}, {1.2, OK}, {0.99, Warn}, {1.11, OK}})
+	explicit := eff(KindFSUsed, &Rule{Mode: ptr(ModeFree), WarnFree: L(1), Hyst: F(0.5)})
+	run(explicit, cs{{5, OK}, {0.9, Warn}, {1.2, Warn}, {1.49, Warn}, {1.6, OK}})
+	// Abweichung stellt auf "GB frei", der Dienst setzt nur die Hysterese: gilt in GB
+	std := Defaults()
+	ovr := []Override{{ID: "o", Group: "g", Kind: KindFSUsed, Rule: Rule{Mode: ptr(ModeFree), WarnFree: L(10)}}}
+	e := Resolve(std, ovr, HostRef{ID: "h", Group: "g"}, HostLevel{Service: &Rule{Hyst: F(3)}}, KindFSUsed)
+	if h := e.HystAt(10); h != 3 {
+		t.Fatalf("Hysterese vom Dienst = %v", h)
+	}
+	// Fuellstand in Prozent: unveraendert 2 Prozentpunkte
+	if h := eff(KindFSUsed, nil).HystAt(80); h != DefaultHyst {
+		t.Fatalf("Hysterese in Prozent = %v", h)
+	}
+}
