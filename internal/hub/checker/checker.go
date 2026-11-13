@@ -115,8 +115,8 @@ func (c *Checker) remind(ctx context.Context) {
 		if e.Execution == "online" && c.st.DailyBlocked(e.UserID) {
 			continue // Tageskontingent erschoepft: nicht gemessen, also auch nicht "noch gestoert" erinnern
 		}
-		if e.DirectNode != "" && c.st.InMaintenanceOf(e.UserID, e.Token, now) {
-			continue // lokaler Check in der Wartung: keine Erinnerung (wie auf der Node)
+		if c.st.InMaintenanceOf(e.UserID, e.Token, now) {
+			continue // Check in der Wartung: keine Erinnerung (wie auf der Node)
 		}
 		c.mu.Lock()
 		last, ok := c.reminders[e.Token]
@@ -569,6 +569,14 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 			}
 			if nodes, err := c.st.LiveNodes(ctx); err == nil && c.st.IsHousekeeper(nodes) {
 				c.remind(ctx)
+				// in der Wartung verschwiegene Ausfaelle, die nach dem Fenster andauern, jetzt melden
+				list, err := c.st.MaintenanceOver(ctx)
+				if err != nil {
+					c.log.Warn("alerts after maintenance failed", "err", err)
+				}
+				for _, e := range list { // auch bei einem Fehler: diese sind schon eingetragen
+					c.onOverall(e)
+				}
 				if e := c.st.Metrics.DBErrorCount(); e != dbErrs {
 					dbErrs, dbErrAt = e, time.Now()
 				}

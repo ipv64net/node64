@@ -279,8 +279,8 @@ func (c *conn) reader() {
 			case <-c.ctx.Done():
 				return
 			}
-		case "channel_test":
-			// Versand ueber Mail/SMS-Bruecke kann dauern: weder Leser noch Worker blockieren
+		case "channel_test", "notify":
+			// Versand ueber Mail/SMS-Bruecke oder einen Webhook kann dauern: weder Leser noch Worker blockieren
 			go c.handle(m)
 		default:
 			c.handle(m)
@@ -556,7 +556,8 @@ func (c *conn) handle(m wire.Msg) {
 	}
 }
 
-// handleNotify: die Node bittet um Versand ueber einen ipv64-Kanal (ipv64_mail/ipv64_sms).
+// handleNotify: die Node bittet um Versand ueber einen Kanal des Portals (ipv64-Mail/-SMS und die Portal-Kanaele,
+// deren Geheimnisse nur hier liegen, z. B. Webhook, Discord, IPv64 App), etwa fuer Meldungen von Monitor64.
 func (c *conn) handleNotify(ctx context.Context, m wire.Msg) {
 	var in struct {
 		ChannelID int64            `json:"channel_id"`
@@ -566,9 +567,16 @@ func (c *conn) handleNotify(ctx context.Context, m wire.Msg) {
 		URL       string           `json:"url"`
 		EventID   string           `json:"event_id"`
 		Check     notify.CheckInfo `json:"check"`
+		Priority  int              `json:"priority"`
+		Time      time.Time        `json:"time"`
+		Payload   map[string]any   `json:"payload"`
 	}
 	if err := json.Unmarshal(m.Data, &in); err != nil {
 		c.ack(m.ID, wire.Ack{Error: "invalid notify"})
+		return
+	}
+	if !c.g.limiter.allow("notify:"+c.node.ID, 120, time.Minute) {
+		c.ack(m.ID, wire.Ack{Error: "rate limited"})
 		return
 	}
 	chans, err := c.g.nf.ChannelsFor(ctx, c.node.UserID)
@@ -579,7 +587,8 @@ func (c *conn) handleNotify(ctx context.Context, m wire.Msg) {
 	}
 	var ch *notify.Channel
 	for _, x := range chans {
-		if x.ID == in.ChannelID && (x.Type == notify.TypeIPv64Mail || x.Type == notify.TypeIPv64SMS) {
+		// Kanaele einer Node sendet die Node selbst
+		if x.ID == in.ChannelID && (x.Type == notify.TypeIPv64Mail || x.Type == notify.TypeIPv64SMS || x.Execution == "server") {
 			ch = x
 		}
 	}
@@ -593,12 +602,16 @@ func (c *conn) handleNotify(ctx context.Context, m wire.Msg) {
 		return
 	}
 	in.Check.UserID = c.node.UserID
-	msg := notify.Message{Kind: notify.Kind(in.Kind), Title: in.Title, Text: in.Text, URL: in.URL, Time: time.Now(), Check: in.Check, EventID: in.EventID, Language: ch.Lang}
-	err = snd.Send(ctx, ch, msg)
-	errText := ""
-	if err != nil {
-		errText = err.Error()
+	if in.Time.IsZero() {
+		in.Time = time.Now()
 	}
+	msg := notify.Message{Kind: notify.Kind(in.Kind), Title: in.Title, Text: in.Text, URL: in.URL, Time: in.Time, Check: in.Check, EventID: in.EventID, Language: ch.Lang,
+		Priority: in.Priority, Payload: in.Payload}
+	// unter 30 s bleiben: so lange wartet die Node auf die Bestaetigung, danach verbindet sie neu
+	sctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	err = snd.Send(sctx, ch, msg)
+	cancel()
+	errText := publicError(ch.Type, err) // wie beim Test: ohne Adressen und Antworttexte fremder Server
 	_ = c.g.nf.AddDelivery(ctx, notify.Delivery{EventID: in.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: in.Kind, CheckToken: in.Check.Token, Subject: in.Title, OK: err == nil, Error: errText})
 	_ = c.g.nf.Touch(ctx, ch.ID, errText)
 	c.ack(m.ID, wire.Ack{Error: errText})

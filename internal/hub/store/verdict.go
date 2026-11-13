@@ -193,6 +193,14 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		silent = len(proxies) > 0
 	}
+	// Wartungsfenster (Portal oder Node): still wie auf der Node; dauert der Ausfall nach dem Fenster an, meldet ihn
+	// MaintenanceOver. Die Entwarnung eines so verschwiegenen Ausfalls bleibt ebenfalls still.
+	maint := false
+	if !silent && s.InMaintenanceOf(userid, token, now) {
+		silent, maint = true, true
+	} else if !silent && unalerted(ctx, tx, token, kind) {
+		silent = true
+	}
 	// nur die Besitzer-Node misst (lokal): kann sie es, sendet sie ipv64-Kanaele und eigene Kanaele selbst
 	directTo := ""
 	if !silent && execution == "local" && directKind(kind) {
@@ -251,6 +259,9 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	flags := 0
 	if silent {
 		flags |= FlagSilent
+	}
+	if maint {
+		flags |= FlagMaintenance
 	}
 	eventID := scheduler.NewID()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_events (event_id, token, userid, source, kind, time, from_state, to_state, reason, message, duration_sec, flaps, flags, incident_id)
@@ -323,6 +334,135 @@ func directNode(ctx context.Context, q rowQuerier, measuring []string, owner str
 		}
 	}
 	return "", rows.Err()
+}
+
+// unalerted: die Entwarnung gehoert zu einem Ausfall, der in einer Wartung begann und nicht gemeldet wurde (letztes
+// Ereignis dieser Art im Gesamtzustand mit Wartungs-Flag) - dann ist auch sie still, wie auf der Node.
+func unalerted(ctx context.Context, q interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}, token, kind string) bool {
+	var kinds string
+	switch kind {
+	case "up", "flapping_end":
+		kinds = "'down','flapping_start'"
+	case "degraded_end":
+		kinds = "'degraded'"
+	default:
+		return false
+	}
+	var flags int
+	err := q.QueryRowContext(ctx, `SELECT flags FROM hc2_events WHERE token = ? AND source = '' AND kind IN (`+kinds+`) ORDER BY time DESC, id DESC LIMIT 1`, token).Scan(&flags)
+	return err == nil && flags&FlagMaintenance != 0
+}
+
+// MaintenanceOver meldet Ausfaelle, die in einer Wartung begannen (still, mit Wartungs-Flag) und nach dem Fenster
+// andauern - wie die Node. Ein neues Ereignis ohne Flag sorgt dafuer, dass es nur einmal geschieht. Nur der
+// Housekeeper, einmal je Minute.
+func (s *Store) MaintenanceOver(ctx context.Context) ([]OverallEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT c.token, c.userid, c.state, c.state_since FROM hc2_checks c
+		WHERE c.deleted_at IS NULL AND c.paused = 0 AND c.state IN ('down','flapping','degraded')
+		AND EXISTS (SELECT 1 FROM hc2_events e WHERE e.token = c.token AND e.source = '' AND e.time >= c.state_since AND e.flags & `+strconv.Itoa(FlagMaintenance)+` <> 0)
+		AND NOT EXISTS (SELECT 1 FROM hc2_events e WHERE e.token = c.token AND e.source = '' AND e.time >= c.state_since AND e.flags & `+strconv.Itoa(FlagMaintenance)+` = 0)
+		LIMIT 500`)
+	if err != nil {
+		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return nil, err
+	}
+	type cand struct {
+		token, state, since string
+		uid                 int64
+	}
+	var list []cand
+	for rows.Next() {
+		var x cand
+		var since sql.NullString
+		if err := rows.Scan(&x.token, &x.uid, &x.state, &since); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		x.since = since.String
+		list = append(list, x)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	var out []OverallEvent
+	for _, x := range list {
+		if s.InMaintenanceOf(x.uid, x.token, now) {
+			continue // Fenster laeuft noch (oder das naechste)
+		}
+		e, err := s.maintenanceOver(ctx, x.token, x.state, x.since, now)
+		if err != nil {
+			return out, err
+		}
+		if e != nil {
+			out = append(out, *e)
+		}
+	}
+	return out, nil
+}
+
+// maintenanceOver traegt fuer einen Check das Ereignis nach der Wartung ein (unter Zeilensperre, falls Reverdict
+// inzwischen entschieden hat, passiert nichts) und liefert die Meldung.
+func (s *Store) maintenanceOver(ctx context.Context, token, state, since string, now time.Time) (*OverallEvent, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	var e OverallEvent
+	var curState, channels, execution, nodesCol, owner string
+	var curSince, reason, message sql.NullString
+	var incident sql.NullInt64
+	var critical, nd, nu, ndeg int
+	err = tx.QueryRowContext(ctx, `SELECT userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution, nodes, COALESCE(node_id, ''),
+			state, state_since, last_reason, last_message, incident_id
+		FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
+		Scan(&e.UserID, &e.Name, &e.Type, &e.Target, &critical, &channels, &nd, &nu, &ndeg, &execution, &nodesCol, &owner, &curState, &curSince, &reason, &message, &incident)
+	if err == sql.ErrNoRows || (err == nil && (curState != state || curSince.String != since)) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	switch state {
+	case "down":
+		e.Kind = "down"
+	case "flapping":
+		e.Kind = "flapping_start"
+	default:
+		e.Kind = "degraded"
+	}
+	if execution == "local" && directKind(e.Kind) {
+		if e.DirectNode, err = directNode(ctx, tx, measuringNodes(splitList(nodesCol), owner), owner); err != nil {
+			return nil, err
+		}
+	}
+	var incidentID any
+	if incident.Valid && incident.Int64 > 0 {
+		incidentID = incident.Int64
+	}
+	e.EventID, e.Token, e.Time, e.Reason, e.Message = scheduler.NewID(), token, now, reason.String, message.String
+	e.From, e.To = scheduler.State(state), scheduler.State(state)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_events (event_id, token, userid, source, kind, time, from_state, to_state, reason, message, duration_sec, flaps, flags, incident_id)
+		VALUES (?,?,?,'',?,?,?,?,?,?,0,0,0,?)`,
+		e.EventID, token, e.UserID, e.Kind, now.Format(TimeFormat), state, state, nullStr(reason.String), truncate(message.String, 500), incidentID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	e.Critical, e.NotifyDown, e.NotifyUp, e.NotifyDegraded = critical == 1, nd == 1, nu == 1, ndeg == 1
+	for _, c := range splitList(channels) {
+		var id int64
+		if _, err := fmtSscan(c, &id); err == nil {
+			e.Channels = append(e.Channels, id)
+		}
+	}
+	s.log.Info("outage continues after maintenance", "token", token, "name", e.Name, "state", state)
+	return &e, nil
 }
 
 // eventKind leitet Ereignisart und Stille aus dem Wechsel ab. incidentOpen:
