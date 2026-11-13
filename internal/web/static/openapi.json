@@ -6097,6 +6097,7 @@
               "mailcow",
               "fritzbox",
               "mikrotik",
+              "unifi",
               "docker",
               "truenas",
               "unraid",
@@ -6190,6 +6191,7 @@
               "mailcow",
               "fritzbox",
               "mikrotik",
+              "unifi",
               "docker",
               "truenas",
               "unraid",
@@ -6304,6 +6306,10 @@
             "minimum": 1,
             "maximum": 8760,
             "description": "PBS: Höchstalter des letzten Backups je Gruppe in Stunden (leer = 26)"
+          },
+          "site": {
+            "type": "string",
+            "description": "UniFi: Schlüssel der Site (leer = `default`)"
           },
           "ups": {
             "type": "string",
@@ -6501,6 +6507,7 @@
               "mailcow",
               "fritzbox",
               "mikrotik",
+              "unifi",
               "docker",
               "prom",
               "nut",
@@ -6564,6 +6571,7 @@
               "mailcow",
               "fritzbox",
               "mikrotik",
+              "unifi",
               "docker",
               "prom",
               "nut",

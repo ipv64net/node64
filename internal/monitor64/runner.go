@@ -45,7 +45,7 @@ func accessRank(typ string) int {
 		return 0
 	case "ssh":
 		return 1
-	case "pve", "pbs", "pmg", "mailcow", "fritzbox", "mikrotik", "docker", "nut", "truenas", "unraid", "redfish":
+	case "pve", "pbs", "pmg", "mailcow", "fritzbox", "mikrotik", "unifi", "docker", "nut", "truenas", "unraid", "redfish":
 		return 2
 	case "snmp":
 		return 3
@@ -74,7 +74,8 @@ var factKinds = map[string][]string{
 	"temp":    {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"zfs":     {eval.KindRAIDDegraded},
 	"btrfs":   {eval.KindRAIDDegraded, eval.KindDeviceWarn},
-	"wan":     {eval.KindDeviceCrit},
+	"wan":     {eval.KindDeviceWarn, eval.KindDeviceCrit},
+	"netdev":  {eval.KindDeviceWarn, eval.KindDeviceCrit},
 	"dsl":     {eval.KindDeviceCrit},
 	"routing": {eval.KindDeviceWarn},
 	"bond":    {eval.KindBondMemberDown, eval.KindBondLACP},

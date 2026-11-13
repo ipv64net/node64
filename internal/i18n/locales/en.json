@@ -5617,7 +5617,10 @@
       "secret_fritzbox": "Password of the FRITZ!Box user.",
       "backup_max_age": "Maximum backup age (hours)",
       "backup_max_age_hint": "If a group's last backup is older, it counts as too old. Empty = 26 hours; for weekly backups e.g. 170.",
-      "secret_mikrotik": "Password of the RouterOS user."
+      "secret_mikrotik": "Password of the RouterOS user.",
+      "secret_unifi": "API key (then leave the user empty) or the password of the local read-only admin.",
+      "site": "Site",
+      "site_hint": "Empty = default. The key of another site is part of the address of the web interface (…/network/<site>/… or …/manage/<site>/…)."
     },
     "access": {
       "agent": "Agent",
@@ -5634,7 +5637,8 @@
       "pmg": "Proxmox Mail Gateway",
       "mailcow": "mailcow",
       "fritzbox": "FRITZ!Box",
-      "mikrotik": "MikroTik"
+      "mikrotik": "MikroTik",
+      "unifi": "UniFi"
     },
     "sd": {
       "vanished": "This service is no longer delivered. It stays a warning until you remove it.",
@@ -6022,6 +6026,10 @@
       "mikrotik": {
         "title": "MikroTik",
         "sub": "RouterOS 7 (REST API) – system, interfaces, update"
+      },
+      "unifi": {
+        "title": "UniFi",
+        "sub": "Network Application – devices, internet, ports, updates"
       }
     },
     "new": {
@@ -6096,7 +6104,8 @@
       "test_keytype": "host key {k}",
       "hint_mikrotik": "For RouterOS version 7 and later (REST API over HTTPS). On the router, create a dedicated user in a group with only read, api and rest-api, and give the www-ssl service a certificate – without one RouterOS accepts no HTTPS connection. The commands below do both (in the router's terminal). The certificate is self-signed – confirm the fingerprint during the test. Monitor64 only reads and triggers nothing; whether an update is available is only shown after the router has checked for itself. RouterOS 6 has no REST API – use SNMP there.",
       "dev_cmd": "Set up on the device",
-      "cmd_password": "password"
+      "cmd_password": "password",
+      "hint_unifi": "For the UniFi Network Application on a UniFi OS console (UDM, UDR, UCG, Cloud Key, UniFi OS Server) or as a self-hosted Network Server. Easiest with an API key: create a key in UniFi Network under \"Integrations\" (Network 9: Settings → Control Plane → Integrations), enter it here as the secret and leave the user empty – this only works on UniFi OS. Otherwise create a local admin with the role \"View Only\" (\"Restrict to local access only\", without two-factor login) and enter user and password; for the self-hosted server the port belongs in the URL (usually 8443). Monitor64 only reads. The certificate is usually self-signed – confirm the fingerprint during the test."
     },
     "nf": {
       "where": "Where to",
@@ -6271,7 +6280,8 @@
       "agent_no_file": "There is no agent file for {platform}.",
       "agent_none": "The host has no enabled agent access.",
       "agent_current": "The agent is already up to date (version {version}).",
-      "backup_max_age_h": "Maximum backup age: 1 to 8760 hours (Proxmox Backup Server only)."
+      "backup_max_age_h": "Maximum backup age: 1 to 8760 hours (Proxmox Backup Server only).",
+      "site": "Invalid site (letters, digits, - and _; UniFi access only)."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",
@@ -6594,7 +6604,8 @@
       "mc_containers": "mailcow containers",
       "pi_power": "Power supply",
       "fb_wan": "Internet connection",
-      "wlan_clients": "Wi-Fi clients"
+      "wlan_clients": "Wi-Fi clients",
+      "uf_clients": "Clients"
     },
     "txt": {
       "aborted": "aborted",
@@ -7061,7 +7072,48 @@
       "mt_ospf": "{n} neighbors, {full} full",
       "mt_update": "RouterOS update available: {v} (installed {cur})",
       "mt_update_unknown": "RouterOS {v} – update status unknown (the router has not checked for updates since it started)",
-      "mt_routerboot": "RouterBOOT {cur}, {v} is ready"
+      "mt_routerboot": "RouterBOOT {cur}, {v} is ready",
+      "uf_site_invalid": "invalid site (letters, digits, - and _)",
+      "uf_no_session": "login without a session (no cookie received)",
+      "uf_mfa": "the console asks for a second factor – use a local admin without two-factor login (no UI account)",
+      "uf_locked": "too many rejected logins – the console blocks temporarily",
+      "uf_login_pause": "next attempt in {n} min (change the access to test again right away)",
+      "uf_hint_site": "the site \"{s}\" does not exist or the access may not see it",
+      "uf_hint_key": "check the API key: it must be created in UniFi Network under \"Integrations\" of this console (keys from the Site Manager do not work locally); use user and password for the self-hosted Network Server",
+      "uf_hint_login": "check user and password; it must be a local admin without two-factor login",
+      "uf_hint_perm": "the access lacks permission – the role \"View Only\" for Network is enough",
+      "uf_hint_no_os": "no UniFi OS answers at this address – API keys exist only there; use user and password for the self-hosted Network Server (port usually 8443)",
+      "uf_site_unknown": "site \"{s}\" not found – available: {list}",
+      "uf_summary": "{n} devices",
+      "uf_st_offline": "offline",
+      "uf_st_online": "online",
+      "uf_st_pending": "waiting for adoption",
+      "uf_st_fw_mismatch": "firmware mismatch",
+      "uf_st_upgrading": "upgrading firmware",
+      "uf_st_provisioning": "provisioning",
+      "uf_st_heartbeat": "heartbeat missed",
+      "uf_st_adopting": "adopting",
+      "uf_st_inform_error": "inform error",
+      "uf_st_adopt_failed": "adoption failed",
+      "uf_st_isolated": "isolated (no connection to the network)",
+      "uf_st_other": "state {n}",
+      "uf_dev_state": "{name}: {s}",
+      "uf_clients_n": "{n} clients",
+      "uf_overheating": "{name} is overheating",
+      "uf_overheating_short": "overheating",
+      "uf_firmware": "firmware {v}",
+      "uf_dev_offline": "device not connected",
+      "uf_poe": "{w} W of {max} W on {n} ports",
+      "uf_wan_down": "internet connection down",
+      "uf_wan_warn": "internet connection degraded",
+      "uf_clients": "{w} Wi-Fi, {l} LAN, {g} guests",
+      "uf_alarms_none": "no open alarms",
+      "uf_alarms": "{n} open alarms",
+      "uf_version": "version {v}",
+      "uf_devices": "{n} devices, {off} offline",
+      "uf_update_app": "update of the Network Application available",
+      "uf_update_fw": "firmware update for {n} devices: {list}",
+      "uf_starting": "the UniFi Network Application is still starting"
     },
     "smart": {
       "title": "SMART values: {n}",

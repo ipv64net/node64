@@ -59,7 +59,7 @@ function parseNum(s) {
 	return isFinite(v) ? v : NaN;
 }
 // Geraete-APIs (Prometheus, NUT, TrueNAS, Unraid, Redfish, Proxmox Mail Gateway, mailcow): zusaetzliche Felder je Zugangsart.
-var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish', 'pmg', 'mailcow', 'fritzbox', 'mikrotik'];
+var DEVAPI = ['prom', 'nut', 'truenas', 'unraid', 'redfish', 'pmg', 'mailcow', 'fritzbox', 'mikrotik', 'unifi'];
 var DEVSPEC = {
 	prom: { url: 'http://{a}:9100/metrics', user: true, extra: ['metrics'] },
 	nut: { url: '{a}:3493', user: true, extra: ['ups', 'tls'] },
@@ -69,7 +69,8 @@ var DEVSPEC = {
 	pmg: { url: 'https://{a}:8006', user: true, extra: [] },
 	mailcow: { url: 'https://{a}', user: false, extra: [] },
 	fritzbox: { url: 'https://{a}:49443', user: true, extra: [] },
-	mikrotik: { url: 'https://{a}', user: true, extra: [] }
+	mikrotik: { url: 'https://{a}', user: true, extra: [] },
+	unifi: { url: 'https://{a}', user: true, extra: ['site'] }
 };
 // urlHost: Host-Teil einer URL aus der Adresse eines Hosts - ein Port der Adresse entfaellt, IPv6 kommt in Klammern
 // ("nas:2222" -> "nas", "2001:db8::1" und "[2001:db8::1]:22" -> "[2001:db8::1]").
@@ -82,29 +83,30 @@ function urlHost(a) {
 }
 function devURL(t, addr) { return DEVSPEC[t].url.replace('{a}', urlHost(addr) || '10.0.0.21'); }
 // Texte je Art und Feld (ausgeschrieben, damit die Pruefung der Texte sie findet)
-function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish'), pmg: L('acc.secret_pmg'), mailcow: L('acc.secret_mailcow'), fritzbox: L('acc.secret_fritzbox'), mikrotik: L('acc.secret_mikrotik') }[t]; }
-function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish'), pmg: L('new.hint_pmg'), mailcow: L('new.hint_mailcow'), fritzbox: L('new.hint_fritzbox'), mikrotik: L('new.hint_mikrotik') }[t]; }
+function devSecretHint(t) { return { prom: L('acc.secret_prom'), nut: L('acc.secret_nut'), truenas: L('acc.secret_truenas'), unraid: L('acc.secret_unraid'), redfish: L('acc.secret_redfish'), pmg: L('acc.secret_pmg'), mailcow: L('acc.secret_mailcow'), fritzbox: L('acc.secret_fritzbox'), mikrotik: L('acc.secret_mikrotik'), unifi: L('acc.secret_unifi') }[t]; }
+function devHint(t) { return { prom: L('new.hint_prom'), nut: L('new.hint_nut'), truenas: L('new.hint_truenas'), unraid: L('new.hint_unraid'), redfish: L('new.hint_redfish'), pmg: L('new.hint_pmg'), mailcow: L('new.hint_mailcow'), fritzbox: L('new.hint_fritzbox'), mikrotik: L('new.hint_mikrotik'), unifi: L('new.hint_unifi') }[t]; }
 // devCmd: Befehle zum Einrichten auf dem Geraet (Nur-Lese-Benutzer), sofern die Art welche hat.
 function devCmd(t) {
 	return { mikrotik: '/user/group/add name=monitor64 policy=read,api,rest-api\n/user/add name=monitor64 group=monitor64 password="<' + L('new.cmd_password') + '>"\n' +
 		'/certificate/add name=monitor64 common-name=monitor64 days-valid=3650\n/certificate/sign monitor64\n/ip/service/set www-ssl certificate=monitor64 disabled=no' }[t] || '';
 }
 function devText(k) {
-	return { ups: L('acc.ups'), tls: L('acc.tls'), api: L('acc.api'), session: L('acc.session'), metrics: L('acc.metrics'), tls_auto: L('acc.tls_auto'), tls_require: L('acc.tls_require'), tls_off: L('acc.tls_off'),
+	return { ups: L('acc.ups'), tls: L('acc.tls'), api: L('acc.api'), session: L('acc.session'), metrics: L('acc.metrics'), site: L('acc.site'), tls_auto: L('acc.tls_auto'), tls_require: L('acc.tls_require'), tls_off: L('acc.tls_off'),
 		api_auto: L('acc.api_auto'), api_jsonrpc: L('acc.api_jsonrpc'), api_rest: L('acc.api_rest') }[k];
 }
 // devFields: Zusatzfelder. p = "af": Host-Seite, alle Felder mit data-af (Werte aus der Konfiguration c);
 // p = "w": Assistent, nur die Felder der Art t (Werte aus dem Zustand c, data-w).
 function devFields(c, p, t) {
 	c = c || {};
-	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics'];
-	var owner = { ups: 'nut', tls: 'nut', api: 'truenas', session: 'redfish', metrics: 'prom' };
+	var ids = p === 'w' ? DEVSPEC[t].extra : ['ups', 'tls', 'api', 'session', 'metrics', 'site'];
+	var owner = { ups: 'nut', tls: 'nut', api: 'truenas', session: 'redfish', metrics: 'prom', site: 'unifi' };
 	var val = function (id) { return id === 'metrics' && p === 'af' ? (c.metrics ? JSON.stringify(c.metrics, null, 1) : '') : c[id] || ''; };
 	var attr = function (id) { return ' id="m64-' + p + '-' + id + '"' + (p === 'w' ? ' data-w="' + id + '"' : ''); };
 	var opts = function (id, list) { return list.map(function (x) { return '<option value="' + x + '"' + (val(id) === x ? ' selected' : '') + '>' + esc(devText(id + '_' + (x || 'auto'))) + '</option>'; }).join(''); };
 	return ids.map(function (id) {
 		var lab = '<label class="form-label" for="m64-' + p + '-' + id + '">' + esc(devText(id)) + '</label>', inner, cls = 'col-md-6';
 		if (id === 'ups') { inner = lab + '<input class="form-control"' + attr(id) + ' maxlength="512" value="' + esc(val(id)) + '" placeholder="ups1, ups2"><div class="form-text">' + esc(L('acc.ups_hint')) + '</div>'; }
+		if (id === 'site') { inner = lab + '<input class="form-control"' + attr(id) + ' maxlength="64" value="' + esc(val(id)) + '" placeholder="default"><div class="form-text">' + esc(L('acc.site_hint')) + '</div>'; }
 		if (id === 'tls') { inner = lab + '<select class="form-select"' + attr(id) + '>' + opts(id, ['', 'require', 'off']) + '</select>'; }
 		if (id === 'api') { inner = lab + '<select class="form-select"' + attr(id) + '>' + opts(id, ['', 'jsonrpc', 'rest']) + '</select>'; }
 		if (id === 'session') { cls = 'col-12'; inner = '<div class="form-check"><input class="form-check-input" type="checkbox"' + attr(id) + (val(id) ? ' checked' : '') + '><label class="form-check-label small" for="m64-' + p + '-session">' + esc(devText('session')) + '</label></div>'; }
@@ -1413,7 +1415,7 @@ function pageHost() {
 			(c.mode === 'push' && c.token ? '<div class="col-12" data-af="agent"><div class="form-label">' + esc(L('push.token')) + '</div><code class="small">' + esc(c.token) + '</code><div class="form-text">' + esc(L('push.token_hint')) + '</div>' +
 				'<div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-newtok"><label class="form-check-label small" for="m64-af-newtok">' + esc(L('push.token_new')) + '</label></div></div>' : '') +
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + esc(c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
-			'<div class="col-md-8" data-af="ssh prom nut truenas redfish"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
+			'<div class="col-md-8" data-af="ssh ' + DEVAPI.filter(function (x) { return DEVSPEC[x].user; }).join(' ') + '"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
 			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.21:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
@@ -2293,13 +2295,13 @@ function pushTarget(tok, node, port) {
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
 	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', bmax: '', pin: '', docker_secret: '',
-		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '', mode: '', pushNode: location.hostname, token: '', pushPort: 0,
+		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '', site: '', mode: '', pushNode: location.hostname, token: '', pushPort: 0,
 		s_version: '2c', s_port: '', s_community: '', s_user: '', s_level: 'authPriv', s_auth: 'SHA256', s_authpass: '', s_priv: 'AES', s_privpass: '', s_context: '', s_engine: '', s_custom: '', s_traps: false,
 		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {}, clPref: '', clBack: {} };
 	// Cluster: bevorzugte Node (Standard diese) und Ersatz-Nodes (Standard keine), nur bei aktivem Cluster
 	var CLW = D.cluster && D.cluster.active ? D.cluster : null, clFailed = false;
 	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
-	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'bmax', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics',
+	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'bmax', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics', 'site',
 		's_version', 's_port', 's_community', 's_user', 's_level', 's_auth', 's_authpass', 's_priv', 's_privpass', 's_context', 's_engine', 's_custom', 's_traps'];
 	// Vorbelegung aus der Adresse (z. B. "als Host anlegen" bei Traps unbekannter Absender): ?kind=snmp&address=10.0.0.5
 	(function () {
@@ -2404,7 +2406,7 @@ function pageNew() {
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.api_hint')) + '</div></div>' +
 					'<div class="col-12"><details' + (WZ.pin || WZ.node || WZ.bmax ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '<div class="col-md-6">' + field('bmax', L('acc.backup_max_age'), WZ.bmax, ' data-w="bmax" type="number" min="1" max="8760" placeholder="26"') + '<div class="form-text">' + esc(L('acc.backup_max_age_hint')) + '</div></div>') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (DEVAPI.indexOf(k.access) >= 0) {
-				var ta = k.access, open = WZ.pin || WZ.ups || WZ.tls || WZ.api || WZ.session || WZ.metrics;
+				var ta = k.access, open = WZ.pin || WZ.ups || WZ.tls || WZ.api || WZ.session || WZ.metrics || WZ.site;
 				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="' + esc(devURL(ta, WZ.address)) + '"') + '</div>' +
 					(DEVSPEC[ta].user ? '<div class="col-md-6">' + field('duser', L('acc.user'), WZ.duser, ' data-w="duser" maxlength="32"') + '</div>' : '') +
 					'<div class="col-md-6">' + field('dsec', L('acc.secret'), WZ.dsecret, ' data-w="dsecret" type="password" autocomplete="new-password"') + '</div>' +
@@ -2499,7 +2501,7 @@ function pageNew() {
 		if (pref === CLW.self && !back.length) { return Promise.resolve(); }
 		return api('PUT', '/api/monitor64/cluster/hosts/' + encodeURIComponent(hostUID), { preferred_node: pref, backup_nodes: back }).catch(function () { clFailed = true; });
 	}
-	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', btrfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', wan: 'network', dsl: 'network', routing: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local', mailq: 'mail', mail: 'mail', quarantine: 'mail' }; return m[k] || 'other'; }
+	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', btrfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', wan: 'network', dsl: 'network', routing: 'network', netdev: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local', mailq: 'mail', mail: 'mail', quarantine: 'mail' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
 		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if ((r.addr || '') !== WZ.nodeAddr || !!r.bridge !== !!WZ.nodeBridge) { collect(); WZ.nodeAddr = r.addr || ''; WZ.nodeBridge = !!r.bridge; render(); } }).catch(failQuiet);

@@ -44,7 +44,7 @@ var migrationFS embed.FS
 const Name = "monitor64"
 
 const (
-	version = "0.1.12"
+	version = "0.1.13"
 
 	// EnvLoadGen startet den Lastgenerator mit N Schein-Hosts (nur Entwicklung, nie in der Oberflaeche).
 	EnvLoadGen = "NODE64_MONITOR64_LOADGEN"

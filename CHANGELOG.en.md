@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: new access UniFi (API of the Network Application, API key or read-only admin) – devices, ports with PoE, internet connection, clients, alarms, updates.
+
 - Monitor64: new access MikroTik (RouterOS 7 and later, REST API, read-only) – system, sensors, interfaces, Wi-Fi clients, BGP/OSPF, update status.
 
 - Monitor64: disks show all SMART values as a dialog at the push of a button (attribute table or NVMe/SAS values, model, serial number, firmware) – complete with agent 0.1.4, via SSH and via Proxmox VE/PBS.

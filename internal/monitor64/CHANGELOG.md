@@ -1,5 +1,15 @@
 # Monitor64 – Änderungen
 
+## 0.1.13 – 2026-11-13
+
+- Neuer Zugang **UniFi** (eigene Kachel im Assistenten) über die API der UniFi Network Application – für UniFi-OS-Konsolen (UDM, UDR, UCG, Cloud Key, UniFi OS Server) und den selbst gehosteten Network Server; SNMP liefert bei UniFi nur wenig.
+- Je Gerät (Access Point, Switch, Gateway) ein Dienst mit Zustand (offline und gestörte Geräte melden sich), CPU, RAM, Temperatur, Clients, Laufzeit und Firmware; je Port der Switches und Gateways Zustand, Durchsatz, Auslastung, Fehlerrate und PoE-Leistung; je PoE-Switch das belegte PoE-Budget.
+- Internetverbindung des Gateways (Status, Latenz, Durchsatz, letzter Speedtest), Zahl der Clients (WLAN, LAN, Gäste), offene Alarme (soweit die Version sie noch anbietet), Update der Network Application und Firmware-Updates der Geräte.
+- Anmeldung bevorzugt mit lokalem API-Schlüssel (UniFi Network → Integrations; nur auf UniFi OS), sonst mit einem lokalen Nur-Lese-Admin („View Only“, ohne Zwei-Faktor-Anmeldung). Monitor64 liest nur. Fingerabdruck-Pin wie bei den anderen HTTPS-Zugängen, das Geheimnis liegt verschlüsselt. Nach einer abgelehnten Anmeldung wartet Monitor64 (5, 15, 60 Minuten), statt die Konsole in ihre Anmeldesperre zu treiben.
+- Weitere Sites über das Feld „Site“ (leer = default).
+- Zugangsdialog auf der Host-Seite: Das Feld „Benutzer“ erscheint jetzt bei allen Zugängen mit Benutzer (fehlte bei Proxmox Mail Gateway und FRITZ!Box).
+- Getestet gegen einen selbst gehosteten Network Server 10.0.162 (Anmeldung als Nur-Lese-Admin, Site, Version, Alarme – ohne Geräte). Geräte, Ports und der API-Schlüssel auf UniFi OS sind bisher nur gegen aufgezeichnete Antworten geprüft – Rückmeldungen willkommen.
+
 ## 0.1.12 – 2026-11-13
 
 - Neuer Zugang **MikroTik** (eigene Kachel im Assistenten) über die REST-API von RouterOS ab Version 7: CPU, RAM, Flash, Laufzeit und Version; Temperaturen, Lüfter, Netzteile, Spannung und Leistung (soweit das Gerät Sensoren hat); Schnittstellen mit Zustand, Durchsatz und Fehlerrate; Zahl der angemeldeten WLAN-Clients; BGP-Verbindungen (eine eingerichtete Verbindung ohne aufgebaute Sitzung warnt) und OSPF-Nachbarn; RouterOS-Update verfügbar und RouterBOOT.

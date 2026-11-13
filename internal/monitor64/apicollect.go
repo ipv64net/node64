@@ -81,7 +81,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 			return nil, err
 		}
 		return &apiAdapter{apiCollector: apiCollector{src: c, close: c.Close}}, nil
-	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow", "fritzbox", "mikrotik":
+	case "nut", "truenas", "unraid", "redfish", "pmg", "mailcow", "fritzbox", "mikrotik", "unifi":
 		src, done, err := newDeviceAPI(typ, h, cfg, secret)
 		if err != nil {
 			return nil, err
@@ -184,6 +184,15 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 			addr = "https://" + apiHostPort(h.Address, 443)
 		}
 		c, err := apis.NewMikrotik(apis.MikrotikConfig{Address: addr, User: cfg.User, Password: secret, Pin: cfg.Pin})
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, c.Close, nil
+	case "unifi":
+		if addr == "" {
+			addr = "https://" + apiHostPort(h.Address, 443)
+		}
+		c, err := apis.NewUnifi(apis.UnifiConfig{Address: addr, User: cfg.User, Secret: secret, Site: cfg.Site, Pin: cfg.Pin})
 		if err != nil {
 			return nil, nil, err
 		}

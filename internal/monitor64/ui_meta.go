@@ -121,7 +121,7 @@ func svcCategory(kind string) string {
 		return "storage"
 	case "disk":
 		return "disks"
-	case "if", "bond", "poe", "wlan", "wan", "dsl", "routing":
+	case "if", "bond", "poe", "wlan", "wan", "dsl", "routing", "netdev":
 		return "network"
 	case "vm", "ct", "backup", "job":
 		return "guests"
@@ -164,6 +164,7 @@ var hostKinds = []hostKind{
 	{Kind: "mailcow", Icon: "bi-mailbox", Access: "mailcow"},
 	{Kind: "fritzbox", Icon: "bi-router", Access: "fritzbox"},
 	{Kind: "mikrotik", Icon: "bi-hdd-network", Access: "mikrotik"},
+	{Kind: "unifi", Icon: "bi-wifi", Access: "unifi"},
 	{Kind: "docker", Icon: "bi-box-seam", Access: "docker"},
 	{Kind: "truenas", Icon: "bi-device-hdd", Access: "truenas"},
 	{Kind: "unraid", Icon: "bi-hdd-stack", Access: "unraid"},
@@ -192,7 +193,7 @@ func hostIcon(kind string) string {
 }
 
 // accessTypes sind die Zugangsarten, die angelegt werden koennen.
-var accessTypes = []string{"agent", "ssh", "pve", "pbs", "pmg", "mailcow", "fritzbox", "mikrotik", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp"}
+var accessTypes = []string{"agent", "ssh", "pve", "pbs", "pmg", "mailcow", "fritzbox", "mikrotik", "unifi", "docker", "prom", "nut", "truenas", "unraid", "redfish", "snmp"}
 
 func validAccessType(t string) bool {
 	for _, a := range accessTypes {

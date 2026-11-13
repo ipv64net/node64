@@ -1,5 +1,15 @@
 # Monitor64 – Changes
 
+## 0.1.13 – 2026-11-13
+
+- New access **UniFi** (its own tile in the wizard) via the API of the UniFi Network Application – for UniFi OS consoles (UDM, UDR, UCG, Cloud Key, UniFi OS Server) and the self-hosted Network Server; SNMP delivers only little on UniFi.
+- One service per device (access point, switch, gateway) with state (offline and faulty devices raise a problem), CPU, RAM, temperature, clients, uptime and firmware; per port of switches and gateways state, throughput, utilisation, error rate and PoE power; per PoE switch the used PoE budget.
+- Internet connection of the gateway (status, latency, throughput, last speed test), number of clients (Wi-Fi, LAN, guests), open alarms (as far as the version still offers them), update of the Network Application and firmware updates of the devices.
+- Login preferably with a local API key (UniFi Network → Integrations; UniFi OS only), otherwise with a local read-only admin ("View Only", without two-factor login). Monitor64 only reads. Fingerprint pin as with the other HTTPS accesses, the secret is stored encrypted. After a rejected login Monitor64 waits (5, 15, 60 minutes) instead of driving the console into its login lockout.
+- Further sites via the field "Site" (empty = default).
+- Access dialog on the host page: the field "User" now appears for all accesses with a user (it was missing for Proxmox Mail Gateway and FRITZ!Box).
+- Tested against a self-hosted Network Server 10.0.162 (login as read-only admin, site, version, alarms – without devices). Devices, ports and the API key on UniFi OS have so far only been checked against recorded replies – feedback welcome.
+
 ## 0.1.12 – 2026-11-13
 
 - New access **MikroTik** (its own tile in the wizard) via the REST API of RouterOS version 7 and later: CPU, RAM, flash, uptime and version; temperatures, fans, power supplies, voltage and power (as far as the device has sensors); interfaces with state, throughput and error rate; number of connected Wi-Fi clients; BGP connections (a configured connection without an established session warns) and OSPF neighbors; RouterOS update available and RouterBOOT.

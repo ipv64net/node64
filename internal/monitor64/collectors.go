@@ -99,6 +99,7 @@ type accessConfig struct {
 	URL     string `json:"url,omitempty"`
 	TokenID string `json:"token_id,omitempty"`
 	Node    string `json:"node,omitempty"`
+	Site    string `json:"site,omitempty"` // UniFi: Schluessel der Site (leer = default)
 	// BackupMaxAgeH: PBS – letztes Backup einer Gruppe aelter als so viele Stunden gilt als zu alt (0 = 26)
 	BackupMaxAgeH int    `json:"backup_max_age_h,omitempty"`
 	Pin           string `json:"pin,omitempty"`

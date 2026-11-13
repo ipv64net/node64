@@ -306,6 +306,9 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 	case c.Session && typ != "redfish":
 		return nil, errBad("session")
 	}
+	if c.Site = strings.TrimSpace(c.Site); c.Site != "" && (typ != "unifi" || !apis.ValidUnifiSite(c.Site)) {
+		return nil, errBad("site")
+	}
 	c.Mode, c.Token = strings.TrimSpace(c.Mode), strings.TrimSpace(c.Token)
 	switch {
 	case c.Mode != "" && (typ != "agent" || c.Mode != "push"):
@@ -321,7 +324,7 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 		switch typ {
 		case "nut": // host[:3493] oder nut://
 			ok = !strings.Contains(c.URL, "/") || strings.HasPrefix(c.URL, "nut://")
-		case "truenas", "redfish", "pmg", "mailcow", "fritzbox", "mikrotik": // TrueNAS widerruft ueber http benutzte API-Keys; BMC, Mail Gateway und mailcow nur https
+		case "truenas", "redfish", "pmg", "mailcow", "fritzbox", "mikrotik", "unifi": // TrueNAS widerruft ueber http benutzte API-Keys; BMC, Mail Gateway und mailcow nur https
 			ok = strings.HasPrefix(c.URL, "https://")
 		case "snmp": // Adresse des Hosts, Port im Zugang
 			ok = false
