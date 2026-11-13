@@ -5614,7 +5614,9 @@
       "hostkey_set": "Fingerprint accepted – test again or save now.",
       "secret_pmg": "The user's password.",
       "secret_mailcow": "API key (read-only).",
-      "secret_fritzbox": "Password of the FRITZ!Box user."
+      "secret_fritzbox": "Password of the FRITZ!Box user.",
+      "backup_max_age": "Maximum backup age (hours)",
+      "backup_max_age_hint": "If a group's last backup is older, it counts as too old. Empty = 26 hours; for weekly backups e.g. 170."
     },
     "access": {
       "agent": "Agent",
@@ -6081,7 +6083,11 @@
       "hint_mailcow": "In mailcow under System → Configuration → Access → API, enable read-only access, add this node's address to \"Allow API access from\" and paste the key here. Note: mailcow counts requests with a wrong key as failed logins and may ban the node (Fail2ban).",
       "hint_fritzbox": "In the FRITZ!Box enable \"Allow access for applications\" under Home Network → Network → Network Settings and create a dedicated user under System → FRITZ!Box Users. For all values it needs the right \"FRITZ!Box Settings\" – the FRITZ!Box has no read-only role; without the right you get access type, line state and the update status. Access works from the home network only. The certificate is self-signed – confirm the fingerprint during the test.",
       "fp_changed": "The device presents a different certificate than the remembered one (e.g. FRITZ!Box after a new name or an update) – token or password were not sent. If this is expected: compare and accept the new fingerprint, then enter the secret again and save.",
-      "fp_accept_changed": "Accept new fingerprint"
+      "fp_accept_changed": "Accept new fingerprint",
+      "docker_host_ip": "<IP of the Docker host>",
+      "from_bridge": "The node runs in the Docker bridge network: the host does not see the container's address but the Docker host's. Please put the Docker host's LAN address into from=\"…\".",
+      "test_peer": "connected to {a}",
+      "test_keytype": "host key {k}"
     },
     "nf": {
       "where": "Where to",
@@ -6255,7 +6261,8 @@
       "agent_busy": "An update is already running for this host.",
       "agent_no_file": "There is no agent file for {platform}.",
       "agent_none": "The host has no enabled agent access.",
-      "agent_current": "The agent is already up to date (version {version})."
+      "agent_current": "The agent is already up to date (version {version}).",
+      "backup_max_age_h": "Maximum backup age: 1 to 8760 hours (Proxmox Backup Server only)."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",
@@ -6278,7 +6285,8 @@
       "push_waiting": "Agent (push) not reconnected yet after the node started – not counted as an outage for up to 7 minutes",
       "agent_updated": "Agent {from} → {to}",
       "threshold_free": "only {value} GB free (threshold {limit} GB)",
-      "hostkey_unconfirmed": "Host key not confirmed yet – the password is not sent before that. Choose \"Test\" at the access, compare the fingerprint and confirm it."
+      "hostkey_unconfirmed": "Host key not confirmed yet – the password is not sent before that. Choose \"Test\" at the access, compare the fingerprint and confirm it.",
+      "ssh_no_pubkey": "The server does not offer public key login – are you reaching the right server and port? (e.g. the name resolves differently inside the container, or the connection goes via IPv6)"
     },
     "push": {
       "mode_label": "Connection",

@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
@@ -273,6 +274,8 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 		return nil, errBad("user")
 	case !reToken.MatchString(c.TokenID):
 		return nil, errBad("token_id")
+	case c.BackupMaxAgeH != 0 && (typ != "pbs" || c.BackupMaxAgeH < 1 || c.BackupMaxAgeH > 8760):
+		return nil, errBad("backup_max_age_h")
 	case !reNode.MatchString(c.Node):
 		return nil, errBad("node")
 	case !rePin.MatchString(c.Pin):
@@ -732,6 +735,8 @@ type testResult struct {
 	// nur API-Zugaenge (Proxmox VE, PBS, Docker)
 	NeedConfirm bool               `json:"need_confirm,omitempty"` // Fingerabdruck bestaetigen (als Pin speichern), dann erneut testen
 	CertChanged bool               `json:"cert_changed,omitempty"` // Zertifikat passt nicht mehr zum gemerkten Pin (Fingerprint = neues)
+	Peer        string             `json:"peer,omitempty"`         // Agent/SSH: tatsaechlich verbundene Adresse (IP:Port)
+	KeyType     string             `json:"key_type,omitempty"`     // Agent/SSH: Art des gezeigten Hostschluessels (ssh-ed25519 ...)
 	Trusted     bool               `json:"trusted,omitempty"`      // Zertifikat von einer bekannten CA bzw. Pin passt
 	CertSubject string             `json:"cert_subject,omitempty"`
 	Version     string             `json:"version,omitempty"`
@@ -787,12 +792,17 @@ func (m *Module) testAccess(ctx context.Context, h *Host, a Access) testResult {
 	svcs, err := col.collect(ctx)
 	res.Ms = time.Since(start).Milliseconds()
 	res.Fingerprint = a.HostKey
+	if p, ok := col.(interface{ peer() (string, string) }); ok { // womit wurde wirklich gesprochen?
+		res.Peer, res.KeyType = p.peer()
+	}
 	var uk *transport.UnconfirmedKeyError
 	if errors.As(err, &uk) { // SSH mit Passwort: erst den Fingerabdruck bestaetigen lassen, dann anmelden
 		res.Fingerprint, res.NeedConfirm = uk.Got, true
 		return res
 	}
-	if err != nil {
+	if errors.Is(err, transport.ErrNoKeyAuth) {
+		res.Error = i18nText("monitor64.detail.ssh_no_pubkey")
+	} else if err != nil {
 		res.Error = err.Error()
 	}
 	res.OK = len(svcs) > 0 || err == nil
@@ -1014,11 +1024,37 @@ func decodeOptional(r *http.Request, v any) (has bool, err error) {
 	return true, nil
 }
 
+// natHidden: laeuft die Node im Bridge-Netz und liegt das Ziel ausserhalb des Netzes ihrer eigenen Adresse, sieht
+// das Ziel nicht local, sondern die Adresse des Docker-Hosts (NAT).
+func natHidden(bridge bool, local, remote net.IP, nets []*net.IPNet) bool {
+	if !bridge || local == nil || remote == nil || remote.IsLoopback() {
+		return false
+	}
+	for _, n := range nets {
+		if n.Contains(local) && n.Contains(remote) {
+			return false
+		}
+	}
+	return true
+}
+
+// localNets: Netze der eigenen Schnittstellen.
+func localNets() []*net.IPNet {
+	var out []*net.IPNet
+	addrs, _ := net.InterfaceAddrs()
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // apiNodeAddr: GET Adresse dieser Node in Richtung eines Hosts (fuer from="..." in authorized_keys). Es wird kein
 // Paket gesendet (UDP-"Verbindung" waehlt nur die Quelladresse).
 func (m *Module) apiNodeAddr(w http.ResponseWriter, r *http.Request) {
 	target := transport.SplitHost(r.URL.Query().Get("target")) // ohne Port und Klammern
-	out := map[string]string{"addr": ""}
+	out := map[string]any{"addr": ""}
 	if target != "" && reAddress.MatchString(target) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
@@ -1026,6 +1062,11 @@ func (m *Module) apiNodeAddr(w http.ResponseWriter, r *http.Request) {
 		if c, err := d.DialContext(ctx, "udp", net.JoinHostPort(target, "22")); err == nil {
 			if ua, ok := c.LocalAddr().(*net.UDPAddr); ok {
 				out["addr"] = ua.IP.String()
+				// Docker-Bridge: der Host sieht durch das NAT die Adresse des Docker-Hosts, nicht die des Containers –
+				// ausser er liegt selbst im Bridge-Netz (der Docker-Host ueber das Gateway, andere Container)
+				if ra, ok := c.RemoteAddr().(*net.UDPAddr); ok && natHidden(localnet.Bridge(), ua.IP, ra.IP, localNets()) {
+					out["addr"], out["bridge"] = "", true
+				}
 			}
 			_ = c.Close()
 		}

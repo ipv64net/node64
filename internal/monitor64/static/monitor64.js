@@ -739,6 +739,9 @@ function unitFmt(unit) {
 // Knopf "Fingerabdruck bestaetigen" (data-fp-confirm), der ihn als Pin uebernimmt und erneut testet.
 function testHTML(r) {
 	var fp = r.fingerprint ? '<div class="small mt-1">' + esc(L('new.fp')) + ' <code>' + esc(r.fingerprint) + '</code>' + (r.cert_subject ? ' <span class="text-body-secondary">' + esc(r.cert_subject) + '</span>' : '') + '</div>' : '';
+	// Agent/SSH: womit wurde wirklich gesprochen (hilft, wenn ein Name im Container anders aufloest)
+	var diag = [r.peer ? L('new.test_peer', { a: r.peer }) : '', r.key_type ? L('new.test_keytype', { k: r.key_type }) : ''].filter(Boolean).join(' · ');
+	if (diag) { fp += '<div class="small text-body-secondary mt-1"><i class="bi bi-hdd-network"></i> ' + esc(diag) + '</div>'; }
 	if (r.need_confirm) {
 		return '<span class="text-warning-emphasis"><i class="bi bi-shield-exclamation"></i> ' + esc(L('new.fp_confirm')) + '</span>' + fp +
 			(r.fingerprint ? '<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-fp-confirm="' + esc(r.fingerprint) + '"><i class="bi bi-check2"></i> ' + esc(L('new.fp_accept')) + '</button>' : '');
@@ -1346,6 +1349,7 @@ function pageHost() {
 			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.21:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
 			'<div class="col-md-6" data-af="pve"><label class="form-label" for="m64-af-node">' + esc(L('new.node')) + '</label><input class="form-control" id="m64-af-node" maxlength="64" value="' + esc(c.node || '') + '"></div>' +
+			'<div class="col-md-6" data-af="pbs"><label class="form-label" for="m64-af-bmax">' + esc(L('acc.backup_max_age')) + '</label><input class="form-control" id="m64-af-bmax" type="number" min="1" max="8760" placeholder="26" value="' + esc(c.backup_max_age_h || '') + '"><div class="form-text">' + esc(L('acc.backup_max_age_hint')) + '</div></div>' +
 			devFields(c, 'af') +
 			'<div class="col-12" data-af="snmp"><div class="row g-3">' + snmpFields('af', function (x) { return snmpVal(c, x); }, !!(a && a.secret_set && a.type === 'snmp')) + '</div></div>' +
 			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
@@ -1372,6 +1376,7 @@ function pageHost() {
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { cfg.url = $('#m64-af-url', body).value.trim(); cfg.pin = $('#m64-af-pin', body).value.trim(); }
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = $('#m64-af-tid', body).value.trim(); }
 		if (t === 'pve') { cfg.node = $('#m64-af-node', body).value.trim(); }
+		if (t === 'pbs') { var bm = parseInt($('#m64-af-bmax', body).value, 10); if (bm > 0) { cfg.backup_max_age_h = bm; } }
 		if (DEVAPI.indexOf(t) >= 0) {
 			var m = devCfg(t, function (id) { var x = $('#m64-af-' + id, body); return x ? (x.type === 'checkbox' ? x.checked : x.value.trim()) : ''; });
 			if (m === null) { throw new Error(L('acc.metrics_bad')); }
@@ -1460,6 +1465,7 @@ function pageHost() {
 		if (t === 'pve' || t === 'pbs' || t === 'docker') { o.url = c.url || ''; o.pin = c.pin || ''; }
 		if (t === 'pve' || t === 'pbs') { o.token_id = c.token_id || ''; }
 		if (t === 'pve') { o.node = c.node || ''; }
+		if (t === 'pbs' && c.backup_max_age_h) { o.backup_max_age_h = c.backup_max_age_h; }
 		if (DEVAPI.indexOf(t) >= 0) {
 			o.url = c.url || '';
 			o.pin = c.pin || '';
@@ -2215,14 +2221,14 @@ function pushTarget(tok, node, port) {
 }
 // ---------- Assistent "Host hinzufuegen" ----------
 function pageNew() {
-	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', pin: '', docker_secret: '',
+	var WZ = { step: 1, kind: null, name: '', address: '', port: '', user: 'monitor64', smart: false, usePw: false, password: '', url: '', token_id: '', token_secret: '', node: '', bmax: '', pin: '', docker_secret: '',
 		duser: '', dsecret: '', ups: '', tls: '', api: '', session: false, metrics: '', mode: '', pushNode: location.hostname, token: '', pushPort: 0,
 		s_version: '2c', s_port: '', s_community: '', s_user: '', s_level: 'authPriv', s_auth: 'SHA256', s_authpass: '', s_priv: 'AES', s_privpass: '', s_context: '', s_engine: '', s_custom: '', s_traps: false,
 		test: null, nodeAddr: '', group: '', tags: '', interval: D.interval || 60, adopt: {}, nodes: {}, clPref: '', clBack: {} };
 	// Cluster: bevorzugte Node (Standard diese) und Ersatz-Nodes (Standard keine), nur bei aktivem Cluster
 	var CLW = D.cluster && D.cluster.active ? D.cluster : null, clFailed = false;
 	// Felder, deren Aenderung ein Testergebnis ungueltig macht (anderes Ziel bzw. andere Zugangsdaten)
-	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics',
+	var CONN = ['address', 'port', 'user', 'usePw', 'password', 'url', 'token_id', 'token_secret', 'node', 'bmax', 'pin', 'docker_secret', 'smart', 'duser', 'dsecret', 'ups', 'tls', 'api', 'session', 'metrics',
 		's_version', 's_port', 's_community', 's_user', 's_level', 's_auth', 's_authpass', 's_priv', 's_privpass', 's_context', 's_engine', 's_custom', 's_traps'];
 	// Vorbelegung aus der Adresse (z. B. "als Host anlegen" bei Traps unbekannter Absender): ?kind=snmp&address=10.0.0.5
 	(function () {
@@ -2254,6 +2260,7 @@ function pageNew() {
 		if (t === 'pve' || t === 'pbs') { cfg.token_id = WZ.token_id; out.secret = WZ.token_secret; }
 		if (t === 'docker') { out.secret = WZ.docker_secret; }
 		if (t === 'pve') { cfg.node = WZ.node; }
+		if (t === 'pbs' && parseInt(WZ.bmax, 10) > 0) { cfg.backup_max_age_h = parseInt(WZ.bmax, 10); }
 		if (DEVAPI.indexOf(t) >= 0) {
 			var m = devCfg(t, function (id) { return id === 'user' ? WZ.duser : WZ[id]; });
 			if (m === null) { throw new Error(L('acc.metrics_bad')); }
@@ -2302,9 +2309,10 @@ function pageNew() {
 					'<div class="col-12"><div class="form-label">' + esc(L('new.agent_step2')) + '</div><div class="small">' + esc(L('new.agent_fp')) + '</div></div>' +
 					'<div class="col-12"><details><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2" style="max-width:12rem">' + field('port', L('acc.port'), WZ.port, ' data-w="port" type="number" min="1" max="65535" placeholder="' + (D.port || 6465) + '"') + '</div></details></div>');
 			} else if (k.access === 'ssh') {
-				var line = 'restrict,from="' + (WZ.nodeAddr || L('new.node_ip')) + '" ' + key, u = WZ.user || 'monitor64';
+				var line = 'restrict,from="' + (WZ.nodeAddr || (WZ.nodeBridge ? L('new.docker_host_ip') : L('new.node_ip'))) + '" ' + key, u = WZ.user || 'monitor64';
 				html += '<div class="col-md-6">' + field('user', L('acc.user'), WZ.user, ' data-w="user" maxlength="32"') + '</div>' +
 					'<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.ssh_key')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc("echo '" + line + "' >> ~" + u + '/.ssh/authorized_keys') + '</div>' +
+					(WZ.nodeBridge && !WZ.nodeAddr ? '<div class="small text-warning-emphasis mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.from_bridge')) + '</div>' : '') +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-shield-lock"></i> ' + esc(L('new.ssh_safe')) + '</div>' +
 					// sudoers nur fuer die beiden Aufrufe des Skripts (Platten suchen, Werte lesen ohne Aufwecken)
 					'<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="m64-w-smart" data-w="smart"' + (WZ.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-w-smart">' + esc(L('new.smart')) + '</label></div>' +
@@ -2323,7 +2331,7 @@ function pageNew() {
 						// PBS: ein Token darf nur, was auch sein Benutzer darf - beide brauchen Audit
 						'proxmox-backup-manager user create monitor@pbs\nproxmox-backup-manager user generate-token monitor@pbs node64\nproxmox-backup-manager acl update / Audit --auth-id monitor@pbs\nproxmox-backup-manager acl update / Audit --auth-id \'monitor@pbs!node64\'') + '</div>' +
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.api_hint')) + '</div></div>' +
-					'<div class="col-12"><details' + (WZ.pin || WZ.node ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
+					'<div class="col-12"><details' + (WZ.pin || WZ.node || WZ.bmax ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '<div class="col-md-6">' + field('bmax', L('acc.backup_max_age'), WZ.bmax, ' data-w="bmax" type="number" min="1" max="8760" placeholder="26"') + '<div class="form-text">' + esc(L('acc.backup_max_age_hint')) + '</div></div>') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (DEVAPI.indexOf(k.access) >= 0) {
 				var ta = k.access, open = WZ.pin || WZ.ups || WZ.tls || WZ.api || WZ.session || WZ.metrics;
 				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="' + esc(devURL(ta, WZ.address)) + '"') + '</div>' +
@@ -2422,7 +2430,7 @@ function pageNew() {
 	function catOfKind(k) { var m = { cpu: 'system', load: 'system', mem: 'system', swap: 'system', temp: 'system', systemd: 'system', updates: 'system', reboot: 'system', cluster: 'system', ha: 'system', ceph: 'system', alerts: 'system', system: 'system', uptime: 'system', traps: 'system', ups: 'devices', fan: 'devices', psu: 'devices', power: 'devices', printer: 'devices', supply: 'devices', tray: 'devices', hw: 'devices', ctrl: 'storage', fs: 'fs', zfs: 'storage', btrfs: 'storage', raid: 'storage', store: 'storage', ds: 'storage', disk: 'disks', 'if': 'network', bond: 'network', poe: 'network', wlan: 'network', wan: 'network', dsl: 'network', vm: 'guests', ct: 'guests', backup: 'guests', job: 'guests', ctr: 'docker', winsvc: 'winsvc', local: 'local', mailq: 'mail', mail: 'mail', quarantine: 'mail' }; return m[k] || 'other'; }
 	function nodeAddr() {
 		if (!WZ.address) { return; }
-		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if (r.addr && r.addr !== WZ.nodeAddr) { collect(); WZ.nodeAddr = r.addr; render(); } }).catch(failQuiet);
+		api('GET', '/api/monitor64/nodeaddr?target=' + encodeURIComponent(WZ.address)).then(function (r) { if ((r.addr || '') !== WZ.nodeAddr || !!r.bridge !== !!WZ.nodeBridge) { collect(); WZ.nodeAddr = r.addr || ''; WZ.nodeBridge = !!r.bridge; render(); } }).catch(failQuiet);
 	}
 	function testConn() {
 		collect();

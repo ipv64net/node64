@@ -364,6 +364,9 @@ func accessErrText(err error) string {
 	if errors.Is(err, transport.ErrHostKeyUnconfirmed) {
 		return i18nText("monitor64.detail.hostkey_unconfirmed")
 	}
+	if errors.Is(err, transport.ErrNoKeyAuth) {
+		return i18nText("monitor64.detail.ssh_no_pubkey")
+	}
 	return shortErr(err)
 }
 

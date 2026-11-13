@@ -12,6 +12,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Start: Mit `user: "0:0"` bleibt der Zugriff auf den Docker-Socket nach dem Wechsel zum Benutzer 65532 erhalten (#121).
 - Monitor64: Fehler behoben – „Abweichung speichern“ unter Schwellen (#107), stehenbleibende Warnung bei „GB frei“ (#109), leere SNMP-Tabelle als fehlgeschlagene Teilabfrage (#98), zweite Platte am gleichen USB-Adapter fehlte (#84), Kategorie „Proxmox“ bei Unraid-VMs (#87); ein geändertes Zertifikat (z. B. FRITZ!Box) lässt sich beim Test neu übernehmen (#121).
 - Monitor64: Der Hinweis zum Proxmox-Token erklärt die Privilegientrennung – mit ihr (Standard in der Oberfläche) braucht auch das Token selbst die Rolle PVEAuditor.
+- Monitor64: „Bearbeiten“ als eigener Knopf auf der Host-Seite (#126); Höchstalter der Backups beim Proxmox Backup Server einstellbar; „Verbindung testen“ zeigt die verbundene Adresse und die Art des Hostschlüssels; im Docker-Bridge-Netz nennt der SSH-Assistent bei `from=` nicht mehr die Adresse des Containers.
 - Monitor64-Agent 0.1.3: Dateisysteme nicht mehr alle „nur lesbar“ (#97), Start auf UGREEN-NAS/UGOS (#96), automatisches Update unter SELinux (#100).
 
 ## 1.5.7 – 2026-11-12

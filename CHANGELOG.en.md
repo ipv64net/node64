@@ -12,6 +12,7 @@ Short summary of what changes per version. Details per module are in the node un
 - Startup: with `user: "0:0"` access to the Docker socket is kept after switching to user 65532 (#121).
 - Monitor64: bugs fixed – "Save override" under thresholds (#107), warning that stayed with "GB free" (#109), empty SNMP table reported as a failed partial query (#98), second disk on an identical USB adapter was missing (#84), category "Proxmox" for Unraid VMs (#87); a changed certificate (e.g. FRITZ!Box) can be accepted again during the test (#121).
 - Monitor64: the Proxmox token hint explains privilege separation – with it (default in the web UI) the token itself also needs the PVEAuditor role.
+- Monitor64: "Edit" as a button of its own on the host page (#126); maximum backup age for Proxmox Backup Server is configurable; "Test connection" shows the connected address and the host key type; in the Docker bridge network the SSH wizard no longer puts the container's address into `from=`.
 - Monitor64 agent 0.1.3: file systems no longer all "read-only" (#97), start on UGREEN NAS/UGOS (#96), automatic update under SELinux (#100).
 
 ## 1.5.7 – 2026-11-12

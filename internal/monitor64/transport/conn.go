@@ -68,6 +68,11 @@ var (
 	ErrTimeout = errors.New("monitor64: timeout")
 )
 
+// ErrNoKeyAuth: der Server hat die Anmeldung per Schluessel gar nicht angeboten (ssh: "attempted methods [none]"
+// bei einem Zugang ohne Passwort).
+// Meist ist dann ein anderer Server oder Port erreicht als gedacht (Name loest im Container anders auf, IPv6).
+var ErrNoKeyAuth = errors.New("monitor64: server offers no public key authentication")
+
 // HostKeyError meldet einen geaenderten Hostschluessel. Es wird nie nachgefragt; die Oberflaeche bietet
 // "neuen uebernehmen" mit Got an.
 type HostKeyError struct {
@@ -164,6 +169,8 @@ type conn struct {
 	mu      sync.Mutex
 	client  *ssh.Client
 	fp      string // gemerkter Fingerabdruck (bekannt oder beim ersten Kontakt uebernommen)
+	peer    string // Adresse der Gegenstelle des letzten Verbindungsaufbaus (IP:Port, fuer die Diagnose)
+	keyType string // Art des dabei gezeigten Hostschluessels
 	hkTried string // fuer diesen gemerkten Fingerabdruck schon alle Schluesselarten versucht
 	active  int
 	lastUse time.Time
@@ -185,6 +192,14 @@ func newConn(cfg connConfig) *conn {
 	life, cancel := context.WithCancel(context.Background())
 	return &conn{cfg: cfg, fp: NormalizeFingerprint(cfg.hostKey), sess: make(chan struct{}, maxSessionsPerConn),
 		dialing: make(chan struct{}, 1), life: life, lifeCancel: cancel, lastUse: time.Now()}
+}
+
+// Peer liefert die Gegenstelle des letzten Verbindungsaufbaus (tatsaechlich verbundene IP:Port) und die Art des
+// dabei gezeigten Hostschluessels – auch nach einem gescheiterten Aufbau ("" = noch keiner bzw. kein Schluessel).
+func (c *conn) Peer() (addr, keyType string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.peer, c.keyType
 }
 
 // HostKey liefert den gemerkten Fingerabdruck ("" bis zum ersten Kontakt bei TOFU).
@@ -470,14 +485,14 @@ func (c *conn) handshake(ctx, dctx context.Context, nc net.Conn, deadline time.T
 		addr = nc.RemoteAddr().String()
 	}
 	want := c.HostKey()
-	var seen string
+	var seen, seenType string
 	var hkErr error
 	cfg := &ssh.ClientConfig{
 		Config: ssh.Config{KeyExchanges: kexAlgos, Ciphers: cipherAlgos, MACs: macAlgos},
 		User:   c.cfg.user,
 		Auth:   c.cfg.auth,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
-			seen = Fingerprint(key)
+			seen, seenType = Fingerprint(key), key.Type()
 			if want != "" && seen != want {
 				hkErr = &HostKeyError{Want: want, Got: seen, GotType: key.Type()}
 				return hkErr
@@ -497,6 +512,9 @@ func (c *conn) handshake(ctx, dctx context.Context, nc net.Conn, deadline time.T
 		Timeout:           c.cfg.dialTimeout,
 	}
 	sc, chans, reqs, err := ssh.NewClientConn(nc, addr, cfg)
+	c.mu.Lock()
+	c.peer, c.keyType = nc.RemoteAddr().String(), seenType
+	c.mu.Unlock()
 	if err != nil {
 		_ = nc.Close()
 		switch {
@@ -508,6 +526,10 @@ func (c *conn) handshake(ctx, dctx context.Context, nc net.Conn, deadline time.T
 			return nil, "", ctx.Err()
 		case dctx.Err() != nil:
 			return nil, "", fmt.Errorf("monitor64: connect: no SSH handshake within %s", c.cfg.dialTimeout)
+		case !c.cfg.confirmKey && strings.Contains(err.Error(), "attempted methods [none]"):
+			// nur "none" versucht, obwohl ein Schluessel bereitstand: der Server bietet keine Anmeldung per Schluessel
+			// an (anderer Server/Port erreicht?). Mit Passwort (confirmKey) heisst dasselbe etwas anderes.
+			return nil, "", fmt.Errorf("%w: %v", ErrNoKeyAuth, err)
 		}
 		return nil, "", err
 	}

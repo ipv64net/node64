@@ -99,13 +99,15 @@ type accessConfig struct {
 	URL     string `json:"url,omitempty"`
 	TokenID string `json:"token_id,omitempty"`
 	Node    string `json:"node,omitempty"`
-	Pin     string `json:"pin,omitempty"`
-	UPS     string `json:"ups,omitempty"`     // NUT: USV-Namen (Komma-Liste, leer = alle)
-	TLS     string `json:"tls,omitempty"`     // NUT: "" (STARTTLS wenn angeboten), "off", "require"
-	API     string `json:"api,omitempty"`     // TrueNAS: "" (automatisch), "jsonrpc", "rest"
-	Session bool   `json:"session,omitempty"` // Redfish: Sitzung statt Basic-Auth
-	Mode    string `json:"mode,omitempty"`    // Agent: "" = Node fragt ab, "push" = Agent verbindet sich (NAT/VPS)
-	Token   string `json:"token,omitempty"`   // Push: Wegweiser zum Zugang (serverseitig erzeugt; gibt keinen Zugriff, aber wie ein Geheimnis behandeln)
+	// BackupMaxAgeH: PBS – letztes Backup einer Gruppe aelter als so viele Stunden gilt als zu alt (0 = 26)
+	BackupMaxAgeH int    `json:"backup_max_age_h,omitempty"`
+	Pin           string `json:"pin,omitempty"`
+	UPS           string `json:"ups,omitempty"`     // NUT: USV-Namen (Komma-Liste, leer = alle)
+	TLS           string `json:"tls,omitempty"`     // NUT: "" (STARTTLS wenn angeboten), "off", "require"
+	API           string `json:"api,omitempty"`     // TrueNAS: "" (automatisch), "jsonrpc", "rest"
+	Session       bool   `json:"session,omitempty"` // Redfish: Sitzung statt Basic-Auth
+	Mode          string `json:"mode,omitempty"`    // Agent: "" = Node fragt ab, "push" = Agent verbindet sich (NAT/VPS)
+	Token         string `json:"token,omitempty"`   // Push: Wegweiser zum Zugang (serverseitig erzeugt; gibt keinen Zugriff, aber wie ein Geheimnis behandeln)
 	// Prometheus: eigene Metriken (beliebige Exporter)
 	Metrics []promscrape.CustomMetric `json:"metrics,omitempty"`
 	// SNMP (Port und User = v3-Benutzer wie oben; Community bzw. v3-Passwoerter im Secret als snmp.Secret-JSON)
@@ -271,6 +273,14 @@ type agentCollector struct {
 	prev *m64proto.Report
 }
 
+// peer: tatsaechlich verbundene Adresse und Art des Hostschluessels (fuer "Verbindung testen").
+func (a *agentCollector) peer() (string, string) {
+	if c, err := a.ref.agent(a.cfg); err == nil {
+		return c.Peer()
+	}
+	return "", ""
+}
+
 func (a *agentCollector) collect(ctx context.Context) ([]model.Service, error) {
 	c, err := a.ref.agent(a.cfg)
 	if err != nil {
@@ -361,6 +371,14 @@ type slowPart struct {
 func newSSHCollector(ref *poolRef, cfg transport.SSHConfig, smart bool) *sshCollector {
 	life, cancel := context.WithCancel(context.Background())
 	return &sshCollector{ref: ref, cfg: cfg, smart: smart, now: time.Now, life: life, cancel: cancel}
+}
+
+// peer wie agentCollector.peer.
+func (s *sshCollector) peer() (string, string) {
+	if c, err := s.ref.ssh(s.cfg); err == nil {
+		return c.Peer()
+	}
+	return "", ""
 }
 
 func (s *sshCollector) collect(ctx context.Context) ([]model.Service, error) {

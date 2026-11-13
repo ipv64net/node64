@@ -5614,7 +5614,9 @@
       "hostkey_set": "Fingerabdruck übernommen – jetzt erneut testen oder speichern.",
       "secret_pmg": "Passwort des Benutzers.",
       "secret_mailcow": "API-Schlüssel (nur lesend).",
-      "secret_fritzbox": "Kennwort des FRITZ!Box-Benutzers."
+      "secret_fritzbox": "Kennwort des FRITZ!Box-Benutzers.",
+      "backup_max_age": "Höchstalter der Backups (Stunden)",
+      "backup_max_age_hint": "Ist das letzte Backup einer Gruppe älter, gilt es als zu alt. Leer = 26 Stunden; bei wöchentlicher Sicherung z. B. 170."
     },
     "access": {
       "agent": "Agent",
@@ -6081,7 +6083,11 @@
       "hint_mailcow": "In mailcow unter System → Konfiguration → Zugriff → API den Nur-Lese-Zugriff einschalten, die Adresse dieser Node bei „API-Zugriff erlauben von“ eintragen und den Schlüssel hier einfügen. Achtung: Abfragen mit falschem Schlüssel zählt mailcow als Fehlversuch und kann die Node sperren (Fail2ban).",
       "hint_fritzbox": "In der FRITZ!Box unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ einschalten und unter System → FRITZ!Box-Benutzer einen eigenen Benutzer anlegen. Für alle Werte braucht er das Recht „FRITZ!Box Einstellungen“ – eine Nur-Lese-Rolle kennt die FRITZ!Box nicht; ohne das Recht kommen Zugangsart, Zustand der Leitung und der Update-Stand. Der Zugriff geht nur aus dem Heimnetz. Das Zertifikat ist selbst signiert – den Fingerabdruck beim Test bestätigen.",
       "fp_changed": "Das Gerät zeigt ein anderes Zertifikat als das gemerkte (z. B. FRITZ!Box nach neuem Namen oder Update) – Token bzw. Passwort wurden nicht gesendet. Wenn das erwartet ist: neuen Fingerabdruck vergleichen und übernehmen, danach das Geheimnis erneut eingeben und speichern.",
-      "fp_accept_changed": "Neuen Fingerabdruck übernehmen"
+      "fp_accept_changed": "Neuen Fingerabdruck übernehmen",
+      "docker_host_ip": "<IP des Docker-Hosts>",
+      "from_bridge": "Die Node läuft im Docker-Bridge-Netz: Der Host sieht nicht die Adresse des Containers, sondern die des Docker-Hosts. Bitte bei from=\"…\" die LAN-Adresse des Docker-Hosts eintragen.",
+      "test_peer": "verbunden mit {a}",
+      "test_keytype": "Hostschlüssel {k}"
     },
     "nf": {
       "where": "Wohin",
@@ -6255,7 +6261,8 @@
       "agent_busy": "Für diesen Host läuft schon ein Update.",
       "agent_no_file": "Für {platform} gibt es keine Agent-Datei.",
       "agent_none": "Der Host hat keinen eingeschalteten Agent-Zugang.",
-      "agent_current": "Der Agent ist schon aktuell (Version {version})."
+      "agent_current": "Der Agent ist schon aktuell (Version {version}).",
+      "backup_max_age_h": "Höchstalter der Backups: 1 bis 8760 Stunden (nur Proxmox Backup Server)."
     },
     "quote": "„{t}“",
     "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",
@@ -6278,7 +6285,8 @@
       "push_waiting": "Agent (Push) nach dem Start der Node noch nicht wieder verbunden – zählt bis zu 7 Minuten nicht als Ausfall",
       "agent_updated": "Agent {from} → {to}",
       "threshold_free": "nur noch {value} GB frei (Schwelle {limit} GB)",
-      "hostkey_unconfirmed": "Hostschlüssel noch nicht bestätigt – das Passwort wird vorher nicht gesendet. Am Zugang „Testen“ wählen, den Fingerabdruck vergleichen und bestätigen."
+      "hostkey_unconfirmed": "Hostschlüssel noch nicht bestätigt – das Passwort wird vorher nicht gesendet. Am Zugang „Testen“ wählen, den Fingerabdruck vergleichen und bestätigen.",
+      "ssh_no_pubkey": "Der Server bietet keine Anmeldung per Schlüssel an – erreichst du den richtigen Server und Port? (z. B. löst der Name im Container anders auf, oder die Verbindung geht über IPv6)"
     },
     "push": {
       "mode_label": "Verbindung",

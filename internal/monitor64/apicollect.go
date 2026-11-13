@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/apis"
 	"github.com/ipv64net/node64/internal/monitor64/model"
@@ -62,7 +63,8 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 		if addr == "" {
 			addr = "https://" + apiHostPort(h.Address, 8007)
 		}
-		c, err := apis.NewPBS(apis.PBSConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin})
+		c, err := apis.NewPBS(apis.PBSConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin,
+			BackupMaxAge: time.Duration(cfg.BackupMaxAgeH) * time.Hour})
 		if err != nil {
 			return nil, err
 		}
