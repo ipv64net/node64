@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Fehler behoben – „Abweichung speichern“ unter Schwellen (#107), stehenbleibende Warnung bei „GB frei“ (#109), leere SNMP-Tabelle als fehlgeschlagene Teilabfrage (#98), zweite Platte am gleichen USB-Adapter fehlte (#84), Kategorie „Proxmox“ bei Unraid-VMs (#87); ein geändertes Zertifikat (z. B. FRITZ!Box) lässt sich beim Test neu übernehmen (#121).
+- Monitor64-Agent 0.1.3: Dateisysteme nicht mehr alle „nur lesbar“ (#97), Start auf UGREEN-NAS/UGOS (#96), automatisches Update unter SELinux (#100).
+
 ## 1.5.7 – 2026-11-12
 
 - Start: Host-Ordner als `/data` ohne Rechte-Ärger (Synology, UGREEN …) – mit `user: "0:0"` übergibt Node64 den Ordner dem Benutzer 65532 und läuft danach nicht als root weiter (anderer Benutzer über `NODE64_UID`/`NODE64_GID`); ist `/data` nicht beschreibbar, nennt die Meldung Besitzer und Abhilfe.
