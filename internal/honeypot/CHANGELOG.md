@@ -1,5 +1,10 @@
 # Änderungen – Honeypot64
 
+## 0.22.1 – 2026-11-13
+
+### Behoben
+- Die eingestellte „Startseite der Web-Falle“ gilt jetzt auch für den PROXY64-Köder (Anfragen ohne passenden Host); bisher kam dort immer die Matrix-Seite.
+
 ## 0.22.0 – 2026-11-11
 
 - Live-Karte: Wiederholungen älterer Angriffe lassen sich ausblenden (Knopf neben „Live“, die Wahl merkt sich der Browser) – dann zeigt die Karte nur neue Angriffe (#51).

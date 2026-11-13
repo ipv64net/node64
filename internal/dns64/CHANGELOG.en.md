@@ -1,5 +1,12 @@
 # Changes – DNS64
 
+## 1.39.3 – 2026-11-13
+
+### Fixed
+- Devices show their MAC address even if no group has a MAC member (#79).
+- Query log, devices and blocklists sort correctly by time again, also across days (#80, #123).
+- The "ports not published" notice in Docker bridge networks mentions the host firewall (e.g. ufw) as a common cause of a false alarm.
+
 ## 1.39.2 – 2026-11-11
 
 ### Security

@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 3.1.2 – 2026-11-13
+
+### Fixed
+- Notifications: module alerts (e.g. Monitor64, DynDNS, DNS64) now also reach portal channels whose credentials are only stored at ipv64 (Discord, webhook, IPv64 App …) instead of failing with "delivery path not available" (#95, #127; with the ipv64 server update).
+- Status pages no longer show outages that lay entirely within a maintenance window as incidents (list, history bars, detail view) (#75).
+- Status pages: when adding entries, the tag filter also lists the tags of Monitor64 hosts (#102).
+
 ## 3.1.1 – 2026-11-11
 
 - Status page editor: the list of entries can no longer be sorted by clicking the columns – "remove" would then have deleted the wrong entry (and silently changed the page order).

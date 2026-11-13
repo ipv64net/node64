@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.55.2 – 2026-11-13
+
+### Fixed
+- Requests aborted by the visitor (e.g. fast scrolling in Immich) are logged as 499 like nginx and no longer count as "5xx errors" (#120). Real target errors stay 502/504.
+
 ## 1.55.1 – 2026-11-11
 
 ### Fixed

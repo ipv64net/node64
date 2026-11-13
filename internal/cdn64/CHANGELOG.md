@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.55.2 – 2026-11-13
+
+### Behoben
+- Vom Besucher abgebrochene Anfragen (z. B. schnelles Scrollen in Immich) werden wie bei nginx als 499 protokolliert und zählen nicht mehr als „Fehler 5xx“ (#120). Echte Fehler des Ziels bleiben 502/504.
+
 ## 1.55.1 – 2026-11-11
 
 ### Behoben

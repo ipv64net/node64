@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.39.3 – 2026-11-13
+
+### Behoben
+- Geräte zeigen ihre MAC-Adresse auch, wenn keine Gruppe ein MAC-Mitglied hat (#79).
+- Abfrage-Log, Geräte und Blocklisten lassen sich wieder richtig nach Zeit sortieren, auch über Tagesgrenzen hinweg (#80, #123).
+- Der Hinweis „Ports nicht veröffentlicht“ im Docker-Bridge-Netz nennt die Host-Firewall (z. B. ufw) als häufigen Grund für eine Fehlmeldung.
+
 ## 1.39.2 – 2026-11-11
 
 ### Sicherheit

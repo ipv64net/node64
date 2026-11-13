@@ -1,5 +1,10 @@
 # Changes – Honeypot64
 
+## 0.22.1 – 2026-11-13
+
+### Fixed
+- The configured "web trap start page" now also applies to the PROXY64 decoy (requests without a matching host); so far it always showed the Matrix page.
+
 ## 0.22.0 – 2026-11-11
 
 - Live map: replays of older attacks can be hidden (button next to "Live", remembered by the browser) – the map then shows new attacks only (#51).

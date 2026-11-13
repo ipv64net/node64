@@ -4,6 +4,12 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: requests aborted by the visitor count as 499 instead of 5xx errors (#120).
+- Honeypot64: the configured web trap start page also applies to requests without a matching proxy host.
+- DNS64: MAC addresses without a MAC group (#79); sorting by time in query log, devices and blocklists (#80, #123); the "ports not published" notice mentions the host firewall.
+- Healthchecks: module alerts also reach portal channels such as Discord, webhook or the IPv64 App (#95, #127); status pages without incidents that lay entirely within maintenance (#75); Monitor64 host tags in the status page filter (#102); maintenance windows also apply to alerts sent by the ipv64 servers in hybrid mode (#129).
+- Interface: with colour scheme "System" pages no longer flash light while loading (#124).
+- Startup: with `user: "0:0"` access to the Docker socket is kept after switching to user 65532 (#121).
 - Monitor64: bugs fixed – "Save override" under thresholds (#107), warning that stayed with "GB free" (#109), empty SNMP table reported as a failed partial query (#98), second disk on an identical USB adapter was missing (#84), category "Proxmox" for Unraid VMs (#87); a changed certificate (e.g. FRITZ!Box) can be accepted again during the test (#121).
 - Monitor64 agent 0.1.3: file systems no longer all "read-only" (#97), start on UGREEN NAS/UGOS (#96), automatic update under SELinux (#100).
 
