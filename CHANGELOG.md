@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.5.8 – 2026-11-13
+
 - PROXY64: Vom Besucher abgebrochene Anfragen zählen als 499 statt als Fehler 5xx (#120); der Asset-Cache legt Antworten auf Anfragen mit Cookies nur noch ab, wenn das Ziel sie ausdrücklich als öffentlich kennzeichnet.
 - Honeypot64: Die eingestellte Startseite der Web-Falle gilt auch für Anfragen ohne passenden Proxy-Host.
 - DNS64: MAC-Adressen auch ohne MAC-Gruppe (#79); Sortierung nach Zeit in Abfrage-Log, Geräten und Blocklisten (#80, #123); Hinweis „Ports nicht veröffentlicht“ nennt die Host-Firewall.

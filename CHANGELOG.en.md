@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.5.8 – 2026-11-13
+
 - PROXY64: requests aborted by the visitor count as 499 instead of 5xx errors (#120); the asset cache only stores responses to requests with cookies if the target explicitly marks them as public.
 - Honeypot64: the configured web trap start page also applies to requests without a matching proxy host.
 - DNS64: MAC addresses without a MAC group (#79); sorting by time in query log, devices and blocklists (#80, #123); the "ports not published" notice mentions the host firewall.
