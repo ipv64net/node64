@@ -8,7 +8,8 @@
 - Anmeldung bevorzugt mit lokalem API-Schlüssel (UniFi Network → Integrations; nur auf UniFi OS), sonst mit einem lokalen Nur-Lese-Admin („View Only“, ohne Zwei-Faktor-Anmeldung). Monitor64 liest nur. Fingerabdruck-Pin wie bei den anderen HTTPS-Zugängen, das Geheimnis liegt verschlüsselt. Nach einer abgelehnten Anmeldung wartet Monitor64 (5, 15, 60 Minuten), statt die Konsole in ihre Anmeldesperre zu treiben.
 - Weitere Sites über das Feld „Site“ (leer = default).
 - Zugangsdialog auf der Host-Seite: Das Feld „Benutzer“ erscheint jetzt bei allen Zugängen mit Benutzer (fehlte bei Proxmox Mail Gateway und FRITZ!Box).
-- Getestet gegen einen selbst gehosteten Network Server 10.0.162 (Anmeldung als Nur-Lese-Admin, Site, Version, Alarme – ohne Geräte). Geräte, Ports und der API-Schlüssel auf UniFi OS sind bisher nur gegen aufgezeichnete Antworten geprüft – Rückmeldungen willkommen.
+- Bei Gateways mit mehreren WAN-Leitungen warnt der Dienst „Internetverbindung“, wenn eine Leitung ausfällt, auch wenn die Verbindung insgesamt steht.
+- Getestet gegen eine UniFi-OS-Konsole (UDM SE, Network 11.0.99, API-Schlüssel) mit Switch und Access Points sowie gegen einen selbst gehosteten Network Server 10.0.162 (Nur-Lese-Admin).
 
 ## 0.1.12 – 2026-11-13
 

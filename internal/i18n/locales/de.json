@@ -7113,7 +7113,9 @@
       "uf_devices": "{n} Geräte, {off} offline",
       "uf_update_app": "Update der Network Application verfügbar",
       "uf_update_fw": "Firmware-Update für {n} Geräte: {list}",
-      "uf_starting": "die UniFi Network Application startet noch"
+      "uf_starting": "die UniFi Network Application startet noch",
+      "uf_wan_line_down": "Leitung ohne Verbindung: {list}",
+      "uf_wans_online": "{n} Leitungen online"
     },
     "smart": {
       "title": "SMART-Werte: {n}",

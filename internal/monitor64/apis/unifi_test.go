@@ -45,7 +45,8 @@ const (
 )
 
 const ufDevicesJSON = `[
- {"type":"udm","model":"UDMPRO","name":"Gateway","mac":"28:70:4E:85:A9:E9","state":1,"adopted":true,"version":"4.1.13","upgradable":false,
+ {"type":"udm","model":"UDMPRO","shortname":"UDM-Pro","name":"Gateway","mac":"28:70:4E:85:A9:E9","state":1,"adopted":true,"version":"4.1.13","upgradable":false,
+  "last_wan_status":{"WAN":"online","WAN2":"offline"},
   "uptime":492633,"num_sta":8,"system-stats":{"cpu":"5.6","mem":"67.2","uptime":"492633"},
   "temperatures":[{"name":"Local","type":"board","value":48.75},{"name":"CPU","type":"cpu","value":66.0}],
   "port_table":[{"port_idx":9,"name":"WAN","up":true,"enable":true,"speed":1000,"full_duplex":true,"is_uplink":true,
@@ -252,7 +253,7 @@ func TestUnifiCollectAPIKey(t *testing.T) {
 	if gw.Kind != "netdev" || gw.Name != "Gateway" || mustMetric(t, gw, "cpu").Value != 5.6 || mustMetric(t, gw, "cpu").Rule != model.RuleCPU ||
 		mustMetric(t, gw, "mem").Value != 67.2 || mustMetric(t, gw, "temp").Value != 66 || mustMetric(t, gw, "temp").Rule != model.RuleTemp ||
 		mustMetric(t, gw, "clients").Value != 8 || mustMetric(t, gw, "uptime").Value != 492633 || len(gw.Facts) != 0 ||
-		gw.Text != "online · UDMPRO · 66 °C · 8 Clients · Firmware 4.1.13" {
+		gw.Text != "online · UDM-Pro · 66 °C · 8 Clients · Firmware 4.1.13" {
 		t.Errorf("Gateway: %+v %q", gw.Metrics, gw.Text)
 	}
 	sw := svcByKey(t, svcs, "dev:fc:ec:da:11:22:33")
@@ -299,8 +300,9 @@ func TestUnifiCollectAPIKey(t *testing.T) {
 	}
 	// Internet und Clients aus stat/health (ein inaktiver VPN-Tunnel zaehlt nicht)
 	wan := svcByKey(t, svcs, "wan")
-	if wan.Kind != "wan" || len(wan.Facts) != 0 || mustMetric(t, wan, "latency").Value != 9 || mustMetric(t, wan, "in").Value != 10 ||
-		mustMetric(t, wan, "speedtest_down").Value != 250 || wan.Text != "online · 203.0.113.154 · Beispiel Netz · 9 ms · ↓ 10 Mbit/s · ↑ 0,3 Mbit/s" {
+	if wan.Kind != "wan" || !hasFact(wan, "device_warn") || hasFact(wan, "device_crit") || mustMetric(t, wan, "latency").Value != 9 || mustMetric(t, wan, "in").Value != 10 ||
+		mustMetric(t, wan, "speedtest_down").Value != 250 ||
+		wan.Text != "Leitung ohne Verbindung: WAN2 · 203.0.113.154 · Beispiel Netz · 9 ms · ↓ 10 Mbit/s · ↑ 0,3 Mbit/s" {
 		t.Errorf("wan: %+v %q", wan.Metrics, wan.Text)
 	}
 	if c := svcByKey(t, svcs, "clients"); mustMetric(t, c, "wlan").Value != 7 || mustMetric(t, c, "lan").Value != 14 || c.Text != "7 WLAN, 14 LAN, 2 Gäste" || c.Name != "Clients" {
@@ -322,14 +324,17 @@ func TestUnifiCollectAPIKey(t *testing.T) {
 		t.Errorf("updates: %+v %q", upd.Metrics, upd.Text)
 	}
 
-	// zweite Runde: Fehlerrate aus den Zaehlern; sysinfo nicht erneut
+	// zweite Runde: Fehlerrate aus den Zaehlern; sysinfo nicht erneut; beide Leitungen wieder da
 	*now = now.Add(time.Minute)
-	f.set("/api/s/default/stat/device", strings.Replace(ufDevicesJSON,
+	f.set("/api/s/default/stat/device", strings.Replace(strings.Replace(ufDevicesJSON, `"WAN2":"offline"`, `"WAN2":"online"`, 1),
 		`"rx_bytes-r":125000,"tx_bytes-r":1250000,"rx_packets":100,"tx_packets":100,"rx_errors":0,"tx_errors":0`,
 		`"rx_bytes-r":125000,"tx_bytes-r":1250000,"rx_packets":600,"tx_packets":600,"rx_errors":3,"tx_errors":2`, 1))
 	svcs, err = u.Collect(context.Background())
 	if err != nil {
 		t.Fatalf("Collect 2: %v", deErr(err))
+	}
+	if wan = svcByKey(t, svcs, "wan"); len(wan.Facts) != 0 || !strings.HasPrefix(wan.Text, "2 Leitungen online · 203.0.113.154") {
+		t.Errorf("wan (Runde 2): %+v %q", wan.Facts, wan.Text)
 	}
 	p6 = svcByKey(t, svcs, "port:fc:ec:da:11:22:33:6")
 	if mustMetric(t, p6, "errors").Value != 5 || mustMetric(t, p6, "errrate").Value != 0.5 || mustMetric(t, p6, "errrate").Rule != model.RuleIfErrRate || !strings.Contains(p6.Text, "5 Fehler") {

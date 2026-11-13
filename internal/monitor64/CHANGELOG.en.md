@@ -8,7 +8,8 @@
 - Login preferably with a local API key (UniFi Network → Integrations; UniFi OS only), otherwise with a local read-only admin ("View Only", without two-factor login). Monitor64 only reads. Fingerprint pin as with the other HTTPS accesses, the secret is stored encrypted. After a rejected login Monitor64 waits (5, 15, 60 minutes) instead of driving the console into its login lockout.
 - Further sites via the field "Site" (empty = default).
 - Access dialog on the host page: the field "User" now appears for all accesses with a user (it was missing for Proxmox Mail Gateway and FRITZ!Box).
-- Tested against a self-hosted Network Server 10.0.162 (login as read-only admin, site, version, alarms – without devices). Devices, ports and the API key on UniFi OS have so far only been checked against recorded replies – feedback welcome.
+- For gateways with several WAN lines the service "Internet connection" warns when one line fails, even if the connection as a whole is up.
+- Tested against a UniFi OS console (UDM SE, Network 11.0.99, API key) with switch and access points and against a self-hosted Network Server 10.0.162 (read-only admin).
 
 ## 0.1.12 – 2026-11-13
 

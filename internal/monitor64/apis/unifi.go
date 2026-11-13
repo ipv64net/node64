@@ -415,7 +415,8 @@ type ufPort struct {
 type ufDevice struct {
 	Mac         string `json:"mac"`
 	Name        string `json:"name"`
-	Model       string `json:"model"`
+	Model       string `json:"model"`     // interner Code, z. B. UAPA6A9
+	Shortname   string `json:"shortname"` // lesbares Kuerzel, z. B. U7PROXG (neuere Versionen)
 	Type        string `json:"type"`
 	Version     string `json:"version"`
 	Adopted     ufBool `json:"adopted"`
@@ -438,6 +439,8 @@ type ufDevice struct {
 	Overheating   ufBool   `json:"overheating"`
 	TotalMaxPower optNum   `json:"total_max_power"`
 	PortTable     []ufPort `json:"port_table"`
+	// LastWanStatus: Gateways – Zustand je WAN-Leitung ({"WAN":"online","WAN2":"online"})
+	LastWanStatus map[string]string `json:"last_wan_status"`
 }
 
 func (d ufDevice) label() string {
@@ -557,6 +560,7 @@ func (u *Unifi) Collect(ctx context.Context) ([]model.Service, error) {
 	var out []model.Service
 	total, offline := 0, 0
 	var fw []string
+	var wans map[string]string
 	for _, d := range devs {
 		if (d.Adopted.Set && !d.Adopted.V) || d.Disabled.V || strings.TrimSpace(d.Mac) == "" {
 			continue // wartet auf Uebernahme bzw. abgeschaltet: nicht unser Geraet
@@ -569,6 +573,9 @@ func (u *Unifi) Collect(ctx context.Context) ([]model.Service, error) {
 		if d.Upgradable.V {
 			fw = append(fw, strings.TrimSpace(d.label()+" "+shortText(d.UpgradeTo)))
 		}
+		if online && len(d.LastWanStatus) > 0 && wans == nil {
+			wans = d.LastWanStatus
+		}
 		out = append(out, ufDeviceService(d, online))
 		if ufHasPorts(d.Type) {
 			out = append(out, ufPortServices(d, online, u.prev, cur)...)
@@ -580,7 +587,7 @@ func (u *Unifi) Collect(ctx context.Context) ([]model.Service, error) {
 	if err := u.get(ctx, base+"/stat/health", &health); err != nil {
 		part.add("stat/health", err, "wan", "clients")
 	} else {
-		out = append(out, ufHealthServices(health)...)
+		out = append(out, ufHealthServices(health, wans)...)
 	}
 
 	if u.alarmsGone.IsZero() || now.Sub(u.alarmsGone) >= ufAbsentEvery {
@@ -642,7 +649,7 @@ func ufDeviceService(d ufDevice, online bool) model.Service {
 			s.Facts = append(s.Facts, model.Fact{Code: st.fact, Text: model.T("monitor64.txt.uf_dev_state", "name", name, "s", model.Sub(model.T(st.text)))})
 		}
 	}
-	if m := shortText(d.Model); m != "" {
+	if m := shortText(firstNonEmpty(strings.TrimSpace(d.Shortname), d.Model)); m != "" {
 		parts = append(parts, model.Raw(m))
 	}
 	if online {
@@ -783,8 +790,10 @@ func ufPortServices(d ufDevice, online bool, prev, cur *counter) []model.Service
 	return out
 }
 
-// ufHealthServices: Internetverbindung (Teilsysteme wan und www, nur mit Gateway) und die Zahl der Clients.
-func ufHealthServices(list []ufHealth) []model.Service {
+// ufHealthServices: Internetverbindung (Teilsysteme wan und www, nur mit Gateway) und die Zahl der Clients. wans ist
+// der Zustand der einzelnen WAN-Leitungen des Gateways (nil = unbekannt): faellt bei mehreren Leitungen eine aus,
+// bleibt die Verbindung insgesamt in Ordnung – der Dienst warnt dann mit dem Namen der Leitung.
+func ufHealthServices(list []ufHealth, wans map[string]string) []model.Service {
 	sub := map[string]ufHealth{}
 	for _, h := range list {
 		sub[strings.ToLower(strings.TrimSpace(h.Subsystem))] = h
@@ -810,7 +819,23 @@ func ufHealthServices(list []ufHealth) []model.Service {
 			s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: t})
 			parts = append(parts, t)
 		default:
-			parts = append(parts, model.T("monitor64.txt.uf_st_online"))
+			var down []string
+			for name, st := range wans {
+				if !strings.EqualFold(strings.TrimSpace(st), "online") {
+					down = append(down, shortText(name))
+				}
+			}
+			sort.Strings(down)
+			switch {
+			case len(wans) > 1 && len(down) > 0:
+				t := model.T("monitor64.txt.uf_wan_line_down", "list", model.Raw(strings.Join(limitList(down, 4), ", ")))
+				s.Facts = append(s.Facts, model.Fact{Code: "device_warn", Text: t})
+				parts = append(parts, t)
+			case len(wans) > 1:
+				parts = append(parts, model.T("monitor64.txt.uf_wans_online", "n", len(wans)))
+			default:
+				parts = append(parts, model.T("monitor64.txt.uf_st_online"))
+			}
 		}
 		if ip := shortText(wan.WanIP); ip != "" {
 			parts = append(parts, model.Raw(ip))
