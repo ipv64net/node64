@@ -6039,7 +6039,7 @@
       "token_id": "API token (ID)",
       "token_secret": "API token (secret)",
       "token_cmd": "Create a read-only token (run on the server)",
-      "api_hint": "Read-only (role PVEAuditor or Audit). Proxmox VE only lists pending updates with the Sys.Modify permission – without it the \"Updates\" service stays empty. For bonding, per-port errors and temperatures, add SSH or the agent afterwards.",
+      "api_hint": "Read-only (role PVEAuditor or Audit on /). A token can never do more than its user. Proxmox VE: with the command above (token without privilege separation) the role on the user is enough; if you create the token in the web UI with \"Privilege Separation\" (default), the token itself also needs the role – for a token of root@pam the token alone is enough. Backup Server: user and token both need Audit. Proxmox VE only lists pending updates with the Sys.Modify permission – without it the \"Updates\" service stays empty. For bonding, per-port errors and temperatures, add SSH or the agent afterwards.",
       "node": "Node name (empty = the node behind the address, fixed on first contact)",
       "pin": "Pin fingerprint (certificate SHA-256 or SSH host key, optional)",
       "docker_hint": "Local: unix:///var/run/docker.sock (mount the socket into the Node64 container). Remote: tcp://host:2375, https://host:2376 with TLS or ssh://user@host. Podman: enable podman.socket (systemctl enable --now podman.socket), then unix:///run/podman/podman.sock or ssh://user@host/run/podman/podman.sock.",

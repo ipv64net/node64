@@ -6039,7 +6039,7 @@
       "token_id": "API-Token (ID)",
       "token_secret": "API-Token (Geheimnis)",
       "token_cmd": "Token nur lesend anlegen (auf dem Server ausführen)",
-      "api_hint": "Nur lesend (Rolle PVEAuditor bzw. Audit). Ausstehende Updates fragt Proxmox VE nur mit dem Recht Sys.Modify ab – ohne es bleibt der Dienst „Updates“ leer. Für Bonding, Fehler je Port und Temperaturen danach zusätzlich SSH oder den Agenten ergänzen.",
+      "api_hint": "Nur lesend (Rolle PVEAuditor bzw. Audit auf /). Ein Token darf nie mehr als sein Benutzer. Proxmox VE: Mit dem Befehl oben (Token ohne Privilegientrennung) genügt die Rolle am Benutzer; legst du das Token in der Oberfläche mit „Privilegientrennung“ an (Standard), braucht zusätzlich das Token selbst die Rolle – beim Token von root@pam reicht dann das Token. Backup-Server: Benutzer und Token brauchen beide Audit. Ausstehende Updates fragt Proxmox VE nur mit dem Recht Sys.Modify ab – ohne es bleibt der Dienst „Updates“ leer. Für Bonding, Fehler je Port und Temperaturen danach zusätzlich SSH oder den Agenten ergänzen.",
       "node": "Node-Name (leer = die Node hinter der Adresse, wird beim ersten Kontakt festgelegt)",
       "pin": "Fingerabdruck festpinnen (Zertifikat SHA-256 bzw. SSH-Host-Key, optional)",
       "docker_hint": "Lokal: unix:///var/run/docker.sock (Socket in den Node64-Container einbinden). Entfernt: tcp://host:2375, https://host:2376 mit TLS oder ssh://benutzer@host. Podman: podman.socket einschalten (systemctl enable --now podman.socket), dann unix:///run/podman/podman.sock bzw. ssh://benutzer@host/run/podman/podman.sock.",
