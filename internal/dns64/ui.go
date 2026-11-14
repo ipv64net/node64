@@ -96,6 +96,7 @@ type pageData struct {
 	Svc     []serviceGroup           // Seite Gruppen: Dienste zum Sperren per Klick, nach Art
 	Tags    []string                 // Seite Gruppen: alle Tags der Geraete (Filter)
 	Deny    string                   // Seite Blocklisten: eigene Sperrliste als Text
+	Rules   string                   // Seite Blocklisten: eigene Filterregeln (Sperrliste und Freigaben, rules_ui.go)
 	States  map[int64]groupStateView // Seite Gruppen: Sperre, Frei, Zeitplan je Gruppe
 	Week    []int                    // Seite Gruppen: Wochentage 1..7
 	Types   []string
@@ -157,6 +158,7 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 			if dl, err := m.denylist(); err == nil {
 				d.Deny = dl.Text()
 			}
+			d.Rules, _ = m.rulesText()
 		}
 		if key == "settings" {
 			d.Docker = m.DockerDNS(ctx)
@@ -201,7 +203,8 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_nodata", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
-	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult", "top_col_domain", "top_col_client"}
+	"reason_group", "reason_cat", "reason_svc", "reason_list", "lookup_title", "lookup_free", "lookup_nogroup", "lookup_own", "lookup_allowed", "lookup_list",
+	"lookup_groups_only", "lookup_excepted", "lookup_released", "lookup_group_allow", "lookup_group_block", "lookup_service", "lookup_cat", "lookup_none", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult", "top_col_domain", "top_col_client"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))

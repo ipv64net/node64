@@ -18,6 +18,7 @@ import (
 type Allowlist struct {
 	path   string
 	header string // erste Zeile der Datei
+	allow  bool   // Freigaben (sonst eigene Sperrliste): nimmt auch Regeln mit "@@" an
 	mu     sync.RWMutex
 	set    map[string]time.Time
 }
@@ -30,16 +31,18 @@ type AllowEntry struct {
 var ErrInvalidDomain = errors.New("ungültiger Domainname")
 
 func LoadAllowlist(path string) (*Allowlist, error) {
-	return loadDomainList(path, "# Freigegebene Domains (inkl. Subdomains)")
+	return loadDomainList(path, "# Freigegebene Domains (inkl. Subdomains)", true)
 }
 
 // LoadDenylist laedt die eigene Sperrliste (gleiches Format wie die Freigaben; Eintrag = Domain samt Subdomains).
 func LoadDenylist(path string) (*Allowlist, error) {
-	return loadDomainList(path, "# Eigene Sperrliste (inkl. Subdomains)")
+	return loadDomainList(path, "# Eigene Sperrliste (inkl. Subdomains)", false)
 }
 
-func loadDomainList(path, header string) (*Allowlist, error) {
-	a := &Allowlist{path: path, header: header, set: map[string]time.Time{}}
+// loadDomainList liest eine Liste ("domain<TAB>Zeit" je Zeile). Von Hand eingetragene Zeilen im Adblock-Stil
+// (||example.com^, in den Freigaben auch @@||example.com^) und hosts-Zeilen zaehlen mit (ParseRule).
+func loadDomainList(path, header string, allow bool) (*Allowlist, error) {
+	a := &Allowlist{path: path, header: header, allow: allow, set: map[string]time.Time{}}
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return a, nil
@@ -55,12 +58,12 @@ func loadDomainList(path, header string) (*Allowlist, error) {
 			continue
 		}
 		name, ts, _ := strings.Cut(line, "\t")
-		d, ok := normalizeDomain(name)
-		if !ok {
+		r, tok, err := ParseRule(name)
+		if tok == "" || err != nil || r.Allow && !allow {
 			continue
 		}
 		added, _ := time.Parse(time.RFC3339, ts)
-		a.set[d] = added
+		a.set[r.Domain] = added
 	}
 	return a, sc.Err()
 }
@@ -93,11 +96,20 @@ func (a *Allowlist) Match(name string) (string, bool) {
 	}
 }
 
+// Add nimmt eine Domain auf (samt Subdomains); auch im Adblock-Stil (||example.com^, bei Freigaben @@||example.com^)
+// oder als hosts-Zeile. Fehler: ErrInvalidDomain, ErrRuleClient, ErrRuleExact, ErrRuleAllow (@@ in der Sperrliste).
 func (a *Allowlist) Add(domain string) (string, error) {
-	d, ok := normalizeEntry(strings.TrimSpace(domain))
-	if !ok {
-		return "", ErrInvalidDomain
+	r, tok, err := ParseRule(domain)
+	if tok == "" && err == nil {
+		err = ErrInvalidDomain
 	}
+	if err == nil && r.Allow && !a.allow {
+		err = ErrRuleAllow
+	}
+	if err != nil {
+		return "", err
+	}
+	d := r.Domain
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, exists := a.set[d]; exists {
@@ -128,27 +140,16 @@ type ReplaceResult struct {
 	New        []string `json:"-"`          // neu aufgenommene Domains
 }
 
-// LineDomain liefert die Domain einer Zeile aus einem Textfeld: "#" leitet einen Kommentar ein, ein Zeitstempel
-// nach Tab und "*." werden ignoriert, eine hosts-Zeile ("0.0.0.0 example.com") liefert das zweite Feld. tok ist
-// das gepruefte Feld (fuer die Meldung ungueltiger Zeilen); tok == "" heisst nichts zu tun (leere Zeile, Kommentar,
-// Standardnamen einer hosts-Datei wie localhost). Eine IP-Adresse ist nie eine Domain.
+// LineDomain liefert die Domain einer Zeile aus einem Textfeld (Format wie ParseRule: Domain, *.Domain,
+// ||Domain^, hosts-Zeile; Kommentare und ein Zeitstempel nach Tab werden ignoriert). tok ist die gepruefte Zeile
+// (fuer die Meldung ungueltiger Zeilen); tok == "" heisst nichts zu tun (leere Zeile, Kommentar, Standardnamen einer
+// hosts-Datei wie localhost). Eine IP-Adresse ist nie eine Domain; Freigaben (@@) gelten hier als ungueltig.
 func LineDomain(line string) (d, tok string, ok bool) {
-	if i := strings.IndexByte(line, '#'); i >= 0 {
-		line = line[:i]
+	r, tok, err := ParseRule(line)
+	if tok == "" || err != nil || r.Allow {
+		return "", tok, false
 	}
-	f := strings.Fields(line)
-	if len(f) == 0 {
-		return "", "", false
-	}
-	tok = f[0]
-	if isIP(tok) && len(f) > 1 { // hosts-Format
-		tok = f[1]
-		if hostsIgnore[strings.ToLower(tok)] {
-			return "", "", false
-		}
-	}
-	d, ok = normalizeEntry(strings.TrimPrefix(tok, "*."))
-	return d, tok, ok
+	return r.Domain, tok, true
 }
 
 // normalizeEntry wie normalizeDomain, lehnt aber IP-Adressen ab ("0.0.0.0" saehe sonst wie ein Name aus).
@@ -174,10 +175,11 @@ func (a *Allowlist) Replace(lines []string) (ReplaceResult, error) {
 	next := map[string]bool{}
 	bad := 0
 	for _, line := range lines {
-		d, tok, ok := LineDomain(line)
+		r, tok, err := ParseRule(line)
 		if tok == "" {
 			continue
 		}
+		d, ok := r.Domain, err == nil && (a.allow || !r.Allow)
 		if !ok {
 			bad++
 			if len(res.Invalid) < 20 {
@@ -191,37 +193,57 @@ func (a *Allowlist) Replace(lines []string) (ReplaceResult, error) {
 		}
 		next[d] = true
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	if len(next) == 0 && bad > 0 {
-		res.Total = len(a.set)
+		res.Total = a.Len()
 		return res, ErrInvalidDomain
 	}
-	now := time.Now().UTC()
-	set := make(map[string]time.Time, len(next))
+	list := make([]string, 0, len(next))
 	for d := range next {
+		list = append(list, d)
+	}
+	var err error
+	res.New, res.Removed, err = a.setDomains(list)
+	res.Added, res.Total = len(res.New), a.Len()
+	return res, err
+}
+
+// setDomains setzt die Liste auf domains (geprueft); vorhandene Eintraege behalten ihr Datum.
+func (a *Allowlist) setDomains(domains []string) (added []string, removed int, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	now := time.Now().UTC()
+	set := make(map[string]time.Time, len(domains))
+	for _, d := range domains {
 		if t, ok := a.set[d]; ok {
 			set[d] = t
-		} else {
+		} else if _, dup := set[d]; !dup {
 			set[d] = now
-			res.Added++
-			res.New = append(res.New, d)
+			added = append(added, d)
 		}
 	}
 	for d := range a.set {
-		if !next[d] {
-			res.Removed++
+		if _, ok := set[d]; !ok {
+			removed++
 		}
 	}
 	a.set = set
-	res.Total = len(set)
-	return res, a.saveLocked()
+	return added, removed, a.saveLocked()
 }
 
-// Text liefert die Eintraege fuer ein Textfeld (eine Domain je Zeile, alphabetisch).
-func (a *Allowlist) Text() string {
+// Len ist die Zahl der Eintraege.
+func (a *Allowlist) Len() int {
 	if a == nil {
-		return ""
+		return 0
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return len(a.set)
+}
+
+// domains: alle Eintraege alphabetisch.
+func (a *Allowlist) domains() []string {
+	if a == nil {
+		return nil
 	}
 	a.mu.RLock()
 	out := make([]string, 0, len(a.set))
@@ -230,7 +252,12 @@ func (a *Allowlist) Text() string {
 	}
 	a.mu.RUnlock()
 	sort.Strings(out)
-	return strings.Join(out, "\n")
+	return out
+}
+
+// Text liefert die Eintraege fuer ein Textfeld (eine Domain je Zeile, alphabetisch).
+func (a *Allowlist) Text() string {
+	return strings.Join(a.domains(), "\n")
 }
 
 func (a *Allowlist) List() []AllowEntry {

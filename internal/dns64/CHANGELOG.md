@@ -1,5 +1,17 @@
 # Änderungen – DNS64
 
+## 1.40.0 – 2026-11-14
+
+### Neu
+- Eigene Filterregeln im AdGuard/Adblock-Stil (Blocklisten → „Eigene Filterregeln“, API `GET/PUT /api/dns64/rules`): `||example.com^` sperrt, `@@||example.com^` gibt frei (je samt Subdomains), dazu einfache Domains und hosts-Zeilen. Die Einzelfelder „Freigeben“ und „Sperren“, der Import und die Dateien `allowlist.txt`/`denylist.txt` verstehen dieselben Regeln. `$client=` wird mit Hinweis auf Gerätegruppen abgelehnt (Forum 5162, #70).
+- Gesperrte Anfragen nennen im Abfrage-Log (auch live) die Regel: „Blockliste: <Name>“, eigene Sperrliste, Sperre der Gruppe oder „Dienst <Name> gesperrt“; dazu ein Knopf „In welcher Liste steht diese Domain?“ (#122).
+- „Domain prüfen“ auf der Seite Blocklisten (API `GET /api/dns64/lookup`): alle Blocklisten mit einer Regel für die Domain, eigene Sperren und Freigaben, Freigabe-Listen, Gruppenregeln, Dienste und Kategorien (#122).
+- Die Bezeichnung eines eigenen PTR- bzw. A-Eintrags ist der Client-Name im Abfrage-Log, bei den Top-Clients und den Geräten – nach dem Namen aus der Gerätegruppe, vor dem technischen PTR-Namen (#119).
+
+### Behoben
+- Docker-Bridge-Netz: Ist Port 53 nur an eine Host-Adresse gebunden (`192.168.2.8:53:53/udp`), meldet die Selbstprüfung ihn nicht mehr als „nicht veröffentlicht“, sobald Anfragen aus dem LAN ankommen oder das Port-Binding des eigenen Containers (Docker-Socket) ihn zeigt (#137).
+- Ein eigener klassischer Upstream (z. B. lokaler Unbound als `192.168.1.5:5335`) erscheint in der Upstream-Übersicht; bisher brach die Liste an ihm ab, und er sowie die Zeile zum lokalen DNS fehlten (Forum 5151).
+
 ## 1.39.3 – 2026-11-13
 
 ### Behoben

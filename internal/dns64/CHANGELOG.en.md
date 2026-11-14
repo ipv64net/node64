@@ -1,5 +1,17 @@
 # Changes – DNS64
 
+## 1.40.0 – 2026-11-14
+
+### New
+- Custom filter rules in AdGuard/Adblock style (Blocklists → "Custom filter rules", API `GET/PUT /api/dns64/rules`): `||example.com^` blocks, `@@||example.com^` allows (each including subdomains), plus plain domains and hosts lines. The single "Allow" and "Block" fields, the import and the files `allowlist.txt`/`denylist.txt` understand the same rules. `$client=` is rejected with a hint to device groups (forum 5162, #70).
+- Blocked queries show the rule in the query log (also live): "blocklist: <name>", own blocklist, group block or "service <name> blocked"; plus a button "Which list contains this domain?" (#122).
+- "Check domain" on the Blocklists page (API `GET /api/dns64/lookup`): all blocklists with a rule for the domain, own blocks and allows, allowlists, group rules, services and categories (#122).
+- The description of an own PTR or A record is the client name in the query log, the top clients and the devices – after the name from the device group, before the technical PTR name (#119).
+
+### Fixed
+- Docker bridge network: if port 53 is bound to a single host address only (`192.168.2.8:53:53/udp`), the self-check no longer reports it as "not published" once queries from the LAN arrive or the port binding of the own container (Docker socket) shows it (#137).
+- A custom classic upstream (e.g. a local Unbound as `192.168.1.5:5335`) appears in the upstream overview; so far the list stopped at it, and it and the local DNS line were missing (forum 5151).
+
 ## 1.39.3 – 2026-11-13
 
 ### Fixed

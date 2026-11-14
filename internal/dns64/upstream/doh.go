@@ -415,7 +415,7 @@ func (u *doh) win() {
 type Stats struct {
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
-	Proto     string    `json:"proto"` // doh, dot, doq
+	Proto     string    `json:"proto"` // doh, dot, doq, dns (klassisch)
 	IPs       []string  `json:"ips"`
 	Requests  uint64    `json:"requests"`
 	Wins      uint64    `json:"wins"`
@@ -438,9 +438,13 @@ func (r *Resolver) Stats() []Stats {
 		}
 	}
 	for _, u := range r.ups {
+		ips := u.IPs
+		if ips == nil { // klassischer Upstream (dns://IP:Port) hat keine Bootstrap-IPs: leere Liste statt null
+			ips = []string{}
+		}
 		u.mu.Lock()
 		out = append(out, Stats{
-			Name: u.Name, URL: u.URL, Proto: Proto(u.URL), IPs: u.IPs,
+			Name: u.Name, URL: u.URL, Proto: Proto(u.URL), IPs: ips,
 			Requests: u.requests, Wins: u.wins, Errors: u.errors, AvgMs: u.avgMs,
 			// healthy until an error is newer than the last success
 			Healthy:   u.lastErrAt.IsZero() || u.lastOKAt.After(u.lastErrAt),

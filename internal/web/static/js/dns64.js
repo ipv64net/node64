@@ -218,10 +218,10 @@
 				var share = wins ? 100 * s.wins / wins : 0;
 				var card = el("div", { "class": "border rounded p-2" });
 				var title = el("div", { "class": "d-flex flex-wrap align-items-center gap-2" }); // Handy: IPs in eine eigene Zeile
-				title.append(el("b", {}, s.name), el("span", { "class": "badge text-bg-info" }, { doh: "DoH", dot: "DoT", doq: "DoQ" }[s.proto] || s.proto),
+				title.append(el("b", {}, s.name), el("span", { "class": "badge text-bg-info" }, { doh: "DoH", dot: "DoT", doq: "DoQ", dns: "DNS" }[s.proto] || s.proto),
 					el("span", { "class": "badge " + (ok ? "text-bg-success" : "text-bg-danger") }, s.requests === 0 ? t("ready") : ok ? t("online") : t("disturbed")),
 					s.active ? el("span", { "class": "badge text-bg-primary" }, t("in_use")) : "",
-					el("span", { "class": "text-body-secondary ms-auto font-monospace text-break" }, s.ips.join(", ")));
+					el("span", { "class": "text-body-secondary ms-auto font-monospace text-break" }, (s.ips || []).join(", "))); // klassisch (dns://) ohne Bootstrap-IPs
 				var stats = el("div", { "class": "d-flex flex-wrap gap-3 mt-1" });
 				[[t("avg"), s.avgMs ? pf.format(s.avgMs) + " ms" : "–"], [t("fastest"), pf.format(share) + " %"], [t("requests"), nf.format(s.requests)], [t("errors"), nf.format(s.errors)]].forEach(function (p) {
 					var sp = el("span", { "class": "text-body-secondary" }, p[0] + " ");
@@ -412,14 +412,19 @@
 				else if (details.indexOf("rewrite:") === 0) { details = t("reason_rewrite", { target: details.slice(8) }); }
 				else if (details === "canary") { details = t("reason_canary"); }
 				else if (details === "bypass:icloud") { details = t("reason_bypass_icloud", { group: r.group || "" }); }
+				else if (details.indexOf("cat:svc:") === 0) { details = t("reason_svc", { svc: t("cat." + details.slice(4)), group: r.group || "" }); }
 				else if (details.indexOf("cat:") === 0) { details = t("reason_cat", { cat: t("cat." + details.slice(4)), group: r.group || "" }); }
 				else if (details.indexOf("answer:") === 0) { details = details.length > 7 ? "→ " + details.slice(7) : t("reason_nodata"); }
+				else if (details && r.status === "blocked") { details = t("reason_list", { list: details }); } // Name der Blockliste (#122), ggf. mit "(CNAME …)"
 				if (!details && r.upstream) { details = t("via", { name: r.upstream }); }
 				if (r.rcode && r.rcode !== "NOERROR") { details = (details ? details + " · " : "") + r.rcode; }
 				var st = el("td");
 				st.append(badge(r.status));
 				var action = el("td", { "class": "text-end" });
-				if (r.status === "blocked") { action.append(releaseButton(r.domain)); }
+				if (r.status === "blocked") {
+					action.append(el("a", { href: "/dns64/lists?check=" + encodeURIComponent(r.domain) + "#domain-pruefen", "class": "btn btn-sm btn-link py-0 px-1", title: t("lookup_title"), "aria-label": t("lookup_title") }), " ", releaseButton(r.domain));
+					action.firstChild.append(el("i", { "class": "bi bi-search" }));
+				}
 				else if (r.status === "allowed" || r.status === "cached") { action.append(blockButton(r.domain)); }
 				tr.append(el("td", { "class": "text-nowrap", "data-sort": String(dt.getTime()), title: dt.toLocaleString(locale) }, time), client, domain, el("td", { "class": "text-nowrap" }, r.qtype + (r.proto && r.proto !== "udp" ? " · " + t("proto." + r.proto) : "")), st,
 					el("td", { "class": "text-body-secondary text-truncate", style: "max-width:22rem", title: details }, details),
@@ -701,6 +706,50 @@
 		loadDeny().catch(function () {});
 		loadLists().catch(function () {});
 		every(60000, loadLists);
+	}
+
+	// In welcher Liste steht diese Domain? (#122) - dieselben Regeln wie beim Beantworten
+	function lookup(domain) {
+		var box = $("lookup-result");
+		box.replaceChildren(el("div", { "class": "text-body-secondary" }, t("loading")));
+		return api("lookup?domain=" + encodeURIComponent(domain)).then(function (d) {
+			box.replaceChildren();
+			var verdict = el("div", { "class": "mb-2" });
+			verdict.append(el("b", { "class": "font-monospace text-break" }, d.domain), " ");
+			verdict.append(d.blocked ? badge("blocked") : el("span", { "class": "badge text-bg-success" }, t("lookup_free")));
+			var why = d.reason || "";
+			if (why.indexOf("own:") === 0) { why = t("reason_own", { domain: why.slice(4) }); }
+			else if (why.indexOf("released:") === 0) { why = t("reason_released", { list: why.slice(9) }); }
+			else if (why && d.blocked) { why = t("reason_list", { list: why }); }
+			if (why) { verdict.append(" ", el("span", { "class": "text-body-secondary" }, why)); }
+			box.append(verdict, el("div", { "class": "form-text mt-0 mb-2" }, t("lookup_nogroup")));
+			var ul = el("ul", { "class": "list-unstyled mb-0" });
+			var add = function (icon, text, muted) {
+				var li = el("li", { "class": muted ? "text-body-secondary" : "" });
+				li.append(el("i", { "class": "bi " + icon + " me-1" }), text);
+				ul.append(li);
+			};
+			if (d.own) { add("bi-slash-circle text-danger", t("lookup_own", { entry: d.own })); }
+			if (d.allowed) { add("bi-unlock text-success", t("lookup_allowed", { entry: d.allowed })); }
+			d.lists.forEach(function (l) { add("bi-funnel text-danger", t("lookup_list", { list: l.name }) + (l.global ? "" : " · " + t("lookup_groups_only")), !l.global); });
+			if (d.excepted) { add("bi-shield-check text-success", t("lookup_excepted")); }
+			d.released.forEach(function (n) { add("bi-shield-check text-success", t("lookup_released", { list: n })); });
+			d.groups.forEach(function (g) { add(g.kind === "allow" ? "bi-unlock text-success" : "bi-slash-circle text-danger", t(g.kind === "allow" ? "lookup_group_allow" : "lookup_group_block", { group: g.group, entry: g.entry })); });
+			d.services.forEach(function (n) { add("bi-grid text-body-secondary", t("lookup_service", { svc: n }), true); });
+			d.categories.forEach(function (c) { add("bi-tags text-body-secondary", t("lookup_cat", { cat: t("cat." + c) }), true); });
+			if (!ul.children.length) { add("bi-check2 text-success", t("lookup_none")); }
+			box.append(ul);
+		}).catch(function (e) { box.replaceChildren(el("div", { "class": "text-danger" }, t("error") + ": " + e.message)); });
+	}
+
+	if (kind === "lists" && $("lookup-form")) {
+		$("lookup-form").addEventListener("submit", function (e) {
+			e.preventDefault();
+			var v = $("lookup-input").value.trim().toLowerCase();
+			if (v) { lookup(v); }
+		});
+		var check = new URLSearchParams(location.search).get("check"); // aus dem Abfrage-Log
+		if (check) { $("lookup-input").value = check; lookup(check); }
 	}
 
 	// Eigene Eintraege: Beispiel und Hinweis je Typ, Bearbeiten im selben Formular, Suche in der Tabelle

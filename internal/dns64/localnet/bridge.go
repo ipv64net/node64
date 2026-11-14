@@ -31,7 +31,8 @@ func Bridge() bool {
 // das Gateway erreichbar und fuehrt zurueck in den Container (Docker-NAT bzw. docker-proxy auf 0.0.0.0). Eine Anfrage
 // an Gateway:Port, die beim eigenen Dienst ankommt, heisst also: veroeffentlicht - unter derselben Portnummer. Ist der
 // Port nur an eine bestimmte Host-Adresse gebunden (-p 192.168.1.5:53:53) oder auf eine andere Nummer gelegt, meldet die
-// Pruefung ihn als fehlend.
+// Pruefung ihn als fehlend; DNS64 schaut dann zusaetzlich in die Port-Bindings des eigenen Containers und auf Anfragen
+// von ausserhalb der Container-Netze (internal/dns64/published.go, #137).
 func Gateway() netip.Addr { return defaultGateway() }
 
 // iface: ifindex und iflink einer Schnittstelle (gleich = echte Schnittstelle, verschieden = veth-Paar).

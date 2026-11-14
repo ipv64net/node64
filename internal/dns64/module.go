@@ -52,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.39.3"
+	version   = "1.40.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -108,6 +108,7 @@ type Module struct {
 
 	updMu     sync.Mutex                    // dynamische Updates nacheinander (update.go)
 	pub       atomic.Pointer[pubState]      // Docker-Bridge: Ports auf dem Host veroeffentlicht? (published.go)
+	pubSeen   sync.Map                      // Docker-Bridge: Protokoll -> erste Anfrage von ausserhalb der Container-Netze
 	dkd       dockerDNS                     // Eintraege aus Docker-Labels (docker.go)
 	hcOn      func() bool                   // Healthchecks laeuft (Knopf "Als Check" bei den Geraeten), nil = nie
 	clMu      sync.Mutex                    // Cluster (cluster.go)
@@ -357,7 +358,7 @@ func (m *Module) start(ctx context.Context) error {
 	m.mdnsDomains(ctx, e.local)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
 		Records: m, Split: m.split, Forward: m.forwardFor, Rewrite: m.rewriteFor, Zone: m.zoneAnswer, Updates: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
-		Policy: m.policy, Canary: cfg.Canary}
+		Policy: m.policy, Canary: cfg.Canary, Seen: m.pubArrived}
 	e.srv.HintV4, e.srv.HintV6 = hintAddrs(cfg.Bind)
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()

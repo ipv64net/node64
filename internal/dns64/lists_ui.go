@@ -60,6 +60,7 @@ func (m *Module) listUIRoutes(mux *http.ServeMux, page func(http.HandlerFunc) ht
 	mux.Handle("POST /dns64/allowlists/add", page(m.pageAllowListAdd))
 	mux.Handle("POST /dns64/allowlists/remove", page(m.pageAllowListRemove))
 	mux.Handle("POST /dns64/denylist/save", page(m.pageDenySave))
+	mux.Handle("POST /dns64/rules/save", page(m.pageRulesSave)) // eigene Filterregeln (rules_ui.go)
 	mux.Handle("POST /dns64/groups/members/{id}/edit", page(m.pageMemberEdit))
 }
 
@@ -211,6 +212,9 @@ func (m *Module) apiListRoutes(mux *http.ServeMux, plain func(http.HandlerFunc) 
 	mux.Handle("POST /api/dns64/allowlists", plain(func(w http.ResponseWriter, r *http.Request) { m.apiListAddKind(w, r, true) }))
 	mux.Handle("DELETE /api/dns64/allowlists", plain(m.apiAllowListRemove))
 	mux.Handle("PUT /api/dns64/denylist", plain(m.apiDenyReplace))
+	mux.Handle("GET /api/dns64/rules", plain(m.apiRules)) // eigene Filterregeln (rules_ui.go)
+	mux.Handle("PUT /api/dns64/rules", plain(m.apiRulesReplace))
+	mux.Handle("GET /api/dns64/lookup", plain(m.apiLookup)) // In welcher Liste steht diese Domain?
 	mux.Handle("GET /api/dns64/services", plain(m.apiServices))
 	mux.Handle("PATCH /api/dns64/groups/members/{id}", plain(m.apiMemberUpdate)) // PUT kollidiert mit /groups/{id}/rules
 }

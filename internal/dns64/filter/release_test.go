@@ -82,7 +82,7 @@ func TestAllowlistReplace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Total != 3 || res.Added != 2 || res.Removed != 1 || res.Duplicates != 1 || len(res.Invalid) != 1 || res.Invalid[0] != "nicht" {
+	if res.Total != 3 || res.Added != 2 || res.Removed != 1 || res.Duplicates != 1 || len(res.Invalid) != 1 || res.Invalid[0] != "nicht gueltig!" { // ganze Zeile (ohne Kommentar) in der Meldung
 		t.Fatalf("result: %+v", res)
 	}
 	if got := d.Text(); got != "alt.example\nneu.example\nzwei.example" {

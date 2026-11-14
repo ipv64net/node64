@@ -336,8 +336,8 @@ func (m *Module) apiAllowAdd(w http.ResponseWriter, r *http.Request, e *engine) 
 		}
 	}
 	m.clChanged(r.Context(), ItemAllow)
-	if errors.Is(err, filter.ErrInvalidDomain) {
-		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
+	if msg, ok := m.ruleErrText(r, err); ok { // auch Regeln im Adblock-Stil (rules_ui.go)
+		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
 	if err != nil {
@@ -388,8 +388,8 @@ func (m *Module) apiDenyAdd(w http.ResponseWriter, r *http.Request, e *engine) {
 		return
 	}
 	d, err := e.lists.Deny.Add(body.Domain)
-	if errors.Is(err, filter.ErrInvalidDomain) {
-		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
+	if msg, ok := m.ruleErrText(r, err); ok {
+		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
 	if err != nil {

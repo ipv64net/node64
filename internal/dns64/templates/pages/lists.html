@@ -139,6 +139,30 @@
 				</details>
 			</div>
 		</div>
+		<div class="card mt-3" id="eigene-regeln">
+			<div class="card-header"><i class="bi bi-code-square text-primary"></i> {{.T "dns64.rules.title"}}{{.Doc "dns64#eigene-filterregeln"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "dns64.rules.hint"}}</p>
+				<form method="post" action="/dns64/rules/save">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<textarea class="form-control font-monospace mb-2" name="rules" rows="8" placeholder="||ads.example.com^&#10;@@||example.org^" aria-label="{{.T "dns64.rules.title"}}" spellcheck="false">{{$d.Rules}}</textarea>
+					<div class="form-text mb-2">{{.T "dns64.rules.syntax"}}</div>
+					<button class="btn btn-sm btn-outline-primary" type="submit" data-confirm="{{.T "dns64.rules.confirm"}}"><i class="bi bi-check2"></i> {{.T "dns64.rules.save"}}</button>
+				</form>
+			</div>
+		</div>
+		<div class="card mt-3" id="domain-pruefen">
+			<div class="card-header"><i class="bi bi-search text-info"></i> {{.T "dns64.lookup.title"}}{{.Doc "dns64#domain-pruefen"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "dns64.lookup.hint"}}</p>
+				{{if $d.Running}}<form id="lookup-form" class="input-group mb-2">
+					<span class="input-group-text"><i class="bi bi-globe"></i></span>
+					<input type="text" class="form-control" id="lookup-input" placeholder="ads.example.com" aria-label="{{.T "dns64.lookup.title"}}" autocomplete="off">
+					<button class="btn btn-outline-primary" type="submit"><i class="bi bi-search"></i> {{.T "dns64.lookup.button"}}</button>
+				</form>
+				<div id="lookup-result"></div>{{else}}<p class="mb-0">{{.T "dns64.allow.not_running"}}</p>{{end}}
+			</div>
+		</div>
 	</div>
 </div>
 <div class="toast-container position-fixed bottom-0 end-0 p-3"><div class="toast" id="dns64-toast" role="status"><div class="toast-body"></div></div></div>

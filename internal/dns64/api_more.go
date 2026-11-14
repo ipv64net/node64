@@ -17,22 +17,23 @@ import (
 // Weitere Endpunkte der lokalen API (alles, was die Oberflaeche kann) und die Logik, die Oberflaeche und API
 // gemeinsam nutzen.
 
-// importAllow uebernimmt Freigaben (eine Domain je Zeile, Format wie filter.LineDomain).
+// importAllow uebernimmt Freigaben (eine Domain je Zeile, Format wie filter.ParseRule: auch @@||example.com^ und
+// hosts-Zeilen).
 func (m *Module) importAllow(lines []string) (n, bad int, err error) {
 	a, err := m.allowlist()
 	if err != nil {
 		return 0, 0, err
 	}
 	for _, line := range lines {
-		d, tok, ok := filter.LineDomain(line) // auch hosts-Zeilen ("0.0.0.0 example.com")
+		r, tok, err := filter.ParseRule(line)
 		if tok == "" {
 			continue
 		}
-		if !ok {
+		if err != nil {
 			bad++
 			continue
 		}
-		if _, err := a.Add(d); err != nil {
+		if _, err := a.Add(r.Domain); err != nil {
 			bad++
 			continue
 		}

@@ -39,6 +39,7 @@ type recordTable struct {
 	exact map[string][]Record
 	wild  map[string][]Record // Schluessel: Name ohne "*."
 	ptr   map[string]Record   // in-addr.arpa/ip6.arpa-Name -> A/AAAA-Eintrag
+	label map[string]string   // in-addr.arpa/ip6.arpa-Name -> Bezeichnung (Kommentar) als Client-Name (#119)
 }
 
 // Lookup beantwortet name/qtype aus den eigenen Eintraegen (dnsserver.Records). ok = Name bekannt.
@@ -157,7 +158,7 @@ func (m *Module) buildRecords(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	t := &recordTable{exact: map[string][]Record{}, wild: map[string][]Record{}, ptr: map[string]Record{}}
+	t := &recordTable{exact: map[string][]Record{}, wild: map[string][]Record{}, ptr: map[string]Record{}, label: map[string]string{}}
 	for _, r := range list {
 		if !r.Enabled {
 			continue
@@ -175,9 +176,30 @@ func (m *Module) buildRecords(ctx context.Context) error {
 			}
 		}
 	}
+	for arpa, recs := range t.exact { // Bezeichnung eines eigenen PTR-Eintrags
+		for _, r := range recs {
+			if r.Type == "PTR" && r.Comment != "" {
+				t.label[arpa] = r.Comment
+				break
+			}
+		}
+	}
+	for arpa, r := range t.ptr { // sonst die des A/AAAA-Eintrags, aus dem die Rueckwaertssuche kommt
+		if _, own := t.exact[arpa]; !own && r.Comment != "" {
+			t.label[arpa] = r.Comment
+		}
+	}
 	m.recs.Store(t)
 	m.dhcpNamesSoon() // DHCP-Namen weichen eigenen Eintraegen
 	return nil
+}
+
+// recordLabel: Bezeichnung des eigenen PTR- bzw. A/AAAA-Eintrags einer Rueckwaertsadresse ("" = keine).
+func (m *Module) recordLabel(arpa string) string {
+	if t := m.recs.Load(); t != nil {
+		return t.label[arpa]
+	}
+	return ""
 }
 
 // Records liefert alle eigenen Eintraege, nach Name sortiert.

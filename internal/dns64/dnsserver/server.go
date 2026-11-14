@@ -94,6 +94,9 @@ type Server struct {
 	Rewrite   RewriteFunc // Name antwortet wie ein anderer (nil = keins)
 	Zone      ZoneFunc    // lokale Zonen: Geraetenamen, SOA, NXDOMAIN fuer Unbekanntes (nil = keine)
 	Updates   Updater     // dynamische Updates mit TSIG (nil = keine, update.go)
+	// Seen bekommt jede erlaubte Anfrage (Absender, Protokoll), z. B. fuer die Pruefung "Port veroeffentlicht?"
+	// (nil = niemand); muss sofort zurueckkehren
+	Seen func(client netip.Addr, proto string)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -189,6 +192,9 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 	}
 	if r.Opcode != dns.OpcodeQuery || len(r.Question) != 1 {
 		return errorMsg(r, dns.RcodeFormatError)
+	}
+	if s.Seen != nil {
+		s.Seen(clientIP, proto)
 	}
 
 	q := r.Question[0]
