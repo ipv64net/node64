@@ -1,6 +1,6 @@
 # CDN64 – Planung (Tunnel zu srv07/srv08)
 
-Stand: 2026-10-17 · Status: **Planung, nichts umgesetzt** · Phasen T0–T8
+Stand: 2026-10-17 · Status: **umgesetzt** (Modus 1–3 live; Phasen-Protokolle unten) · Phasen T0–T8
 
 Der lokale Reverse-Proxy PROXY64 in Node64 wird mit einem neuen Online-CDN verbunden – so wie Cloudflare Tunnel:
 die Node baut von zu Hause eine dauerhafte, verschlüsselte QUIC-Verbindung zu den CDN-Servern **srv07.cdn64.de**

@@ -430,11 +430,11 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 ## Grenzen
 
 - **Keine freie nginx-Konfiguration** (dafür die festen Felder unter „Erweitert“).
-- **Keine Lastverteilung** auf mehrere Ziele, keine Rate-Limits je Host, keine GeoIP-Sperren (vorgemerkt).
+- **Keine Lastverteilung** auf mehrere Ziele, keine eigenen Rate-Limits je Host (die Limits je IP gelten für alle
+  Hosts, je Host nur abschaltbar).
 - **TLS durchreichen** geht nur über TCP, nicht über HTTP/3.
 - **Erreichbarkeit und Zähler „seit Start“** liegen im Speicher. Die Statistik in `cdn64.db` bleibt erhalten.
-- **CDN64** kann bisher nur Modus 1 (durchreichen) und nur Namen in Domains des ipv64-Accounts; Modus 2
-  und 3 folgen ([CDN64-ONLINE.md](CDN64-ONLINE.md)).
+- **CDN64** nimmt nur Namen in Domains des ipv64-Accounts ([CDN64-ONLINE.md](CDN64-ONLINE.md)).
 
 ## API (Auszug)
 
