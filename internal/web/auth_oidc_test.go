@@ -29,7 +29,8 @@ type fakeIdP struct {
 	sub       string
 	nonce     string
 	challenge string
-	slash     bool // Issuer mit "/" am Ende (wie authentik)
+	slash     bool           // Issuer mit "/" am Ende (wie authentik)
+	extra     map[string]any // weitere Claims im ID-Token (z. B. groups, preferred_username)
 }
 
 func (f *fakeIdP) issuer() string {
@@ -55,7 +56,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		f.mu.Lock()
-		sub, nonce, ch := f.sub, f.nonce, f.challenge
+		sub, nonce, ch, extra := f.sub, f.nonce, f.challenge, f.extra
 		f.mu.Unlock()
 		// PKCE: der Verifier muss zur Challenge passen
 		h := sha256.Sum256([]byte(r.PostFormValue("code_verifier")))
@@ -64,8 +65,12 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			return
 		}
 		signer, _ := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, (&jose.SignerOptions{}).WithHeader("kid", "k1"))
-		claims, _ := json.Marshal(map[string]any{"iss": f.issuer(), "sub": sub, "aud": "node64", "exp": time.Now().Add(time.Hour).Unix(),
-			"iat": time.Now().Unix(), "nonce": nonce, "email": sub + "@example.com"})
+		cl := map[string]any{"iss": f.issuer(), "sub": sub, "aud": "node64", "exp": time.Now().Add(time.Hour).Unix(),
+			"iat": time.Now().Unix(), "nonce": nonce, "email": sub + "@example.com"}
+		for k, v := range extra {
+			cl[k] = v
+		}
+		claims, _ := json.Marshal(cl)
 		jws, _ := signer.Sign(claims)
 		idt, _ := jws.CompactSerialize()
 		w.Header().Set("Content-Type", "application/json")

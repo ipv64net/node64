@@ -204,6 +204,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /login", s.loginSubmit)
 	s.mux.HandleFunc("POST /logout", s.logout)
 	s.authRoutes()
+	s.ldapRoutes() // AD/LDAP und SSO-Anlage ueber Gruppen (auth_ldap.go)
 	s.backupRoutes()
 	s.apiRoutes()
 	s.apiLinkRoutes()

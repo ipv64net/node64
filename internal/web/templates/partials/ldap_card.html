@@ -1,0 +1,59 @@
+{{define "ldap_card"}}{{$d := .LDAPCard}}
+<div class="col-lg-6">
+	<div class="card h-100" id="ldap">
+		<div class="card-header"><i class="bi bi-diagram-2 text-primary"></i> {{.T "ldap.title"}} {{if $d.Cfg.Enabled}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "ldap.hint"}}</p>
+			{{if not $d.LDAPGroups}}<div class="alert alert-warning small py-2">{{.T "ldap.no_groups"}}</div>{{else}}<p class="small">{{.T "ldap.groups_mapped" "n" $d.LDAPGroups}}</p>{{end}}
+			<form method="post" action="/settings/users/ldap">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="ldap_enabled" name="enabled" value="1"{{if $d.Cfg.Enabled}} checked{{end}}><label class="form-check-label" for="ldap_enabled">{{.T "ldap.enable"}}</label></div>
+				<div class="mb-2"><label class="form-label" for="ldap_profile">{{.T "ldap.profile"}}</label>
+					<select class="form-select form-select-sm" id="ldap_profile" name="profile">
+						<option value="ad"{{if eq $d.Cfg.Profile "ad"}} selected{{end}}>{{.T "ldap.profile_ad"}}</option>
+						<option value="ldap"{{if eq $d.Cfg.Profile "ldap"}} selected{{end}}>{{.T "ldap.profile_ldap"}}</option>
+					</select></div>
+				<div class="mb-2"><label class="form-label" for="ldap_urls">{{.T "ldap.urls"}}</label><textarea class="form-control form-control-sm font-monospace" id="ldap_urls" name="urls" rows="2" placeholder="ldaps://dc1.example.org:636&#10;ldaps://dc2.example.org:636" autocomplete="off">{{$d.URLs}}</textarea>
+					<div class="form-text">{{.T "ldap.urls_hint"}}</div></div>
+				<div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="ldap_starttls" name="starttls" value="1"{{if $d.Cfg.StartTLS}} checked{{end}}><label class="form-check-label" for="ldap_starttls">{{.T "ldap.starttls"}}</label></div>
+				<div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="ldap_plain" name="allow_plain" value="1"{{if $d.Cfg.AllowPlain}} checked{{end}}><label class="form-check-label" for="ldap_plain">{{.T "ldap.allow_plain"}}</label>
+					<div class="form-text text-warning">{{.T "ldap.allow_plain_warn"}}</div></div>
+				<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="ldap_skip" name="skip_verify" value="1"{{if $d.Cfg.SkipVerify}} checked{{end}}><label class="form-check-label" for="ldap_skip">{{.T "ldap.skip_verify"}}</label>
+					<div class="form-text text-warning">{{.T "ldap.skip_verify_warn"}}</div></div>
+				<div class="row g-2 mb-2">
+					<div class="col-sm-6"><label class="form-label" for="ldap_bind_dn">{{.T "ldap.bind_dn"}}</label><input class="form-control form-control-sm font-monospace" id="ldap_bind_dn" name="bind_dn" value="{{$d.Cfg.BindDN}}" placeholder="CN=node64,OU=Service,DC=example,DC=org" autocomplete="off"></div>
+					<div class="col-sm-6"><label class="form-label" for="ldap_bind_pw">{{.T "ldap.bind_password"}}</label><input class="form-control form-control-sm" type="password" id="ldap_bind_pw" name="bind_password" placeholder="{{if $d.PasswordSet}}{{.T "ldap.password_unchanged"}}{{end}}" autocomplete="new-password"></div>
+				</div>
+				<div class="mb-2"><label class="form-label" for="ldap_base">{{.T "ldap.base_dn"}}</label><input class="form-control form-control-sm font-monospace" id="ldap_base" name="base_dn" value="{{$d.Cfg.BaseDN}}" placeholder="DC=example,DC=org" autocomplete="off"></div>
+				<div class="mb-2"><label class="form-label" for="ldap_filter">{{.T "ldap.user_filter"}}</label><input class="form-control form-control-sm font-monospace" id="ldap_filter" name="user_filter" value="{{$d.Cfg.UserFilter}}" placeholder="{{$d.DefaultFilter}}" autocomplete="off">
+					<div class="form-text">{{.T "ldap.user_filter_hint" "ad" $d.FilterAD "ldap" $d.FilterLDAP}}</div></div>
+				<div class="row g-2 mb-2 align-items-end">
+					<div class="col-sm-7"><div class="form-check"><input class="form-check-input" type="checkbox" id="ldap_nested" name="nested" value="1"{{if $d.Cfg.Nested}} checked{{end}}><label class="form-check-label" for="ldap_nested">{{.T "ldap.nested"}}</label></div></div>
+					<div class="col-sm-5"><label class="form-label" for="ldap_timeout">{{.T "ldap.timeout"}}</label><input class="form-control form-control-sm" type="number" min="0" max="60" id="ldap_timeout" name="timeout_sec" value="{{if $d.Cfg.TimeoutSec}}{{$d.Cfg.TimeoutSec}}{{end}}" placeholder="10"></div>
+				</div>
+				<div class="input-group input-group-sm mb-2"><input class="form-control" name="probe" placeholder="{{.T "ldap.probe"}}" maxlength="256" autocomplete="off">
+					<button class="btn btn-outline-secondary" type="submit" formaction="/settings/users/ldap/test"><i class="bi bi-plug"></i> {{.T "ldap.test"}}</button></div>
+				<div class="form-text mb-2">{{.T "ldap.test_hint"}}</div>
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+<div class="col-lg-6">
+	<div class="card h-100" id="oidc-groups">
+		<div class="card-header"><i class="bi bi-people text-primary"></i> {{.T "ldap.oidc_title"}} {{if $d.OIDCJIT}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "ldap.oidc_hint"}}</p>
+			{{if not $d.OIDCEnabled}}<div class="alert alert-light border small py-2">{{.T "ldap.oidc_not_configured"}}</div>{{end}}
+			{{if not $d.OIDCGroups}}<div class="alert alert-warning small py-2">{{.T "ldap.oidc_no_groups"}}</div>{{else}}<p class="small">{{.T "ldap.groups_mapped" "n" $d.OIDCGroups}}</p>{{end}}
+			<form method="post" action="/settings/users/oidc-groups">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="oidc_jit" name="jit" value="1"{{if $d.OIDCJIT}} checked{{end}}><label class="form-check-label" for="oidc_jit">{{.T "ldap.oidc_enable"}}</label></div>
+				<div class="mb-2"><label class="form-label" for="oidc_claim">{{.T "ldap.oidc_claim"}}</label><input class="form-control form-control-sm font-monospace" id="oidc_claim" name="claim" value="{{$d.OIDCClaim}}" placeholder="groups" maxlength="100">
+					<div class="form-text">{{.T "ldap.oidc_claim_hint"}}</div></div>
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+{{end}}

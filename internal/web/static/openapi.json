@@ -55,6 +55,10 @@
     {
       "name": "Monitor64",
       "description": "Monitoring von Hosts und Diensten mit Schwellen und Verlauf (Modul Monitor64): Hosts mit Zugängen (Agent, SSH, Proxmox VE/PBS, Docker, TrueNAS, Unraid, Redfish, NUT, Prometheus, SNMP), erkannte Dienste, Schwellen mit Abweichungen je Gruppe/Tag, Probleme mit Ablauf, Benachrichtigung, Wartung, Agent-Verteilung und Cluster. Ist das Modul aus: 404. Anmeldung wie überall: Sitzung (mit `X-CSRF-Token` bei Änderungen) oder API-Key `Authorization: Bearer node64_...`. Fehler als `{\"error\": \"<code>\", \"message\": \"<Text>\"}`; Körper werden streng gelesen (unbekanntes Feld: 400 `json`). Geheimnisse der Zugänge werden nur geschrieben, nie ausgegeben (`secret_set`). Jede Änderung steht mit Akteur im Audit-Log."
+    },
+    {
+      "name": "Benutzerverwaltung",
+      "description": "Benutzer, Gruppen und Anmeldung dieser Node (nur Administrator): AD/LDAP-Anbindung und SSO-Anlage über Gruppen. Nur lokal für Node64."
     }
   ],
   "security": [
@@ -2625,19 +2629,19 @@
                 "description": "Protokoll zum Ziel dieser Location: \"\" = wie der Host, auto = automatisch, h1 = nur HTTP/1.1, h2c = HTTP/2 im Klartext (gRPC)"
               },
               "request_headers": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "value": {
-                        "type": "string"
-                      }
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
                     }
                   }
-                },
+                }
+              },
               "request_remove": {
                 "type": "array",
                 "items": {
@@ -2645,19 +2649,19 @@
                 }
               },
               "response_headers": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "value": {
-                        "type": "string"
-                      }
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
                     }
                   }
-                },
+                }
+              },
               "response_remove": {
                 "type": "array",
                 "items": {
@@ -12390,16 +12394,32 @@
                       "type": "object",
                       "description": "Stand der mDNS-Bruecke",
                       "properties": {
-                        "on": {"type": "boolean"},
-                        "queries": {"type": "integer", "description": "Multicast-Anfragen seit Start"},
-                        "answered": {"type": "integer", "description": "davon beantwortet"},
-                        "responders": {"type": "integer", "description": "Geraete bei der letzten Pruefung, -1 = noch nicht geprueft"},
-                        "probed_at": {"type": "string", "format": "date-time"}
+                        "on": {
+                          "type": "boolean"
+                        },
+                        "queries": {
+                          "type": "integer",
+                          "description": "Multicast-Anfragen seit Start"
+                        },
+                        "answered": {
+                          "type": "integer",
+                          "description": "davon beantwortet"
+                        },
+                        "responders": {
+                          "type": "integer",
+                          "description": "Geraete bei der letzten Pruefung, -1 = noch nicht geprueft"
+                        },
+                        "probed_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
                       }
                     },
                     "localDomains": {
                       "type": "array",
-                      "items": {"type": "string"},
+                      "items": {
+                        "type": "string"
+                      },
                       "description": "vom Router gelernte Endungen (nur mit mDNS-Bruecke)"
                     },
                     "count": {
@@ -31183,6 +31203,543 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Monitor64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/ldap": {
+      "get": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "AD/LDAP-Anbindung (ohne Bind-Passwort)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "AD/LDAP-Anmeldung an"
+                    },
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "ldaps://host:636 oder ldap://host:389 (dann StartTLS bzw. Klartext mit allow_plain); nacheinander, der erste erreichbare gilt; höchstens 10"
+                    },
+                    "starttls": {
+                      "type": "boolean",
+                      "description": "bei ldap:// StartTLS verlangen"
+                    },
+                    "allow_plain": {
+                      "type": "boolean",
+                      "description": "ldap:// ohne TLS erlauben (nur Altgeräte)"
+                    },
+                    "skip_verify": {
+                      "type": "boolean",
+                      "description": "Zertifikat nicht prüfen (unsicher)"
+                    },
+                    "profile": {
+                      "type": "string",
+                      "enum": [
+                        "ad",
+                        "ldap"
+                      ],
+                      "description": "Active Directory oder LDAP (OpenLDAP, LDAP64, lldap …)"
+                    },
+                    "bind_dn": {
+                      "type": "string",
+                      "description": "Dienstkonto; leer = anonyme Suche"
+                    },
+                    "base_dn": {
+                      "type": "string"
+                    },
+                    "user_filter": {
+                      "type": "string",
+                      "description": "leer = Vorgabe des Profils; %s = Benutzername (escaped)"
+                    },
+                    "nested": {
+                      "type": "boolean",
+                      "description": "AD: verschachtelte Gruppen (LDAP_MATCHING_RULE_IN_CHAIN)"
+                    },
+                    "timeout_sec": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 60,
+                      "description": "0 = 10 s"
+                    },
+                    "bind_password_set": {
+                      "type": "boolean",
+                      "description": "Bind-Passwort gespeichert (es wird nie zurückgegeben)"
+                    },
+                    "default_filter": {
+                      "type": "string",
+                      "description": "Vorgabe des eingestellten Profils"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "AD/LDAP-Anbindung ändern",
+        "description": "Ersetzt die ganze Einstellung. Das Bind-Passwort wird verschlüsselt gespeichert; leer = unverändert. Ein Benutzer aus dem Verzeichnis wird beim ersten Anmelden angelegt, wenn er in einer Node64-Gruppe mit passender LDAP-Zuordnung ist.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "AD/LDAP-Anmeldung an"
+                  },
+                  "urls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "ldaps://host:636 oder ldap://host:389 (dann StartTLS bzw. Klartext mit allow_plain); nacheinander, der erste erreichbare gilt; höchstens 10"
+                  },
+                  "starttls": {
+                    "type": "boolean",
+                    "description": "bei ldap:// StartTLS verlangen"
+                  },
+                  "allow_plain": {
+                    "type": "boolean",
+                    "description": "ldap:// ohne TLS erlauben (nur Altgeräte)"
+                  },
+                  "skip_verify": {
+                    "type": "boolean",
+                    "description": "Zertifikat nicht prüfen (unsicher)"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "enum": [
+                      "ad",
+                      "ldap"
+                    ],
+                    "description": "Active Directory oder LDAP (OpenLDAP, LDAP64, lldap …)"
+                  },
+                  "bind_dn": {
+                    "type": "string",
+                    "description": "Dienstkonto; leer = anonyme Suche"
+                  },
+                  "base_dn": {
+                    "type": "string"
+                  },
+                  "user_filter": {
+                    "type": "string",
+                    "description": "leer = Vorgabe des Profils; %s = Benutzername (escaped)"
+                  },
+                  "nested": {
+                    "type": "boolean",
+                    "description": "AD: verschachtelte Gruppen (LDAP_MATCHING_RULE_IN_CHAIN)"
+                  },
+                  "timeout_sec": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 60,
+                    "description": "0 = 10 s"
+                  },
+                  "bind_password": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "leer oder fehlend = unverändert; ohne bind_dn entfällt es"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "AD/LDAP-Anmeldung an"
+                    },
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "ldaps://host:636 oder ldap://host:389 (dann StartTLS bzw. Klartext mit allow_plain); nacheinander, der erste erreichbare gilt; höchstens 10"
+                    },
+                    "starttls": {
+                      "type": "boolean",
+                      "description": "bei ldap:// StartTLS verlangen"
+                    },
+                    "allow_plain": {
+                      "type": "boolean",
+                      "description": "ldap:// ohne TLS erlauben (nur Altgeräte)"
+                    },
+                    "skip_verify": {
+                      "type": "boolean",
+                      "description": "Zertifikat nicht prüfen (unsicher)"
+                    },
+                    "profile": {
+                      "type": "string",
+                      "enum": [
+                        "ad",
+                        "ldap"
+                      ],
+                      "description": "Active Directory oder LDAP (OpenLDAP, LDAP64, lldap …)"
+                    },
+                    "bind_dn": {
+                      "type": "string",
+                      "description": "Dienstkonto; leer = anonyme Suche"
+                    },
+                    "base_dn": {
+                      "type": "string"
+                    },
+                    "user_filter": {
+                      "type": "string",
+                      "description": "leer = Vorgabe des Profils; %s = Benutzername (escaped)"
+                    },
+                    "nested": {
+                      "type": "boolean",
+                      "description": "AD: verschachtelte Gruppen (LDAP_MATCHING_RULE_IN_CHAIN)"
+                    },
+                    "timeout_sec": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 60,
+                      "description": "0 = 10 s"
+                    },
+                    "bind_password_set": {
+                      "type": "boolean",
+                      "description": "Bind-Passwort gespeichert (es wird nie zurückgegeben)"
+                    },
+                    "default_filter": {
+                      "type": "string",
+                      "description": "Vorgabe des eingestellten Profils"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ungültige Angabe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/ldap/test": {
+      "post": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Verbindung testen",
+        "description": "Verbindet, meldet das Dienstkonto an und sucht optional einen Benutzer (ohne dessen Passwort): DN, Gruppen und passende Node64-Gruppen. Ohne config gilt die gespeicherte Einstellung; mit config wird nichts gespeichert (bind_password leer = das gespeicherte).",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "Testname (optional)"
+                  },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "AD/LDAP-Anmeldung an"
+                      },
+                      "urls": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "ldaps://host:636 oder ldap://host:389 (dann StartTLS bzw. Klartext mit allow_plain); nacheinander, der erste erreichbare gilt; höchstens 10"
+                      },
+                      "starttls": {
+                        "type": "boolean",
+                        "description": "bei ldap:// StartTLS verlangen"
+                      },
+                      "allow_plain": {
+                        "type": "boolean",
+                        "description": "ldap:// ohne TLS erlauben (nur Altgeräte)"
+                      },
+                      "skip_verify": {
+                        "type": "boolean",
+                        "description": "Zertifikat nicht prüfen (unsicher)"
+                      },
+                      "profile": {
+                        "type": "string",
+                        "enum": [
+                          "ad",
+                          "ldap"
+                        ],
+                        "description": "Active Directory oder LDAP (OpenLDAP, LDAP64, lldap …)"
+                      },
+                      "bind_dn": {
+                        "type": "string",
+                        "description": "Dienstkonto; leer = anonyme Suche"
+                      },
+                      "base_dn": {
+                        "type": "string"
+                      },
+                      "user_filter": {
+                        "type": "string",
+                        "description": "leer = Vorgabe des Profils; %s = Benutzername (escaped)"
+                      },
+                      "nested": {
+                        "type": "boolean",
+                        "description": "AD: verschachtelte Gruppen (LDAP_MATCHING_RULE_IN_CHAIN)"
+                      },
+                      "timeout_sec": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 60,
+                        "description": "0 = 10 s"
+                      },
+                      "bind_password": {
+                        "type": "string",
+                        "format": "password",
+                        "description": "leer oder fehlend = unverändert; ohne bind_dn entfällt es"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ergebnis (ok=false mit error bei Fehlern)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "Fehler der Verbindung bzw. des Dienstkontos (ohne Passwörter)"
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "description": "verbundener Server"
+                        },
+                        "tls": {
+                          "type": "boolean"
+                        },
+                        "probe": {
+                          "type": "string"
+                        },
+                        "found": {
+                          "type": "boolean"
+                        },
+                        "dn": {
+                          "type": "string"
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "stable_key": {
+                          "type": "string",
+                          "description": "objectGUID (hex), entryUUID oder DN"
+                        },
+                        "disabled": {
+                          "type": "boolean"
+                        },
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "matching_groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "uid": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "admin",
+                              "read"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ungültige Angabe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/oidc-groups": {
+      "get": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "SSO: Benutzer über Gruppen anlegen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "SSO legt Benutzer über den Gruppen-Claim an (Standard aus: nur verknüpfte Konten)"
+                    },
+                    "claim": {
+                      "type": "string",
+                      "description": "Name des Gruppen-Claims im ID-Token (leer = groups)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "SSO-Anlage über Gruppen ändern",
+        "description": "Eingeschaltet legt Node64 beim ersten SSO-Anmelden einen Benutzer an, wenn der Gruppen-Claim zu einer Node64-Gruppe passt, und aktualisiert die Gruppen bei jeder Anmeldung. Den Scope groups erzwingt Node64 nicht.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "SSO legt Benutzer über den Gruppen-Claim an (Standard aus: nur verknüpfte Konten)"
+                  },
+                  "claim": {
+                    "type": "string",
+                    "description": "Name des Gruppen-Claims im ID-Token (leer = groups)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "SSO legt Benutzer über den Gruppen-Claim an (Standard aus: nur verknüpfte Konten)"
+                    },
+                    "claim": {
+                      "type": "string",
+                      "description": "Name des Gruppen-Claims im ID-Token (leer = groups)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ungültige Angabe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }

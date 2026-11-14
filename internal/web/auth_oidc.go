@@ -337,6 +337,7 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	if uid > 0 {
 		u, _ = s.Store.UserByID(ctx, uid)
 	}
+	u = s.oidcGroupUser(r, idt, provider, label, u) // SSO-Anlage ueber Gruppen (auth_ldap.go); Schalter aus: unveraendert
 	if u == nil {
 		s.limiter.fail("ip:" + ipKey(ip))
 		s.loginFailed(r, ip)

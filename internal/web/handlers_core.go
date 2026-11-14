@@ -179,6 +179,9 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if s.ldapLogin(w, r, v, u, f["username"], f["password"], keys) { // kein lokaler Benutzer und AD/LDAP an (auth_ldap.go)
+		return
+	}
 	if u == nil || !VerifyPassword(u.PasswordHash, f["password"]) {
 		if u == nil {
 			// Zeit angleichen, damit Benutzernamen nicht ueber die Antwortzeit erratbar sind
@@ -597,6 +600,11 @@ func (s *Server) saveUserPrefs(r *http.Request, u *store.User, lang, tz string) 
 func (s *Server) settingsPassword(w http.ResponseWriter, r *http.Request) {
 	f := s.formValues(r, "current", "password", "password2")
 	v := s.settingsView(r)
+	if v.User.Source != store.SourceLocal { // LDAP/SSO: Passwort wird im Verzeichnis bzw. beim Anbieter verwaltet
+		s.flash(w, r, "warning", v.T("ldap.password_external"))
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		return
+	}
 	if !VerifyPassword(v.User.PasswordHash, f["current"]) {
 		v.Errors["current"] = v.T("settings.password_wrong")
 	}

@@ -46,6 +46,7 @@
 					</div>
 					<button class="btn btn-primary" type="submit">{{.T "common.save"}}</button>
 				</form>
+				{{if and .User (ne .User.Source "local")}}<p class="small text-body-secondary mb-0"><i class="bi bi-person-badge"></i> {{.T "ldap.password_external"}}</p>{{else}}
 				<form method="post" action="/settings/password">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="mb-3">
@@ -66,7 +67,7 @@
 						</div>
 					</div>
 					<button class="btn btn-outline-primary" type="submit">{{.T "common.save"}}</button>
-				</form>
+				</form>{{end}}
 			</div>
 		</div>
 		<div class="card" id="appearance">
