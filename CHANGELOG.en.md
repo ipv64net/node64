@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.0 – 2026-11-14
+
 - User management (new, Settings → User management): several local users with the roles "Administrator" and "Read only", groups with a role, disabling, setting a password or letting it be set on first sign-in, 2FA reset, ending sessions; switch "2FA required for everyone". The last local administrator always stays. The former "Sign-in" page (SSO, forward auth) is now a tab there; your own passkeys and SSO links are under Settings → General.
 - User management: sign-in via AD/LDAP (Active Directory, OpenLDAP and others) with connection test – users are created on first sign-in when they are in a mapped group. SSO can optionally create users from the group claim (off by default).
 - "Read only" sees all pages but only changes their own account; backups, exports, private keys, passwords and tokens go to administrators only. API keys have the role of their user. API: `/api/users`, `/api/groups`, `/api/auth/2fa-required`, `/api/auth/ldap`, `/api/auth/oidc-groups`.

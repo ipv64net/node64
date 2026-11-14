@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.0 – 2026-11-14
+
 - Benutzerverwaltung (neu, Einstellungen → Benutzerverwaltung): mehrere lokale Benutzer mit den Rollen „Administrator“ und „Nur lesen“, Gruppen mit Rolle, Sperren, Passwort setzen oder beim ersten Anmelden setzen lassen, 2FA zurücksetzen, Sitzungen beenden; Schalter „2FA für alle Pflicht“. Der letzte lokale Administrator bleibt immer. Die frühere Seite „Anmeldung“ (SSO, Forward-Auth) ist jetzt ein Reiter dort; eigene Passkeys und SSO-Verknüpfungen stehen unter Einstellungen → Allgemein.
 - Benutzerverwaltung: Anmeldung über AD/LDAP (Active Directory, OpenLDAP u. a.) mit Verbindungstest – Benutzer werden beim ersten Anmelden angelegt, wenn sie in einer zugeordneten Gruppe sind. SSO kann Benutzer optional über den Gruppen-Claim anlegen (Standard aus).
 - „Nur lesen“ sieht alle Seiten, ändert aber nur das eigene Konto; Backups, Exporte, private Schlüssel, Passwörter und Tokens bekommen nur Administratoren. API-Keys haben die Rolle ihres Benutzers. API: `/api/users`, `/api/groups`, `/api/auth/2fa-required`, `/api/auth/ldap`, `/api/auth/oidc-groups`.
