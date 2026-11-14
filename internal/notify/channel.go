@@ -5,11 +5,14 @@
 package notify
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -71,7 +74,10 @@ type Channel struct {
 	RemoteID        int64  // ID auf dem Server (Sync); 0 = nicht abgeglichen
 	NodeID          string // hub: Besitzer-Node eines Node-Kanals (Execution "node")
 	UID             string // Kennung im Cluster (gleich auf allen Nodes, cluster.go); hub: leer
-	cfgErr          bool   // Konfiguration nicht lesbar (Geheimnisse fehlen)
+	// DestKey (hub): Ziel eines Node-Kanals (DestKeyOf), dessen Konfiguration bei der Node bleibt. Gleiches Ziel auf
+	// mehreren Nodes (Kopie ueber den Cluster oder auf jeder Node gleich angelegt) bekommt eine Meldung nur einmal.
+	DestKey string
+	cfgErr  bool // Konfiguration nicht lesbar (Geheimnisse fehlen)
 }
 
 // Field beschreibt ein Konfigurationsfeld eines Kanaltyps (fuer Formular und Validierung).
@@ -381,4 +387,25 @@ func (c *Channel) Summary() string {
 		return g("url")
 	}
 	return ""
+}
+
+// DestKeyOf liefert das Ziel eines Kanals als Fingerabdruck: gleicher Typ, gleiche Sprache und gleiche Konfiguration
+// (leere Werte zaehlen nicht) heissen dieselbe Meldung an dieselbe Stelle. "" = keine Konfiguration bekannt.
+func DestKeyOf(typ Type, lang string, cfg map[string]string) string {
+	keys := make([]string, 0, len(cfg))
+	for k, v := range cfg {
+		if strings.TrimSpace(v) != "" {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return ""
+	}
+	sort.Strings(keys)
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%s", typ, lang)
+	for _, k := range keys {
+		fmt.Fprintf(h, "\x00%s=%s", k, cfg[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

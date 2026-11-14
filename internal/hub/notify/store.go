@@ -82,7 +82,8 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 			s.mu.Lock()
 			s.nodeOf[ch.ID] = nodeID.String
 			s.mu.Unlock()
-			cfg = "" // Geheimnisse der Node bleiben bei der Node
+			ch.DestKey = s.nodeDest(ch.Type, ch.Lang, cfg) // gleiches Ziel auf mehreren Nodes nur einmal (Forum 5172)
+			cfg = ""                                       // Geheimnisse der Node bleiben bei der Node
 		}
 		m := map[string]string{}
 		if cfg != "" {
@@ -122,6 +123,34 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 	s.cache[userID] = cached{at: time.Now(), list: list}
 	s.mu.Unlock()
 	return list, nil
+}
+
+// nodeDest liefert das Ziel eines Node-Kanals (notify.DestKeyOf) aus seiner Konfiguration; "" = nicht bekannt
+// (Geheimnis nur lokal, nicht lesbar). Die Konfiguration selbst geht nicht weiter.
+func (s *Store) nodeDest(typ notify.Type, lang, cfg string) string {
+	if cfg == "" {
+		return ""
+	}
+	m := map[string]string{}
+	if json.Unmarshal([]byte(cfg), &m) != nil {
+		return ""
+	}
+	for k, v := range m {
+		if secrets.IsEncrypted(v) {
+			if s.box == nil {
+				return ""
+			}
+			plain, err := s.box.Decrypt(v)
+			if err != nil {
+				return ""
+			}
+			m[k] = plain
+		}
+	}
+	if lang == "" {
+		lang = "de"
+	}
+	return notify.DestKeyOf(typ, lang, m)
 }
 
 // NodeOfChannel liefert die Besitzer-Node eines Node-Kanals.

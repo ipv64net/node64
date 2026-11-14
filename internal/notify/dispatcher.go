@@ -393,11 +393,17 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 	}
 	var out []*Channel
 	direct := d.direct(c)
+	nodeDest := map[string]bool{} // hub: Ziele, die die messende Node selbst bedient (auch als Kopie einer anderen Node)
+	for _, ch := range all {
+		if ch.Enabled && ch.DestKey != "" && skipForNode(c, ch) {
+			nodeDest[ch.DestKey] = true
+		}
+	}
 	for _, ch := range all {
 		if !ch.Enabled {
 			continue
 		}
-		if skipForNode(c, ch) {
+		if skipForNode(c, ch) || (ch.DestKey != "" && nodeDest[ch.DestKey]) {
 			continue // hub: sendet die messende Node selbst
 		}
 		if direct {
@@ -727,14 +733,32 @@ func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
 		d.log.Debug("notification held (quiet hours)", "check", a.Check.Name, "kind", a.Kind)
 		return
 	}
+	seen := map[string]bool{}
 	for _, ch := range d.channelsFor(ctx, a.Check) {
 		if ok, why := flagsOK(a, ch); !ok {
 			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", why)
 			continue
 		}
+		if sameDest(seen, ch) {
+			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", "same target as another channel")
+			continue
+		}
 		m := d.compose(ch.Lang, a)
 		d.send(ctx, ch, m)
 	}
+}
+
+// sameDest (hub): ein Kanal mit demselben Ziel (DestKey) hat die Meldung schon - z. B. derselbe ntfy-Kanal auf
+// zwei verknuepften Nodes eines Clusters, sonst gaebe es zwei Sendeauftraege und die Meldung kaeme doppelt.
+func sameDest(seen map[string]bool, ch *Channel) bool {
+	if ch.DestKey == "" {
+		return false
+	}
+	if seen[ch.DestKey] {
+		return true
+	}
+	seen[ch.DestKey] = true
+	return false
 }
 
 // sendSummary fasst viele gleichzeitige Stoerungen (bzw. Entwarnungen) je Kanal zusammen.
@@ -746,8 +770,9 @@ func (d *Dispatcher) sendSummary(ctx context.Context, list0 []Alert, up bool) {
 			d.hold(a)
 			continue
 		}
+		seen := map[string]bool{}
 		for _, ch := range d.channelsFor(ctx, a.Check) {
-			if ok, _ := flagsOK(a, ch); !ok {
+			if ok, _ := flagsOK(a, ch); !ok || sameDest(seen, ch) {
 				continue
 			}
 			perChannel[ch.ID] = append(perChannel[ch.ID], a)

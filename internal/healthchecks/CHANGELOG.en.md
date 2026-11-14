@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 3.2.1 – 2026-11-14
+
+### Fixed
+- Notifications with several linked nodes: if every node has the same channel of its own (e.g. ntfy with the same server and topic – copied via the cluster or set up identically on each node), every problem and recovery from ipv64.net now arrives once instead of once per node. Channels with "secret only local" are not known to ipv64.net in plain text and stay separate (forum 5172; with the update of the ipv64 servers).
+
 ## 3.2.0 – 2026-11-14
 
 ### New

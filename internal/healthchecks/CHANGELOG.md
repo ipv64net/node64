@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 3.2.1 – 2026-11-14
+
+### Behoben
+- Benachrichtigungen bei mehreren verknüpften Nodes: Hat jede Node denselben eigenen Kanal (z. B. ntfy mit gleichem Server und Topic – als Kopie über den Cluster oder auf jeder Node gleich angelegt), kommt jede Störung und Entwarnung von ipv64.net nur noch einmal statt einmal je Node. Kanäle mit „Geheimnis nur lokal“ kennt ipv64.net nicht im Klartext, die bleiben getrennt (Forum 5172; mit dem Update der ipv64-Server).
+
 ## 3.2.0 – 2026-11-14
 
 ### Neu

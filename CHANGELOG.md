@@ -10,6 +10,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Monitor64: Host-Adresse wie „10.0.0.2.16“ (Tippfehler) wird abgelehnt statt als Hostname angenommen (Forum 5175).
 - Cluster: Beitritt einer kopierten Node (geklonte VM, kopierter Datenordner) nennt die Ursache statt „HTTP 400 cannot pair with itself“ (Forum 5174).
 - Einstellungen: Link „Changelog“ zum GitHub-Release beim angebotenen Node64-Update.
+- Healthchecks: Gleicher eigener Kanal (z. B. ntfy) auf mehreren verknüpften Nodes – Störung und Entwarnung kommen von ipv64.net nur noch einmal statt einmal je Node (Forum 5172; mit dem Update der ipv64-Server).
 
 ## 1.6.0 – 2026-11-14
 
