@@ -126,5 +126,7 @@ func TestOUI(t *testing.T) {
 	if oui.Lookup("da:00:00:00:00:01") != "" {
 		t.Fatal("random mac has no vendor")
 	}
-	_ = oui.Size() // ohne erzeugte Liste 0, sonst Tausende - beides gueltig
+	if oui.Size() < 10000 || oui.Lookup("00:11:32:aa:10:10") != "Synology Incorporated" || oui.Lookup("DC-A6-32-0A-64-02") != "Raspberry Pi Trading Ltd" {
+		t.Fatalf("vendor list: %d entries", oui.Size())
+	}
 }

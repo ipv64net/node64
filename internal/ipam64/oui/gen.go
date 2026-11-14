@@ -26,7 +26,9 @@ func main() {
 	out := map[string]string{}
 	client := &http.Client{Timeout: 2 * time.Minute}
 	for _, u := range sources {
-		resp, err := client.Get(u)
+		req, _ := http.NewRequest(http.MethodGet, u, nil)
+		req.Header.Set("User-Agent", "node64-oui-gen/1.0") // ohne eigenes Kennzeichen antwortet die IEEE mit 418
+		resp, err := client.Do(req)
 		if err != nil {
 			fail(err)
 		}

@@ -341,5 +341,6 @@ IPAM64 0.4.0, im selben Zweig; Seite auf der Testnode geprüft:
 - Benachrichtigungen: neue Meldungsart `notify.KindIPAM` (Text des Moduls wie bei DHCP), Link auf die Seite; je Fund
   einmal, neue Geräte erst nach einer Stunde Laufzeit.
 - Herstellerliste: Paket `ipam64/oui` mit eingebetteter `oui.txt.gz`; Generator `gen.go` lädt die IEEE-Register
-  (MA-L, MA-M, MA-S). **Eingebaut ist noch eine leere Liste** – der Download wartet auf Dennis' Freigabe (Datei und
-  Größe in der Übergabe genannt). Zufällige MACs erkennt IPAM64 ohne Liste.
+  (MA-L, MA-M, MA-S). Von Dennis freigegeben und am 2026-11-14 erzeugt: 54.466 Einträge, 559 KB gepackt (die IEEE
+  verlangt ein eigenes User-Agent-Kennzeichen, sonst 418). Neu erzeugen: `go run gen.go` im Ordner. Zufällige MACs
+  erkennt IPAM64 ohne Liste.
