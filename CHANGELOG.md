@@ -4,6 +4,23 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: „Messende Nodes“ zeigt beim Anlegen und in den Details die aktuellen Namen der Nodes statt alter Namen (#134).
+- Healthchecks: Statusseiten – Einträge frei sortieren (Pfeile oder Ziehen), dazu Überschriften und Trenner als eigene Einträge; bestehende Seiten bleiben, wie sie sind (#131, #102).
+- Honeypot64: Neue Rangliste der angefragten Domains bzw. Subdomains (Host/SNI) an Web-Falle und PROXY64-Köder, Top 20 im Zeitraum (#113).
+- Zertifikate: Schlüssel auch RSA 4096; die Schlüsselart (ECDSA P-256, RSA 2048/4096) lässt sich bei bestehenden Zertifikaten ändern und gilt ab der nächsten Erneuerung (#62).
+- Zertifikate: Neuer DNS-Anbieter „netcup CloudDNS (REST-API)“ für Domains auf den neuen netcup-Nameservern (netcup.firstns.cc …), nur mit API-Key (#108).
+- DNS64: Eigene Filterregeln im AdGuard/Adblock-Stil (`||example.com^`, `@@||example.com^`, Domains, hosts-Zeilen) direkt in der Oberfläche; Regeln je Gerät über Gerätegruppen (#70).
+- DNS64: Gesperrte Anfragen nennen im Abfrage-Log (auch live) die Blockliste bzw. Regel; neue Suche „Domain prüfen“: in welcher Liste steht eine Domain (#122).
+- DNS64: Die Bezeichnung eigener PTR- bzw. A-Einträge erscheint als Client-Name im Abfrage-Log und bei den Top-Clients (#119).
+- DNS64: Kein falscher Hinweis „Ports nicht veröffentlicht“ mehr, wenn Port 53 nur an eine Host-IP gebunden ist (#137).
+- DNS64: Eigene klassische Upstreams (z. B. lokaler Unbound) erscheinen wieder in der Upstream-Übersicht.
+- PROXY64: Ländersperre entscheidet nach dem Standort der Adresse (DB-IP) statt nach dem Land, in dem das Netz registriert ist – AWS/Azure Frankfurt und Firmennetze mit US-Registrierung gelten so als DE (#139). Neu: `GET /api/cdn64/geo/lookup` zeigt, welches Land gilt.
+- PROXY64: Verbindungen mit PROXY-Kopf von einer nicht freigegebenen Quelle stehen im Container-Log und im Zugriffs-Log; neuer Schalter „PROXY protocol auch von den Nodes des eigenen Clusters annehmen“ zieht bei Adresswechseln mit (#138).
+- PROXY64: Kein „421 Misdirected Request“ mehr bei HTTP/2 mit Wildcard-Zertifikat (Safari), wenn das Zertifikat den Host abdeckt (#132).
+- PROXY64: Zugriffs-Log zusätzlich als Datei `/data/cdn64/access.log` (nginx combined mit Host, z. B. für CrowdSec), mit Größenbegrenzung (#74).
+- PROXY64: Haken „Nextcloud: /.well-known/caldav und carddav weiterleiten“ unter Erweitert (#101).
+- PROXY64: Locations eingeklappt mit „+ Location hinzufügen“ (#78); Eingabe der Ländersperre schlägt nach jedem Komma Länder vor und zeigt Ländernamen (#54).
+
 ## 1.5.9 – 2026-11-13
 
 - Oberfläche: Neues Design als Standard – Seitenleiste mit Gruppen (Übersicht, Module, System), Orange als Akzent, Schriften Inter und JetBrains Mono, Hell und Dunkel gleichwertig (Entwurf aus der Community). Das bisherige Aussehen bleibt unter Einstellungen → Darstellung → Design → „Klassisch“ wählbar.

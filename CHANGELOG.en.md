@@ -4,6 +4,23 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: "Measuring nodes" shows the nodes' current names when creating a check and in the details instead of old ones (#134).
+- Healthchecks: Status pages – order entries freely (arrows or drag and drop), plus headings and dividers as entries of their own; existing pages stay as they are (#131, #102).
+- Honeypot64: New top list of requested domains/subdomains (Host/SNI) at the web trap and PROXY64 decoy, top 20 in the period (#113).
+- Certificates: RSA 4096 keys as well; the key type (ECDSA P-256, RSA 2048/4096) can be changed for existing certificates and applies from the next renewal (#62).
+- Certificates: New DNS provider "netcup CloudDNS (REST API)" for domains on the new netcup name servers (netcup.firstns.cc …), API key only (#108).
+- DNS64: Custom filter rules in AdGuard/Adblock style (`||example.com^`, `@@||example.com^`, domains, hosts lines) directly in the UI; per-device rules via device groups (#70).
+- DNS64: Blocked queries show the blocklist or rule in the query log (also live); new "Check domain" lookup: which list contains a domain (#122).
+- DNS64: The description of own PTR or A records is shown as client name in the query log and top clients (#119).
+- DNS64: No more false "ports not published" notice when port 53 is bound to a single host IP (#137).
+- DNS64: Custom classic upstreams (e.g. a local Unbound) appear in the upstream overview again.
+- PROXY64: The country block decides by the location of the address (DB-IP) instead of the country the network is registered in – AWS/Azure Frankfurt and company networks registered in the US now count as DE (#139). New: `GET /api/cdn64/geo/lookup` shows which country applies.
+- PROXY64: Connections with a PROXY header from an untrusted source show up in the container log and the access log; new switch "Also accept PROXY protocol from the nodes of the own cluster" follows address changes (#138).
+- PROXY64: No more "421 Misdirected Request" with HTTP/2 and a wildcard certificate (Safari) when the certificate covers the host (#132).
+- PROXY64: Access log also as a file `/data/cdn64/access.log` (nginx combined with host, e.g. for CrowdSec), with size limit (#74).
+- PROXY64: Switch "Nextcloud: redirect /.well-known/caldav and carddav" under Advanced (#101).
+- PROXY64: Locations collapsed with "+ Add location" (#78); the country block input suggests countries after every comma and shows country names (#54).
+
 ## 1.5.9 – 2026-11-13
 
 - Interface: new design as default – sidebar with groups (overview, modules, system), orange accent, Inter and JetBrains Mono fonts, light and dark on equal footing (community draft). The previous look stays available under Settings → Appearance → Design → "Classic".
