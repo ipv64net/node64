@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Environment (new, under System next to Cluster): this node and the members of the cluster with status and version in one place. "Open" signs you in on the other node with your user (same ID via user sync, one-time ticket, your role never grows), otherwise you land on its sign-in page. New cluster area "Environment → Sign-in" (on by default).
 - Monitor64: Redfish with HPE iLO 4 also via a DNS name (#141).
 - Monitor64: FRITZ!Box access without fingerprint – no longer fails after a FRITZ!OS update (new certificate) (forum 5134).
 - Monitor64: macOS helper volumes, Time Machine and temporary mounts no longer preselected in the Prometheus access; long mount paths wrap (#114).

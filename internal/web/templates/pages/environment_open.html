@@ -1,0 +1,17 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="card" style="max-width: 36rem">
+	<div class="card-body">
+		<h1 class="h5"><i class="bi bi-hdd-stack text-primary"></i> {{.T "environment.opening" "name" $d.Name}}</h1>
+		{{if $d.Ticket}}
+		<p class="small text-body-secondary">{{.T "environment.opening_user"}}</p>
+		<form method="post" action="{{$d.URL}}/environment/enter" id="env-enter" class="m-0"><input type="hidden" name="ticket" value="{{$d.Ticket}}"><button class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-up-right"></i> {{.T "environment.continue"}}</button></form>
+		{{else}}
+		<p class="small text-body-secondary">{{.T "environment.opening_page"}}</p>
+		<a class="btn btn-primary btn-sm" id="env-login" href="{{$d.URL}}/login?env=1"><i class="bi bi-box-arrow-up-right"></i> {{.T "environment.continue"}}</a>
+		{{end}}
+		<p class="small text-body-secondary mt-3 mb-0"><i class="bi bi-shield-exclamation"></i> {{.T "environment.cert_hint"}}</p>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/environment.js?v={{.Version}}"></script>{{end}}

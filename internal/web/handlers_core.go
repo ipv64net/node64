@@ -153,6 +153,9 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 	}
 	v := s.view(r, "login.title")
 	v.Form["next"] = safeNext(r.URL.Query().Get("next"))
+	if r.URL.Query().Get("env") == "1" && v.Flash == nil { // von Environment einer anderen Node ohne Anmeldung (environment.go)
+		v.Flash = &Flash{Kind: "info", Text: v.T("environment.login_hint")}
+	}
 	s.loginOptions(r, v)
 	s.render(w, r, http.StatusOK, "login", v)
 }

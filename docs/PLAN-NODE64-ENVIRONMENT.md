@@ -133,6 +133,13 @@ mehr als eine Node gibt.
 | **E3 Feinschliff** (optional) | Schnellwechsel in der Kopfzeile | ca. 1 Tag |
 
 E1 hängt an der Benutzerverwaltung B1 (Rollen); ohne B1 ginge E1 auch, alle Benutzer wären dann Administrator.
+
+**Stand E1 (gebaut 2026-11-14):** Paket `internal/environment` (Tickets im Speicher, Provider `environment/login`
+mit Modul-Vorgabe an über `peer.ModuleInfo.Default`, Tabelle `env_sessions` im eigenen Scope `environment`),
+Seite und Handler in `internal/web/environment.go`. Die Rolle einer über Environment entstandenen Sitzung steht in
+`env_sessions.max_role`; `Server.sessionRole` liefert die wirksame Rolle (Rolle samt Gruppen, begrenzt durch die
+Sitzung). Bis die zentrale Rechteprüfung aus B1 da ist, sperrt `auth` in solchen Sitzungen mit „Nur lesen“ alle
+ändernden Anfragen (außer Abmelden und weiteres Öffnen); B1 soll `sessionRole` statt `EffectiveRole` verwenden.
 E2 ist unabhängig von B1/B2.
 
 **Risiken:** Ein Zugangsschlüssel ist so viel wert wie eine Anmeldung als dieser Benutzer → nur einmal angezeigt,

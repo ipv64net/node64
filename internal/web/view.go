@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/environment"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/mcp"
 	"github.com/ipv64net/node64/internal/module"
@@ -40,6 +41,7 @@ type View struct {
 	Host     string
 	Errors   map[string]string
 	Form     map[string]string
+	EnvFrom  *environment.Origin // Sitzung ueber Environment einer anderen Node geoeffnet (Hinweis mit Rueckweg)
 	loc      *time.Location
 }
 
@@ -312,6 +314,9 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 	}
 	if v.User != nil {
 		v.Nav = s.nav(r)
+		if s.Env != nil {
+			v.EnvFrom, _ = s.Env.SessionOrigin(r.Context(), sessionID(r))
+		}
 	}
 	if c, err := r.Cookie(flashCookie); err == nil && c.Value != "" {
 		if kind, text, ok := strings.Cut(c.Value, ":"); ok {
@@ -351,6 +356,9 @@ func (s *Server) nav(r *http.Request) []NavItem {
 	}
 	if s.Peer != nil {
 		items = append(items, NavItem{Key: "nav.cluster", Path: "/cluster", Icon: "bi-hdd-network", Available: true, Enabled: true})
+		if s.Env != nil {
+			items = append(items, NavItem{Key: "nav.environment", Path: "/environment", Icon: "bi-hdd-stack", Available: true, Enabled: true})
+		}
 	}
 	items = append(items,
 		NavItem{Key: "nav.notifications", Path: "/notifications", Icon: "bi-bell", Available: true, Enabled: s.Notify != nil},

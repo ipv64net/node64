@@ -42,6 +42,7 @@ import (
 	"github.com/ipv64net/node64/internal/dyndns"
 	"github.com/ipv64net/node64/internal/dyndns/ddcluster"
 	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/environment"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/healthchecks/hccluster"
 	"github.com/ipv64net/node64/internal/honeypot"
@@ -417,6 +418,15 @@ func run() error {
 	nfcluster.Register(peerMgr, nfStore)                                                                                       // Benachrichtigungskanaele ueber den Cluster
 	nodecluster.Register(peerMgr, nodecfg.New(nodecfg.Deps{Store: st, Box: box, Key: ipv64Key, Account: peerMgr.Account, ClusterAccount: peerMgr.ClusterAccount, Log: logger.Slog().With("module", "peer")}),
 		func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // API-Key und allgemeine Einstellungen ueber den Cluster
+	envMigrations, err := environment.Migrations()
+	if err != nil {
+		return err
+	}
+	if err := st.Migrate(ctx, environment.Name, envMigrations); err != nil {
+		return err
+	}
+	envSvc := environment.New(environment.Deps{Store: st, Log: logger.Slog().With("module", "environment")})
+	environment.Register(peerMgr, envSvc) // Environment: Anmelde-Tickets fuer andere Mitglieder
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
 	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
 	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster
@@ -542,7 +552,7 @@ func run() error {
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
 		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
 		Ports: portReg, Edge: edgeSrv, Certs: certMgr, Box: box, Updater: upd,
-		Users: userCluster,
+		Users: userCluster, Env: envSvc,
 	})
 	if err != nil {
 		return err

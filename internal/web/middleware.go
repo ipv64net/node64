@@ -235,6 +235,9 @@ func (s *Server) session(next http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/peer/") {
 				break // Cluster: signierte Anfragen der anderen Nodes bzw. Kopplungscode (peer-Paket, alle Versionen)
 			}
+			if r.URL.Path == envEnterPath {
+				break // Environment: kommt von einer anderen Node, das einmalige Ticket ist die Berechtigung (environment.go)
+			}
 			tok := r.Header.Get("X-CSRF-Token")
 			if tok == "" && bodyLimitFor(r.URL.Path) > maxBody {
 				// Uploads (bis 1 GB): Formular erst lesen, wenn angemeldet, und nur als multipart (Datei auf Platte statt
@@ -274,6 +277,15 @@ func (s *Server) auth(h http.HandlerFunc) http.Handler {
 				return
 			}
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+			return
+		}
+		if s.envDenied(r) { // ueber Environment mit „nur lesen“ geoeffnet (environment.go)
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				w.Header().Set("Content-Type", "application/json")
+				http.Error(w, `{"error":"read-only session"}`, http.StatusForbidden)
+				return
+			}
+			s.errorPage(w, r, http.StatusForbidden, "environment.read_only")
 			return
 		}
 		h(w, r)
@@ -382,6 +394,12 @@ func longTransfer(w http.ResponseWriter) {
 // startSession legt nach erfolgreichem Login eine neue Sitzung an. Mit
 // totpPending wartet sie noch auf den zweiten Faktor.
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int64, totpPending bool) error {
+	_, err := s.newSession(w, r, userID, totpPending)
+	return err
+}
+
+// newSession ist startSession mit der Kennung der neuen Sitzung.
+func (s *Server) newSession(w http.ResponseWriter, r *http.Request, userID int64, totpPending bool) (string, error) {
 	now := time.Now()
 	sess := &store.Session{
 		ID: randomToken(32), UserID: userID, CSRF: randomToken(32),
@@ -389,16 +407,16 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int
 		IP: s.clientIP(r), UserAgent: truncate(r.UserAgent(), 200),
 	}
 	if err := s.Store.CreateSession(r.Context(), sess); err != nil {
-		return err
+		return "", err
 	}
 	if totpPending {
 		if err := s.Store.SetSessionTOTP(r.Context(), sess.ID, false); err != nil {
-			return err
+			return "", err
 		}
 	}
 	s.setCookie(w, r, sessionCookie, sess.ID, int(sessionMax.Seconds()))
 	s.setCookie(w, r, csrfCookie, sess.CSRF, 0)
-	return nil
+	return sess.ID, nil
 }
 
 func truncate(s string, n int) string {

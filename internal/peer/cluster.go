@@ -29,6 +29,7 @@ type ModuleInfo struct {
 	ID       string     `json:"id"`
 	TitleKey string     `json:"title_key"`
 	Items    []ItemInfo `json:"-"`
+	Default  bool       `json:"-"` // Modul ohne Einstellung eingeschaltet (sonst nur die eingebauten)
 }
 
 // Provider ist ein Modul, das Eintraege ueber den Cluster abgleicht (ausser Healthchecks, das seinen eigenen Weg hat).
@@ -176,13 +177,13 @@ func (m *Manager) modules() []ModuleInfo {
 }
 
 // SyncModules liefert alle abgleichbaren Module mit ihren Schaltern auf dieser Node. Healthchecks und
-// Benachrichtigungen sind ohne Einstellung eingeschaltet (wie bisher), alle anderen Module aus.
+// Benachrichtigungen sind ohne Einstellung eingeschaltet (wie bisher), alle anderen Module aus (ausser mit Default).
 func (m *Manager) SyncModules(ctx context.Context) []ModuleState {
 	cfg := m.syncCfg(ctx)
 	var out []ModuleState
 	for _, mi := range m.modules() {
 		c := cfg[mi.ID]
-		st := ModuleState{ModuleInfo: mi, Available: (!builtin(mi.ID) || m.checks() != nil) && m.running(mi.ID), Enabled: builtin(mi.ID), Items: []ItemState{}}
+		st := ModuleState{ModuleInfo: mi, Available: (!builtin(mi.ID) || m.checks() != nil) && m.running(mi.ID), Enabled: builtin(mi.ID) || mi.Default, Items: []ItemState{}}
 		if c.Enabled != nil {
 			st.Enabled = *c.Enabled
 		}

@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Environment (neu, unter System neben Cluster): diese Node und die Mitglieder des Clusters mit Status und Version an einer Stelle. „Öffnen“ meldet dich auf der anderen Node mit deinem Benutzer an (gleiche Kennung über den Benutzer-Abgleich, einmaliges Ticket, deine Rolle wird nie größer), sonst geht es zu ihrer Anmeldeseite. Neuer Cluster-Bereich „Environment → Anmeldung“ (Standard an).
 - Monitor64: Redfish mit HPE iLO 4 auch über einen DNS-Namen (#141).
 - Monitor64: FRITZ!Box-Zugang ohne Fingerabdruck – fällt nach einem FRITZ!OS-Update (neues Zertifikat) nicht mehr aus (Forum 5134).
 - Monitor64: macOS-Hilfsvolumes, Time-Machine- und temporäre Mounts im Prometheus-Zugang nicht mehr vorausgewählt; lange Mountpfade brechen um (#114).

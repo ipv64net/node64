@@ -1,0 +1,191 @@
+package web
+
+import (
+	"context"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/ipv64net/node64/internal/environment"
+	"github.com/ipv64net/node64/internal/store"
+)
+
+// Seite „Environment“ (internal/environment): diese Node und die Mitglieder des Clusters mit „Oeffnen“. Oeffnen holt
+// bei der anderen Node ein Anmelde-Ticket und schickt es per Formular direkt an deren /environment/enter (der
+// Browser spricht immer selbst mit der anderen Node, kein Ticket in URL oder Verlauf).
+
+const envEnterPath = "/environment/enter" // ohne CSRF-Pruefung (middleware.go), das Ticket ist die Berechtigung
+
+type envData struct {
+	SelfName    string
+	SelfURL     string
+	SelfVersion string
+	Nodes       []environment.Node
+}
+
+type envOpenData struct {
+	Name   string
+	URL    string
+	Ticket string // leer = Anmeldeseite der anderen Node
+}
+
+func (s *Server) environmentRoutes() {
+	if s.Env == nil || s.Peer == nil {
+		return
+	}
+	s.mux.Handle("GET /environment", s.auth(s.environmentPage))
+	s.mux.Handle("POST /environment/open/{id}", s.auth(s.environmentOpen))
+	s.mux.HandleFunc("POST "+envEnterPath, s.environmentEnter)
+}
+
+func (s *Server) environmentPage(w http.ResponseWriter, r *http.Request) {
+	v := s.view(r, "environment.title")
+	v.Data = envData{SelfName: s.Store.SettingOr(r.Context(), SettingNodeName, "Node64"), SelfURL: browserOrigin(r), SelfVersion: s.Version,
+		Nodes: s.Env.Nodes(r.Context())}
+	s.render(w, r, http.StatusOK, "environment", v)
+}
+
+// browserOrigin: Adresse dieser Node, wie der Browser sie gerade aufruft.
+func browserOrigin(r *http.Request) string {
+	if r.TLS != nil {
+		return "https://" + r.Host
+	}
+	return "http://" + r.Host
+}
+
+// formOrigin: Ursprung einer Node-Adresse fuer form-action ("" = ungueltig).
+func formOrigin(raw string) string {
+	p, err := url.Parse(raw)
+	if err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" || strings.ContainsAny(p.Host, " ;,'\"\r\n") {
+		return ""
+	}
+	return p.Scheme + "://" + p.Host
+}
+
+// environmentOpen holt bei der anderen Node ein Ticket und liefert die Seite, die es dorthin schickt; ohne Ticket
+// (Benutzer-Abgleich aus, Benutzer dort unbekannt oder gesperrt, Node ausgesetzt, aeltere Version) geht es zur
+// Anmeldeseite der anderen Node.
+func (s *Server) environmentOpen(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	n := s.Env.Member(ctx, r.PathValue("id"))
+	origin := ""
+	if n != nil {
+		origin = formOrigin(n.URL)
+	}
+	if origin == "" {
+		s.notFound(w, r)
+		return
+	}
+	d := envOpenData{Name: n.Name, URL: origin}
+	result := "login page"
+	if u := currentUser(r); u != nil && u.UID != "" && n.Login {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		tok, err := s.Env.RequestTicket(cctx, n.ID, environment.TicketRequest{UID: u.UID, Role: s.sessionRole(r), Back: browserOrigin(r) + "/environment"})
+		cancel()
+		if err == nil {
+			d.Ticket, result = tok, "ticket"
+		} else {
+			result += ": " + err.Error()
+			s.log.Info("environment ticket not issued", "node", n.Name, "err", err)
+		}
+	}
+	s.audit(r, "environment.open", n.Name, result)
+	// das Formular geht an die andere Node: nur fuer diese Antwort dorthin erlauben
+	h := w.Header()
+	h.Set("Content-Security-Policy", strings.Replace(h.Get("Content-Security-Policy"), "form-action 'self'", "form-action 'self' "+origin, 1))
+	h.Set("Referrer-Policy", "no-referrer")
+	v := s.view(r, "environment.title")
+	v.Data = d
+	s.render(w, r, http.StatusOK, "environment_open", v)
+}
+
+// environmentEnter loest ein Ticket ein (Browser kommt von der anderen Node) und legt eine Sitzung mit begrenzter
+// Rolle an. Ungueltig, abgelaufen, schon benutzt, Benutzer inzwischen gesperrt oder geloescht: Anmeldeseite mit Hinweis.
+func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ip := s.clientIP(r)
+	deny := func(actor, why string) {
+		s.log.Warn("environment ticket rejected", "reason", why, "ip", ip)
+		s.auditEntry(ctx, store.AuditEntry{Actor: actor, Action: "login.environment_failed", Details: why, IP: ip})
+		http.Redirect(w, r, "/login?env=1", http.StatusSeeOther)
+	}
+	t, ok := s.Env.Redeem(r.PostFormValue("ticket"))
+	if !ok {
+		deny("-", "invalid, used or expired ticket")
+		return
+	}
+	u, err := s.Store.UserByUID(ctx, t.UID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if u == nil || u.Disabled {
+		deny("-", "user unknown or locked (from "+t.FromName+")")
+		return
+	}
+	role := environment.MinRole(t.Role, s.Store.EffectiveRole(ctx, u))
+	id, err := s.newSession(w, r, u.ID, false) // zweiter Faktor ist auf der oeffnenden Node erledigt
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.Env.SaveSession(ctx, id, environment.Origin{MaxRole: role, FromNode: t.FromNode, FromName: t.FromName, Back: t.Back}); err != nil {
+		_ = s.Store.DeleteSession(ctx, id) // ohne Vermerk keine Sitzung (sonst ohne Begrenzung der Rolle)
+		s.clearCookie(w, r, sessionCookie)
+		s.fail(w, r, err)
+		return
+	}
+	if s.I18n.Has(u.Lang) {
+		s.setCookie(w, r, langCookie, u.Lang, 365*24*3600)
+	}
+	_ = s.Store.TouchUserLogin(ctx, u.ID)
+	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.environment", Target: t.FromName, Details: "role " + role, IP: ip})
+	s.log.Info("login via environment", "user", u.Username, "from", t.FromName, "role", role, "ip", ip)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// sessionRole: wirksame Rolle des angemeldeten Benutzers in dieser Sitzung (eigene Rolle samt Gruppen, ueber
+// Environment zusaetzlich begrenzt; bei einem Lesefehler „nur lesen“).
+func (s *Server) sessionRole(r *http.Request) string {
+	u := currentUser(r)
+	if u == nil {
+		return store.RoleRead
+	}
+	role := s.Store.EffectiveRole(r.Context(), u)
+	if s.Env != nil {
+		o, err := s.Env.SessionOrigin(r.Context(), sessionID(r))
+		if err != nil {
+			return store.RoleRead
+		}
+		if o != nil {
+			role = environment.MinRole(role, o.MaxRole)
+		}
+	}
+	return role
+}
+
+// envDenied: aendernde Anfrage in einer Sitzung, die ueber Environment mit „nur lesen“ entstanden ist. Abmelden und
+// das Oeffnen weiterer Nodes bleiben erlaubt (die Rolle geht begrenzt mit).
+func (s *Server) envDenied(r *http.Request) bool {
+	if s.Env == nil {
+		return false
+	}
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+	default:
+		return false
+	}
+	if r.URL.Path == "/logout" || strings.HasPrefix(r.URL.Path, "/environment/open/") {
+		return false
+	}
+	id := sessionID(r)
+	if id == "" {
+		return false
+	}
+	o, err := s.Env.SessionOrigin(r.Context(), id)
+	if err != nil {
+		return true
+	}
+	return o != nil && !store.IsAdmin(o.MaxRole)
+}

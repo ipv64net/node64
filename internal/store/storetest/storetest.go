@@ -15,6 +15,7 @@ import (
 	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dyndns"
+	"github.com/ipv64net/node64/internal/environment"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/notify"
@@ -27,7 +28,7 @@ func Scopes(t testing.TB) map[string][]store.Migration {
 	t.Helper()
 	out := map[string][]store.Migration{}
 	for name, f := range map[string]func() ([]store.Migration, error){"core": store.CoreMigrations, "notify": notify.Migrations,
-		"certs": certs.Migrations, "peer": peer.Migrations} {
+		"certs": certs.Migrations, "peer": peer.Migrations, environment.Name: environment.Migrations} {
 		ms, err := f()
 		if err != nil {
 			t.Fatal(err)

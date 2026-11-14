@@ -26,6 +26,7 @@ import (
 	"github.com/ipv64net/node64/internal/certsui"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/environment"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/ipv64api"
@@ -62,6 +63,7 @@ type Deps struct {
 	Box        *secrets.Box         // Verschluesselung von Geheimnissen (z. B. OIDC-Client-Secret)
 	Updater    *selfupdate.Updater  // Selbst-Update (nil = nicht verfuegbar)
 	Users      *usercluster.Cluster // Benutzer & Anmeldung im Cluster (nil = ohne; Wahl bei gleichnamigen Benutzern)
+	Env        *environment.Service // Environment: Cluster-Nodes oeffnen mit Anmelde-Ticket (nil = ohne; braucht Peer)
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
@@ -213,6 +215,7 @@ func (s *Server) routes() {
 	s.apiAdminRoutes()
 	s.syncRoutes()
 	s.peerRoutes()
+	s.environmentRoutes()
 	s.portRoutes()
 	s.settingsPageRoutes() // Einstellungen › Ports und › Daten & Sicherung
 	s.certRoutes()
