@@ -1,6 +1,7 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Entwurf, noch nichts umgesetzt; wartet auf Dennis' Entscheidungen (unten).** Anlass: Das
+Stand 2026-11-14, **Entwurf, noch nichts umgesetzt. Entschieden: Community-Code übernehmen und umbauen; weitere
+Entscheidungen offen (unten).** Anlass: Das
 Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, 2 Commits auf Basis 1.5.9). Vorbild ist der IP-Teil von Netbox. Räume, Racks und
 Geräteinventar gehören nicht dazu. IPAM64 soll nahtlos mit DNS64 (Filter), dem lokalen DNS und dem DHCP-Server von DNS64
@@ -123,7 +124,7 @@ Urheber in den Commits als `Co-Authored-By` und im Modul-Changelog nennen. Lizen
 
 ## Offene Entscheidungen für Dennis
 
-1. **Übernehmen und umbauen** (Empfehlung) oder neu bauen?
+1. ~~Übernehmen und umbauen oder neu bauen?~~ **Entschieden (Dennis, 2026-11-14): übernehmen und umbauen.**
 2. **Menü:** eigenes Modul nach DNS64 (Vorschau) oder Unterpunkt von DNS64 neben „Lokaler DNS“ und „DHCP“?
 3. **Ausnahmen im DHCP-Adressbereich** in DNS64 einbauen (nötig für feste Adressen im Pool)?
 4. **Aktiver Scan** (UDP-Sweep) ja, oder nur passiv über Nachbartabelle, Leases und Abfrage-Log?
