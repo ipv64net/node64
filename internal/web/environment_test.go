@@ -131,7 +131,10 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 		strings.Contains(body, "nur lesen") {
 		t.Fatal("banner on B missing")
 	}
-	// Administrator: Aenderungen erlaubt
+	// Administrator: Aenderungen und Admin-Bereich erlaubt
+	if resp, _ := b.app.get(t, userAdminPath); resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin page in admin session: %d", resp.StatusCode)
+	}
 	_, page = b.app.get(t, "/settings")
 	if resp, _ := b.app.post(t, "/settings/node", url.Values{"_csrf": {csrfOf(t, page)}, "node_name": {"Node B"}}); resp.StatusCode == http.StatusForbidden {
 		t.Fatal("admin session denied")
@@ -179,6 +182,10 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 	}
 	if got := b.app.store.SettingOr(ctx, SettingNodeName, ""); got == "Boese" {
 		t.Fatal("setting changed")
+	}
+	// auch Admin-Bereiche beim Lesen gesperrt (Rechtepruefung sieht die begrenzte Rolle)
+	if resp, _ := b.app.get(t, userAdminPath); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("admin page in read-only session: %d", resp.StatusCode)
 	}
 	// Abmelden geht
 	_, body = b.app.get(t, "/settings")

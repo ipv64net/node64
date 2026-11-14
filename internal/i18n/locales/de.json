@@ -3644,8 +3644,7 @@
     "opened_from": "Geöffnet über Environment von {name}",
     "read_only_badge": "nur lesen",
     "back": "Zurück zu {name}",
-    "login_hint": "Über Environment ist hier keine Anmeldung mit deinem Benutzer möglich (Benutzer unbekannt oder gesperrt, Abgleich aus oder Ticket abgelaufen). Bitte melde dich an.",
-    "read_only": "Diese Sitzung wurde über Environment mit „Nur lesen“ geöffnet: Änderungen sind hier nicht möglich."
+    "login_hint": "Über Environment ist hier keine Anmeldung mit deinem Benutzer möglich (Benutzer unbekannt oder gesperrt, Abgleich aus oder Ticket abgelaufen). Bitte melde dich an."
   },
   "link": {
     "key_title": "Mit einem Klick verknüpfen",

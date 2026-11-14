@@ -137,9 +137,9 @@ E1 hängt an der Benutzerverwaltung B1 (Rollen); ohne B1 ginge E1 auch, alle Ben
 **Stand E1 (gebaut 2026-11-14):** Paket `internal/environment` (Tickets im Speicher, Provider `environment/login`
 mit Modul-Vorgabe an über `peer.ModuleInfo.Default`, Tabelle `env_sessions` im eigenen Scope `environment`),
 Seite und Handler in `internal/web/environment.go`. Die Rolle einer über Environment entstandenen Sitzung steht in
-`env_sessions.max_role`; `Server.sessionRole` liefert die wirksame Rolle (Rolle samt Gruppen, begrenzt durch die
-Sitzung). Bis die zentrale Rechteprüfung aus B1 da ist, sperrt `auth` in solchen Sitzungen mit „Nur lesen“ alle
-ändernden Anfragen (außer Abmelden und weiteres Öffnen); B1 soll `sessionRole` statt `EffectiveRole` verwenden.
+`env_sessions.max_role`; die Sitzungs-Middleware begrenzt damit die Rolle im Kontext (`envCap`), sodass die zentrale
+Rechteprüfung der Benutzerverwaltung (`roles.go`) nur die begrenzte Rolle sieht (auch Admin-Bereiche beim Lesen).
+
 E2 ist unabhängig von B1/B2.
 
 **Risiken:** Ein Zugangsschlüssel ist so viel wert wie eine Anmeldung als dieser Benutzer → nur einmal angezeigt,

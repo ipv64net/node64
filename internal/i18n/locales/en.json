@@ -3644,8 +3644,7 @@
     "opened_from": "Opened via Environment from {name}",
     "read_only_badge": "read only",
     "back": "Back to {name}",
-    "login_hint": "Signing in with your user via Environment is not possible here (user unknown or locked, sync off or ticket expired). Please sign in.",
-    "read_only": "This session was opened via Environment as \"read only\": changes are not possible here."
+    "login_hint": "Signing in with your user via Environment is not possible here (user unknown or locked, sync off or ticket expired). Please sign in."
   },
   "link": {
     "key_title": "Link with one click",

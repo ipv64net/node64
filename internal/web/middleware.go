@@ -193,7 +193,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, ctxPending, sess)
 			} else {
 				ctx = context.WithValue(ctx, ctxSession, sess)
-				ctx = s.withUser(ctx, u)
+				ctx = s.envCap(s.withUser(ctx, u), sess.ID) // ueber Environment geoeffnet: Rolle begrenzt (environment.go)
 				if time.Since(sess.LastSeenAt) > 5*time.Minute {
 					_ = s.Store.TouchSession(ctx, sess.ID, time.Now().Add(sessionIdle))
 				}
@@ -293,15 +293,6 @@ func (s *Server) auth(h http.HandlerFunc) http.Handler {
 		}
 		if (!readOnlyAllowed(r) || adminPath(r.URL.Path)) && !s.isAdmin(r) {
 			s.forbidRole(w, r)
-			return
-		}
-		if s.envDenied(r) { // ueber Environment mit „nur lesen“ geoeffnet (environment.go)
-			if strings.HasPrefix(r.URL.Path, "/api/") {
-				w.Header().Set("Content-Type", "application/json")
-				http.Error(w, `{"error":"read-only session"}`, http.StatusForbidden)
-				return
-			}
-			s.errorPage(w, r, http.StatusForbidden, "environment.read_only")
 			return
 		}
 		h(w, r)

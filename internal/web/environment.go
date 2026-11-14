@@ -81,7 +81,7 @@ func (s *Server) environmentOpen(w http.ResponseWriter, r *http.Request) {
 	result := "login page"
 	if u := currentUser(r); u != nil && u.UID != "" && n.Login {
 		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		tok, err := s.Env.RequestTicket(cctx, n.ID, environment.TicketRequest{UID: u.UID, Role: s.sessionRole(r), Back: browserOrigin(r) + "/environment"})
+		tok, err := s.Env.RequestTicket(cctx, n.ID, environment.TicketRequest{UID: u.UID, Role: s.role(r), Back: browserOrigin(r) + "/environment"})
 		cancel()
 		if err == nil {
 			d.Ticket, result = tok, "ticket"
@@ -145,47 +145,19 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// sessionRole: wirksame Rolle des angemeldeten Benutzers in dieser Sitzung (eigene Rolle samt Gruppen, ueber
-// Environment zusaetzlich begrenzt; bei einem Lesefehler „nur lesen“).
-func (s *Server) sessionRole(r *http.Request) string {
-	u := currentUser(r)
-	if u == nil {
-		return store.RoleRead
-	}
-	role := s.Store.EffectiveRole(r.Context(), u)
-	if s.Env != nil {
-		o, err := s.Env.SessionOrigin(r.Context(), sessionID(r))
-		if err != nil {
-			return store.RoleRead
-		}
-		if o != nil {
-			role = environment.MinRole(role, o.MaxRole)
-		}
-	}
-	return role
-}
-
-// envDenied: aendernde Anfrage in einer Sitzung, die ueber Environment mit „nur lesen“ entstanden ist. Abmelden und
-// das Oeffnen weiterer Nodes bleiben erlaubt (die Rolle geht begrenzt mit).
-func (s *Server) envDenied(r *http.Request) bool {
+// envCap begrenzt die Rolle einer Sitzung, die ueber Environment entstanden ist (env_sessions.max_role); die
+// Rechtepruefung (roles.go) sieht so nur die begrenzte Rolle. Bei einem Lesefehler „nur lesen“.
+func (s *Server) envCap(ctx context.Context, sessionID string) context.Context {
 	if s.Env == nil {
-		return false
+		return ctx
 	}
-	switch r.Method {
-	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-	default:
-		return false
-	}
-	if r.URL.Path == "/logout" || strings.HasPrefix(r.URL.Path, "/environment/open/") {
-		return false
-	}
-	id := sessionID(r)
-	if id == "" {
-		return false
-	}
-	o, err := s.Env.SessionOrigin(r.Context(), id)
+	o, err := s.Env.SessionOrigin(ctx, sessionID)
 	if err != nil {
-		return true
+		return context.WithValue(ctx, ctxRole, store.RoleRead)
 	}
-	return o != nil && !store.IsAdmin(o.MaxRole)
+	if o == nil {
+		return ctx
+	}
+	role, _ := ctx.Value(ctxRole).(string)
+	return context.WithValue(ctx, ctxRole, environment.MinRole(role, o.MaxRole))
 }
