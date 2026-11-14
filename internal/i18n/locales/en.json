@@ -109,7 +109,8 @@
     "settings_general": "General",
     "settings_ports": "Ports",
     "settings_data": "Data & backup",
-    "settings_modules": "Modules"
+    "settings_modules": "Modules",
+    "useradmin": "User management"
   },
   "common": {
     "copy": "Copy",
@@ -307,7 +308,8 @@
     "logged_out": "You are signed out.",
     "totp_title": "Second factor",
     "totp_hint": "Enter the code from your authenticator app or a recovery code.",
-    "totp_failed": "The code is wrong or expired."
+    "totp_failed": "The code is wrong or expired.",
+    "disabled": "This user is disabled. Please contact an administrator."
   },
   "dashboard": {
     "customize": "Customize",
@@ -2135,7 +2137,19 @@
       "monitor64_host_cluster": "Monitor64: host responsibility changed",
       "monitor64_key_rotate": "Monitor64: cluster key rotated",
       "monitor64_key_confirm": "Monitor64: SSH host switch confirmed",
-      "monitor64_key_retire": "Monitor64: old keys discarded"
+      "monitor64_key_retire": "Monitor64: old keys discarded",
+      "user_create": "User created",
+      "user_update": "User changed",
+      "user_disable": "User disabled",
+      "user_enable": "User enabled",
+      "user_role": "User role changed",
+      "user_password": "User password set",
+      "user_2fa_reset": "User 2FA reset",
+      "user_sessions_end": "User sessions ended",
+      "group_create": "Group created",
+      "group_update": "Group changed",
+      "group_delete": "Group deleted",
+      "auth_2fa_required": "2FA requirement changed"
     }
   },
   "logs": {
@@ -2156,7 +2170,9 @@
     "username_invalid": "The username may only contain letters, digits, dot, dash and underscore (3 to 64 characters).",
     "timezone_invalid": "Unknown time zone.",
     "too_large": "The request is too large.",
-    "setup_done": "Setup is already complete."
+    "setup_done": "Setup is already complete.",
+    "read_only": "Your user has the role “Read only” and cannot change anything here.",
+    "admin_only": "This page is for administrators only."
   },
   "module": {
     "dns64": "DNS64 (local DNS with blocklists)",
@@ -7357,5 +7373,68 @@
         "crc_errors": "Interface CRC errors"
       }
     }
+  },
+  "useradmin": {
+    "title": "User management",
+    "intro": "Several people manage this node: local users, groups with a role and the sign-in methods. Applies to Node64 only, not to ipv64.net.",
+    "tab_users": "Users",
+    "tab_groups": "Groups",
+    "tab_login": "Sign-in",
+    "role": "Role",
+    "role_admin": "Administrator",
+    "role_read": "Read only",
+    "role_own": "Own role",
+    "source": "Source",
+    "source_local": "Local",
+    "groups": "Groups",
+    "ext_group": "assigned via AD/LDAP or SSO",
+    "email": "Email",
+    "active": "active",
+    "disabled": "disabled",
+    "edit": "Edit",
+    "disable_label": "Disabled (no sign-in, sessions and API keys stop working)",
+    "new_user": "Create user",
+    "create": "Create",
+    "created": "User {name} created.",
+    "name_taken": "Or the name is already taken.",
+    "otp_title": "One-time password for {name}",
+    "otp_hint": "Only visible now. Pass it on; on the first sign-in the person sets their own password.",
+    "must_change_label": "Set password on first sign-in (generate a one-time password)",
+    "must_change_new_hint": "Without this tick you set the password yourself.",
+    "must_change_badge": "Password pending",
+    "must_change_hint": "Must set an own password on the next sign-in.",
+    "must_change_title": "Set a new password",
+    "must_change_intro": "Hello {name}, you signed in with a one-time password. Please set your own password now.",
+    "must_change_same": "Please choose a password other than the one-time password.",
+    "password_set_label": "Set password",
+    "password_set_btn": "Set",
+    "password_set": "Password for {name} set, their sessions have ended.",
+    "not_local": "The password is managed in the directory or by the SSO provider.",
+    "twofa_reset": "Reset 2FA",
+    "twofa_reset_confirm": "Turn off app 2FA of {name}? Their sessions end.",
+    "twofa_reset_done": "2FA of {name} reset.",
+    "sessions_end": "End sessions",
+    "sessions_ended": "Sessions of {name} ended.",
+    "last_admin": "The last active local administrator cannot be disabled, demoted or deleted.",
+    "self": "You cannot disable, demote or delete yourself.",
+    "groups_intro": "Groups bundle users and give them a role. The highest role of the own role and all groups applies. Map AD/LDAP and SSO groups via the mappings.",
+    "no_groups": "No groups yet.",
+    "new_group": "Create group",
+    "description": "Description",
+    "mappings": "Mappings",
+    "members": "Members",
+    "ldap_groups": "AD/LDAP groups (DN)",
+    "oidc_groups": "SSO groups (name in the claim)",
+    "lines_hint": "One entry per line.",
+    "group_name_taken": "The group name is missing or already taken.",
+    "group_deleted": "Group {name} deleted.",
+    "group_delete_confirm": "Delete group {name}? Its members lose the group's role.",
+    "twofa_required": "2FA required for everyone",
+    "twofa_required_label": "Every local and AD/LDAP user needs app 2FA or a passkey",
+    "twofa_required_hint": "Anyone without 2FA lands on the setup after signing in and cannot go anywhere else. SSO users handle 2FA at the provider. In a cluster the switch applies to all nodes.",
+    "twofa_required_flash": "2FA is required on this node. Please set it up now.",
+    "personal_hint": "Every user manages their own passkeys and linked SSO accounts under Settings ›",
+    "readonly": "Read only",
+    "readonly_hint": "Your user can view everything but only change their own account."
   }
 }

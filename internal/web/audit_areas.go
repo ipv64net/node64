@@ -34,7 +34,7 @@ func auditKeep(st *store.Store) time.Duration { return time.Duration(AuditDays(s
 var auditAreaOrder = []string{"login", "settings", "healthchecks", "monitor64", "dyndns", "cdn64", "dns64", "certs", "sync", "honeypot", "mcp"}
 
 var auditAreas = map[string][]string{
-	"login":        {"setup", "login", "logout", "twofa.", "passkey.", "sso.", "apikey.", "user.", "environment."},
+	"login":        {"setup", "login", "logout", "twofa.", "passkey.", "sso.", "apikey.", "user.", "group.", "auth.", "environment."},
 	"settings":     {"settings.", "logging.", "notify.", "channel.", "module.", "edge.settings", "edge.ui", "web.tls_cert", "backup.", "config.", "node."},
 	"healthchecks": {"check.", "proxmox."},
 	"monitor64":    {"monitor64."},

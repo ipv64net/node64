@@ -264,4 +264,17 @@
 		if (!b || document.querySelector('script[src*="/static/js/dns64.js"], script[src*="/static/js/cdn64.js"], script[src*="/static/js/certs.js"]')) { return; }
 		if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
 	});
+
+	// Rolle „Nur lesen“ (data-readonly am body): Formulare, die etwas aendern, ausgrauen - ausser dem eigenen Konto
+	// (wie selfService in roles.go). Sicher ist es auch ohne: der Server antwortet mit 403.
+	if (document.body.getAttribute("data-readonly") === "1") {
+		var own = /^\/(logout|login\/password|settings\/(user|password|2fa\/(enable|disable)|api-keys(\/.*)?|login\/(passkeys|identities)\/.*|login\/oidc\/link|mcp\/keys(\/.*)?))$/;
+		document.querySelectorAll("form").forEach(function (f) {
+			if ((f.getAttribute("method") || "get").toLowerCase() !== "post" || own.test(f.getAttribute("action") || location.pathname)) { return; }
+			f.classList.add("readonly-form");
+			f.querySelectorAll("button, input, select, textarea").forEach(function (el) {
+				if (el.type !== "hidden") { el.disabled = true; }
+			});
+		});
+	}
 })();

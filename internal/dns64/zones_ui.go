@@ -26,7 +26,7 @@ func (m *Module) zoneRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dns64/zones/{id}/zonefile", h(m.pageZoneFile))
 	mux.Handle("POST /dns64/zones/{id}/tsig", h(m.pageZoneTSIG))
 	mux.Handle("GET /api/dns64/zones/{id}/zonefile", h(m.pageZoneFile))
-	mux.Handle("GET /api/dns64/zones/{id}/tsig", h(m.apiZoneTSIG(false)))
+	mux.Handle("GET /api/dns64/zones/{id}/tsig", g.Enabled(g.AdminAuth(m.apiZoneTSIG(false)))) // Geheimnis: nur Administrator
 	mux.Handle("POST /api/dns64/zones/{id}/tsig", h(m.apiZoneTSIG(true)))
 }
 

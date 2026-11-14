@@ -108,16 +108,12 @@ func TestClusterUserChoice(t *testing.T) {
 		t.Fatal("audit entry of the choice missing")
 	}
 
-	// Seite Anmeldung: Liste ab zwei Benutzern, den eigenen nicht loeschen, einen anderen schon
-	_, body = a.get(t, "/settings/login")
-	if strings.Contains(body, `id="users"`) {
-		t.Fatal("no user list with a single user")
-	}
+	// Benutzerverwaltung (frueher Liste auf der Seite Anmeldung): den eigenen nicht loeschen, einen anderen schon
 	other, _ := a.store.CreateUser(ctx, "bob", hashB, "en", "UTC")
-	_, body = a.get(t, "/settings/login")
-	if !strings.Contains(body, `id="users"`) || !strings.Contains(body, "/settings/login/users/"+itoa(other.ID)+"/delete") ||
-		strings.Contains(body, "/settings/login/users/"+itoa(me.ID)+"/delete") {
-		t.Fatal("user list on the login page")
+	_, body = a.get(t, "/settings/users")
+	if !strings.Contains(body, `id="users"`) || !strings.Contains(body, "/settings/users/"+itoa(other.ID)+"/delete") ||
+		strings.Contains(body, "/settings/users/"+itoa(me.ID)+"/delete") {
+		t.Fatal("user list in the user management")
 	}
 	csrf := csrfOf(t, body)
 	a.post(t, "/settings/login/users/"+itoa(me.ID)+"/delete", url.Values{"_csrf": {csrf}})

@@ -3,6 +3,7 @@ package monitor64
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -489,7 +490,24 @@ func (m *Module) apiHost(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
+	if m.g.IsReadOnly(r) {
+		d.redactTokens()
+	}
 	writeJSON(w, http.StatusOK, d)
+}
+
+// redactTokens: Push-Token der Zugaenge weglassen (Rolle „Nur lesen“; wer ihn kennt, kann Verbindungen trennen).
+func (d *hostDetail) redactTokens() {
+	for i := range d.Accesses {
+		var c map[string]json.RawMessage
+		if json.Unmarshal(d.Accesses[i].Config, &c) != nil || c["token"] == nil {
+			continue
+		}
+		delete(c, "token")
+		if b, err := json.Marshal(c); err == nil {
+			d.Accesses[i].Config = b
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------

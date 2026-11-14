@@ -28,6 +28,8 @@ type View struct {
 	Path     string
 	Title    string
 	User     *store.User
+	ReadOnly bool // Rolle „Nur lesen“: Aendern-Knoepfe ausblenden/ausgrauen (der Server prueft ohnehin)
+	Admin    bool // Rolle Administrator (Benutzerverwaltung, Geheimnisse)
 	CSRF     string
 	Version  string
 	Nav      []NavItem
@@ -313,6 +315,8 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 		v.FontSize = c.Value
 	}
 	if v.User != nil {
+		v.Admin = s.isAdmin(r)
+		v.ReadOnly = !v.Admin
 		v.Nav = s.nav(r)
 		if s.Env != nil {
 			v.EnvFrom, _ = s.Env.SessionOrigin(r.Context(), sessionID(r))
@@ -368,6 +372,7 @@ func (s *Server) nav(r *http.Request) []NavItem {
 		NavItem{Key: "nav.settings_modules", Path: "/settings/modules", Icon: "bi-grid", Available: true, Enabled: true, Sub: true},
 		NavItem{Key: "nav.settings_ports", Path: "/settings/ports", Icon: "bi-ethernet", Available: true, Enabled: true, Sub: true},
 		NavItem{Key: "nav.settings_data", Path: "/settings/data", Icon: "bi-database", Available: true, Enabled: true, Sub: true},
+		NavItem{Key: "nav.useradmin", Path: userAdminPath, Icon: "bi-people", Available: true, Enabled: true, Sub: true, Hidden: !s.isAdmin(r)},
 		NavItem{Key: "nav.audit", Path: "/audit", Icon: "bi-journal-text", Available: true, Enabled: true},
 		NavItem{Key: "nav.logs", Path: "/logs", Icon: "bi-terminal", Available: true, Enabled: true},
 		NavItem{Key: "nav.api", Path: "/api/docs", Icon: "bi-code-slash", Available: true, Enabled: true},

@@ -461,6 +461,9 @@ func (m *Module) pageHost(w http.ResponseWriter, r *http.Request) {
 	}
 	d := m.basePage(r, "host", "/monitor64")
 	d.Host, d.Title = hd.Host, hd.Host.Name
+	if m.g.IsReadOnly(r) {
+		hd.redactTokens()
+	}
 	d.JS["host"] = hd
 	d.JS["targets"] = m.targets(r.Context())
 	if ch := m.clusterHostInfo(r.Context(), hd.Host); ch.Active || ch.Ref != nil {

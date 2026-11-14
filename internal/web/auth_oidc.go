@@ -186,7 +186,7 @@ func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request, linkUser int6
 		s.flash(w, r, "danger", v.T("sso.unreachable"))
 		back := "/login"
 		if linkUser > 0 {
-			back = "/settings/login"
+			back = "/settings#identities"
 		}
 		http.Redirect(w, r, back, http.StatusSeeOther)
 		return
@@ -246,7 +246,7 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	back := "/login"
 	if f.linkUser > 0 {
-		back = "/settings/login"
+		back = "/settings#identities"
 	}
 	if e := q.Get("error"); e != "" {
 		s.log.Info("oidc denied", "error", e, "desc", q.Get("error_description"))
@@ -346,6 +346,11 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		fail("/login", "sso.not_linked", "name", label)
 		return
 	}
+	if u.Disabled { // gesperrt: keine Anmeldung
+		s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.failed", Details: "sso: user disabled", IP: ip})
+		fail("/login", "login.disabled")
+		return
+	}
 	s.finishLogin(w, r, u, "sso "+o.ButtonLabel(), f.next)
 }
 
@@ -423,7 +428,7 @@ var (
 )
 
 func (s *Server) oidcLink(w http.ResponseWriter, r *http.Request) {
-	s.oidcStart(w, r, currentUser(r).ID, "/settings/login")
+	s.oidcStart(w, r, currentUser(r).ID, "/settings#identities")
 }
 
 func (s *Server) ssoUnlink(w http.ResponseWriter, r *http.Request) {
@@ -438,5 +443,5 @@ func (s *Server) ssoUnlink(w http.ResponseWriter, r *http.Request) {
 		s.audit(r, "sso.unlink", strconv.FormatInt(id, 10), "")
 		s.flash(w, r, "success", v.T("sso.unlinked"))
 	}
-	http.Redirect(w, r, "/settings/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings#identities", http.StatusSeeOther)
 }

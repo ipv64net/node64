@@ -182,6 +182,11 @@ func (s *Server) mcpServe(w http.ResponseWriter, r *http.Request) {
 		mcpErr(w, http.StatusUnauthorized, "invalid MCP key")
 		return
 	}
+	if u.Disabled { // gesperrter Benutzer: seine Schluessel gelten nicht
+		s.log.Warn("mcp key of disabled user", "user", u.Username, "ip", ip)
+		mcpErr(w, http.StatusUnauthorized, "user disabled")
+		return
+	}
 	if !s.mcpLimit.allow("key:" + strconv.FormatInt(key.ID, 10)) {
 		w.Header().Set("Retry-After", "5")
 		mcpErr(w, http.StatusTooManyRequests, fmt.Sprintf("rate limit: %d requests per minute per MCP key", mcpRate))
@@ -234,14 +239,14 @@ func (b mcpBackend) Get(ctx context.Context, id mcp.Identity, path string, q url
 		return 0, nil, errors.New("only /api/ paths")
 	}
 	u, err := s.Store.UserByID(ctx, id.UserID)
-	if err != nil || u == nil {
+	if err != nil || u == nil || u.Disabled {
 		return 0, nil, errors.New("key owner not found")
 	}
 	target := path
 	if len(q) > 0 {
 		target += "?" + q.Encode()
 	}
-	ctx = context.WithValue(ctx, ctxUser, u)
+	ctx = s.withUser(ctx, u)
 	ctx = context.WithValue(ctx, ctxMCPKey, id)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {

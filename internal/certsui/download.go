@@ -59,6 +59,17 @@ func (u *UI) bundleFromPath(w http.ResponseWriter, r *http.Request) (*certs.Bund
 	return nil, false
 }
 
+// keyGuard: Formate mit privatem Schluessel nur fuer Administratoren (Rolle „Nur lesen“ bekommt 403).
+func (u *UI) keyGuard(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if certs.HasKey(r.URL.Query().Get("f")) {
+			u.g.AdminAuth(h).ServeHTTP(w, r)
+			return
+		}
+		h(w, r)
+	}
+}
+
 func (u *UI) pageCertDownload(w http.ResponseWriter, r *http.Request) {
 	b, ok := u.bundleFromPath(w, r)
 	if !ok {

@@ -140,8 +140,13 @@ func (s *Server) session(next http.Handler) http.Handler {
 				key, err := s.Store.APIKeyByValue(ctx, strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
 				if err == nil && key != nil {
 					if u, err := s.Store.UserByID(ctx, key.UserID); err == nil && u != nil {
+						if u.Disabled { // gesperrter Benutzer: seine Keys gelten nicht (kein Fehlversuch, der Key ist echt)
+							s.log.Warn("api key of disabled user", "user", u.Username, "ip", s.clientIP(r), "path", r.URL.Path)
+							writeErr(w, http.StatusUnauthorized, "user disabled")
+							return
+						}
 						_ = s.Store.TouchAPIKey(ctx, key.ID)
-						ctx = context.WithValue(ctx, ctxUser, u)
+						ctx = s.withUser(ctx, u) // Rolle des Inhabers: Key eines Nur-lesen-Benutzers liest nur
 						ctx = context.WithValue(ctx, ctxAPIKey, key)
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
@@ -178,14 +183,17 @@ func (s *Server) session(next http.Handler) http.Handler {
 		}
 		if sess != nil {
 			u, err := s.Store.UserByID(ctx, sess.UserID)
-			if err != nil || u == nil {
+			if err != nil || u == nil || u.Disabled { // gesperrt: Sitzung gilt nicht mehr
+				if u != nil {
+					_ = s.Store.DeleteSession(ctx, sess.ID)
+				}
 				sess = nil
 			} else if ok, _ := s.Store.SessionTOTPOK(ctx, sess.ID); !ok {
 				// Passwort stimmt, zweiter Faktor fehlt noch
 				ctx = context.WithValue(ctx, ctxPending, sess)
 			} else {
 				ctx = context.WithValue(ctx, ctxSession, sess)
-				ctx = context.WithValue(ctx, ctxUser, u)
+				ctx = s.withUser(ctx, u)
 				if time.Since(sess.LastSeenAt) > 5*time.Minute {
 					_ = s.Store.TouchSession(ctx, sess.ID, time.Now().Add(sessionIdle))
 				}
@@ -193,7 +201,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 		}
 		if sess == nil && ctx.Value(ctxPending) == nil {
 			if u := s.forwardUser(r); u != nil { // Benutzer vom vorgeschalteten Proxy (auth_forward.go)
-				ctx = context.WithValue(ctx, ctxUser, u)
+				ctx = s.withUser(ctx, u)
 			}
 		}
 		if sess == nil {
@@ -259,7 +267,8 @@ func (s *Server) session(next http.Handler) http.Handler {
 	})
 }
 
-// auth verlangt eine Sitzung; sonst Weiterleitung zu Login oder Setup.
+// auth verlangt eine Sitzung; sonst Weiterleitung zu Login oder Setup. Danach die Pflichten der Sitzung (gate) und
+// die Rolle: „Nur lesen“ darf nichts aendern ausser dem eigenen Konto (roles.go).
 func (s *Server) auth(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if currentUser(r) == nil {
@@ -277,6 +286,13 @@ func (s *Server) auth(h http.HandlerFunc) http.Handler {
 				return
 			}
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+			return
+		}
+		if !s.gate(w, r) {
+			return
+		}
+		if (!readOnlyAllowed(r) || adminPath(r.URL.Path)) && !s.isAdmin(r) {
+			s.forbidRole(w, r)
 			return
 		}
 		if s.envDenied(r) { // ueber Environment mit „nur lesen“ geoeffnet (environment.go)

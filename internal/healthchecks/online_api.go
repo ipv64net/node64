@@ -104,7 +104,7 @@ func (m *Module) onlineRoutes(mux *http.ServeMux, g module.Guards) {
 	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /healthchecks/online/new", page(m.onlineForm))
 	mux.Handle("POST /healthchecks/online/new", page(m.onlineSubmit))
-	mux.Handle("GET /healthchecks/online/{token}/edit", page(m.onlineForm))
+	mux.Handle("GET /healthchecks/online/{token}/edit", g.Enabled(g.AdminAuth(http.HandlerFunc(m.onlineForm)))) // zeigt Passwort und Kopfzeilen
 	mux.Handle("POST /healthchecks/online/{token}/edit", page(m.onlineSubmit))
 	mux.Handle("POST /healthchecks/online/{token}/{action}", page(m.onlineAction))
 }
@@ -294,6 +294,11 @@ func (m *Module) apiOnlineList(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []json.RawMessage{}
 	}
+	if m.g.IsReadOnly(r) { // Passwort und Kopfzeilen nur fuer Administratoren
+		for i := range list {
+			list[i] = redactCheckRaw(list[i])
+		}
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 
@@ -306,6 +311,9 @@ func (m *Module) apiOnlineGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
+	}
+	if m.g.IsReadOnly(r) {
+		raw = redactCheckRaw(raw)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(raw)

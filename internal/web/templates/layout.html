@@ -11,7 +11,7 @@
 	<link rel="stylesheet" href="/static/css/{{.Design.CSS}}?v={{.Version}}">
 	<link rel="stylesheet" href="/static/css/node64.css?v={{.Version}}">
 </head>
-<body>
+<body{{if .ReadOnly}} data-readonly="1"{{end}}>
 {{if .User}}{{if eq .Design.Frame "classic"}}{{template "frame_classic" .}}{{else}}{{template "frame_sidebar" .}}{{end}}
 {{else}}
 <main class="auth-wrap">

@@ -9769,6 +9769,181 @@
             "description": "Verbliebene verwaiste Hosts"
           }
         }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "uid": {
+            "type": "string",
+            "description": "Kennung im Cluster"
+          },
+          "username": {
+            "type": "string"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "totp": {
+            "type": "boolean",
+            "description": "2FA eingerichtet"
+          },
+          "self": {
+            "type": "boolean",
+            "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "read"
+            ],
+            "description": "wirksame Rolle (höchste aus eigener Rolle und Gruppen)"
+          },
+          "own_role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "read"
+            ],
+            "description": "eigene Rolle"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "ldap",
+              "oidc"
+            ],
+            "description": "Herkunft"
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "gesperrt: keine Anmeldung, Sitzungen und API-Keys gelten nicht"
+          },
+          "email": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "von Hand zugeordnete Gruppen (uid)"
+          },
+          "ext_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "über AD/LDAP bzw. SSO ermittelte Gruppen (uid)"
+          },
+          "must_change": {
+            "type": "boolean",
+            "description": "muss beim nächsten Anmelden ein eigenes Passwort setzen"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_login_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserGroup": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "read"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "ldap_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "zugeordnete AD/LDAP-Gruppen (DN)"
+          },
+          "oidc_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "zugeordnete Gruppen aus dem SSO-Claim"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Benutzernamen (von Hand)"
+          },
+          "ext_members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Benutzernamen (über AD/LDAP bzw. SSO)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserGroupInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "read"
+            ],
+            "default": "read"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ldap_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "oidc_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     }
   },
@@ -16082,7 +16257,7 @@
     "/users": {
       "get": {
         "tags": [
-          "Node"
+          "Benutzerverwaltung"
         ],
         "summary": "Benutzer dieser Node (ohne Passwort-Hash und Geheimnisse)",
         "responses": {
@@ -16093,45 +16268,117 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "integer"
-                      },
-                      "uid": {
-                        "type": "string",
-                        "description": "Kennung im Cluster"
-                      },
-                      "username": {
-                        "type": "string"
-                      },
-                      "lang": {
-                        "type": "string"
-                      },
-                      "timezone": {
-                        "type": "string"
-                      },
-                      "totp": {
-                        "type": "boolean",
-                        "description": "2FA eingerichtet"
-                      },
-                      "self": {
-                        "type": "boolean",
-                        "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
-                      },
-                      "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "last_login_at": {
-                        "type": "string",
-                        "format": "date-time"
-                      }
-                    }
+                    "$ref": "#/components/schemas/User"
                   }
                 }
               }
             }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Lokalen Benutzer anlegen",
+        "description": "Mit `must_change` ohne `password` erzeugt die Node ein Einmal-Passwort und gibt es einmal als `password` zurück; beim ersten Anmelden setzt der Benutzer ein eigenes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "3–64 Zeichen: Buchstaben, Ziffern, Punkt, Minus, Unterstrich"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "mindestens 10 Zeichen"
+                  },
+                  "must_change": {
+                    "type": "boolean"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "read"
+                    ],
+                    "default": "read"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "uid der Gruppen"
+                  }
+                },
+                "required": [
+                  "username"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "password": {
+                          "type": "string",
+                          "description": "Einmal-Passwort (nur mit must_change ohne password)"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Name ungültig oder vergeben, Passwort zu kurz, Rolle ungültig"
           }
         }
       }
@@ -16139,7 +16386,7 @@
     "/users/me": {
       "get": {
         "tags": [
-          "Node"
+          "Benutzerverwaltung"
         ],
         "summary": "Angemeldeter Benutzer bzw. Inhaber des API-Keys",
         "responses": {
@@ -16148,41 +16395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "integer"
-                    },
-                    "uid": {
-                      "type": "string",
-                      "description": "Kennung im Cluster"
-                    },
-                    "username": {
-                      "type": "string"
-                    },
-                    "lang": {
-                      "type": "string"
-                    },
-                    "timezone": {
-                      "type": "string"
-                    },
-                    "totp": {
-                      "type": "boolean",
-                      "description": "2FA eingerichtet"
-                    },
-                    "self": {
-                      "type": "boolean",
-                      "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
-                    },
-                    "created_at": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "last_login_at": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  }
+                  "$ref": "#/components/schemas/User"
                 }
               }
             }
@@ -16191,7 +16404,7 @@
       },
       "put": {
         "tags": [
-          "Node"
+          "Benutzerverwaltung"
         ],
         "summary": "Eigene Sprache und Zeitzone",
         "description": "Fehlende Felder bleiben. Die Zeitzone gilt auch für die Node.",
@@ -16224,41 +16437,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "integer"
-                    },
-                    "uid": {
-                      "type": "string",
-                      "description": "Kennung im Cluster"
-                    },
-                    "username": {
-                      "type": "string"
-                    },
-                    "lang": {
-                      "type": "string"
-                    },
-                    "timezone": {
-                      "type": "string"
-                    },
-                    "totp": {
-                      "type": "boolean",
-                      "description": "2FA eingerichtet"
-                    },
-                    "self": {
-                      "type": "boolean",
-                      "description": "der angemeldete Benutzer bzw. Inhaber des API-Keys"
-                    },
-                    "created_at": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "last_login_at": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  }
+                  "$ref": "#/components/schemas/User"
                 }
               }
             }
@@ -16287,35 +16466,173 @@
           }
         }
       ],
+      "get": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Ein Benutzer",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Rolle, Gruppen, E-Mail, Sperre ändern",
+        "description": "Fehlende Felder bleiben. Nie den letzten aktiven lokalen Administrator sperren oder herabstufen und nie sich selbst (409). Sperre und geänderte wirksame Rolle beenden die Sitzungen des Benutzers.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "read"
+                    ]
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "disabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "letzter lokaler Administrator bzw. eigener Benutzer"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Rolle ungültig"
+          }
+        }
+      },
       "delete": {
         "tags": [
-          "Node"
+          "Benutzerverwaltung"
         ],
         "summary": "Anderen Benutzer löschen",
-        "description": "Den eigenen nie (409). Mit eingeschaltetem Cluster-Bereich „Benutzer“ auch auf den anderen Nodes.",
+        "description": "Den eigenen nie und nie den letzten aktiven lokalen Administrator (409). Mit eingeschaltetem Cluster-Bereich „Benutzer“ auch auf den anderen Nodes.",
         "responses": {
           "204": {
             "description": "gelöscht"
           },
-          "404": {
-            "description": "unbekannt",
+          "403": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
               }
-            }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
           },
           "409": {
-            "description": "eigener Benutzer",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
               }
-            }
+            },
+            "description": "eigener Benutzer bzw. letzter lokaler Administrator"
           }
         }
       }
@@ -31743,6 +32060,531 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/users/{id}/password": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Passwort setzen (nur lokale Benutzer)",
+        "description": "Mit `must_change` ohne `password` erzeugt die Node ein Einmal-Passwort. Die Sitzungen des Benutzers enden.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "must_change": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "gesetzt"
+          },
+          "200": {
+            "description": "Einmal-Passwort erzeugt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "password": {
+                      "type": "string"
+                    },
+                    "must_change": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "AD/LDAP- bzw. SSO-Benutzer"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Passwort zu kurz"
+          }
+        }
+      }
+    },
+    "/users/{id}/2fa-reset": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "App-2FA eines Benutzers abschalten (Geheimnis und Wiederherstellungscodes); seine Sitzungen enden",
+        "responses": {
+          "204": {
+            "description": "zurückgesetzt"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          }
+        }
+      }
+    },
+    "/users/{id}/sessions-end": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Alle Sitzungen eines Benutzers beenden",
+        "responses": {
+          "204": {
+            "description": "beendet"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          }
+        }
+      }
+    },
+    "/groups": {
+      "get": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Gruppen mit Mitgliedern",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserGroup"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Gruppe anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserGroupInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserGroup"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Name fehlt oder vergeben, Rolle ungültig"
+          }
+        }
+      }
+    },
+    "/groups/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "uid der Gruppe"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Eine Gruppe",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserGroup"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Gruppe ändern (fehlende Felder bleiben)",
+        "description": "Nimmt die Änderung dem letzten aktiven lokalen Administrator bzw. dir selbst die Rolle Administrator, antwortet die Node mit 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserGroupInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserGroup"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "letzter lokaler Administrator"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Name vergeben, Rolle ungültig"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Gruppe löschen",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "unbekannt"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "letzter lokaler Administrator"
+          }
+        }
+      }
+    },
+    "/auth/2fa-required": {
+      "get": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "Schalter „2FA für alle Pflicht“",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "required": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benutzerverwaltung"
+        ],
+        "summary": "2FA-Pflicht schalten",
+        "description": "Lokale und AD/LDAP-Benutzer ohne App-2FA und ohne Passkey kommen nach der Anmeldung nur noch zur Einrichtung. SSO-Benutzer ausgenommen. Gilt im Cluster auf allen Nodes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "required"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "required": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "nur für Administratoren (`read-only user`)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "required fehlt"
           }
         }
       }

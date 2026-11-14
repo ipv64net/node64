@@ -10,7 +10,7 @@ import (
 func TestForwardAuth(t *testing.T) {
 	a := newTestApp(t)
 	loginAs(t, a, "admin", "sehr geheimes passwort")
-	_, body := a.get(t, "/settings/login")
+	_, body := a.get(t, "/settings/users")
 	csrf := csrfOf(t, body)
 	asProxy := func(user string) int {
 		req, _ := http.NewRequest("GET", a.srv.URL+"/settings", nil)

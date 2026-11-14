@@ -15,7 +15,7 @@ import (
 func (s *Server) certExportRoutes() {
 	s.mux.Handle("GET /api/certs/{id}/meta", s.auth(s.apiCertMeta))
 	s.mux.Handle("GET /api/certs/{id}/bundle", s.auth(s.apiCertBundle))
-	s.mux.Handle("POST /api/certs/{id}/p12", s.auth(s.apiCertP12))
+	s.mux.Handle("POST /api/certs/{id}/p12", s.admin(s.apiCertP12))
 }
 
 func (s *Server) certBundle(w http.ResponseWriter, r *http.Request) (*certs.Bundle, bool) {
@@ -49,6 +49,10 @@ func (s *Server) apiCertBundle(w http.ResponseWriter, r *http.Request) {
 	format := r.URL.Query().Get("format")
 	if format == "" {
 		format = certs.FormatZIP
+	}
+	if certs.HasKey(format) && !s.isAdmin(r) { // privater Schluessel nur fuer Administratoren
+		s.forbidRole(w, r)
+		return
 	}
 	sent, err := certsui.ServeFile(w, r, b, format)
 	if err != nil {

@@ -38,7 +38,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /healthchecks/online-test", page(m.uiOnlineTest))
 	mux.Handle("POST /healthchecks/bulk", page(m.pageBulk))
 	mux.Handle("GET /healthchecks/{token}", page(m.pageDetail))
-	mux.Handle("GET /healthchecks/{token}/edit", page(m.pageForm))
+	mux.Handle("GET /healthchecks/{token}/edit", g.Enabled(g.AdminAuth(http.HandlerFunc(m.pageForm)))) // Formular zeigt Passwort und Kopfzeilen
 	mux.Handle("POST /healthchecks/{token}/edit", page(m.pageFormSubmit))
 	mux.Handle("POST /healthchecks/{token}/action", page(m.pageAction))
 	m.maintenanceRoutes(mux, page)
@@ -553,6 +553,9 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.Unmarshal(c.Params, &d.Params)
+	if m.g.IsReadOnly(r) { // Kopfzeilen koennen Zugangsdaten enthalten
+		delete(d.Params, "headers")
+	}
 	if c.Parent != "" {
 		if p, _ := m.st.Check(ctx, c.Parent); p != nil {
 			d.ParentName = p.Name

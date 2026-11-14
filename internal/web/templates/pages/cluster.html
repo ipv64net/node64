@@ -91,7 +91,7 @@
 			<ul class="list-group mb-3">{{range .Versions}}
 				<li class="list-group-item d-flex align-items-center gap-2 flex-wrap">
 					<div>
-						<span class="fw-semibold">{{if .Own}}{{$.T "cluster.acme_this_node"}}{{else}}{{.Name}}{{end}}</span>{{if .TwoFA}} · <span class="badge text-bg-success">2FA</span>{{end}}{{if .Identities}} · {{$.T "cluster.users_sso" "count" .Identities}}{{end}}
+						<span class="fw-semibold">{{if .Own}}{{$.T "cluster.acme_this_node"}}{{else}}{{.Name}}{{end}}</span>{{if .TwoFA}} · <span class="badge text-bg-success">2FA</span>{{end}}{{if .Identities}} · {{$.T "cluster.users_sso" "count" .Identities}}{{end}}{{if eq .Role "read"}} · <span class="badge text-bg-secondary">{{$.T "useradmin.role_read"}}</span>{{end}}{{if .Disabled}} · <span class="badge text-bg-danger">{{$.T "useradmin.disabled"}}</span>{{end}}{{if and .Source (ne .Source "local")}} · <span class="badge text-bg-light">{{.Source}}</span>{{end}}
 						<div class="text-body-secondary">{{$.T "cluster.acme_created"}} {{if .CreatedAt.IsZero}}–{{else}}{{$.Time .CreatedAt}}{{end}} · <span class="font-monospace" title="{{.UID}}">{{slice .UID 0 12}}</span></div>
 					</div>
 					<form method="post" action="/cluster/users" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="uid" value="{{.UID}}"><button class="btn btn-sm btn-outline-primary" data-confirm="{{$.T "cluster.users_confirm"}}"><i class="bi bi-check2-circle"></i> {{$.T "cluster.users_use"}}</button></form>

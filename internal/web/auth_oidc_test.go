@@ -106,7 +106,7 @@ func TestOIDCLinkAndLogin(t *testing.T) {
 	box, _ := secrets.Load(filepath.Join(dir, "secret.key"))
 	a := newTestAppDeps(t, func(d *Deps) { d.Box = box })
 	loginAs(t, a, "admin", "sehr geheimes passwort")
-	_, body := a.get(t, "/settings/login")
+	_, body := a.get(t, "/settings/users")
 	csrf := csrfOf(t, body)
 	resp, _ := a.post(t, "/settings/login/oidc", url.Values{"_csrf": {csrf}, "issuer": {idp.srv.URL}, "client_id": {"node64"}, "client_secret": {"s3cret"}, "label": {"Authelia"}})
 	if resp.StatusCode != http.StatusSeeOther {
@@ -119,7 +119,7 @@ func TestOIDCLinkAndLogin(t *testing.T) {
 	resp, body = a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
 	cb := idp.authorize(t, handoffURL(t, resp, body), "alice")
 	resp, _ = a.get(t, cb)
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/login" {
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings#identities" {
 		t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	u, _ := a.store.UserByName(t.Context(), "admin")
@@ -172,7 +172,7 @@ func TestOIDCIssuerTrailingSlash(t *testing.T) {
 			box, _ := secrets.Load(filepath.Join(dir, "secret.key"))
 			a := newTestAppDeps(t, func(d *Deps) { d.Box = box })
 			loginAs(t, a, "admin", "sehr geheimes passwort")
-			_, body := a.get(t, "/settings/login")
+			_, body := a.get(t, "/settings/users")
 			csrf := csrfOf(t, body)
 			_, _ = a.post(t, "/settings/login/oidc", url.Values{"_csrf": {csrf}, "issuer": {idp.srv.URL + tc.input}, "client_id": {"node64"}, "client_secret": {"s3cret"}})
 			if got := a.store.SettingOr(t.Context(), setOIDCIssuer, ""); got != idp.srv.URL+tc.store {
@@ -181,7 +181,7 @@ func TestOIDCIssuerTrailingSlash(t *testing.T) {
 			resp, body := a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
 			cb := idp.authorize(t, handoffURL(t, resp, body), "alice")
 			resp, _ = a.get(t, cb)
-			if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/login" {
+			if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings#identities" {
 				t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 			}
 			u, _ := a.store.UserByName(t.Context(), "admin")

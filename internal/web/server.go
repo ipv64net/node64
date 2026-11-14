@@ -205,8 +205,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /login", s.loginForm)
 	s.mux.HandleFunc("POST /login", s.loginSubmit)
 	s.mux.HandleFunc("POST /logout", s.logout)
+	s.mux.Handle("GET /login/password", s.auth(s.mustChangeForm)) // Passwort beim ersten Anmelden setzen (roles.go)
+	s.mux.Handle("POST /login/password", s.auth(s.mustChangeSubmit))
 	s.authRoutes()
-	s.ldapRoutes() // AD/LDAP und SSO-Anlage ueber Gruppen (auth_ldap.go)
+	s.userAdminRoutes() // Einstellungen › Benutzerverwaltung (useradmin.go)
+	s.ldapRoutes()      // AD/LDAP und SSO-Anlage ueber Gruppen (auth_ldap.go)
 	s.backupRoutes()
 	s.apiRoutes()
 	s.apiLinkRoutes()
@@ -241,15 +244,20 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /logs/download", s.auth(s.logsDownload))
 
 	// Module registrieren ihre Pfade selbst; deaktiviert = 404
-	guards := module.Guards{
-		Auth: s.authHandler, Render: s.renderModule, T: s.tr, Flash: s.flash, Actor: s.actor, ClientIP: s.clientIP, Audit: s.audit, CSRF: csrfToken, Lang: s.lang, Timezone: s.location,
-		Translate: s.I18n.T,
-	}
+	guards := s.guards()
 	s.Modules.Routes(s.mux, http.HandlerFunc(s.notFound), guards)
 	if s.certsUI != nil { // Kern: immer da, unabhaengig von den Modulen
 		s.certsUI.Routes(s.mux, guards)
 	}
 	s.mux.HandleFunc("/", s.notFound)
+}
+
+// guards: Middleware und Hilfen fuer die Module (ohne Enabled, das setzt die Registry je Modul).
+func (s *Server) guards() module.Guards {
+	return module.Guards{
+		Auth: s.authHandler, Admin: s.adminHandler, ReadOnly: s.readOnly, Render: s.renderModule, T: s.tr, Flash: s.flash, Actor: s.actor, ClientIP: s.clientIP,
+		Audit: s.audit, CSRF: csrfToken, Lang: s.lang, Timezone: s.location, Translate: s.I18n.T,
+	}
 }
 
 // authHandler ist auth fuer beliebige Handler (Module).

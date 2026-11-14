@@ -211,7 +211,7 @@ func (s *Server) passkeyDelete(w http.ResponseWriter, r *http.Request) {
 		s.audit(r, "passkey.delete", strconv.FormatInt(id, 10), "")
 		s.flash(w, r, "success", v.T("sso.pk_deleted"))
 	}
-	http.Redirect(w, r, "/settings/login#passkeys", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings#passkeys", http.StatusSeeOther)
 }
 
 // ---------------------------------------------------------------- Anmeldung (Login-Seite)
@@ -260,6 +260,9 @@ func (s *Server) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		u, err := s.Store.UserByID(ctx, id)
 		if err != nil || u == nil {
 			return nil, errors.New("unknown user")
+		}
+		if u.Disabled { // gesperrt: keine Anmeldung
+			return nil, errors.New("user disabled")
 		}
 		found = u
 		return s.passkeyUserOf(r, u, rpID)

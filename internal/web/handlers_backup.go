@@ -37,12 +37,12 @@ const (
 )
 
 func (s *Server) backupRoutes() {
-	s.mux.Handle("GET /settings/backup", s.auth(s.backupDownload))
-	s.mux.Handle("POST /settings/backup", s.auth(s.backupArchiveDownload))
-	s.mux.Handle("POST /settings/restore", s.auth(s.restoreUpload))
-	s.mux.Handle("POST /settings/export", s.auth(s.exportConfig))
-	s.mux.Handle("POST /settings/import", s.auth(s.importConfig))
-	s.mux.Handle("POST /settings/reset", s.auth(s.resetNode))
+	s.mux.Handle("GET /settings/backup", s.admin(s.backupDownload))
+	s.mux.Handle("POST /settings/backup", s.admin(s.backupArchiveDownload))
+	s.mux.Handle("POST /settings/restore", s.admin(s.restoreUpload))
+	s.mux.Handle("POST /settings/export", s.admin(s.exportConfig))
+	s.mux.Handle("POST /settings/import", s.admin(s.importConfig))
+	s.mux.Handle("POST /settings/reset", s.admin(s.resetNode))
 }
 
 // bodyLimitFor erlaubt fuer Uploads groessere Bodys.

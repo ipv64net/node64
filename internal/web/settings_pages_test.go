@@ -225,7 +225,7 @@ func TestSettingsNav(t *testing.T) {
 	}
 	var subs []string
 	for _, n := range a.s.nav(httptest.NewRequest("GET", "/", nil)) {
-		if n.Sub && strings.HasPrefix(n.Path, "/settings") {
+		if n.Sub && !n.Hidden && strings.HasPrefix(n.Path, "/settings") {
 			subs = append(subs, n.Key)
 		}
 	}

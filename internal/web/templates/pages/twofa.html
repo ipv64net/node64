@@ -17,7 +17,8 @@
 		<p><i class="bi bi-shield-check text-success"></i> {{.T "twofa.active"}}</p>
 		<form method="post" action="/settings/2fa/disable" class="row g-2 align-items-end">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
-			<div class="col-sm-6"><label class="form-label" for="password">{{.T "settings.password_current"}}</label><input class="form-control" type="password" id="password" name="password" autocomplete="current-password" required></div>
+			{{if eq .User.Source "local"}}<div class="col-sm-6"><label class="form-label" for="password">{{.T "settings.password_current"}}</label><input class="form-control" type="password" id="password" name="password" autocomplete="current-password" required></div>
+			{{else}}<div class="col-sm-6"><label class="form-label" for="code">{{.T "login.totp"}}</label><input class="form-control font-monospace" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></div>{{end}}
 			<div class="col-sm-6"><button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "common.confirm"}}">{{.T "twofa.disable"}}</button></div>
 		</form>
 	</div>

@@ -77,7 +77,7 @@ func TestPasskeyRegisterAndLogin(t *testing.T) {
 	u := loginAs(t, a, "admin", "sehr geheimes passwort")
 	port := strings.TrimPrefix(a.srv.URL, "http://127.0.0.1:")
 	host, origin := "localhost:"+port, "http://localhost:"+port
-	_, body := a.get(t, "/settings/login")
+	_, body := a.get(t, "/settings/users")
 	csrf := csrfOf(t, body)
 	// unter einer IP-Adresse gibt es keine Passkeys
 	if c, _ := pkCall(t, a, "127.0.0.1:"+port, "/settings/login/passkeys/begin", csrf, nil); c != http.StatusUnprocessableEntity {

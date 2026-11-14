@@ -39,7 +39,7 @@ func (s *Server) apiLinkRoutes() {
 	s.mux.Handle("PUT /api/ipv64/key", s.auth(s.apiIPv64KeyPut))
 	s.mux.Handle("DELETE /api/ipv64/key", s.auth(s.apiIPv64KeyDelete))
 	s.mux.Handle("GET /api/group", s.auth(s.apiGroupGet))
-	s.mux.Handle("POST /api/group/code", s.auth(s.apiGroupCode))
+	s.mux.Handle("POST /api/group/code", s.admin(s.apiGroupCode))
 	s.mux.Handle("DELETE /api/group/code", s.auth(s.apiGroupCodeCancel))
 	s.mux.Handle("POST /api/group/join", s.auth(s.apiGroupJoin))
 	s.mux.Handle("POST /api/group/leave", s.auth(s.apiGroupLeave))
@@ -340,7 +340,7 @@ func (s *Server) apiGroupGet(w http.ResponseWriter, r *http.Request) {
 	_, fwd, fwdSelf := s.Peer.Forwarder(ctx)
 	out := map[string]any{"account_id": s.Peer.Account(), "linked": s.Peer.LinkedSelf(), "members": members, "forwarder": fwd, "forwarder_self": fwdSelf,
 		"sync_modules": s.Peer.SyncModules(ctx), "https_port": s.Cfg.HTTPSPort, "acme_accounts": acmeAPI(s.acmeChoices(ctx, list))}
-	if code, exp := s.Peer.PairingCode(); code != "" {
+	if code, exp := s.Peer.PairingCode(); code != "" && s.isAdmin(r) { // Kopplungscode nur fuer Administratoren
 		out["code"], out["code_expires"] = code, exp
 	}
 	out["user_conflicts"] = userConflictsAPI(s.userChoices(ctx, list))

@@ -109,7 +109,8 @@
     "settings_general": "Allgemein",
     "settings_ports": "Ports",
     "settings_data": "Daten & Sicherung",
-    "settings_modules": "Module"
+    "settings_modules": "Module",
+    "useradmin": "Benutzerverwaltung"
   },
   "common": {
     "copy": "Kopieren",
@@ -307,7 +308,8 @@
     "logged_out": "Du bist abgemeldet.",
     "totp_title": "Zweiter Faktor",
     "totp_hint": "Gib den Code aus deiner Authenticator-App ein oder einen Wiederherstellungscode.",
-    "totp_failed": "Der Code ist falsch oder abgelaufen."
+    "totp_failed": "Der Code ist falsch oder abgelaufen.",
+    "disabled": "Dieser Benutzer ist gesperrt. Bitte wende dich an einen Administrator."
   },
   "dashboard": {
     "customize": "Anpassen",
@@ -2135,7 +2137,19 @@
       "monitor64_host_cluster": "Monitor64: Zuständigkeit eines Hosts geändert",
       "monitor64_key_rotate": "Monitor64: Cluster-Schlüssel gewechselt",
       "monitor64_key_confirm": "Monitor64: Umstellung eines SSH-Hosts bestätigt",
-      "monitor64_key_retire": "Monitor64: alte Schlüssel verworfen"
+      "monitor64_key_retire": "Monitor64: alte Schlüssel verworfen",
+      "user_create": "Benutzer angelegt",
+      "user_update": "Benutzer geändert",
+      "user_disable": "Benutzer gesperrt",
+      "user_enable": "Benutzer entsperrt",
+      "user_role": "Rolle eines Benutzers geändert",
+      "user_password": "Passwort eines Benutzers gesetzt",
+      "user_2fa_reset": "2FA eines Benutzers zurückgesetzt",
+      "user_sessions_end": "Sitzungen eines Benutzers beendet",
+      "group_create": "Gruppe angelegt",
+      "group_update": "Gruppe geändert",
+      "group_delete": "Gruppe gelöscht",
+      "auth_2fa_required": "2FA-Pflicht geändert"
     }
   },
   "logs": {
@@ -2156,7 +2170,9 @@
     "username_invalid": "Der Benutzername darf nur Buchstaben, Ziffern, Punkt, Minus und Unterstrich enthalten (3 bis 64 Zeichen).",
     "timezone_invalid": "Unbekannte Zeitzone.",
     "too_large": "Die Anfrage ist zu groß.",
-    "setup_done": "Die Einrichtung ist bereits abgeschlossen."
+    "setup_done": "Die Einrichtung ist bereits abgeschlossen.",
+    "read_only": "Dein Benutzer hat die Rolle „Nur lesen“ und darf hier nichts ändern.",
+    "admin_only": "Diese Seite ist nur für Administratoren."
   },
   "module": {
     "dns64": "DNS64 (lokaler DNS mit Blocklisten)",
@@ -7357,5 +7373,68 @@
         "crc_errors": "CRC-Fehler der Verbindung"
       }
     }
+  },
+  "useradmin": {
+    "title": "Benutzerverwaltung",
+    "intro": "Mehrere Personen verwalten diese Node: lokale Benutzer, Gruppen mit Rolle und die Anmeldewege. Gilt nur für Node64, nicht für ipv64.net.",
+    "tab_users": "Benutzer",
+    "tab_groups": "Gruppen",
+    "tab_login": "Anmeldung",
+    "role": "Rolle",
+    "role_admin": "Administrator",
+    "role_read": "Nur lesen",
+    "role_own": "Eigene Rolle",
+    "source": "Herkunft",
+    "source_local": "Lokal",
+    "groups": "Gruppen",
+    "ext_group": "über AD/LDAP oder SSO zugeordnet",
+    "email": "E-Mail",
+    "active": "aktiv",
+    "disabled": "gesperrt",
+    "edit": "Bearbeiten",
+    "disable_label": "Gesperrt (keine Anmeldung, Sitzungen und API-Keys gelten nicht)",
+    "new_user": "Benutzer anlegen",
+    "create": "Anlegen",
+    "created": "Benutzer {name} angelegt.",
+    "name_taken": "Oder der Name ist schon vergeben.",
+    "otp_title": "Einmal-Passwort für {name}",
+    "otp_hint": "Nur jetzt sichtbar. Gib es der Person weiter; beim ersten Anmelden setzt sie ein eigenes Passwort.",
+    "must_change_label": "Passwort beim ersten Anmelden setzen (Einmal-Passwort erzeugen)",
+    "must_change_new_hint": "Ohne diesen Haken legst du das Passwort selbst fest.",
+    "must_change_badge": "Passwort ausstehend",
+    "must_change_hint": "Muss beim nächsten Anmelden ein eigenes Passwort setzen.",
+    "must_change_title": "Neues Passwort setzen",
+    "must_change_intro": "Hallo {name}, du hast dich mit einem Einmal-Passwort angemeldet. Bitte setze jetzt dein eigenes Passwort.",
+    "must_change_same": "Bitte ein anderes Passwort als das Einmal-Passwort wählen.",
+    "password_set_label": "Passwort setzen",
+    "password_set_btn": "Setzen",
+    "password_set": "Passwort für {name} gesetzt, seine Sitzungen sind beendet.",
+    "not_local": "Das Passwort wird im Verzeichnis bzw. beim SSO-Anbieter verwaltet.",
+    "twofa_reset": "2FA zurücksetzen",
+    "twofa_reset_confirm": "App-2FA von {name} abschalten? Die Sitzungen enden.",
+    "twofa_reset_done": "2FA von {name} zurückgesetzt.",
+    "sessions_end": "Sitzungen beenden",
+    "sessions_ended": "Sitzungen von {name} beendet.",
+    "last_admin": "Der letzte aktive lokale Administrator kann nicht gesperrt, herabgestuft oder gelöscht werden.",
+    "self": "Du kannst dich nicht selbst sperren, herabstufen oder löschen.",
+    "groups_intro": "Gruppen bündeln Benutzer und geben ihnen eine Rolle. Wirksam ist die höchste Rolle aus eigener Rolle und allen Gruppen. AD/LDAP- und SSO-Gruppen ordnest du über die Zuordnungen zu.",
+    "no_groups": "Noch keine Gruppen.",
+    "new_group": "Gruppe anlegen",
+    "description": "Beschreibung",
+    "mappings": "Zuordnungen",
+    "members": "Mitglieder",
+    "ldap_groups": "AD/LDAP-Gruppen (DN)",
+    "oidc_groups": "SSO-Gruppen (Name im Claim)",
+    "lines_hint": "Eine Angabe je Zeile.",
+    "group_name_taken": "Der Gruppenname fehlt oder ist schon vergeben.",
+    "group_deleted": "Gruppe {name} gelöscht.",
+    "group_delete_confirm": "Gruppe {name} löschen? Ihre Mitglieder verlieren die Rolle der Gruppe.",
+    "twofa_required": "2FA für alle Pflicht",
+    "twofa_required_label": "Jeder lokale und AD/LDAP-Benutzer braucht App-2FA oder einen Passkey",
+    "twofa_required_hint": "Wer noch keine 2FA hat, landet nach der Anmeldung auf der Einrichtung und kommt sonst nirgends hin. SSO-Benutzer erledigen 2FA beim Anbieter. Im Cluster gilt der Schalter auf allen Nodes.",
+    "twofa_required_flash": "Auf dieser Node ist 2FA Pflicht. Bitte richte sie jetzt ein.",
+    "personal_hint": "Eigene Passkeys und verknüpfte SSO-Konten pflegt jeder Benutzer selbst unter Einstellungen ›",
+    "readonly": "Nur lesen",
+    "readonly_hint": "Dein Benutzer darf alles ansehen, aber nur das eigene Konto ändern."
   }
 }

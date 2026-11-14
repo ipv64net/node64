@@ -12,6 +12,7 @@
 			<div class="card-header"><i class="bi bi-hdd-network text-primary"></i> {{.T "settings.node"}}{{$.Doc "configuration#oberflaeche"}}</div>
 			<div class="card-body">
 				<form method="post" action="/settings/node">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="mb-3">
 						<label class="form-label" for="node_name">{{.T "settings.node_name"}}</label>
@@ -23,6 +24,7 @@
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-geo-alt"></i></span><input class="form-control" id="location" name="location" value="{{.Val "location"}}" maxlength="64"></div>
 					</div>
 					<button class="btn btn-primary" type="submit">{{.T "common.save"}}</button>
+					</fieldset>
 				</form>
 			</div>
 		</div>
@@ -108,9 +110,10 @@
 				<a class="btn btn-outline-secondary btn-sm" href="/settings/2fa">{{.T "twofa.manage"}}</a>
 				{{else}}<p class="small text-body-secondary">{{.T "twofa.hint"}}</p>
 				<a class="btn btn-primary btn-sm" href="/settings/2fa">{{.T "twofa.setup"}}</a>{{end}}
-				<hr class="my-2"><div class="small"><i class="bi bi-person-badge"></i> {{.T "sso.settings_hint"}} <a href="/settings/login">{{.T "sso.title"}}</a></div>
+				{{if .Admin}}<hr class="my-2"><div class="small"><i class="bi bi-person-badge"></i> {{.T "sso.settings_hint"}} <a href="/settings/users?tab=login#login">{{.T "nav.useradmin"}}</a></div>{{end}}
 			</div>
 		</div>
+		{{template "settings_personal_login" .}}
 		{{with $d.Reach}}<div class="card" id="reach">
 			<div class="card-header"><i class="bi bi-broadcast-pin text-primary"></i> {{$.T "settings.reach"}}{{$.Doc "configuration#oberflaeche"}}</div>
 			<div class="card-body small">
@@ -124,6 +127,7 @@
 					{{if or .HTTPSPort .HTTPPort}}<dt class="col-5">{{$.T "settings.reach_tls"}}</dt><dd class="col-7"><a href="/settings/certificate">{{$.T "settings.cert_download"}}</a></dd>{{end}}
 				</dl>
 				<form method="post" action="/settings/reach">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					{{if .EdgeOn}}<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>
 					<input class="form-control form-control-sm font-monospace mb-1" id="ui_name" name="ui_name" value="{{.UIName}}" placeholder="node64.example.ipv64.de" maxlength="253">
@@ -138,6 +142,7 @@
 					<div class="form-text mb-2">{{if .UICert.EnvFile}}<i class="bi bi-info-circle"></i> {{$.T "ports.ui_cert_env"}}{{else}}{{$.T "ports.ui_cert_hint"}}{{end}} <a href="/certificates">{{$.T "nav.certificates"}}</a></div>
 					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
 					<a class="btn btn-outline-secondary btn-sm" href="/settings/ports"><i class="bi bi-ethernet"></i> {{$.T "settings.reach_all_ports"}}</a>
+					</fieldset>
 				</form>
 			</div>
 		</div>{{end}}
@@ -157,12 +162,14 @@
 				{{if and (not $d.IPv64.ExpiresAt.IsZero) (lt $d.IPv64.DaysLeft 14)}}<div class="alert alert-warning py-2">{{.T "ipv64key.expiry_warn"}}</div>{{end}}
 				{{end}}
 				<form method="post" action="/settings/ipv64">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="input-group input-group-sm mb-1">
 						<input class="form-control" type="password" name="apikey" placeholder="{{if $d.IPv64Set}}{{.T "ipv64key.placeholder_new"}}{{else}}{{.T "ipv64key.placeholder"}}{{end}}" autocomplete="off"{{if not $d.IPv64Set}} required{{end}}>
 						<button class="btn btn-outline-primary" type="submit">{{if $d.IPv64Set}}{{.T "ipv64key.recheck"}}{{else}}{{.T "ipv64key.save"}}{{end}}</button>
 					</div>
 					<div class="form-text mb-2">{{.T "ipv64key.stored_hint"}} <a href="https://ipv64.net/api_settings" target="_blank" rel="noopener">{{.T "ipv64key.create_link"}}</a></div>
+					</fieldset>
 				</form>
 				{{if $d.IPv64Set}}<form method="post" action="/settings/ipv64/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "ipv64key.remove_confirm"}}"><i class="bi bi-trash"></i> {{.T "ipv64key.remove"}}</button></form>{{end}}
 			</div>
@@ -179,6 +186,7 @@
 			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}{{.Doc "configuration#logs"}}</div>
 			<div class="card-body">
 				<form method="post" action="/settings/logging">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="row">
 						<div class="col-sm-4 mb-3">
@@ -212,9 +220,11 @@
 					{{if not $d.LogResetAt.IsZero}}<p class="small text-warning-emphasis">{{.T "settings.log_reset_at" "time" (.Time $d.LogResetAt) "level" $d.LogDefault}}</p>{{end}}
 					<button class="btn btn-primary" type="submit">{{.T "common.save"}}</button>
 					<a class="btn btn-outline-secondary" href="/logs">{{.T "logs.title"}}</a>
+					</fieldset>
 				</form>
 				<hr>
 				<form method="post" action="/settings/api-log">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<label class="form-label" for="api_log">{{.T "settings.api_log"}}</label>
 					<div class="input-group" style="max-width:24rem"><span class="input-group-text"><i class="bi bi-code-slash"></i></span><select class="form-select" id="api_log" name="api_log" data-autosubmit>
@@ -223,6 +233,7 @@
 						<option value="all"{{if eq $d.APILog "all"}} selected{{end}}>{{.T "settings.api_log_all"}}</option>
 					</select></div>
 					<p class="form-text mb-0">{{.T "settings.api_log_hint"}}</p>
+					</fieldset>
 				</form>
 			</div>
 		</div>
@@ -243,6 +254,7 @@
 				{{with $u.Trial}}<div class="alert alert-warning py-2"><i class="bi bi-hourglass-split"></i> {{$.T "settings.upd.trial" "version" .Version}}</div>{{end}}
 				{{if not $u.KeysOK}}<div class="alert alert-secondary py-2"><i class="bi bi-key"></i> {{$.T "settings.upd.no_key"}}</div>{{end}}
 				<form method="post" action="/settings/updates" class="row g-2 align-items-end mb-2">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<div class="col-sm-4"><label class="form-label mb-1" for="updates_mode">{{$.T "settings.upd.mode"}}</label>
 						<select class="form-select form-select-sm" id="updates_mode" name="updates_mode">{{range $u.Modes}}<option value="{{.}}"{{if eq . $u.Mode}} selected{{end}}>{{$.T (print "settings.upd.mode_" .)}}</option>{{end}}</select></div>
@@ -252,6 +264,7 @@
 						<input class="form-control form-control-sm" id="updates_window" name="updates_window" value="{{$u.Window}}" pattern="[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9]" placeholder="03:00-05:00"></div>
 					<div class="col-sm-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit">{{$.T "common.save"}}</button></div>
 					<div class="col-12 form-text mt-0">{{$.T "settings.upd.hint"}}{{if $u.Dev}} {{$.T "settings.upd.dev"}}{{end}}</div>
+					</fieldset>
 				</form>
 				{{with $u.Latest}}{{if .ApplyError}}<div class="small text-danger mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "settings.upd.apply_failed" "error" .ApplyError}}</div>{{end}}{{if .Error}}<div class="small text-danger mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "settings.upd.check_failed" "error" .Error}}</div>
 				{{else if .Newer}}<div class="alert alert-info py-2 d-flex flex-wrap align-items-center gap-2"><span class="me-auto">{{$.T "settings.update_available" "version" .Version}}{{with .URL}} <a href="{{.}}" target="_blank" rel="noopener">{{$.T "settings.upd.notes"}}</a>{{end}} <a class="small" href="https://github.com/ipv64net/node64/releases/tag/v{{.Version}}" target="_blank" rel="noopener">{{$.T "settings.upd.changelog"}}</a></span>
@@ -263,10 +276,12 @@
 				</div>
 				{{else}}
 				<form method="post" action="/settings/updates">
+					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="updates_check" id="updates_check"{{if $d.UpdateOn}} checked{{end}}><label class="form-check-label" for="updates_check">{{.T "settings.updates_check"}}</label></div>
 					<div class="form-text mb-2">{{.T "settings.updates_hint"}}</div>
 					<button class="btn btn-outline-primary btn-sm mt-2" type="submit">{{.T "common.save"}}</button>
+					</fieldset>
 				</form>
 				{{end}}
 			</div>
@@ -274,4 +289,4 @@
 	</div>
 </div>
 {{end}}
-{{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}
+{{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script><script src="/static/js/passkey.js?v={{.Version}}"></script>{{end}}

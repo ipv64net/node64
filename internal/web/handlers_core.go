@@ -198,6 +198,13 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.refund(keys...)
+	if u.Disabled { // gesperrt (Benutzerverwaltung): keine Anmeldung
+		s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.failed", Details: "user disabled", IP: ip})
+		s.log.Warn("login of disabled user", "user", u.Username, "ip", ip)
+		v.Flash = &Flash{Kind: "danger", Text: v.T("login.disabled")}
+		s.render(w, r, http.StatusForbidden, "login", v)
+		return
+	}
 	pending := u.TOTPSecret != ""
 	if err := s.startSession(w, r, u.ID, pending); err != nil {
 		s.fail(w, r, err)
@@ -213,6 +220,10 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	_ = s.Store.TouchUserLogin(ctx, u.ID)
 	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login", IP: ip})
 	s.log.Info("login", "user", u.Username, "ip", ip)
+	if u.MustChange { // Einmal-Passwort: erst ein eigenes setzen (gate laesst sonst nichts durch)
+		http.Redirect(w, r, "/login/password?next="+url.QueryEscape(v.Form["next"]), http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, v.Form["next"], http.StatusSeeOther)
 }
 
@@ -459,8 +470,9 @@ type settingsData struct {
 	ChartDetail               string
 	RawOptions, HourlyOptions []int
 	ChartOptions              []string
-	AuditDays                 int   // Audit-Log aufbewahren (0 = unbegrenzt)
-	AuditOptions              []int //
+	AuditDays                 int              // Audit-Log aufbewahren (0 = unbegrenzt)
+	AuditOptions              []int            //
+	Login                     loginMethodsData // eigene Passkeys und verknuepfte SSO-Konten
 }
 
 func (s *Server) settingsView(r *http.Request) *View {
@@ -508,6 +520,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	d.Modules2 = logModuleNames
 	d.APILog = s.APILogMode()
 	d.Reach, d.Moved = s.reachData(ctx), settingsMoved
+	d.Login = s.loginMethodsData(r)
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
 	if v.Form["lang"] == "" {

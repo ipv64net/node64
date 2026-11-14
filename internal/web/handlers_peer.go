@@ -58,7 +58,7 @@ func (s *Server) peerRoutes() {
 	}
 	s.Peer.Register(s.mux)
 	s.mux.Handle("GET /cluster", s.auth(s.clusterPage))
-	s.mux.Handle("POST /cluster/code", s.auth(s.groupCode))
+	s.mux.Handle("POST /cluster/code", s.admin(s.groupCode))
 	s.mux.Handle("POST /cluster/join", s.auth(s.groupJoin))
 	s.mux.Handle("POST /cluster/leave", s.auth(s.groupLeave))
 	s.mux.Handle("POST /cluster/sync", s.auth(s.groupSync))
@@ -107,7 +107,9 @@ func (s *Server) groupView(r *http.Request) groupData {
 	}
 	g.ACME = s.acmeChoices(ctx, list)
 	g.Users = s.userChoices(ctx, list)
-	g.Code, g.CodeExp = s.Peer.PairingCode()
+	if s.isAdmin(r) { // Kopplungscode nur fuer Administratoren
+		g.Code, g.CodeExp = s.Peer.PairingCode()
+	}
 	g.Linked = s.Peer.LinkedSelf()
 	_, g.Forwarder, g.FwdSelf = s.Peer.Forwarder(ctx)
 	g.SelfURL = selfURL(r, g.HTTPSPort)

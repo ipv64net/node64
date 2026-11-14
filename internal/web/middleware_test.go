@@ -90,7 +90,7 @@ func TestCSRFUploadNotParsedWithoutLogin(t *testing.T) {
 func TestForwardAuthNoSession(t *testing.T) {
 	a := newTestApp(t)
 	loginAs(t, a, "admin", "sehr geheimes passwort")
-	_, body := a.get(t, "/settings/login")
+	_, body := a.get(t, "/settings/users")
 	if resp, _ := a.post(t, "/settings/login/forward", url.Values{"_csrf": {csrfOf(t, body)}, "enabled": {"1"}, "trusted": {"127.0.0.1"}, "header": {"Remote-User"}}); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("forward auth: %d", resp.StatusCode)
 	}

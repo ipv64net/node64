@@ -22,6 +22,7 @@
 			<span class="topbar-crumb-mobile d-md-none small">{{.LastCrumb}}</span>
 			<div class="ms-auto d-flex align-items-center gap-2">
 				<button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}" aria-label="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
+				{{if .ReadOnly}}<span class="badge rounded-pill text-bg-light border readonly-badge" title="{{.T "useradmin.readonly_hint"}}"><i class="bi bi-eye"></i> {{.T "useradmin.readonly"}}</span>{{end}}
 				<span class="topbar-user d-none d-sm-inline-flex"><span class="topbar-avatar" aria-hidden="true">{{printf "%.2s" .User.Username}}</span>{{.User.Username}}</span>
 				<form method="post" action="/logout" class="m-0">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -46,6 +47,7 @@
 	<span class="topbar-crumb-mobile d-md-none ms-2 small">{{.LastCrumb}}</span>
 	<div class="ms-auto d-flex align-items-center gap-2">
 		<button class="btn btn-outline-secondary btn-sm theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
+		{{if .ReadOnly}}<span class="badge rounded-pill text-bg-light border readonly-badge" title="{{.T "useradmin.readonly_hint"}}"><i class="bi bi-eye"></i> {{.T "useradmin.readonly"}}</span>{{end}}
 		<span class="d-none d-sm-inline text-body-secondary small"><i class="bi bi-person-circle"></i> {{.User.Username}}</span>
 		<form method="post" action="/logout" class="m-0">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">

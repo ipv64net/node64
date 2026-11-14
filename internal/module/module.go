@@ -65,8 +65,13 @@ type Module interface {
 type Guards struct {
 	// Enabled antwortet mit 404, solange das Modul deaktiviert ist.
 	Enabled func(http.Handler) http.Handler
-	// Auth verlangt eine Anmeldung.
+	// Auth verlangt eine Anmeldung. Rolle „Nur lesen“: aendernde Anfragen (POST/PUT/PATCH/DELETE) beantwortet der
+	// Kern schon hier mit 403 (Benutzerverwaltung), Module brauchen dafuer nichts.
 	Auth func(http.Handler) http.Handler
+	// Admin verlangt eine Anmeldung mit Rolle Administrator, auch beim Lesen (GETs, die Geheimnisse ausliefern).
+	Admin func(http.Handler) http.Handler
+	// ReadOnly: der angemeldete Benutzer hat die Rolle „Nur lesen“ (Geheimnisse in Antworten weglassen).
+	ReadOnly func(r *http.Request) bool
 	// Render zeigt eine Seite des Moduls im Layout des Kerns. page ist
 	// "<modul>/<name>" (Datei pages/<name>.html im Templates-FS des Moduls).
 	Render func(w http.ResponseWriter, r *http.Request, status int, page, titleKey string, data any)
@@ -90,6 +95,17 @@ type Guards struct {
 	// Translate uebersetzt fuer eine feste Sprache (z. B. fuer Tooltips, Hintergrundjobs).
 	Translate func(lang, key string, args ...any) string
 }
+
+// AdminAuth: Guards.Admin, ohne ihn (Tests mit eigenen Guards) Guards.Auth.
+func (g Guards) AdminAuth(h http.Handler) http.Handler {
+	if g.Admin != nil {
+		return g.Admin(h)
+	}
+	return g.Auth(h)
+}
+
+// IsReadOnly: Rolle „Nur lesen“ (ohne Guards.ReadOnly nie).
+func (g Guards) IsReadOnly(r *http.Request) bool { return g.ReadOnly != nil && g.ReadOnly(r) }
 
 // Templater liefert die Seiten-Templates eines Moduls (pages/*.html).
 type Templater interface {

@@ -188,8 +188,20 @@ func (s *Server) twoFADisable(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(r)
 	v := s.view(r, "twofa.title")
-	if !VerifyPassword(u.PasswordHash, r.PostFormValue("password")) {
-		s.flash(w, r, "danger", v.T("settings.password_wrong"))
+	ok := VerifyPassword(u.PasswordHash, r.PostFormValue("password"))
+	if u.Source != store.SourceLocal { // LDAP/SSO: kein lokales Passwort, stattdessen ein gueltiger Code der App
+		step, hit := totp.VerifyStep(u.TOTPSecret, strings.TrimSpace(r.PostFormValue("code")), time.Now())
+		ok = hit && u.TOTPSecret != ""
+		if ok {
+			ok, _ = s.Store.UseTOTPStep(ctx, u.ID, step)
+		}
+	}
+	if !ok {
+		key := "settings.password_wrong"
+		if u.Source != store.SourceLocal {
+			key = "twofa.code_wrong"
+		}
+		s.flash(w, r, "danger", v.T(key))
 		http.Redirect(w, r, "/settings/2fa", http.StatusSeeOther)
 		return
 	}

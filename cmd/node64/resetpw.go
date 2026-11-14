@@ -103,6 +103,10 @@ func resetPassword(args []string) int {
 		}
 		details += ", 2FA abgeschaltet"
 	}
+	if err := st.RestoreAdmin(ctx, u.ID); err != nil { // Notfallzugang: wieder aktiver lokaler Administrator
+		fmt.Fprintln(os.Stderr, "Benutzer entsperren:", err)
+		return 1
+	}
 	if err := st.DeleteUserSessions(ctx, u.ID, ""); err != nil {
 		fmt.Fprintln(os.Stderr, "Sitzungen beenden:", err)
 		return 1

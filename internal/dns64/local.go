@@ -56,6 +56,9 @@ func (m *Module) localView(r *http.Request, d *pageData) error {
 		}
 	}
 	for i := range d.Zones {
+		if m.g.IsReadOnly(r) { // TSIG-Geheimnis nur fuer Administratoren
+			d.Zones[i].TSIGSecret = ""
+		}
 		if d.Zones[i].Name == d.Sel {
 			d.SelZone = &d.Zones[i]
 		}

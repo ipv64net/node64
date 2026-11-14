@@ -146,7 +146,7 @@ func (s *Server) forwardUser(r *http.Request) *store.User {
 		return nil
 	}
 	u, err := s.Store.UserByName(r.Context(), name)
-	if err != nil || u == nil {
+	if err != nil || u == nil || u.Disabled { // gesperrt: keine Anmeldung
 		return nil
 	}
 	s.fwd.Lock()

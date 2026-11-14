@@ -59,8 +59,8 @@ func (u *UI) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST "+Base+"/{id}/keytype", page(u.pageCertKeyType))
 	mux.Handle("POST "+Base+"/{id}/delete", page(u.pageCertDelete))
 	mux.Handle("GET "+Base+"/{id}/chain.pem", page(u.pageCertChain))
-	mux.Handle("GET "+Base+"/{id}/download", page(u.pageCertDownload))
-	mux.Handle("POST "+Base+"/{id}/p12", page(u.pageCertP12))
+	mux.Handle("GET "+Base+"/{id}/download", page(u.keyGuard(u.pageCertDownload)))
+	mux.Handle("POST "+Base+"/{id}/p12", g.AdminAuth(http.HandlerFunc(u.pageCertP12))) // enthaelt den Schluessel
 	// DNS-Zugaenge: vier Stufen, damit sich die Pfade nicht mit /certificates/{id}/... ueberschneiden
 	mux.Handle("GET "+Base+"/dns-accounts/new", page(u.pageDNSNew))
 	mux.Handle("POST "+Base+"/dns-accounts", page(u.pageDNSSave))

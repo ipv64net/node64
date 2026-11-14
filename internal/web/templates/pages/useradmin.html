@@ -1,0 +1,223 @@
+{{define "content"}}
+{{$d := .Data}}{{$l := $d.Login}}
+{{template "settings_tabs" .}}
+<div class="d-flex align-items-center mb-2">
+	<h1 class="h4 mb-0"><i class="bi bi-people text-primary me-1"></i> {{.T "useradmin.title"}}{{$.Doc "security#benutzerverwaltung"}}</h1>
+</div>
+<p class="text-body-secondary small">{{.T "useradmin.intro"}}</p>
+<ul class="nav nav-pills mb-3" role="tablist" id="ua-tabs">
+	<li class="nav-item" role="presentation"><button class="nav-link{{if eq $d.Tab "users"}} active{{end}}" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab"><i class="bi bi-person"></i> {{.T "useradmin.tab_users"}} <span class="badge text-bg-secondary">{{len $d.Users}}</span></button></li>
+	<li class="nav-item" role="presentation"><button class="nav-link{{if eq $d.Tab "groups"}} active{{end}}" data-bs-toggle="tab" data-bs-target="#groups" type="button" role="tab"><i class="bi bi-diagram-3"></i> {{.T "useradmin.tab_groups"}} <span class="badge text-bg-secondary">{{len $d.Groups}}</span></button></li>
+	<li class="nav-item" role="presentation"><button class="nav-link{{if eq $d.Tab "login"}} active{{end}}" data-bs-toggle="tab" data-bs-target="#login" type="button" role="tab"><i class="bi bi-box-arrow-in-right"></i> {{.T "useradmin.tab_login"}}</button></li>
+</ul>
+<div class="tab-content">
+{{/* ---------------------------------------------------------------- Benutzer */}}
+<div class="tab-pane fade{{if eq $d.Tab "users"}} show active{{end}}" id="users" role="tabpanel">
+	{{if $d.OTP}}<div class="alert alert-warning">
+		<div class="fw-semibold mb-1"><i class="bi bi-key"></i> {{.T "useradmin.otp_title" "name" $d.NewUser}}</div>
+		<div class="input-group input-group-sm mb-1" style="max-width:24rem"><input class="form-control font-monospace" value="{{$d.OTP}}" readonly id="ua-otp" aria-label="{{.T "useradmin.otp_title" "name" $d.NewUser}}"><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-text="{{$d.OTP}}" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+		<div class="small">{{.T "useradmin.otp_hint"}}</div>
+	</div>{{end}}
+	<div class="card mb-3">
+		<div class="table-responsive">
+		<table class="table table-sm table-hover align-middle mb-0 small">
+			<thead><tr><th>{{.T "login.username"}}</th><th>{{.T "useradmin.role"}}</th><th>{{.T "useradmin.source"}}</th><th>{{.T "useradmin.groups"}}</th><th>2FA</th><th>{{.T "common.status"}}</th><th>{{.T "sso.user_last_login"}}</th><th></th></tr></thead>
+			<tbody>
+			{{range $d.Users}}
+			<tr>
+				<td><strong>{{.Username}}</strong>{{if .Self}} <span class="badge text-bg-secondary">{{$.T "sso.user_you"}}</span>{{end}}{{if .MustChange}} <span class="badge text-bg-warning" title="{{$.T "useradmin.must_change_hint"}}">{{$.T "useradmin.must_change_badge"}}</span>{{end}}{{if .Email}}<br><span class="text-body-secondary">{{.Email}}</span>{{end}}</td>
+				<td>{{if eq .Effective "admin"}}<span class="badge text-bg-primary">{{$.T "useradmin.role_admin"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "useradmin.role_read"}}</span>{{end}}{{if ne .Role .Effective}}<br><span class="text-body-secondary">{{$.T "useradmin.role_own"}}: {{if eq .Role "admin"}}{{$.T "useradmin.role_admin"}}{{else}}{{$.T "useradmin.role_read"}}{{end}}</span>{{end}}</td>
+				<td>{{if eq .Source "ldap"}}AD/LDAP{{else if eq .Source "oidc"}}SSO{{else}}{{$.T "useradmin.source_local"}}{{end}}</td>
+				<td>{{range .Groups}}<span class="badge text-bg-light border me-1">{{.}}</span>{{end}}{{range .ExtGroups}}<span class="badge text-bg-light border fst-italic me-1" title="{{$.T "useradmin.ext_group"}}">{{.}}</span>{{end}}{{if and (not .Groups) (not .ExtGroups)}}<span class="text-body-secondary">–</span>{{end}}</td>
+				<td>{{if .TOTPSecret}}<span class="badge text-bg-success">{{$.T "common.yes"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "common.no"}}</span>{{end}}{{if .Passkeys}} <span class="badge text-bg-light border" title="{{$.T "sso.pk_title"}}"><i class="bi bi-fingerprint"></i> {{.Passkeys}}</span>{{end}}</td>
+				<td>{{if .Disabled}}<span class="badge text-bg-danger">{{$.T "useradmin.disabled"}}</span>{{else}}<span class="badge text-bg-success">{{$.T "useradmin.active"}}</span>{{end}}</td>
+				<td>{{$.Ago .LastLoginAt}}</td>
+				<td class="text-end"><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#ua-u{{.ID}}" aria-expanded="false" title="{{$.T "useradmin.edit"}}"><i class="bi bi-pencil"></i></button></td>
+			</tr>
+			<tr class="collapse" id="ua-u{{.ID}}"><td colspan="8" class="bg-body-tertiary">
+				<div class="row g-3 py-2">
+					<div class="col-lg-6">
+						<form method="post" action="/settings/users/{{.ID}}">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<div class="row g-2 mb-2">
+								<div class="col-sm-6"><label class="form-label" for="ua-role-{{.ID}}">{{$.T "useradmin.role_own"}}</label>
+									<select class="form-select form-select-sm" id="ua-role-{{.ID}}" name="role"{{if .Self}} disabled{{end}}><option value="read"{{if eq .Role "read"}} selected{{end}}>{{$.T "useradmin.role_read"}}</option><option value="admin"{{if eq .Role "admin"}} selected{{end}}>{{$.T "useradmin.role_admin"}}</option></select>
+									{{if .Self}}<input type="hidden" name="role" value="{{.Role}}">{{end}}</div>
+								<div class="col-sm-6"><label class="form-label" for="ua-email-{{.ID}}">{{$.T "useradmin.email"}}</label><input class="form-control form-control-sm" type="email" id="ua-email-{{.ID}}" name="email" value="{{.Email}}" maxlength="200"></div>
+							</div>
+							{{if $d.Groups}}<div class="mb-2"><div class="form-label mb-1">{{$.T "useradmin.groups"}}</div>
+								{{$u := .}}{{range $d.Groups}}{{$gid := .UID}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="groups" value="{{.UID}}" id="ua-g{{$u.ID}}-{{.UID}}"{{range $u.GroupUIDs}}{{if eq . $gid}} checked{{end}}{{end}}><label class="form-check-label" for="ua-g{{$u.ID}}-{{.UID}}">{{.Name}}</label></div>{{end}}
+							</div>{{end}}
+							<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="disabled" value="1" id="ua-dis-{{.ID}}"{{if .Disabled}} checked{{end}}{{if .Self}} disabled{{end}}><label class="form-check-label" for="ua-dis-{{.ID}}">{{$.T "useradmin.disable_label"}}</label></div>
+							<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button>
+						</form>
+					</div>
+					<div class="col-lg-6">
+						{{if eq .Source "local"}}
+						<form method="post" action="/settings/users/{{.ID}}/password" class="mb-2">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<label class="form-label" for="ua-pw-{{.ID}}">{{$.T "useradmin.password_set_label"}}</label>
+							<div class="input-group input-group-sm"><input class="form-control" type="password" id="ua-pw-{{.ID}}" name="password" autocomplete="new-password" minlength="10">
+								<button class="btn btn-outline-primary" type="submit">{{$.T "useradmin.password_set_btn"}}</button></div>
+							<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="must_change" value="1" id="ua-mc-{{.ID}}"><label class="form-check-label" for="ua-mc-{{.ID}}">{{$.T "useradmin.must_change_label"}}</label></div>
+						</form>
+						{{else}}<p class="text-body-secondary mb-2">{{$.T "useradmin.not_local"}}</p>{{end}}
+						<div class="d-flex flex-wrap gap-2">
+							{{if .TOTPSecret}}<form method="post" action="/settings/users/{{.ID}}/2fa-reset" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-confirm="{{$.T "useradmin.twofa_reset_confirm" "name" .Username}}"><i class="bi bi-shield-x"></i> {{$.T "useradmin.twofa_reset"}}</button></form>{{end}}
+							<form method="post" action="/settings/users/{{.ID}}/sessions-end" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right"></i> {{$.T "useradmin.sessions_end"}}</button></form>
+							{{if not .Self}}<form method="post" action="/settings/users/{{.ID}}/delete" class="m-0 ms-auto"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "sso.user_delete_confirm" "name" .Username}}"><i class="bi bi-trash"></i> {{$.T "common.delete"}}</button></form>{{end}}
+						</div>
+					</div>
+				</div>
+			</td></tr>
+			{{end}}
+			</tbody>
+		</table>
+		</div>
+	</div>
+	<div class="card" id="user-new">
+		<div class="card-header"><i class="bi bi-person-plus text-primary"></i> {{.T "useradmin.new_user"}}</div>
+		<div class="card-body">
+			<form method="post" action="/settings/users">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="row g-2 mb-2">
+					<div class="col-md-4"><label class="form-label" for="nu-name">{{.T "login.username"}}</label><input class="form-control form-control-sm" id="nu-name" name="username" required pattern="[A-Za-z0-9._\-]{3,64}" autocomplete="off"></div>
+					<div class="col-md-4"><label class="form-label" for="nu-role">{{.T "useradmin.role"}}</label><select class="form-select form-select-sm" id="nu-role" name="role"><option value="read">{{.T "useradmin.role_read"}}</option><option value="admin">{{.T "useradmin.role_admin"}}</option></select></div>
+					<div class="col-md-4"><label class="form-label" for="nu-email">{{.T "useradmin.email"}} <span class="text-body-secondary">({{.T "common.optional"}})</span></label><input class="form-control form-control-sm" type="email" id="nu-email" name="email" maxlength="200"></div>
+				</div>
+				<div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="must_change" value="1" id="nu-mc" checked><label class="form-check-label" for="nu-mc">{{.T "useradmin.must_change_label"}}</label>
+					<div class="form-text">{{.T "useradmin.must_change_new_hint"}}</div></div>
+				<div class="row g-2 mb-2">
+					<div class="col-md-6"><label class="form-label" for="nu-pw">{{.T "login.password"}}</label><input class="form-control form-control-sm" type="password" id="nu-pw" name="password" autocomplete="new-password" minlength="10"></div>
+					<div class="col-md-6"><label class="form-label" for="nu-pw2">{{.T "setup.password_repeat"}}</label><input class="form-control form-control-sm" type="password" id="nu-pw2" name="password2" autocomplete="new-password" minlength="10"></div>
+				</div>
+				{{if $d.Groups}}<div class="mb-2"><div class="form-label mb-1">{{.T "useradmin.groups"}}</div>
+					{{range $d.Groups}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="groups" value="{{.UID}}" id="nu-g-{{.UID}}"><label class="form-check-label" for="nu-g-{{.UID}}">{{.Name}}</label></div>{{end}}
+				</div>{{end}}
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-lg"></i> {{.T "useradmin.create"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+{{/* ---------------------------------------------------------------- Gruppen */}}
+<div class="tab-pane fade{{if eq $d.Tab "groups"}} show active{{end}}" id="groups" role="tabpanel">
+	<p class="small text-body-secondary">{{.T "useradmin.groups_intro"}}</p>
+	{{if $d.Groups}}
+	<div class="card mb-3">
+		<div class="table-responsive">
+		<table class="table table-sm table-hover align-middle mb-0 small">
+			<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "useradmin.role"}}</th><th>{{.T "useradmin.mappings"}}</th><th>{{.T "useradmin.members"}}</th><th></th></tr></thead>
+			<tbody>
+			{{range $d.Groups}}
+			<tr>
+				<td><strong>{{.Name}}</strong>{{if .Description}}<br><span class="text-body-secondary">{{.Description}}</span>{{end}}</td>
+				<td>{{if eq .Role "admin"}}<span class="badge text-bg-primary">{{$.T "useradmin.role_admin"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "useradmin.role_read"}}</span>{{end}}</td>
+				<td>{{if .LDAPGroups}}<div>AD/LDAP: {{len .LDAPGroups}}</div>{{end}}{{if .OIDCGroups}}<div>SSO: {{len .OIDCGroups}}</div>{{end}}{{if and (not .LDAPGroups) (not .OIDCGroups)}}<span class="text-body-secondary">–</span>{{end}}</td>
+				<td>{{range .Members}}<span class="badge text-bg-light border me-1">{{.}}</span>{{end}}{{range .ExtMembers}}<span class="badge text-bg-light border fst-italic me-1" title="{{$.T "useradmin.ext_group"}}">{{.}}</span>{{end}}{{if and (not .Members) (not .ExtMembers)}}<span class="text-body-secondary">–</span>{{end}}</td>
+				<td class="text-end"><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#ua-g{{.UID}}" aria-expanded="false" title="{{$.T "useradmin.edit"}}"><i class="bi bi-pencil"></i></button></td>
+			</tr>
+			<tr class="collapse" id="ua-g{{.UID}}"><td colspan="5" class="bg-body-tertiary">
+				<form method="post" action="/settings/groups/{{.UID}}" class="py-2">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					{{template "ua_group_fields" (dict "V" $ "G" .)}}
+					<div class="d-flex gap-2"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button>
+					<button class="btn btn-sm btn-outline-danger ms-auto" type="submit" formaction="/settings/groups/{{.UID}}/delete" data-confirm="{{$.T "useradmin.group_delete_confirm" "name" .Name}}"><i class="bi bi-trash"></i> {{$.T "common.delete"}}</button></div>
+				</form>
+			</td></tr>
+			{{end}}
+			</tbody>
+		</table>
+		</div>
+	</div>
+	{{else}}<p class="small">{{.T "useradmin.no_groups"}}</p>{{end}}
+	<div class="card" id="group-new">
+		<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "useradmin.new_group"}}</div>
+		<div class="card-body">
+			<form method="post" action="/settings/groups">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				{{template "ua_group_fields" (dict "V" $ "G" nil)}}
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-lg"></i> {{.T "useradmin.create"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+{{/* ---------------------------------------------------------------- Anmeldung (frueher /settings/login) */}}
+<div class="tab-pane fade{{if eq $d.Tab "login"}} show active{{end}}" id="login" role="tabpanel">
+<p class="text-body-secondary small">{{.T "sso.intro"}}</p>
+<div class="row g-3">
+<div class="col-lg-6">
+	<div class="card h-100" id="twofa-required">
+		<div class="card-header"><i class="bi bi-shield-lock text-success"></i> {{.T "useradmin.twofa_required"}} {{if $d.Required}}<span class="badge text-bg-success">{{.T "common.on"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.off"}}</span>{{end}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "useradmin.twofa_required_hint"}}</p>
+			<form method="post" action="/settings/auth/2fa-required">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="tfa_required" name="required" value="1"{{if $d.Required}} checked{{end}}><label class="form-check-label" for="tfa_required">{{.T "useradmin.twofa_required_label"}}</label></div>
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+<div class="col-lg-6">
+	<div class="card h-100" id="oidc">
+		<div class="card-header"><i class="bi bi-box-arrow-in-right text-primary"></i> {{.T "sso.oidc_title"}}{{$.Doc "security#sso-einrichten"}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.oidc_hint"}}</p>
+			<form method="post" action="/settings/login/oidc">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="mb-2"><label class="form-label" for="issuer">{{.T "sso.issuer"}}</label><input class="form-control form-control-sm font-monospace" id="issuer" name="issuer" value="{{$l.OIDC.Issuer}}" placeholder="https://auth.example.com" autocomplete="off">
+					<div class="form-text">{{.T "sso.issuer_hint"}}</div></div>
+				<div class="row g-2 mb-2">
+					<div class="col-sm-6"><label class="form-label" for="client_id">{{.T "sso.client_id"}}</label><input class="form-control form-control-sm font-monospace" id="client_id" name="client_id" value="{{$l.OIDC.ClientID}}" autocomplete="off"></div>
+					<div class="col-sm-6"><label class="form-label" for="client_secret">{{.T "sso.client_secret"}}</label><input class="form-control form-control-sm" type="password" id="client_secret" name="client_secret" placeholder="{{if $l.SecretSet}}{{.T "sso.secret_unchanged"}}{{end}}" autocomplete="new-password"></div>
+				</div>
+				<div class="row g-2 mb-2">
+					<div class="col-sm-6"><label class="form-label" for="label">{{.T "sso.label"}}</label><input class="form-control form-control-sm" id="label" name="label" value="{{$l.OIDC.Label}}" placeholder="Authelia" maxlength="60"></div>
+					<div class="col-sm-6"><label class="form-label" for="scopes">{{.T "sso.scopes"}}</label><input class="form-control form-control-sm font-monospace" id="scopes" name="scopes" value="{{$l.OIDC.Scopes}}"></div>
+				</div>
+				<div class="mb-2"><label class="form-label" for="base_url">{{.T "sso.base_url"}}</label><input class="form-control form-control-sm font-monospace" id="base_url" name="base_url" value="{{$l.OIDC.BaseURL}}" placeholder="https://node64.example.com">
+					<div class="form-text">{{.T "sso.base_url_hint"}}</div></div>
+				<div class="alert alert-light border small py-2 mb-2"><div class="fw-semibold">{{.T "sso.callback"}}</div><code class="text-break">{{$l.Callback}}</code></div>
+				<div class="d-flex gap-2">
+					<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+					{{if $l.OIDC.Enabled}}<button class="btn btn-sm btn-outline-danger ms-auto" type="submit" name="clear" value="1" data-confirm="{{.T "sso.clear_confirm"}}"><i class="bi bi-x-lg"></i> {{.T "sso.clear"}}</button>{{end}}
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
+<div class="col-lg-6">
+	<div class="card h-100" id="forward">
+		<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{.T "sso.fwd_title"}}{{$.Doc "security#forward-auth"}} {{if $l.Fwd.Enabled}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.fwd_hint"}}</p>
+			<form method="post" action="/settings/login/forward">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="fwd_enabled" name="enabled" value="1"{{if $l.Fwd.Enabled}} checked{{end}}><label class="form-check-label" for="fwd_enabled">{{.T "sso.fwd_enable"}}</label></div>
+				<div class="mb-2"><label class="form-label" for="trusted">{{.T "sso.fwd_trusted"}}</label><input class="form-control form-control-sm font-monospace" id="trusted" name="trusted" value="{{$l.Fwd.Raw}}" placeholder="192.168.10.5, 172.18.0.0/16">
+					<div class="form-text">{{.T "sso.fwd_trusted_hint"}}</div></div>
+				<div class="mb-2"><label class="form-label" for="header">{{.T "sso.fwd_header"}}</label><input class="form-control form-control-sm font-monospace" id="header" name="header" value="{{$l.Fwd.Header}}" maxlength="64"></div>
+				<div class="alert alert-light border small py-2 mb-2">{{.T "sso.fwd_now" "ip" $l.FwdIP}} {{if $l.FwdTrusted}}<span class="badge text-bg-success">{{.T "sso.fwd_trusted_yes"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "sso.fwd_trusted_no"}}</span>{{end}}{{if $l.FwdHeader}}<br>{{$l.Fwd.Header}}: <code>{{$l.FwdHeader}}</code>{{end}}</div>
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+{{template "ldap_card" .}}
+</div>
+<p class="small text-body-secondary mt-3 mb-0"><i class="bi bi-fingerprint"></i> {{.T "useradmin.personal_hint"}} <a href="/settings#passkeys">{{.T "nav.settings_general"}}</a></p>
+</div>
+</div>
+{{end}}
+{{define "ua_group_fields"}}{{$v := .V}}{{$g := .G}}{{$id := "new"}}{{if $g}}{{$id = $g.UID}}{{end}}
+<div class="row g-2 mb-2">
+	<div class="col-md-4"><label class="form-label" for="gr-name-{{$id}}">{{$v.T "common.name"}}</label><input class="form-control form-control-sm" id="gr-name-{{$id}}" name="name" value="{{if $g}}{{$g.Name}}{{end}}" required maxlength="100"></div>
+	<div class="col-md-3"><label class="form-label" for="gr-role-{{$id}}">{{$v.T "useradmin.role"}}</label><select class="form-select form-select-sm" id="gr-role-{{$id}}" name="role"><option value="read">{{$v.T "useradmin.role_read"}}</option><option value="admin"{{if $g}}{{if eq $g.Role "admin"}} selected{{end}}{{end}}>{{$v.T "useradmin.role_admin"}}</option></select></div>
+	<div class="col-md-5"><label class="form-label" for="gr-desc-{{$id}}">{{$v.T "useradmin.description"}}</label><input class="form-control form-control-sm" id="gr-desc-{{$id}}" name="description" value="{{if $g}}{{$g.Description}}{{end}}" maxlength="200"></div>
+</div>
+<div class="row g-2 mb-2">
+	<div class="col-md-6"><label class="form-label" for="gr-ldap-{{$id}}">{{$v.T "useradmin.ldap_groups"}}</label><textarea class="form-control form-control-sm font-monospace" id="gr-ldap-{{$id}}" name="ldap_groups" rows="2" placeholder="CN=Node64-Admins,OU=Groups,DC=example,DC=com">{{if $g}}{{join $g.LDAPGroups "\n"}}{{end}}</textarea><div class="form-text">{{$v.T "useradmin.lines_hint"}}</div></div>
+	<div class="col-md-6"><label class="form-label" for="gr-oidc-{{$id}}">{{$v.T "useradmin.oidc_groups"}}</label><textarea class="form-control form-control-sm font-monospace" id="gr-oidc-{{$id}}" name="oidc_groups" rows="2" placeholder="node64-admins">{{if $g}}{{join $g.OIDCGroups "\n"}}{{end}}</textarea><div class="form-text">{{$v.T "useradmin.lines_hint"}}</div></div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/useradmin.js?v={{.Version}}"></script>{{end}}

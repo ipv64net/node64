@@ -25,7 +25,7 @@ func (s *Server) apiRoutes() {
 	s.mux.Handle("GET /api/docs", s.auth(s.apiDocs))
 	s.mux.Handle("GET /api/audit", s.auth(s.apiAudit))
 	s.mux.Handle("GET /api/logs", s.auth(s.apiLogs))
-	s.mux.Handle("GET /api/backup", s.auth(s.backupDownload))
+	s.mux.Handle("GET /api/backup", s.admin(s.backupDownload)) // nur Administrator (Geheimnisse)
 	s.mux.Handle("GET /api/settings", s.auth(s.apiSettingsGet))
 	s.mux.Handle("PUT /api/settings", s.auth(s.apiSettingsPut))
 	s.mux.Handle("GET /api/modules", s.auth(s.apiModules))
@@ -269,6 +269,10 @@ func (s *Server) apiChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	secrets := r.URL.Query().Get("include_secrets") == "true"
+	if secrets && !s.isAdmin(r) { // Geheimnisse der Kanaele nur fuer Administratoren
+		s.forbidRole(w, r)
+		return
+	}
 	out := make([]channelJSON, 0, len(list))
 	for _, c := range list {
 		out = append(out, channelOut(c, secrets))
@@ -310,8 +314,13 @@ func (s *Server) loadAPIChannel(w http.ResponseWriter, r *http.Request) *notify.
 }
 
 func (s *Server) apiChannelGet(w http.ResponseWriter, r *http.Request) {
+	secrets := r.URL.Query().Get("include_secrets") == "true"
+	if secrets && !s.isAdmin(r) { // Geheimnisse der Kanaele nur fuer Administratoren
+		s.forbidRole(w, r)
+		return
+	}
 	if ch := s.loadAPIChannel(w, r); ch != nil {
-		writeJSON(w, 200, channelOut(ch, r.URL.Query().Get("include_secrets") == "true"))
+		writeJSON(w, 200, channelOut(ch, secrets))
 	}
 }
 
