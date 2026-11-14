@@ -1,0 +1,2 @@
+FROM alpine:3
+RUN apk add --no-cache openldap openldap-back-mdb openldap-overlay-memberof openldap-overlay-refint openldap-clients openssl
