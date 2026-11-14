@@ -72,3 +72,27 @@ func TestKernelVersionCompare(t *testing.T) {
 	}
 	_ = strings.TrimSpace
 }
+
+// #158: aeltere Agent-Units setzen ProtectKernelModules=yes, /lib/modules ist dann leer; der Agent liest den Ordner
+// ueber die Wurzel von PID 1.
+func TestKernelModulesViaPID1(t *testing.T) {
+	r := readReboot(newMapSource(map[string][]byte{
+		"/proc/sys/kernel/osrelease":                                 []byte("6.18.60-1-rpi-16k\n"),
+		"/proc/1/root/usr/lib/modules/6.18.62-1-rpi-16k/modules.dep": nil,
+	}))
+	if !r.Required {
+		t.Fatalf("Arch, laufender Kernel ohne Modul-Ordner: %+v", r)
+	}
+	r = readReboot(newMapSource(map[string][]byte{
+		"/proc/sys/kernel/osrelease":                               []byte("6.1.0-27-amd64\n"),
+		"/proc/1/root/usr/lib/modules/6.1.0-27-amd64/modules.dep":  nil,
+		"/proc/1/root/usr/lib/modules/6.1.0-28-amd64/modules.dep":  nil,
+		"/lib/modules-gibt-es-nicht-sichtbar/6.1.0-27-amd64/x.dep": nil,
+	}))
+	if !r.Required || r.KernelNewest != "6.1.0-28-amd64" {
+		t.Fatalf("Debian, neuerer Kernel: %+v", r)
+	}
+	if r := readReboot(kernelSrc("6.1.0-27-amd64", "6.1.0-27-amd64")); r.Required {
+		t.Fatalf("aktuell: %+v", r)
+	}
+}

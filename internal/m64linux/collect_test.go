@@ -611,3 +611,63 @@ func TestCollectNeedsRestarting(t *testing.T) {
 		t.Fatalf("%d Aufrufe", calls)
 	}
 }
+
+// #159: nach "apt upgrade" (Paketdatenbank geaendert) liest der Agent die Updates neu, ohne die Stunde abzuwarten;
+// fruehestens eine Minute nach dem letzten Lauf (waehrend eines Upgrades aendert sich die Datenbank laufend).
+func TestCollectUpdatesPkgChange(t *testing.T) {
+	h := newFakeHost(t, "script_proxmox8.txt")
+	var mu sync.Mutex
+	now := testNow
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	advance := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+	status := filepath.Join(h.root, "var", "lib", "dpkg", "status")
+	write := func(s string, mt time.Time) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(status), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(status, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(status, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("Package: a\n", testNow.Add(-time.Hour))
+	opt := h.options(clock)
+	opt.Sections = []string{m64proto.SecUpdates}
+	apt := "apt-get " + strings.Join(aptSimArgs, " ")
+	run := func() {
+		Collect(context.Background(), opt)
+		opt.Cache.Wait()
+	}
+	run()
+	advance(10 * time.Minute)
+	run()
+	if h.count(apt) != 1 {
+		t.Fatalf("ohne Aenderung neu gelesen: %d", h.count(apt))
+	}
+	write("Package: a\nPackage: b\n", testNow.Add(10*time.Minute))
+	advance(30 * time.Second)
+	run()
+	if h.count(apt) != 2 {
+		t.Fatalf("Aenderung nicht erkannt: %d", h.count(apt))
+	}
+	// weitere Aenderung kurz danach: erst nach einer Minute
+	write("Package: a\n", testNow.Add(11*time.Minute))
+	advance(30 * time.Second)
+	run()
+	if h.count(apt) != 2 {
+		t.Fatalf("zu frueh neu gelesen: %d", h.count(apt))
+	}
+	advance(time.Minute)
+	run()
+	if h.count(apt) != 3 {
+		t.Fatalf("zweite Aenderung nicht erkannt: %d", h.count(apt))
+	}
+	advance(5 * time.Minute)
+	run()
+	if h.count(apt) != 3 {
+		t.Fatalf("ohne Aenderung neu gelesen: %d", h.count(apt))
+	}
+}

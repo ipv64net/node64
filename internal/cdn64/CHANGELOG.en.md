@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.56.2 – 2026-11-14
+
+### Fixed
+- HTTP/3: a GET without body reached the target as a request with a body of unknown length (HTTP/2 without end of stream). Targets like lighttpd (e.g. the OPNsense web GUI) answered with `400 Bad Request` – in the normal browser profile that remembered HTTP/3, but not in a private window or with curl (HTTP/2). PROXY64 now forwards such requests without body, as with HTTP/1.1 and HTTP/2 (#157).
+
 ## 1.56.1 – 2026-11-14
 
 ### Changed

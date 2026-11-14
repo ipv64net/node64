@@ -39,8 +39,20 @@ func readReboot(src source) *m64proto.Reboot {
 	have, found := false, false
 	newest := ""
 	flavor := kernelFlavor(rel)
-	for _, n := range src.ReadDir("/lib/modules") {
-		if strings.ContainsAny(n, "/ ") || !src.Exists("/lib/modules/"+n+"/modules.dep") {
+	mods := "/lib/modules"
+	names := src.ReadDir(mods)
+	if len(names) == 0 {
+		// Dienste aus aelteren Agent-Installationen laufen mit ProtectKernelModules=yes: /lib/modules ist dort
+		// unsichtbar (#158). Ueber die Wurzel von PID 1 ist der Ordner weiter lesbar (Agent laeuft als root).
+		for _, alt := range []string{"/proc/1/root/usr/lib/modules", "/proc/1/root/lib/modules"} {
+			if names = src.ReadDir(alt); len(names) > 0 {
+				mods = alt
+				break
+			}
+		}
+	}
+	for _, n := range names {
+		if strings.ContainsAny(n, "/ ") || !src.Exists(mods+"/"+n+"/modules.dep") {
 			continue
 		}
 		have = true

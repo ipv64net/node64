@@ -844,6 +844,7 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		H3Body(r) // GET ohne Inhalt nicht als Anfrage mit Inhalt unbekannter Laenge weiterreichen (#157)
 	}
 	t := e.table.Load()
 	host := hostOf(r.Host)

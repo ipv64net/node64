@@ -25,6 +25,11 @@ func TestUnitText(t *testing.T) {
 	if strings.Contains(u, "ProtectHome=yes") || strings.Contains(u, "/run") || strings.Contains(u, "%!") {
 		t.Errorf("unit without zypper:\n%s", u)
 	}
+	// #158: ProtectKernelModules=yes versteckt /lib/modules ("Neustart noetig"); Module laden bleibt gesperrt
+	if strings.Contains(u, "ProtectKernelModules") || !strings.Contains(u, "\nCapabilityBoundingSet=~CAP_SYS_MODULE\n") ||
+		!strings.Contains(u, "\nSystemCallFilter=~@module\n") {
+		t.Errorf("Kernel-Module:\n%s", u)
+	}
 	if z := unitText(6465, true); !strings.Contains(z, "\nReadWritePaths=/run -/var/log/zypper.log\n") {
 		t.Errorf("unit with zypper:\n%s", z)
 	}

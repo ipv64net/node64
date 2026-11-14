@@ -35,6 +35,7 @@ const (
 	HintNoRepo        = "{m64:no_repo}"        // keine Paketquelle eingeschaltet (FreeBSD)
 	HintNoVulnDB      = "{m64:no_vuln_db}"     // keine Schwachstellen-Datenbank (pkg audit -F)
 	HintNoDisks       = "{m64:no_disks}"       // keine Platten gefunden (Windows)
+	HintPacmanLocal   = "{m64:pacman_local}"   // pacman -Qu ohne checkupdates: nur gegen die lokale Paketliste (#158)
 
 	HintCountersUnreadable = "{m64:counters_unreadable}" // Zuverlaessigkeitszaehler nicht lesbar (Administratorrechte noetig?)
 )

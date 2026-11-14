@@ -1,5 +1,14 @@
 # Monitor64 – Änderungen
 
+## 0.1.17 – 2026-11-14
+
+Fehlerbehebungen:
+
+- Linux-Agent: Nach einem Paket-Update (z. B. `apt upgrade`, `dnf upgrade`, `pacman -Syu`) oder neu geladenen Paketlisten liest der Agent die Updates innerhalb von etwa einer Minute neu, statt bis zu einer Stunde den alten Stand zu melden. Er erkennt das an der Paketdatenbank (dpkg, rpm, pacman, apk, opkg). Ohne Änderung bleibt es bei einer Prüfung pro Stunde (#159).
+- Linux-Agent: „Neustart nötig“ erkennt einen laufenden Kernel ohne Modul-Ordner (Arch) bzw. einen neueren installierten Kernel wieder. Die Dienst-Härtung `ProtectKernelModules=yes` versteckte `/lib/modules` vor dem Agent. Neue Installationen sperren nur noch das Laden von Kernel-Modulen (`CapabilityBoundingSet=~CAP_SYS_MODULE`, `SystemCallFilter=~@module`); bestehende Installationen liest der Agent ab 0.1.6 ohne Neuinstallation richtig (#158).
+- Arch Linux: Ohne `checkupdates` (Paket pacman-contrib) vergleicht `pacman -Qu` nur mit der lokalen Paketliste und meldet meist „0 verfügbar“. Der Dienst „Updates“ weist jetzt darauf hin (Agent und SSH, #158).
+- **Agent 0.1.6 (Linux):** Updates nach Paket-Änderungen neu lesen; „Neustart nötig“ trotz alter Dienst-Härtung; Hinweis auf pacman-contrib.
+
 ## 0.1.16 – 2026-11-14
 
 Änderungen:

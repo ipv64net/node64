@@ -7,7 +7,7 @@ var collectorTexts = []string{
 	"note.counters_unreadable", "note.dev_errors", "note.dev_unreadable", "note.exit_code", "note.format", "note.hung",
 	"note.incomplete", "note.larger_than", "note.member", "note.missing", "note.no_count", "note.no_disks",
 	"note.no_json", "note.no_output", "note.no_output_of", "note.no_pkg_manager", "note.no_repo", "note.no_smart_disks",
-	"note.no_systemd", "note.no_vuln_db", "note.not_found", "note.not_parsable", "note.pkg_missing", "note.reading",
+	"note.no_systemd", "note.no_vuln_db", "note.not_found", "note.not_parsable", "note.pacman_local", "note.pkg_missing", "note.reading",
 	"note.running", "note.sec_unknown", "note.slow_failed", "note.smart_disabled", "note.smart_unavail",
 	"note.sudo_denied", "note.timeout", "note.too_large", "note.unknown_error", "note.unreadable",
 	"note.upgrade_locked", "snmp.assembling", "snmp.bad_sectors", "snmp.bypass_fault", "snmp.canceling",

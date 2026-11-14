@@ -34,6 +34,8 @@ const (
 // /run/zypp.pid, siehe zypperPaths). /home und /root sind nur lesbar: eigene Skripte koennen Zugangsdateien wie
 // /root/.my.cnf lesen (mit vollem Pfad, z. B. mysql --defaults-extra-file=/root/.my.cnf), aber nichts dort aendern.
 // Restart=always startet den Agent nach einem Absturz neu; nach einem Update startet er sich selbst neu (exec).
+// Kernel-Module laden darf der Dienst nicht (CapabilityBoundingSet, SystemCallFilter); ProtectKernelModules=yes ginge
+// weiter und versteckte /lib/modules, das "Neustart noetig" nach einem Kernel-Update braucht (#158).
 // UnsetEnvironment=GODEBUG: manche Systeme setzen GODEBUG fuer alle Dienste (UGOS von Ugreen: tlskyber=0 in
 // /etc/systemd/system.conf); einen dort inzwischen entfernten Schalter quittiert die Go-Laufzeit mit Abbruch beim Start.
 const unitFile = `[Unit]
@@ -57,7 +59,8 @@ StateDirectory=monitor64-agent
 StateDirectoryMode=0700
 ReadWritePaths=` + defaultDir + ` ` + libDir + `
 ReadWritePaths=-/var/cache/dnf -/var/cache/libdnf5 -/var/cache/yum -/var/cache/zypp
-%sProtectKernelModules=yes
+%sCapabilityBoundingSet=~CAP_SYS_MODULE
+SystemCallFilter=~@module
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes

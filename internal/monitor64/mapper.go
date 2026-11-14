@@ -791,6 +791,7 @@ var noteKeys = map[string]string{
 	"slow_failed": "monitor64.note.slow_failed", "member": "monitor64.note.member", "pkg_missing": "monitor64.note.pkg_missing",
 	"no_repo": "monitor64.note.no_repo", "no_vuln_db": "monitor64.note.no_vuln_db", "running": "monitor64.note.running",
 	"no_disks": "monitor64.note.no_disks", "counters_unreadable": "monitor64.note.counters_unreadable", "larger_than": "monitor64.note.larger_than",
+	"pacman_local": "monitor64.note.pacman_local",
 }
 
 // hostText macht aus einem Text des Hosts (Abschnittsfehler, Hinweis, SMART-Fehler) einen Text fuer die Anzeige:

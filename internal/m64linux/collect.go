@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +26,7 @@ const (
 	timeoutNeedsRestart = 10 * time.Minute // Puffer fuer needs-restarting
 	slowRetry           = 5 * time.Minute  // gescheiterter langsamer Abschnitt: so bald neu versuchen
 	slowFirstWait       = 2 * time.Second  // erster Lauf: so lange auf das Ergebnis warten, dann Hinweis
+	stampMinAge         = time.Minute      // Paketdatenbank geaendert: fruehestens so lange nach dem letzten Lauf neu lesen
 	deadlineMargin      = 3 * time.Second  // Collect endet so viel vor der ctx-Deadline (Antwort muss noch raus)
 )
 
@@ -77,11 +80,12 @@ type Cache struct {
 }
 
 type slowEntry struct {
-	res  slowResult
-	have bool          // res stammt aus einem fertigen Lauf
-	at   time.Time     // Ende des letzten Laufs (Uhr rueckwaerts = veraltet)
-	next time.Time     // ab dann erneuern
-	run  chan struct{} // laufende Erneuerung (wird beim Ende geschlossen), nil = keine
+	res   slowResult
+	have  bool          // res stammt aus einem fertigen Lauf
+	at    time.Time     // Ende des letzten Laufs (Uhr rueckwaerts = veraltet)
+	next  time.Time     // ab dann erneuern
+	stamp string        // Stand der Quelle beim letzten Lauf (pkgStamp); weicht er ab, gilt res als veraltet
+	run   chan struct{} // laufende Erneuerung (wird beim Ende geschlossen), nil = keine
 }
 
 // slowResult ist das Ergebnis eines langsamen Abschnitts.
@@ -208,13 +212,13 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 		c.collectReboot(ctx, r)
 	}
 	if want(m64proto.SecSmart) {
-		res := c.slow(ctx, m64proto.SecSmart, m64proto.SlowSmartSec*time.Second, c.collectSmart)
+		res := c.slow(ctx, m64proto.SecSmart, m64proto.SlowSmartSec*time.Second, "", c.collectSmart)
 		r.SMART = res.smart
 		r.Errors = append(r.Errors, res.errs...)
 		r.Notes = append(r.Notes, res.notes...)
 	}
 	if want(m64proto.SecUpdates) {
-		res := c.slow(ctx, m64proto.SecUpdates, m64proto.SlowUpdatesSec*time.Second, c.collectUpdates)
+		res := c.slow(ctx, m64proto.SecUpdates, m64proto.SlowUpdatesSec*time.Second, c.pkgStamp(), c.collectUpdates)
 		r.Updates = res.updates
 		r.Errors = append(r.Errors, res.errs...)
 		r.Notes = append(r.Notes, res.notes...)
@@ -224,7 +228,11 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 
 // slow liefert einen gepufferten Abschnitt. Gelesen wird immer im Hintergrund (hoechstens ein Lauf je Schluessel);
 // ohne fertigen Stand wartet slow kurz und liefert sonst den Hinweis NoteReading (Abschnitt key).
-func (c *collector) slow(ctx context.Context, key string, maxAge time.Duration, fn func(context.Context) slowResult) slowResult {
+//
+// stamp ist der Stand der Quelle (z. B. pkgStamp, "" = keiner): Aendert er sich, liest slow neu, ohne maxAge
+// abzuwarten (fruehestens stampMinAge nach dem letzten Lauf) - nach "apt upgrade" stimmt die Zahl sonst bis zu
+// einer Stunde nicht (#159).
+func (c *collector) slow(ctx context.Context, key string, maxAge time.Duration, stamp string, fn func(context.Context) slowResult) slowResult {
 	ca := c.cache
 	ca.mu.Lock()
 	if ca.entries == nil {
@@ -236,7 +244,8 @@ func (c *collector) slow(ctx context.Context, key string, maxAge time.Duration, 
 		ca.entries[key] = e
 	}
 	now := c.now()
-	stale := !e.have || now.Before(e.at) || !now.Before(e.next)
+	stale := !e.have || now.Before(e.at) || !now.Before(e.next) ||
+		stamp != "" && stamp != e.stamp && now.Sub(e.at) >= stampMinAge
 	if stale && e.run == nil {
 		done := make(chan struct{})
 		e.run = done
@@ -253,7 +262,7 @@ func (c *collector) slow(ctx context.Context, key string, maxAge time.Duration, 
 			if !aborted || !e.have { // abgebrochen: guter alter Stand bleibt
 				e.res, e.have = nr, true
 			}
-			e.at = t
+			e.at, e.stamp = t, stamp
 			if aborted || len(nr.errs) > 0 {
 				e.next = t.Add(slowRetry)
 			} else {
@@ -430,7 +439,7 @@ func (c *collector) collectPower(ctx context.Context) *m64proto.Power {
 func (c *collector) collectReboot(ctx context.Context, r *m64proto.Report) {
 	rb := readReboot(c.src)
 	if !rb.Required && c.has("needs-restarting") { // RHEL: Python-Aufruf, daher 10 min gepuffert
-		res := c.slow(ctx, "needs-restarting", timeoutNeedsRestart, func(ctx context.Context) slowResult {
+		res := c.slow(ctx, "needs-restarting", timeoutNeedsRestart, "", func(ctx context.Context) slowResult {
 			var out slowResult
 			if res, err := c.run(ctx, timeoutNeeds, "needs-restarting", "-r"); err == nil {
 				if req, ok := ParseNeedsRestarting(res.Code); ok {
@@ -557,8 +566,9 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	case mgrPacman:
 		if c.has("checkupdates") {
 			list = &call{"checkupdates", nil, func(c int) bool { return c == 0 || c == 2 }}
-		} else {
+		} else { // nur gegen die lokale Paketliste (Stand des letzten pacman -Sy): Hinweis auf checkupdates
 			list = &call{"pacman", []string{"-Qu"}, func(c int) bool { return c == 0 || c == 1 }}
+			out.notes = append(out.notes, m64proto.SectionNote{Section: m64proto.SecUpdates, Note: m64proto.HintPacmanLocal})
 		}
 	case mgrApk:
 		list = &call{"apk", []string{"list", "-u"}, zero}
@@ -619,6 +629,28 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	u.Checked = c.now().Unix()
 	out.updates = u
 	return out
+}
+
+// pkgFiles aendern sich, wenn Pakete installiert oder erneuert werden oder die Paketlisten neu geladen sind
+// (apt/dpkg, rpm alt und neu, pacman, apk, opkg). Ordner zaehlen mit ihrer eigenen Aenderungszeit (neue oder
+// entfernte Eintraege).
+var pkgFiles = []string{
+	"/var/lib/dpkg/status", "/var/lib/apt/lists",
+	"/var/lib/rpm/rpmdb.sqlite", "/var/lib/rpm/Packages", "/usr/lib/sysimage/rpm/rpmdb.sqlite", "/usr/lib/sysimage/rpm/Packages",
+	"/var/lib/pacman/local", "/var/lib/pacman/sync",
+	"/lib/apk/db/installed", "/var/lib/opkg/status", "/usr/lib/opkg/status",
+}
+
+// pkgStamp ist der Stand der Paketdatenbank (Groesse und Aenderungszeit der pkgFiles); "" = nichts gefunden.
+func (c *collector) pkgStamp() string {
+	var b strings.Builder
+	src := osSource{root: c.opt.Root}
+	for _, p := range pkgFiles {
+		if fi, err := os.Stat(src.full(p)); err == nil {
+			fmt.Fprintf(&b, "%s:%d:%d;", p, fi.Size(), fi.ModTime().UnixNano())
+		}
+	}
+	return b.String()
 }
 
 // Caps liefert die Abschnitte, die auf diesem Host Werte liefern koennen (fuer m64proto.Info.Caps).

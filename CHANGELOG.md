@@ -15,6 +15,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Monitor64: macOS-Hilfsvolumes, Time-Machine- und temporäre Mounts im Prometheus-Zugang nicht mehr vorausgewählt; lange Mountpfade brechen um (#114).
 - Monitor64: Host-Adresse wie „10.0.0.2.16“ (Tippfehler) wird abgelehnt statt als Hostname angenommen (Forum 5175).
 - Cluster: Beitritt einer kopierten Node (geklonte VM, kopierter Datenordner) nennt die Ursache statt „HTTP 400 cannot pair with itself“ (Forum 5174).
+- PROXY64: Mit HTTP/3 liefert z. B. die OPNsense-Oberfläche kein `400 Bad Request` mehr (GET kam beim Ziel mit Inhalt unbekannter Länge an, #157).
+- Monitor64: Linux-Agent 0.1.6 – Updates nach `apt upgrade` & Co. nach etwa einer Minute aktuell statt bis zu einer Stunde später (#159); „Neustart nötig“ wieder richtig trotz Dienst-Härtung, Hinweis auf pacman-contrib unter Arch (#158).
 - Einstellungen: Link „Changelog“ zum GitHub-Release beim angebotenen Node64-Update.
 - Healthchecks: Gleicher eigener Kanal (z. B. ntfy) auf mehreren verknüpften Nodes – Störung und Entwarnung kommen von ipv64.net nur noch einmal statt einmal je Node (Forum 5172; mit dem Update der ipv64-Server).
 - MCP: alle Module lesbar (Konfiguration von Node, Healthchecks, Monitor64, DNS64, PROXY64, DynDNS, Zertifikaten, Honeypot64, Benachrichtigungen, neu Sonar64) – weiterhin nur lesend und ohne Geheimnisse; Änderungen über die REST-API, das neue Werkzeug `api_reference` zeigt der KI die passenden Endpunkte (#152, #153).

@@ -15,6 +15,8 @@ Short summary of what changes per version. Details per module are in the node un
 - Monitor64: macOS helper volumes, Time Machine and temporary mounts no longer preselected in the Prometheus access; long mount paths wrap (#114).
 - Monitor64: a host address like "10.0.0.2.16" (typo) is rejected instead of being accepted as a host name (forum 5175).
 - Cluster: joining a copied node (cloned VM, copied data folder) names the cause instead of "HTTP 400 cannot pair with itself" (forum 5174).
+- PROXY64: with HTTP/3, e.g. the OPNsense web GUI no longer returns `400 Bad Request` (GET reached the target with a body of unknown length, #157).
+- Monitor64: Linux agent 0.1.6 – updates current about a minute after `apt upgrade` & co. instead of up to an hour later (#159); "Reboot required" correct again despite the service hardening, hint about pacman-contrib on Arch (#158).
 - Settings: "Changelog" link to the GitHub release next to an offered Node64 update.
 - Healthchecks: same channel of its own (e.g. ntfy) on several linked nodes – problems and recoveries from ipv64.net now arrive once instead of once per node (forum 5172; with the update of the ipv64 servers).
 - MCP: all modules readable (configuration of node, health checks, Monitor64, DNS64, PROXY64, DynDNS, certificates, Honeypot64, notifications, new Sonar64) – still read-only and without secrets; changes go through the REST API, the new tool `api_reference` shows the AI the right endpoints (#152, #153).

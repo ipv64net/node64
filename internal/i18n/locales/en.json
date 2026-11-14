@@ -6684,6 +6684,7 @@
       "no_vuln_db": "no vulnerability database (pkg audit -F)",
       "not_found": "program not found",
       "not_parsable": "output could not be evaluated",
+      "pacman_local": "pacman -Qu only compares against the local package list (as of the last pacman -Sy) – install pacman-contrib (checkupdates) for current numbers",
       "pkg_missing": "pkg not installed",
       "reading": "still being read",
       "running": "running: {a}",

@@ -354,6 +354,7 @@ if [ "$m64_updates" = 1 ]; then
 		if m64_try pacman "0 1" 90 pacman -Qu; then
 			m64_sec updates:pacman
 			m64_out
+			m64_note updates "{m64:pacman_local}"
 		else
 			m64_err updates "$m64_e"
 		fi

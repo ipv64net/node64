@@ -1,5 +1,14 @@
 # Monitor64 – Changes
 
+## 0.1.17 – 2026-11-14
+
+Bug fixes:
+
+- Linux agent: after a package update (e.g. `apt upgrade`, `dnf upgrade`, `pacman -Syu`) or refreshed package lists, the agent re-reads the updates within about a minute instead of reporting the old state for up to an hour. It detects this from the package database (dpkg, rpm, pacman, apk, opkg). Without changes it still checks once an hour (#159).
+- Linux agent: "Reboot required" detects a running kernel without a module directory (Arch) or a newer installed kernel again. The service hardening `ProtectKernelModules=yes` hid `/lib/modules` from the agent. New installations only block loading kernel modules (`CapabilityBoundingSet=~CAP_SYS_MODULE`, `SystemCallFilter=~@module`); from agent 0.1.6 existing installations are read correctly without reinstalling (#158).
+- Arch Linux: without `checkupdates` (package pacman-contrib), `pacman -Qu` only compares against the local package list and mostly reports "0 available". The "Updates" service now points this out (agent and SSH, #158).
+- **Agent 0.1.6 (Linux):** re-read updates after package changes; "Reboot required" despite the old service hardening; hint about pacman-contrib.
+
 ## 0.1.16 – 2026-11-14
 
 Changes:

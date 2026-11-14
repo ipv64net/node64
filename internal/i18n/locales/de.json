@@ -6684,6 +6684,7 @@
       "no_vuln_db": "keine Schwachstellen-Datenbank (pkg audit -F)",
       "not_found": "Programm fehlt",
       "not_parsable": "keine Auswertung möglich",
+      "pacman_local": "pacman -Qu vergleicht nur mit der lokalen Paketliste (Stand des letzten pacman -Sy) – für aktuelle Zahlen pacman-contrib (checkupdates) installieren",
       "pkg_missing": "pkg nicht installiert",
       "reading": "wird gelesen",
       "running": "läuft: {a}",

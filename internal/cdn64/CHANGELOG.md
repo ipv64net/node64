@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.56.2 – 2026-11-14
+
+### Behoben
+- HTTP/3: Ein GET ohne Inhalt kam beim Ziel als Anfrage mit Inhalt unbekannter Länge an (HTTP/2 ohne Ende des Streams). Ziele wie lighttpd (z. B. die OPNsense-Oberfläche) antworteten darauf mit `400 Bad Request` – im normalen Browser-Profil, das sich HTTP/3 gemerkt hat, im privaten Fenster oder mit curl (HTTP/2) dagegen nicht. PROXY64 reicht solche Anfragen jetzt wie bei HTTP/1.1 und HTTP/2 ohne Inhalt weiter (#157).
+
 ## 1.56.1 – 2026-11-14
 
 ### Geändert
