@@ -139,7 +139,37 @@ lassen sich nicht sinnvoll parallel bauen (B2 braucht Gruppen und Rollen aus B1)
 alle registrierten Routen mit einem Nur-lesen-Benutzer abklopft; Aussperren durch LDAP-Ausfall → lokaler Admin
 bleibt Pflicht; Altgeräte ohne TLS beim LDAP → Klartext nur per Schalter.
 
-## Offene Fragen an Dennis
+## Entscheidungen (Dennis, 2026-11-14)
+
+1. Rollen: nur **Administrator** und **Nur lesen**.
+2. AD/LDAP: Benutzer werden beim ersten Anmelden angelegt, wenn sie in einer zugeordneten Gruppe sind.
+3. SSO: Anlage über den Gruppen-Claim als Schalter, **Standard aus**.
+4. 2FA-Pflicht: **ein** Schalter für alle.
+5. Cluster: Benutzer-Abgleich bleibt ein Schalter (wie heute, Standard aus).
+6. Menüname: **Benutzerverwaltung**.
+7. Die Benutzerverwaltung ist **nur lokal für Node64** und hat mit ipv64.net nichts zu tun (keine Portal-, hub- oder
+   API-v2-Änderung).
+8. B1 und B2 parallel bauen; an **allen** Stellen prüfen, dass „Nur lesen“ greift.
+
+## Gemeinsamer Vertrag (Fundament, vor dem parallelen Bau)
+
+- **Schema** `internal/store/migrations/0008_user_admin.sql`: `users.role|disabled|source|email|group_uids|
+  ext_group_uids|must_change`, Tabelle `user_groups` (uid, name, role, description, ldap_groups, oidc_groups).
+- **Store** `internal/store/users.go`: `RoleAdmin/RoleRead`, `SourceLocal/LDAP/OIDC`, `CreateUserWith(NewUser)`,
+  `UserByUID`, `UpdateUserAdmin(UserAdmin)`, `SetUserExtGroups`, `SetUserMustChange`, `EffectiveRole`,
+  `ActiveLocalAdmins(exclude)`, Gruppen `Groups/GroupByUID/SaveGroup/DeleteGroup` (meldet `LoginChanged("groups")`).
+- **Einstellungen** `internal/authcfg`: `LDAPConfig` (`auth.ldap`, Bind-Passwort mit `secret.key` verschlüsselt),
+  `auth.2fa_required`, `auth.oidc.jit`, `auth.oidc.group_claim`; Speichern meldet `LoginChanged("directory","auth")`.
+
+## Aufteilung (parallel, je ein Worktree)
+
+| Teil | Inhalt | Dateien (Besitz) |
+|---|---|---|
+| A Oberfläche + Rechte | zentrale Rechteprüfung (`s.auth`, `Guards`, Admin-Liste), Test über alle Routen; Einstellungen → Benutzerverwaltung (Benutzer, Gruppen, Anmeldung; Login-Seite zieht um); 2FA-Pflicht und „Passwort beim ersten Anmelden setzen“ im Anmeldeablauf; Sperre wirkt auf Sitzungen/API-Keys; `/api/users`, `/api/groups`; „Nur lesen“-Hinweis in der Oberfläche; i18n `useradmin.*`, `nav.useradmin`; openapi | `internal/web/**` (ohne LDAP-Dateien), `internal/module` (Guards), Module nur wo GETs Geheimnisse liefern |
+| B Cluster | `usercluster`: `accounts` um Rolle/Sperre/Herkunft/E-Mail/Gruppen/MustChange; neue Bereiche `groups` und `directory` (LDAP + 2FA-Pflicht, Bind-Passwort neu verschlüsselt); `sso` um JIT/Claim; Sitzungsende bei Sperre/Rolle; letzter lokaler Admin; TOTP-Geheimnis verschlüsselt speichern (Store-Hook); Tests mit zwei Nodes | `internal/usercluster/**`, `internal/store` (nur TOTP-Hook), Verdrahtung `cmd/node64/main.go` (Zeilen) |
+| C AD/LDAP + SSO-Gruppen | Paket `internal/ldapauth` (go-ldap/v3: Verbindung, Test, Anmelden, Gruppen); Anmeldung lokal→LDAP mit Anlage beim ersten Mal (stabile UID aus `objectGUID`/`entryUUID`); OIDC-Gruppen-Claim mit Anlage; Karte „AD/LDAP“ als eigenes Template-Teil für den Reiter Anmeldung; API `/api/auth/ldap`; i18n `ldap.*`; Tests gegen einen Test-LDAP-Server | `internal/ldapauth/**`, `internal/web/auth_ldap*.go`, `internal/web/templates/partials/ldap_card.html` |
+
+## Offene Fragen an Dennis (beantwortet, siehe Entscheidungen)
 
 1. **Rollen:** reichen „Administrator“ und „Nur lesen“? (Empfehlung: ja; eine dritte Rolle wie „Bediener“ – z. B.
    Checks pausieren, quittieren – erst bei Bedarf.)

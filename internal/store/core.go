@@ -78,17 +78,27 @@ type User struct {
 	Timezone     string
 	CreatedAt    time.Time
 	LastLoginAt  time.Time
+	// Benutzerverwaltung (users.go)
+	Role         string   // RoleAdmin oder RoleRead (eigene Rolle; wirksam: EffectiveRole)
+	Disabled     bool     // gesperrt: keine Anmeldung, Sitzungen und API-Keys gelten nicht
+	Source       string   // SourceLocal, SourceLDAP, SourceOIDC
+	Email        string   // nur Anzeige und Zuordnung
+	GroupUIDs    []string // von Hand zugeordnete Gruppen
+	ExtGroupUIDs []string // beim letzten Anmelden ueber LDAP/SSO ermittelte Gruppen
+	MustChange   bool     // Passwort beim naechsten Anmelden setzen
 }
 
-const userCols = `id, uid, username, password_hash, totp_secret, lang, timezone, created_at, last_login_at`
+const userCols = `id, uid, username, password_hash, totp_secret, lang, timezone, created_at, last_login_at, role, disabled, source, email, group_uids, ext_group_uids, must_change`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	var created, last string
-	if err := row.Scan(&u.ID, &u.UID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.Lang, &u.Timezone, &created, &last); err != nil {
+	var created, last, groups, ext string
+	if err := row.Scan(&u.ID, &u.UID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.Lang, &u.Timezone, &created, &last,
+		&u.Role, &u.Disabled, &u.Source, &u.Email, &groups, &ext, &u.MustChange); err != nil {
 		return nil, err
 	}
 	u.CreatedAt, u.LastLoginAt = ParseTime(created), ParseTime(last)
+	u.GroupUIDs, u.ExtGroupUIDs = splitList(groups), splitList(ext)
 	return &u, nil
 }
 
