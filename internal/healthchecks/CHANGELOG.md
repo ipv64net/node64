@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 3.2.2 – 2026-11-14
+
+### Geändert
+- Benutzerverwaltung: Benutzer mit der Rolle „Nur lesen“ sehen Basic-Auth-Passwort und Kopfzeilen von HTTP-Checks nicht (Detailseite, `/api/checks`, `/api/online-checks`) und können Checks nicht bearbeiten; das Bearbeiten-Formular bleibt Administratoren vorbehalten.
+
 ## 3.2.1 – 2026-11-14
 
 ### Behoben

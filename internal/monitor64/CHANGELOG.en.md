@@ -1,5 +1,11 @@
 # Monitor64 – Changes
 
+## 0.1.16 – 2026-11-14
+
+Changes:
+
+- User management: only administrators see the push token of accesses (host page, `GET /api/monitor64/hosts/{uid}`); "Read only" sees the accesses without token.
+
 ## 0.1.15 – 2026-11-14
 
 Bug fixes:

@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 3.2.2 – 2026-11-14
+
+### Changed
+- User management: users with the role "Read only" do not see the basic-auth password and headers of HTTP checks (detail page, `/api/checks`, `/api/online-checks`) and cannot edit checks; the edit form is for administrators only.
+
 ## 3.2.1 – 2026-11-14
 
 ### Fixed

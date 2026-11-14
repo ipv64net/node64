@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.40.1 – 2026-11-14
+
+### Changed
+- User management: TSIG keys of local zones (`/api/dns64/zones/{id}/tsig`, Local DNS page) for administrators only; "Read only" sees the zones without keys.
+
 ## 1.40.0 – 2026-11-14
 
 ### New

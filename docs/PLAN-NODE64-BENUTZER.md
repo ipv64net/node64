@@ -3,7 +3,11 @@
 Stand 2026-11-14, Wunsch Dennis: Eine Node soll von mehreren Personen verwaltet werden (Büro mit mehreren Leuten).
 Neuer Menüpunkt unter Einstellungen für die Benutzerverwaltung: mehrere lokale Benutzer, Gruppen, 2FA je Benutzer,
 SSO (Authentik usw.) und eine AD/LDAP-Anbindung an einer Stelle. **Klein halten**, aber clusterweit sauber
-abgeglichen. **Nur Planung**, nichts gebaut.
+abgeglichen.
+
+**Stand 2026-11-14: B1 und B2 gebaut** (Fundament 00fee2ef, Cluster 880bcee1, AD/LDAP fe1bd034, Rechte und
+Oberfläche b688dee3). Bedienung: [ANMELDUNG.md](ANMELDUNG.md); Cluster: [CLUSTER.md](CLUSTER.md). Offen: Test gegen
+echtes Samba-AD/OpenLDAP auf der Box, eigene Request-Header in PROXY64 für „Nur lesen“ ausblenden.
 
 Abgrenzung: [PLAN-NODE64-LDAP.md](PLAN-NODE64-LDAP.md) beschreibt Node64 als LDAP-**Server** (LDAP64). Hier geht es um
 das Gegenstück: Node64 meldet Benutzer **gegen** ein vorhandenes AD/LDAP an (LDAP-**Client**). Beides schließt sich

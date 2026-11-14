@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.40.1 – 2026-11-14
+
+### Geändert
+- Benutzerverwaltung: TSIG-Schlüssel lokaler Zonen (`/api/dns64/zones/{id}/tsig`, Seite Lokaler DNS) nur für Administratoren; „Nur lesen“ sieht die Zonen ohne Schlüssel.
+
 ## 1.40.0 – 2026-11-14
 
 ### Neu
