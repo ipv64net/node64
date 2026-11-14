@@ -17,6 +17,9 @@ const (
 	WatchTLS         = "tls"         // TLS-Handshake gescheitert (path = Fehler)
 	WatchNoTLS       = "no_tls"      // auf Port 443 kein lesbares TLS-ClientHello (auch zu altes TLS)
 	WatchPassthrough = "passthrough" // TLS roh ans Ziel durchgereicht (host = SNI)
+	// WatchProxyUntrusted: PROXY-Kopf von einer Quelle, die nicht unter "PROXY protocol annehmen von" steht (geschlossen)
+	WatchProxyUntrusted = "proxy_untrusted"
+	WatchMisdirected    = "misdirected" // 421: Host gehoert nicht zur Verbindung und das Zertifikat deckt ihn nicht ab
 )
 
 // WatchFunc bekommt je Ereignis die Gegenstelle, Name, Methode, Pfad bzw. Fehler, Status (0 = keine Antwort) und Art.

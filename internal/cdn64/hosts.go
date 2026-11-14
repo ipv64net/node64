@@ -183,6 +183,7 @@ func (h *Host) normalize() error {
 		h.Locations = []Location{}
 		h.Advanced.TargetPath, h.Advanced.OnlyLocations = "", false // Pfad beim Ziel und "nur Locations" nur bei Proxy-Hosts
 		h.Advanced.TargetHTTP = ""                                  // ebenso das Protokoll zum Ziel
+		h.Advanced.NextcloudDAV = false                             // und die Nextcloud-Weiterleitungen
 	}
 	if h.Kind != KindPass {
 		h.Advanced.ProxyProtocol = "" // PROXY-Kopf zum Ziel nur beim Durchreichen (sonst setzt der Proxy X-Forwarded-For)

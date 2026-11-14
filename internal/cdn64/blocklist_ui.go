@@ -3,7 +3,10 @@ package cdn64
 import (
 	"encoding/json"
 	"net/http"
+	"net/netip"
 	"strings"
+
+	"github.com/ipv64net/node64/internal/geoip"
 )
 
 // Seite (Karte auf dem Reiter Sicherheit) und API der ipv64-Blocklisten; Freigabe- und Sperrliste auf dem Reiter Zugriffslisten.
@@ -60,8 +63,10 @@ type blocklistsView struct {
 	Blocked int64            `json:"blocked"` // abgewiesen seit dem Start
 	Active  bool             `json:"active"`  // mindestens eine Liste geladen und eingeschaltet
 
-	Countries  []GeoState `json:"countries"`   // Laenderlisten der Laendersperre (Hosts mit Laendersperre)
+	Countries  []GeoState `json:"countries"`   // Laenderlisten der Laendersperre (Hosts mit Laendersperre; Rueckfall ohne Standort)
 	GeoBlocked int64      `json:"geo_blocked"` // von der Laendersperre abgewiesen seit dem Start
+	// GeoData: Standortdaten (DB-IP ueber ipv64.net), nach denen die Laendersperre entscheidet (#139)
+	GeoData geoip.Status `json:"geo_data"`
 
 	TokenSet  bool `json:"token_set"`  // Listen-Token von Hand hinterlegt (das Token wird nie ausgegeben)
 	TokenAuto bool `json:"token_auto"` // Listen-Token automatisch ueber den zentralen API-Key geholt
@@ -72,7 +77,7 @@ type blocklistsView struct {
 func (m *Module) blView(r *http.Request) blocklistsView {
 	v := blocklistsView{Lists: m.blStates(r.Context()), Allow: strings.Fields(m.core.SettingOr(r.Context(), setBlockAllow, "")),
 		Deny: strings.Fields(m.core.SettingOr(r.Context(), setBlockDeny, "")), Denied: m.bl.denied.Load(), Blocked: m.bl.blocked.Load(),
-		Active: m.bl.set.Load() != nil, Countries: m.geoStates(), GeoBlocked: m.bl.geo.blocked.Load(), AIBots: m.aiState()}
+		Active: m.bl.set.Load() != nil, Countries: m.geoStates(), GeoBlocked: m.bl.geo.blocked.Load(), GeoData: geoip.Current(), AIBots: m.aiState()}
 	v.TokenSet = m.blTokenOf(r.Context(), setBlockToken) != ""
 	v.TokenAuto = !v.TokenSet && m.blTokenOf(r.Context(), setBlockTokenAuto) != ""
 	if v.Allow == nil {
@@ -82,6 +87,22 @@ func (m *Module) blView(r *http.Request) blocklistsView {
 		v.Deny = []string{}
 	}
 	return v
+}
+
+// apiGeoLookup: welches Land die Laendersperre fuer eine Adresse sieht und woher (#139, #54).
+func (m *Module) apiGeoLookup(w http.ResponseWriter, r *http.Request) {
+	ip, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(r.URL.Query().Get("ip")), "[]"))
+	if err != nil || ip.Zone() != "" {
+		writeErr(w, http.StatusBadRequest, "ip missing or invalid")
+		return
+	}
+	ip = ip.Unmap()
+	cc, src := m.geoSource(ip)
+	out := map[string]any{"ip": ip.String(), "country": cc, "source": src, "location_data": geoip.Current().Loaded}
+	if cc != "" {
+		out["name"] = geoip.Name(cc, r.URL.Query().Get("lang"))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (m *Module) apiBlocklistsGet(w http.ResponseWriter, r *http.Request) {

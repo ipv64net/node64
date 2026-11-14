@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/ipv64net/node64/internal/geoip"
 )
 
 // index.json von ipv64.net: welche Listen es gibt (Name, Kategorie, Lizenz, Datei) und welche Laender. Neue Listen
@@ -49,6 +51,17 @@ type geoCountry struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
+
+// Local: Name in der Sprache der Oberflaeche (#54), sonst der aus index.json.
+func (c geoCountry) Local(lang string) string {
+	if n := geoip.Name(c.Code, lang); n != c.Code {
+		return n
+	}
+	return c.Name
+}
+
+// Flag: Flagge als Emoji ("" = unbekannt).
+func (c geoCountry) Flag() string { return geoip.Flag(c.Code) }
 
 var (
 	blIDRe   = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)

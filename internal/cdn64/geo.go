@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -15,14 +16,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/shield"
 )
 
-// Laendersperre je Host und Stream: Besucher aus bestimmten Laendern sperren oder nur sie zulassen. Die Laenderlisten kommen
-// von ipv64.net (taeglich aus den Daten der Registrierungsstellen, dazu die Ausgangsadressen von Apple iCloud Private Relay mit
-// Apples Land, #54) und werden nur fuer Laender geladen, die ein
-// eingeschalteter Host oder Stream benutzt; Zwischenspeicher wie bei den Blocklisten. Private Netze, CGNAT und die Ausnahmen
-// der Blocklisten werden nie gesperrt. "Nur zulassen" sperrt erst, wenn mindestens eine der Listen geladen ist.
+// Laendersperre je Host und Stream: Besucher aus bestimmten Laendern sperren oder nur sie zulassen. Entschieden wird nach dem
+// Standort der Adresse (Laenderdaten von ipv64.net nach DB-IP, internal/geoip, wie bei Honeypot64; #139): AWS/Azure Frankfurt
+// oder Firmennetze, die bei ARIN registriert sind, aber in Deutschland stehen, gelten so als DE. Die Standortdaten werden
+// geladen, solange ein eingeschalteter Host oder Stream die Laendersperre nutzt. Nur fuer Adressen ohne Standort (Daten noch
+// nicht geladen oder Adresse unbekannt) gelten als Rueckfall die Laenderlisten von ipv64.net (taeglich aus den Daten der
+// Registrierungsstellen, dazu die Ausgangsadressen von Apple iCloud Private Relay mit Apples Land, #54); sie werden nur fuer
+// Laender geladen, die ein eingeschalteter Host oder Stream benutzt; Zwischenspeicher wie bei den Blocklisten. Private Netze,
+// CGNAT und die Ausnahmen der Blocklisten werden nie gesperrt. "Nur zulassen" sperrt ohne Standort erst, wenn alle Listen
+// geladen sind.
 
 const (
 	geoBlock  = "block" // Laender sperren
@@ -47,6 +53,12 @@ type GeoState struct {
 	Error   string    `json:"error,omitempty"`
 }
 
+// geoLocate: Land einer Adresse nach Standort (Tests ersetzen es); ok = false ohne Daten bzw. fuer unbekannte Adressen.
+var geoLocate = geoip.Lookup
+
+// geoDataStart fordert die Standortdaten an (Tests ersetzen es); die gelieferte Funktion gibt sie zurueck.
+var geoDataStart = geoip.Start
+
 // geoSets: geladene Laenderlisten.
 type geoSets struct {
 	mu      sync.RWMutex
@@ -57,6 +69,9 @@ type geoSets struct {
 	blocked atomic.Int64   // abgewiesen seit dem Start
 
 	needBy map[string][]string // Laender je Quelle ("hosts", "streams")
+
+	dataMu      sync.Mutex
+	dataRelease func() // Standortdaten angefordert (geoDataStart), nil = nicht
 }
 
 // normalizeGeo prueft Modus und Laender (Grossbuchstaben, ohne Doppelte); ohne Modus keine Laender.
@@ -121,7 +136,17 @@ func (m *Module) geoBlockedBy(mode string, countries []string, ip netip.Addr) bo
 			return false
 		}
 	}
-	in, missing := false, false
+	if cc, ok := geoLocate(ip); ok { // Standort bekannt: nur er zaehlt (#139)
+		block := slices.Contains(countries, cc)
+		if mode == geoAllow {
+			block = !block
+		}
+		if block {
+			g.blocked.Add(1)
+		}
+		return block
+	}
+	in, missing := false, false // ohne Standort: Listen nach Registrierungsland
 	for _, c := range countries {
 		s := g.sets[c]
 		if s == nil {
@@ -189,12 +214,47 @@ func (m *Module) geoNeedFrom(src string, codes []string) {
 		}
 	}
 	g.mu.Unlock()
+	m.geoData(len(need) > 0)
 	if missing {
 		select {
 		case m.bl.kick <- struct{}{}:
 		default:
 		}
 	}
+}
+
+// geoData fordert die Standortdaten an bzw. gibt sie zurueck (on = mindestens ein Host oder Stream mit Laendersperre).
+// Ohne Datenverzeichnis (Tests) nie.
+func (m *Module) geoData(on bool) {
+	g := &m.bl.geo
+	g.dataMu.Lock()
+	defer g.dataMu.Unlock()
+	switch {
+	case on && g.dataRelease == nil && m.dataDir != "":
+		g.dataRelease = geoDataStart(m.dataDir, "Node64/"+m.version, m.log)
+	case !on && g.dataRelease != nil:
+		g.dataRelease()
+		g.dataRelease = nil
+	}
+}
+
+// geoSource: Land einer Adresse und woher es kommt ("location" = Standort nach DB-IP, "registry" = Liste nach
+// Registrierungsland, "" = keins), fuer die Abfrage in der API.
+func (m *Module) geoSource(ip netip.Addr) (cc, source string) {
+	ip = ip.Unmap()
+	if cc, ok := geoLocate(ip); ok {
+		return cc, "location"
+	}
+	g := &m.bl.geo
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	codes := slices.Sorted(maps.Keys(g.sets)) // nur die geladenen Listen (Laender der Hosts und Streams)
+	for _, c := range codes {
+		if g.sets[c].Has(ip) {
+			return c, "registry"
+		}
+	}
+	return "", ""
 }
 
 func (m *Module) geoNeeded() []string {

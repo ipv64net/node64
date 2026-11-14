@@ -12,6 +12,7 @@ package edge
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,6 +61,8 @@ type Config struct {
 	// ProxyProtocol: Adressen bzw. Netze vorgeschalteter Proxys (z. B. Traefik), die auf 80/443 einen PROXY-Kopf
 	// (v1/v2) mit der echten Besucher-Adresse schicken duerfen; durch Leerzeichen/Komma getrennt, "" = aus (proxyproto.go)
 	ProxyProtocol string `json:"proxy_protocol"`
+	// ProxyProtocolPeers: PROXY-Kopf auch von den Adressen der eigenen Cluster-Nodes annehmen (SetProxyPeers, #138)
+	ProxyProtocolPeers bool `json:"proxy_protocol_peers"`
 }
 
 // DefaultConfig: 80/443 auf allen Adressen, HTTP/3 an, unbekannte Namen bekommen 404.
@@ -199,6 +203,11 @@ type Edge struct {
 	watch    atomic.Pointer[WatchFunc]   // Debug-Beobachter (SetWatch, watch.go)
 	probes   sync.Map                    // Pruefwerte "auf dem Docker-Host veroeffentlicht?" (published.go) -> angekommen
 	pub      atomic.Pointer[pubCache]
+	ppSrc    atomic.Pointer[func(context.Context) []string] // Cluster-Nodes (SetProxyPeers, proxypeers.go)
+	ppPeers  atomic.Pointer[[]netip.Addr]                   // deren Adressen
+	ppOnce   sync.Once
+	ppKick   chan struct{}
+	ppLog    ppLimiter // Log-Bremse fuer abgewiesene PROXY-Koepfe
 	fallback struct {
 		once sync.Once
 		crt  *tls.Certificate
@@ -219,7 +228,7 @@ func New(cfg Config, certs Certs, check func(ctx context.Context, want []ports.C
 		return nil, err
 	}
 	e := &Edge{log: log.With("module", "edge"), certs: certs, check: check, cfg: cfg, owners: map[string][]Route{}, tokens: map[string]string{},
-		lst: map[string]*listener{"http": {}, "https": {}, "http3": {}}, pass: map[net.Conn]struct{}{}}
+		lst: map[string]*listener{"http": {}, "https": {}, "http3": {}}, pass: map[net.Conn]struct{}{}, ppKick: make(chan struct{}, 1)}
 	e.defClose.Store(cfg.Default == DefaultClose)
 	e.cfgNow.Store(&cfg)
 	e.table.Store(buildTable(nil))
@@ -483,6 +492,7 @@ func (e *Edge) Close(ctx context.Context) {
 	}
 	stops := e.stopAllLocked()
 	e.mu.Unlock()
+	e.kickPeers() // peerLoop endet
 	for _, s := range stops {
 		_ = s(ctx)
 	}
@@ -529,6 +539,8 @@ type Status struct {
 	// UnknownReplaced: unbekannte Namen beantwortet gerade ein anderer Handler (z. B. der Honeypot-Koeder ueber
 	// PROXY64), die Standardseite gilt solange nicht
 	UnknownReplaced bool `json:"unknown_replaced,omitempty"`
+	// ProxyPeers: Adressen der Cluster-Nodes, von denen gerade ein PROXY-Kopf angenommen wird (Config.ProxyProtocolPeers)
+	ProxyPeers []netip.Addr `json:"proxy_peers,omitempty"`
 }
 
 type ListenerStatus struct {
@@ -552,6 +564,11 @@ func (e *Edge) Status() Status {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	st := Status{Config: e.cfg, UnknownReplaced: replaced}
+	if e.cfg.ProxyProtocolPeers {
+		if p := e.ppPeers.Load(); p != nil {
+			st.ProxyPeers = slices.Clone(*p)
+		}
+	}
 	need := e.needLocked()
 	for _, name := range []string{"http", "https", "http3"} {
 		c, l := e.claimLocked(name), e.lst[name]
@@ -682,7 +699,7 @@ func (e *Edge) startLocked(name string) error {
 		if err != nil {
 			return err
 		}
-		ln = proxyListen(ln, e.cfg.ProxyProtocol) // vorgeschalteter Proxy mit PROXY-Kopf: echte Besucher-Adresse
+		ln = e.proxyListen(ln, e.cfg) // vorgeschalteter Proxy mit PROXY-Kopf: echte Besucher-Adresse
 		srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10, ErrorLog: errLog}
 		if name == "http" {
 			srv.Handler = http.HandlerFunc(e.serveHTTP)
@@ -833,7 +850,8 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 	key, routes := t.lookup(host)
 	if r.TLS != nil && r.TLS.ServerName != "" { // Host muss zum Namen der Verbindung gehoeren
 		sni, _ := NormalizeName(r.TLS.ServerName)
-		if skey, _ := t.lookup(sni); skey != key {
+		if skey, sroutes := t.lookup(sni); skey != key && !e.coalesced(r, sni, sroutes, routes) {
+			e.watched(peerIP(r), host, r.Method, r.URL.RequestURI(), http.StatusMisdirectedRequest, WatchMisdirected)
 			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
 			return
 		}
@@ -856,6 +874,36 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Alt-Svc", `h3=":443"; ma=86400`)
 	}
 	rt.Handler.ServeHTTP(w, r)
+}
+
+// coalesced: Anfrage fuer einen anderen Namen als den der Verbindung (SNI), die trotzdem hier beantwortet werden darf -
+// HTTP/2 legt Verbindungen fuer alle Namen zusammen, die das Zertifikat der Verbindung abdeckt (RFC 9113 9.1.1, z. B.
+// Safari mit Wildcard-Zertifikat, #132). Erlaubt nur, wenn das Zertifikat der Verbindung den angefragten Namen abdeckt
+// und die Verbindung die TLS-Vorgaben des angefragten Namens erfuellt (Mindestversion, BSI, nur HTTP/1.1, HTTP/3);
+// nie fuer Verbindungen, die der CDN64-Server fuer einen bestimmten Namen durchreicht. Sonst bleibt es bei 421.
+func (e *Edge) coalesced(r *http.Request, sni string, sroutes, routes []*Route) bool {
+	if want, _ := r.Context().Value(routedKey{}).(string); want != "" {
+		return false
+	}
+	rt, srt := tlsRoute(routes), tlsRoute(sroutes)
+	if rt == nil || srt == nil || rt.Passthrough != "" || srt.GetCert != nil {
+		return false
+	}
+	if r.TLS.Version < max(rt.MinTLS, tls.VersionTLS12) || (rt.BSI && !srt.BSI) || (rt.NoHTTP2 && r.ProtoMajor == 2) || (r.ProtoMajor == 3 && !rt.HTTP3) {
+		return false
+	}
+	crt := e.certFor(srt, sni)
+	if crt == nil || len(crt.Certificate) == 0 {
+		return false
+	}
+	leaf := crt.Leaf
+	if leaf == nil {
+		var err error
+		if leaf, err = x509.ParseCertificate(crt.Certificate[0]); err != nil {
+			return false
+		}
+	}
+	return leaf.VerifyHostname(hostOf(r.Host)) == nil
 }
 
 // serveHTTP: Port 80 (ACME-Pruefungen, Weiterleitung auf HTTPS, reine HTTP-Abnehmer).

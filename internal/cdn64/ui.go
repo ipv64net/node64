@@ -381,7 +381,7 @@ type formData struct {
 	DNSKey  bool                // ipv64 DNS-01 moeglich (API-Key)
 	IPv64   bool                // DNS-Eintrag bei ipv64 moeglich (API-Key)
 	Zones   []string            // ipv64-Domains (Ziel fuer CNAME)
-	Locs    []Location          // vorhandene Locations und zwei leere Zeilen
+	Locs    []Location          // vorhandene Locations und eine leere Zeile (Vorlage fuer "+ Location hinzufuegen")
 	Adv     advText
 	CFNets  string
 
@@ -469,7 +469,7 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 		d.Zones, _ = m.dnsrec.Domains(dctx)
 		cancel()
 	}
-	d.Locs = append(append([]Location{}, h.Locations...), Location{Scheme: "http", WebSockets: true}, Location{Scheme: "http", WebSockets: true})
+	d.Locs = append(append([]Location{}, h.Locations...), Location{Scheme: "http", WebSockets: true})
 	a := h.Advanced
 	d.Adv = advText{ReqSet: headersText(a.RequestHeaders), ReqDel: strings.Join(a.RequestRemove, "\n"), RespSet: headersText(a.ResponseHeaders),
 		RespDel: strings.Join(a.ResponseRemove, "\n"), Trusted: strings.Join(a.TrustedProxies, "\n")}
@@ -601,6 +601,7 @@ func hostFromForm(r *http.Request, h *Host) {
 		a.TrustedProxies = lines(r.PostFormValue("adv_trusted"))
 		if r.PostForm.Has("adv_target_http") { // nur bei Proxy-Hosts im Formular
 			a.TargetHTTP = r.PostFormValue("adv_target_http")
+			a.NextcloudDAV = on("adv_nextcloud_dav")
 		}
 	}
 	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular

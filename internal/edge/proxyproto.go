@@ -20,6 +20,7 @@ import (
 // von dort ist er freiwillig (Health-Checks des Proxys ohne Kopf gehen weiter), von allen anderen wird nichts
 // gelesen - ein Besucher kann sich also keine fremde Adresse geben. Die Verbindung traegt danach die Adresse aus dem
 // Kopf (Zugriffslisten, Logs, Honeypot, Bremsen, Sperren). Verbindungen aus dem CDN64-Tunnel betrifft das nicht.
+// Cluster-Nodes und Log bei abgewiesenem Kopf: proxypeers.go.
 
 const (
 	ppHeaderWait = 5 * time.Second // so lange darf der vertraute Proxy fuer den Kopf brauchen
@@ -69,11 +70,12 @@ func trustedAddr(nets []netip.Prefix, a net.Addr) bool {
 // langsamer Absender das Annehmen nicht aufhaelt) und gibt die Verbindung mit der echten Adresse weiter.
 type ppListener struct {
 	net.Listener
-	nets []netip.Prefix
-	ch   chan net.Conn
-	errc chan error
-	done chan struct{}
-	once sync.Once
+	trust func(net.Addr) bool
+	bad   func(net.Addr, error) // unlesbarer Kopf einer vertrauten Quelle (nil = nicht melden)
+	ch    chan net.Conn
+	errc  chan error
+	done  chan struct{}
+	once  sync.Once
 }
 
 // proxyListen: ln unveraendert, wenn keine vertrauten Adressen eingetragen sind.
@@ -82,7 +84,11 @@ func proxyListen(ln net.Listener, raw string) net.Listener {
 	if err != nil || len(nets) == 0 {
 		return ln
 	}
-	l := &ppListener{Listener: ln, nets: nets, ch: make(chan net.Conn), errc: make(chan error, 1), done: make(chan struct{})}
+	return newPPListener(ln, func(a net.Addr) bool { return trustedAddr(nets, a) }, nil)
+}
+
+func newPPListener(ln net.Listener, trust func(net.Addr) bool, bad func(net.Addr, error)) net.Listener {
+	l := &ppListener{Listener: ln, trust: trust, bad: bad, ch: make(chan net.Conn), errc: make(chan error, 1), done: make(chan struct{})}
 	go l.loop()
 	return l
 }
@@ -102,13 +108,16 @@ func (l *ppListener) loop() {
 			}
 			return
 		}
-		if !trustedAddr(l.nets, c.RemoteAddr()) {
+		if !l.trust(c.RemoteAddr()) {
 			l.deliver(c)
 			continue
 		}
 		go func() {
 			pc, err := readProxyHeader(c)
 			if err != nil {
+				if l.bad != nil && !errors.Is(err, io.EOF) {
+					l.bad(c.RemoteAddr(), err)
+				}
 				_ = c.Close()
 				return
 			}

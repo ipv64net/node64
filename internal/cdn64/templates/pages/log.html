@@ -68,6 +68,9 @@
 				<input class="form-control form-control-sm mb-2" type="number" min="1" max="90" id="days" name="days" value="{{$d.Days}}">
 				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="anonymize" id="anonymize"{{if $d.Anon}} checked{{end}}><label class="form-check-label" for="anonymize">{{.T "cdn64.log.anonymize"}}</label></div>
 				<div class="form-text mb-2">{{.T "cdn64.log.settings_hint"}}</div>
+				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="access_file" id="access_file"{{if $d.File}} checked{{end}}><label class="form-check-label" for="access_file">{{.T "cdn64.log.file"}}</label></div>
+				<div class="input-group input-group-sm mb-1"><label class="input-group-text" for="access_file_mb">{{.T "cdn64.log.file_mb"}}</label><input class="form-control" type="number" min="1" max="1000" id="access_file_mb" name="access_file_mb" value="{{$d.FileMB}}"><span class="input-group-text">MB</span></div>
+				<div class="form-text mb-2">{{.T "cdn64.log.file_hint" "path" $d.FilePath}}</div>
 				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
 			</div>
 		</form>

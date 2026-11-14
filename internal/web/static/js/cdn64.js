@@ -159,23 +159,150 @@
 		setTimeout(function () { window.location.reload(); }, 1000 * (parseInt(reload.getAttribute("data-reload"), 10) || 5));
 	}
 
-	// Laendersperre: Vorschlaege auch nach dem Komma (#54) - die Liste traegt den bisherigen Text vorn, sonst schlaegt
-	// der Browser nach dem ersten Land nichts mehr vor
+	// Laendersperre (#54): eigene Vorschlagsliste unter dem Feld - sucht nach Kuerzel und Laendername (deutsch und
+	// englisch) im Teil nach dem letzten Komma, Auswahl per Klick, Pfeiltasten und Enter; darunter die gewaehlten Laender
+	// mit Flagge und Namen (x entfernt eins). Das Feld bleibt Text mit Kommas (Formular und API unveraendert).
 	var geo = document.getElementById("geo_countries"), geoList = document.getElementById("geo-cc");
 	if (geo && geoList) {
-		var base = Array.prototype.map.call(geoList.options, function (o) { return [o.value, o.textContent]; });
-		var fill = function () {
-			var v = geo.value, i = Math.max(v.lastIndexOf(","), v.lastIndexOf(" "));
-			var pre = v.slice(0, i + 1); // genau wie getippt, so passt der Vorschlag zum bisherigen Text
-			geoList.replaceChildren();
-			base.forEach(function (b) {
-				var o = document.createElement("option");
-				o.value = pre + b[0];
-				o.textContent = b[1];
-				geoList.appendChild(o);
+		var cc = Array.prototype.map.call(geoList.options, function (o) {
+			return { c: o.value, n: o.textContent, f: o.getAttribute("data-flag") || "", a: (o.getAttribute("data-alt") || "").toLowerCase() };
+		});
+		var byCode = {};
+		cc.forEach(function (x) { byCode[x.c] = x; });
+		var box = document.createElement("div");
+		box.className = "dropdown-menu shadow-sm";
+		box.style.maxHeight = "16rem";
+		box.style.overflowY = "auto";
+		var wrap = geo.parentNode;
+		wrap.style.position = "relative";
+		wrap.appendChild(box);
+		var chips = document.createElement("div");
+		chips.className = "d-flex flex-wrap gap-1 mt-1 small";
+		wrap.appendChild(chips);
+		var active = -1;
+		var codes = function () {
+			return geo.value.split(/[\s,;]+/).map(function (s) { return s.trim().toUpperCase(); }).filter(function (s) { return s !== ""; });
+		};
+		var showChips = function () {
+			chips.replaceChildren();
+			var seen = {}, typing = document.activeElement === geo ? cut()[1].toUpperCase() : ""; // angefangenes Wort noch nicht
+			codes().forEach(function (c) {
+				if (seen[c] || (c === typing && !byCode[c])) { return; }
+				seen[c] = true;
+				var x = byCode[c], s = document.createElement("span");
+				s.className = "badge rounded-pill border fw-normal " + (x || !cc.length ? "text-body-emphasis" : "text-danger border-danger");
+				s.textContent = (x && x.f ? x.f + " " : "") + (x ? x.n + " (" + c + ")" : c) + " ";
+				var del = document.createElement("button");
+				del.type = "button";
+				del.className = "btn-close btn-close-sm ms-1 align-middle";
+				del.style.fontSize = ".55rem";
+				del.setAttribute("aria-label", "×");
+				del.addEventListener("click", function () {
+					geo.value = codes().filter(function (k) { return k !== c; }).join(", ");
+					showChips();
+					geo.focus();
+				});
+				s.appendChild(del);
+				chips.appendChild(s);
 			});
 		};
-		geo.addEventListener("input", fill);
+		var cut = function () { // bisheriger Text bis einschliesslich des letzten Trenners, und das angefangene Wort
+			var v = geo.value, i = Math.max(v.lastIndexOf(","), v.lastIndexOf(" "), v.lastIndexOf(";"));
+			return [v.slice(0, i + 1), v.slice(i + 1).trim()];
+		};
+		var hide = function () { box.classList.remove("show"); active = -1; };
+		var pick = function (code) {
+			var pre = cut()[0].replace(/[\s,;]+$/, "");
+			geo.value = (pre ? pre + ", " : "") + code + ", ";
+			hide();
+			showChips();
+			geo.focus();
+		};
+		var fill = function () {
+			var q = cut()[1].toLowerCase(), have = {};
+			codes().forEach(function (c) { have[c] = true; });
+			box.replaceChildren();
+			active = -1;
+			var hits = cc.filter(function (x) {
+				if (have[x.c] && x.c.toLowerCase() !== q) { return false; }
+				return q === "" || x.c.toLowerCase().indexOf(q) === 0 || x.n.toLowerCase().indexOf(q) >= 0 || x.a.indexOf(q) >= 0;
+			}).sort(function (a, b) { // Kuerzel-Treffer zuerst
+				return (b.c.toLowerCase().indexOf(q) === 0) - (a.c.toLowerCase().indexOf(q) === 0);
+			}).slice(0, 12);
+			hits.forEach(function (x) {
+				var b = document.createElement("button");
+				b.type = "button";
+				b.className = "dropdown-item small";
+				b.textContent = (x.f ? x.f + " " : "") + x.n + " (" + x.c + ")";
+				b.addEventListener("mousedown", function (e) { e.preventDefault(); pick(x.c); });
+				box.appendChild(b);
+			});
+			box.classList.toggle("show", hits.length > 0 && document.activeElement === geo);
+		};
+		var mark = function (n) {
+			var items = box.querySelectorAll(".dropdown-item");
+			if (!items.length) { return; }
+			active = (n + items.length) % items.length;
+			items.forEach(function (it, i) { it.classList.toggle("active", i === active); });
+			items[active].scrollIntoView({ block: "nearest" });
+		};
+		geo.removeAttribute("list");
+		geo.addEventListener("input", function () { fill(); showChips(); });
 		geo.addEventListener("focus", fill);
+		geo.addEventListener("blur", function () { setTimeout(function () { hide(); showChips(); }, 150); });
+		geo.addEventListener("keydown", function (e) {
+			if (!box.classList.contains("show")) { return; }
+			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+				e.preventDefault();
+				mark(active + (e.key === "ArrowDown" ? 1 : -1));
+			} else if (e.key === "Enter" && active >= 0) {
+				e.preventDefault();
+				box.querySelectorAll(".dropdown-item")[active].dispatchEvent(new MouseEvent("mousedown"));
+			} else if (e.key === "Escape") {
+				hide();
+			}
+		});
+		showChips();
+	}
+
+	// Locations (#78): eingeklappt, "+ Location hinzufuegen" zeigt die leere Zeile bzw. legt eine weitere an (Nummer =
+	// loc_count, hoechstens 50); "entfernen" leert den Pfad (leere Zeilen speichert der Server nicht)
+	var locAdd = document.querySelector("[data-loc-add]"), locCount = document.querySelector("input[name=loc_count]");
+	if (locAdd && locCount) {
+		var tplLoc = document.querySelector("[data-loc-new]");
+		tplLoc = tplLoc ? tplLoc.cloneNode(true) : null;
+		var locWire = function (d) {
+			var p = d.querySelector("input[id$=_path]"), t = d.querySelector("[data-loc-title]");
+			if (p && t && d.hasAttribute("data-loc-new")) {
+				p.addEventListener("input", function () { if (p.value.trim()) { t.textContent = p.value.trim(); } });
+			}
+			var del = d.querySelector("[data-loc-del]");
+			if (del && p) {
+				del.addEventListener("click", function () { p.value = ""; d.hidden = true; });
+			}
+		};
+		document.querySelectorAll("[data-loc]").forEach(locWire);
+		locAdd.addEventListener("click", function () {
+			var d = document.querySelector("[data-loc-new][hidden]");
+			if (!d && tplLoc) {
+				var n = parseInt(locCount.value, 10) || 0;
+				if (n >= 50) { return; }
+				d = tplLoc.cloneNode(true);
+				d.querySelectorAll("[id],[name],[for]").forEach(function (el) {
+					["id", "name", "for"].forEach(function (a) {
+						var v = el.getAttribute(a);
+						if (v) { el.setAttribute(a, v.replace(/^loc_\d+_/, "loc_" + n + "_")); }
+					});
+				});
+				locCount.value = String(n + 1);
+				locAdd.parentNode.insertBefore(d, locAdd);
+				locWire(d);
+			}
+			if (!d) { return; }
+			d.hidden = false;
+			d.open = true;
+			var p = d.querySelector("input[id$=_path]");
+			if (p) { p.focus(); }
+		});
 	}
 })();

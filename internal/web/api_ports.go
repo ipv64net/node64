@@ -83,8 +83,8 @@ func (s *Server) saveEdge(r *http.Request, cfg edge.Config) error {
 	if err := s.Edge.Configure(cfg); err != nil {
 		return err
 	}
-	s.audit(r, "edge.settings", "", fmt.Sprintf("http=%d https=%d public=%d http3=%v default=%s bind=%q proxy_protocol=%q", cfg.HTTPPort, cfg.HTTPSPort,
-		cfg.PublicPort, cfg.HTTP3, cfg.Default, cfg.Bind, cfg.ProxyProtocol))
+	s.audit(r, "edge.settings", "", fmt.Sprintf("http=%d https=%d public=%d http3=%v default=%s bind=%q proxy_protocol=%q proxy_protocol_peers=%v", cfg.HTTPPort, cfg.HTTPSPort,
+		cfg.PublicPort, cfg.HTTP3, cfg.Default, cfg.Bind, cfg.ProxyProtocol, cfg.ProxyProtocolPeers))
 	return nil
 }
 
@@ -107,6 +107,7 @@ func (s *Server) settingsEdge(w http.ResponseWriter, r *http.Request) {
 	cfg.Default = r.PostFormValue("default")
 	if r.PostForm.Has("proxy_protocol") {
 		cfg.ProxyProtocol = strings.Join(strings.Fields(strings.ReplaceAll(r.PostFormValue("proxy_protocol"), ",", " ")), " ")
+		cfg.ProxyProtocolPeers = r.PostFormValue("proxy_protocol_peers") == "on"
 	}
 	v := s.view(r, "settings.title")
 	if !ok1 || !ok2 || !ok3 {

@@ -1,5 +1,22 @@
 # Changes – PROXY64
 
+## 1.56.0 – 2026-11-14
+
+### New
+- Access log also as a file `/data/cdn64/access.log` in the nginx "combined" format with the host in front, e.g. for CrowdSec (#74): every request of all hosts, including rejected ones; switch on under Access log › Settings, rotates to `access.log.1` at a configurable size (default 50 MB). API: `access_file`, `access_file_mb` in `/api/cdn64/settings`.
+- Nextcloud: a switch under Advanced redirects `/.well-known/caldav` and `/.well-known/carddav` with a 301 to `/remote.php/dav/` (#101).
+- Locations are collapsed (path and target in the row), new ones come via "+ Add location", "Remove" deletes one (#78).
+- Country block: the input suggests countries again after every comma, also searches by country name (German and English) and shows the chosen countries with flag and name (#54).
+- Ports › Shared entry: "Also accept PROXY protocol from the nodes of the own cluster" – the addresses of the other nodes are determined every minute from their cluster addresses and follow a move (#138).
+- API: `GET /api/cdn64/geo/lookup?ip=…` shows which country the country block sees for an address and where it comes from (location or registry).
+
+### Changed
+- Country block by location instead of registration country (#139): PROXY64 decides by the location data of ipv64.net (DB-IP, as Honeypot64 does). AWS/Azure Frankfurt, company networks registered in the US or providers like M247 now count as the country they are located in. The country lists by registry only apply to addresses without a location. The location data (~4.7 MB, about 10 MB in memory) is only loaded while a host or stream uses the country block; status under Security › Blocklists.
+
+### Fixed
+- HTTP/2 with a wildcard certificate (Safari): requests for another host on the same connection no longer get "421 Misdirected Request" if the certificate of the connection covers the host and its TLS requirements are met (#132). Otherwise it stays 421, which is now in the access log.
+- Connections with a PROXY header from a source not listed under "Accept PROXY protocol from" are no longer closed silently: an entry in the container log (at most every 10 minutes per source, with address and hint) and in the access log as "PROXY header from untrusted source" (#138).
+
 ## 1.55.2 – 2026-11-13
 
 ### Fixed

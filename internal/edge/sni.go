@@ -130,7 +130,11 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 	sni, data, ok := peekHello(conn)
 	_ = conn.SetReadDeadline(time.Time{})
 	if !ok {
-		e.watched(addrIP(conn.RemoteAddr()), "", "-", "", 0, WatchNoTLS)
+		if isProxyHeader(data) { // PROXY-Kopf von nicht freigegebener Quelle (#138): nicht still schliessen
+			e.proxyUntrusted(addrIP(conn.RemoteAddr()))
+		} else {
+			e.watched(addrIP(conn.RemoteAddr()), "", "-", "", 0, WatchNoTLS)
+		}
 		_ = conn.Close() // kein TLS
 		return
 	}

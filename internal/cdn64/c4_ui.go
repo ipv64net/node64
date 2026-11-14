@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,6 +52,7 @@ func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http
 	mux.Handle("GET /api/cdn64/blocklists", api(m.apiBlocklistsGet))
 	mux.Handle("PUT /api/cdn64/blocklists", api(m.apiBlocklistsPut))
 	mux.Handle("POST /api/cdn64/blocklists/refresh", api(m.apiBlocklistsRefresh))
+	mux.Handle("GET /api/cdn64/geo/lookup", api(m.apiGeoLookup))
 	mux.Handle("GET /api/cdn64/limits", api(m.apiLimitsGet))
 	mux.Handle("PUT /api/cdn64/limits", api(m.apiLimitsPut))
 	mux.Handle("DELETE /api/cdn64/limits/bans/{ip...}", api(m.apiLimitsUnban))
@@ -315,6 +317,10 @@ type logData struct {
 	// DecoyActive: Honeypot-Koeder aktiv (Kennzahl "an den Honeypot" auch ohne Werte zeigen)
 	DecoyActive bool
 	Debug       bool // Log-Level Debug: alles ungebremst im Log
+	// Zugriffs-Log als Datei (accessfile.go): an, Groesse bis zum Wechsel, Pfad im Container
+	File     bool
+	FileMB   int
+	FilePath string
 }
 
 func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
@@ -326,6 +332,8 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)
 	d := logData{Tabs: m.tabs("/cdn64/log"), HostName: map[int64]string{}, Filter: f, Days: m.logDays(ctx),
 		Anon: m.core.SettingOr(ctx, setAnonymize, "off") == "mask", Debug: m.debug()}
+	d.File, d.FileMB = m.accessFileSettings(ctx)
+	d.FilePath = filepath.Join(m.dataDir, Name, accessFileName)
 	hosts, err := m.hosts(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -380,13 +388,39 @@ func (m *Module) saveLogSettings(ctx context.Context, days int, anon bool) error
 	return m.core.SetSetting(ctx, setAnonymize, v)
 }
 
+// saveAccessFile: Zugriffs-Log als Datei an/aus und Groesse (1-1000 MB), gilt sofort.
+func (m *Module) saveAccessFile(ctx context.Context, on bool, mb int) error {
+	if mb < 1 || mb > accessFileMaxMB {
+		return ferr("access_file_mb", "cdn64.err.access_file_mb")
+	}
+	v := "0"
+	if on {
+		v = "1"
+	}
+	if err := m.core.SetSetting(ctx, setAccessFile, v); err != nil {
+		return err
+	}
+	if err := m.core.SetSetting(ctx, setAccessFileMB, strconv.Itoa(mb)); err != nil {
+		return err
+	}
+	m.accessFileApply(ctx)
+	return nil
+}
+
 func (m *Module) pageLogSettings(w http.ResponseWriter, r *http.Request) {
 	days, _ := strconv.Atoi(r.PostFormValue("days"))
 	anon := r.PostFormValue("anonymize") == "on"
+	file, mb := m.accessFileSettings(r.Context())
+	if r.PostForm.Has("access_file_mb") {
+		file = r.PostFormValue("access_file") == "on"
+		mb, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("access_file_mb")))
+	}
 	if err := m.saveLogSettings(r.Context(), days, anon); err != nil {
 		m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.err.log_days"))
+	} else if err := m.saveAccessFile(r.Context(), file, mb); err != nil {
+		m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.err.access_file_mb"))
 	} else {
-		m.g.Audit(r, "cdn64.settings", "", fmt.Sprintf("log_days=%d anonymize=%v", days, anon))
+		m.g.Audit(r, "cdn64.settings", "", fmt.Sprintf("log_days=%d anonymize=%v access_file=%v access_file_mb=%d", days, anon, file, mb))
 		m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	}
 	http.Redirect(w, r, "/cdn64/log", http.StatusSeeOther)
@@ -657,13 +691,17 @@ func (m *Module) apiStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiSettingsGet(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"log_days": m.logDays(r.Context()), "anonymize": m.core.SettingOr(r.Context(), setAnonymize, "off") == "mask"})
+	file, mb := m.accessFileSettings(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"log_days": m.logDays(r.Context()), "anonymize": m.core.SettingOr(r.Context(), setAnonymize, "off") == "mask",
+		"access_file": file, "access_file_mb": mb, "access_file_path": filepath.Join(m.dataDir, Name, accessFileName)})
 }
 
 func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 	in := struct {
-		LogDays   *int  `json:"log_days"`
-		Anonymize *bool `json:"anonymize"`
+		LogDays      *int  `json:"log_days"`
+		Anonymize    *bool `json:"anonymize"`
+		AccessFile   *bool `json:"access_file"`
+		AccessFileMB *int  `json:"access_file_mb"`
 	}{}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -676,11 +714,26 @@ func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 	if in.Anonymize != nil {
 		anon = *in.Anonymize
 	}
+	file, mb := m.accessFileSettings(r.Context())
+	if in.AccessFile != nil {
+		file = *in.AccessFile
+	}
+	if in.AccessFileMB != nil {
+		mb = *in.AccessFileMB
+	}
+	if mb < 1 || mb > accessFileMaxMB {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "access_file_mb must be 1-1000", "field": "access_file_mb"})
+		return
+	}
 	if err := m.saveLogSettings(r.Context(), days, anon); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "log_days must be 1-90", "field": "log_days"})
 		return
 	}
-	m.g.Audit(r, "cdn64.settings", "", fmt.Sprintf("log_days=%d anonymize=%v", days, anon))
+	if err := m.saveAccessFile(r.Context(), file, mb); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	m.g.Audit(r, "cdn64.settings", "", fmt.Sprintf("log_days=%d anonymize=%v access_file=%v access_file_mb=%d", days, anon, file, mb))
 	m.apiSettingsGet(w, r)
 }
 

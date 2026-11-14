@@ -158,9 +158,10 @@ func TestEdgeRouting(t *testing.T) {
 	if code, body, _, _ := get(t, c, "https://unknown.test/"); code != 404 || strings.Contains(strings.ToLower(body), "node64") {
 		t.Fatalf("unknown: %d %q", code, body)
 	}
-	// Name der Verbindung app.test, Host-Kopf dns.test: 421
-	if code, _, _, _ := get(t, c, "https://app.test/dns-query", "Host", "dns.test"); code != http.StatusMisdirectedRequest {
-		t.Fatalf("misdirected: %d", code)
+	// Name der Verbindung app.test, Host-Kopf dns.test: das Zertifikat deckt beide ab, also nach dem Host (#132) - und
+	// dort gilt die Freigabe von dns.test (nur LAN: 404); 421 nur ohne passendes Zertifikat (coalesce_test.go)
+	if code, _, _, _ := get(t, c, "https://app.test/dns-query", "Host", "dns.test"); code != 404 {
+		t.Fatalf("coalesced: %d", code)
 	}
 	// DNS nur aus dem eigenen Netz; ein gefaelschter Kopf aendert daran nichts
 	if code, _, _, _ := get(t, c, "https://dns.test/dns-query", "X-Forwarded-For", "192.168.1.5", "X-Real-IP", "192.168.1.5"); code != 404 {

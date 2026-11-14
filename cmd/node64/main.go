@@ -395,6 +395,16 @@ func run() error {
 		}
 		return out
 	})
+	edgeSrv.SetProxyPeers(func(ctx context.Context) []string { // PROXY-Kopf von den Cluster-Nodes annehmen (Ports, #138)
+		list, _ := peerMgr.Members(ctx)
+		out := make([]string, 0, len(list))
+		for _, x := range list {
+			if !x.Suspended() {
+				out = append(out, x.URL)
+			}
+		}
+		return out
+	})
 	certcluster.Register(peerMgr, certMgr, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Zertifikate ueber den Cluster
 	dns64cluster.Register(peerMgr, dnsModule)                                                                                  // DNS64 ueber den Cluster
 	hccluster.Register(peerMgr, hcModule)                                                                                      // Statusseiten ueber den Cluster

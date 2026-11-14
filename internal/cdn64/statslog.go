@@ -58,14 +58,16 @@ const (
 // ohne Einzel-Log des Hosts, dazu unbekannte Namen, TLS-Fehler, durchgereichtes TLS und Stream-Verbindungen.
 func (m *Module) debug() bool { return m.log.Enabled(context.Background(), slog.LevelDebug) }
 
-// watchEdge: Debug-Beobachter des Eingangs (edge.SetWatch) - nur ins Log, nicht in die Zaehler.
+// watchEdge: Debug-Beobachter des Eingangs (edge.SetWatch) - nur ins Log, nicht in die Zaehler. Abgewiesene PROXY-Koepfe
+// (#138) und 421 (#132) kommen auch ohne Debug ins Log (gebremst wie andere Abweisungen), sonst fielen sie nirgends auf.
 func (m *Module) watchEdge(ip netip.Addr, host, method, path string, status int, kind string) {
-	if !m.debug() {
+	dbg := m.debug()
+	if !dbg && kind != edge.WatchProxyUntrusted && kind != edge.WatchMisdirected {
 		return
 	}
 	if sdb := m.stats2.Load(); sdb != nil {
 		sdb.add(hit{time: time.Now(), client: ip.Unmap(), method: method, host: host, path: trunc(path, 500), status: status, reason: kind,
-			conn: status == 0, all: true, only: true})
+			conn: status == 0, all: dbg, only: true})
 	}
 }
 
@@ -116,6 +118,8 @@ type hit struct {
 	in     int64 // Upload: vom Besucher zum Ziel (Request-Body, bei WebSockets alles in diese Richtung)
 	ms     int64
 	ua     string
+	ref    string // Referer (nur fuer die Datei access.log, accessfile.go)
+	proto  string // HTTP/1.1, HTTP/2.0, HTTP/3.0 (ebenso)
 	log    bool   // ins Einzel-Log
 	reason string // abgewiesen: Grund (immer ins Log, gebremst)
 	conn   bool   // Verbindung vor der ersten Anfrage abgewiesen (zaehlt nicht als Anfrage)
@@ -143,6 +147,10 @@ type statsDB struct {
 	wg      sync.WaitGroup
 	days    func() int
 	anon    func() bool
+
+	afOn  atomic.Bool  // Zugriffs-Log zusaetzlich als Datei (accessfile.go)
+	afMax atomic.Int64 // Groesse bis zum Wechsel in Bytes
+	af    *accessFile  // nur der Schreiber
 }
 
 func openStats(dir string, log *slog.Logger, days func() int, anon func() bool) (*statsDB, error) {
@@ -173,7 +181,9 @@ func openStats(dir string, log *slog.Logger, days func() int, anon func() bool) 
 			}
 		}
 	}
-	s := &statsDB{db: db, log: log, ch: make(chan hit, 8192), done: make(chan struct{}), days: days, anon: anon}
+	s := &statsDB{db: db, log: log, ch: make(chan hit, 8192), done: make(chan struct{}), days: days, anon: anon,
+		af: &accessFile{path: filepath.Join(dir, accessFileName), log: log}}
+	s.afMax.Store(accessFileDefMB << 20)
 	s.wg.Add(1)
 	go s.writer()
 	return s, nil
@@ -205,7 +215,17 @@ func (s *statsDB) writer() {
 	lastRej := map[string]time.Time{} // Bremse fuer abgewiesene im Log
 	var rejMinute time.Time
 	rejN := 0
+	fileAnon := false // Kuerzen der Adressen auch in der Datei (bei jedem Schreiben neu gelesen)
+	if s.afOn.Load() {
+		fileAnon = s.anon()
+	}
 	flush := func() {
+		if s.afOn.Load() {
+			s.af.flush()
+			fileAnon = s.anon()
+		} else {
+			s.af.close()
+		}
 		if len(agg) == 0 && len(logs) == 0 {
 			return
 		}
@@ -217,6 +237,11 @@ func (s *statsDB) writer() {
 	addHit := func(h hit) {
 		if !h.only {
 			countHit(agg, h)
+		}
+		if s.afOn.Load() { // Datei: jede HTTP-Anfrage, ungebremst
+			if line, ok := accessLine(h, fileAnon); ok {
+				s.af.write(line, s.afMax.Load())
+			}
 		}
 		if h.all { // Debug: alles, ungebremst
 			logs = append(logs, h)
@@ -256,6 +281,7 @@ func (s *statsDB) writer() {
 					addHit(h)
 				default:
 					flush()
+					s.af.close()
 					return
 				}
 			}

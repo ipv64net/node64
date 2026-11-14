@@ -558,8 +558,21 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 			serveMaint(w, r, &h.Advanced)
 			return
 		}
+		if h.Advanced.NextcloudDAV && rt.prefix == "" && davWellKnown(p) { // Nextcloud (#101); eine eigene Location geht vor
+			http.Redirect(w, r, davTarget, http.StatusMovedPermanently)
+			return
+		}
 		rt.next.ServeHTTP(w, r)
 	})
+}
+
+// davTarget: Ziel der Nextcloud-Weiterleitungen (relativ: Schema, Name und Port bleiben die des Besuchers).
+const davTarget = "/remote.php/dav/"
+
+// davWellKnown: Pfad der CalDAV- bzw. CardDAV-Erkennung (RFC 6764), mit oder ohne Schraegstrich am Ende.
+func davWellKnown(p string) bool {
+	p = strings.TrimSuffix(strings.ToLower(p), "/")
+	return p == "/.well-known/caldav" || p == "/.well-known/carddav"
 }
 
 // pickRoute: routes[0] passt; unter den folgenden Routen mit gleichem key (vor 1.54.1 gespeichert, z. B. /admin und
@@ -998,7 +1011,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			if sdb := m.stats2.Load(); sdb != nil {
 				dbg := m.debug()
 				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
-					status: sw.code(), bytes: sw.bytes + sw.hjOut.Load(), in: sw.in.Load(), ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog || dbg,
+					status: sw.code(), bytes: sw.bytes + sw.hjOut.Load(), in: sw.in.Load(), ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), ref: trunc(r.Referer(), 500), proto: r.Proto, log: h.Advanced.AccessLog || dbg,
 					reason: *reject, decoy: *decoyed, all: dbg})
 			}
 		}()

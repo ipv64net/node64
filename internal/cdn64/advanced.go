@@ -70,6 +70,10 @@ type Advanced struct {
 	// NoProbe: Ziel nicht auf Erreichbarkeit pruefen (z. B. Dienst ohne Weboberflaeche; Forum 5100)
 	NoProbe bool `json:"no_probe,omitempty"`
 
+	// NextcloudDAV (nur Proxy-Hosts, #101): /.well-known/caldav und /.well-known/carddav mit 301 auf /remote.php/dav/
+	// (wie die nginx-Vorlage von Nextcloud), damit Kalender- und Kontakte-Apps den Dienst selbst finden
+	NextcloudDAV bool `json:"nextcloud_dav,omitempty"`
+
 	// LabelHeaders: Pruefsumme der Antwort-Kopfzeilen, die zuletzt aus Traefik-Labels kamen. Stimmen die Kopfzeilen
 	// des Hosts noch damit ueberein, folgen sie spaeteren Label-Aenderungen; von Hand geaenderte bleiben (nur lesend).
 	LabelHeaders string `json:"label_headers,omitempty"`

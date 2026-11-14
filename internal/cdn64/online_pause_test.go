@@ -165,8 +165,8 @@ func rowsHosts(rows []hostRow) []*Host {
 
 // tplView spielt die View der Oberflaeche fuer die Vorlage (Texte = Schluessel).
 type tplView struct {
-	Data          any
-	CSRF, Version string
+	Data                any
+	CSRF, Version, Lang string
 }
 
 func (tplView) T(key string, _ ...any) string { return key }

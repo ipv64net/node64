@@ -50,7 +50,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.55.2"
+	Version = "1.56.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -180,6 +180,7 @@ func (m *Module) Start(ctx context.Context) error {
 			m.log.Warn("cdn64 statistics not available", "err", err)
 		} else {
 			m.stats2.Store(st)
+			m.accessFileApply(ctx) // Zugriffs-Log als Datei (accessfile.go)
 		}
 	}
 	if m.certs != nil {
@@ -235,6 +236,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	}
 	m.applyMu.Unlock()
 	m.stopStreams()
+	m.geoData(false) // Standortdaten der Laendersperre zurueckgeben
 	if m.certs != nil {
 		m.certs.Release(Name)
 		m.certs.SetUsers(Name, nil)
@@ -430,7 +432,7 @@ type exportFile struct {
 // exportSettings: Einstellungen, die zur Konfiguration gehoeren (nicht CDN64 online: Tunnel und Token gehoeren
 // zu dieser Node; nicht das Listen-Token der v64 Blocklist, es gehoert zum Account). setHoneypot: die Schalter der
 // Verbindung zum Honeypot (Koeder, Zugriffe, Sofort-Sperre), die Sperrliste selbst bleibt im Speicher.
-var exportSettings = []string{setBlocklists, setBlockAllow, setLimits, setLogDays, setAnonymize, setHoneypot}
+var exportSettings = []string{setBlocklists, setBlockAllow, setLimits, setLogDays, setAnonymize, setHoneypot, setAccessFile, setAccessFileMB}
 
 func (m *Module) Export(ctx context.Context) (any, error) {
 	list, err := m.hosts(ctx)

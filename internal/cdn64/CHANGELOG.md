@@ -1,5 +1,22 @@
 # Änderungen – PROXY64
 
+## 1.56.0 – 2026-11-14
+
+### Neu
+- Zugriffs-Log zusätzlich als Datei `/data/cdn64/access.log` im nginx-Format „combined“ mit dem Host vorn, z. B. für CrowdSec (#74): jede Anfrage aller Hosts, auch abgewiesene; einschaltbar unter Zugriffs-Log › Einstellungen, Wechsel auf `access.log.1` ab einstellbarer Größe (Standard 50 MB). API: `access_file`, `access_file_mb` unter `/api/cdn64/settings`.
+- Nextcloud: Haken unter Erweitert leitet `/.well-known/caldav` und `/.well-known/carddav` mit 301 auf `/remote.php/dav/` weiter (#101).
+- Locations sind eingeklappt (Pfad und Ziel in der Zeile), neue kommen über „+ Location hinzufügen“, „Entfernen“ löscht eine (#78).
+- Ländersperre: Die Eingabe schlägt nach jedem Komma wieder Länder vor, sucht auch nach dem Ländernamen (deutsch und englisch) und zeigt die gewählten Länder mit Flagge und Namen (#54).
+- Ports › Gemeinsamer Eingang: „PROXY protocol auch von den Nodes des eigenen Clusters annehmen“ – die Adressen der anderen Nodes werden jede Minute aus ihren Cluster-Adressen bestimmt und ziehen bei einem Umzug mit (#138).
+- API: `GET /api/cdn64/geo/lookup?ip=…` zeigt, welches Land die Ländersperre für eine Adresse sieht und woher (Standort oder Registrierungsland).
+
+### Geändert
+- Ländersperre nach Standort statt nach Registrierungsland (#139): PROXY64 entscheidet nach den Standortdaten von ipv64.net (DB-IP, wie Honeypot64). AWS/Azure Frankfurt, Firmennetze mit US-Registrierung oder Anbieter wie M247 gelten so als das Land, in dem sie stehen. Die Länderlisten nach Registrierungsland gelten nur noch für Adressen ohne Standort. Die Standortdaten (~4,7 MB, etwa 10 MB im Speicher) werden nur geladen, solange ein Host oder Stream die Ländersperre nutzt; Stand unter Sicherheit › Blocklisten.
+
+### Behoben
+- HTTP/2 mit Wildcard-Zertifikat (Safari): Anfragen für einen anderen Host auf derselben Verbindung bekommen kein „421 Misdirected Request“ mehr, wenn das Zertifikat der Verbindung den Host abdeckt und dessen TLS-Vorgaben erfüllt sind (#132). Sonst bleibt es bei 421, das jetzt im Zugriffs-Log steht.
+- Verbindungen mit PROXY-Kopf von einer Quelle, die nicht unter „PROXY protocol annehmen von“ steht, werden nicht mehr kommentarlos geschlossen: Eintrag im Container-Log (je Quelle höchstens alle 10 Minuten, mit Adresse und Hinweis) und im Zugriffs-Log als „PROXY-Kopf von nicht freigegebener Quelle“ (#138).
+
 ## 1.55.2 – 2026-11-13
 
 ### Behoben

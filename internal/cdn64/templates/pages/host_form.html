@@ -141,7 +141,7 @@
 						<div class="col-md-8"><input class="form-control form-control-sm font-monospace{{if index $d.Errors "geo"}} is-invalid{{end}}" id="geo_countries" name="geo_countries" value="{{$d.GeoText}}" placeholder="DE, AT, CH" maxlength="400" list="geo-cc" autocomplete="off">
 							{{with index $d.Errors "geo"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
 					</div>
-					{{if $d.Countries}}<datalist id="geo-cc"><option value="EU">{{.T "cdn64.f.geo_eu"}}</option>{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
+					{{if $d.Countries}}<datalist id="geo-cc"><option value="EU" data-flag="🇪🇺" data-alt="European Union">{{.T "cdn64.f.geo_eu"}}</option>{{range $d.Countries}}<option value="{{.Code}}" data-flag="{{.Flag}}" data-alt="{{.Local "en"}} {{.Name}}">{{.Local $.Lang}}</option>{{end}}</datalist>{{end}}
 					<div class="form-text">{{.T "cdn64.f.geo_hint"}}</div>
 					{{end}}
 					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect") (eq $h.Kind "status")}}
@@ -163,9 +163,11 @@
 					<input type="hidden" name="has_locations" value="1"><input type="hidden" name="loc_count" value="{{len $d.Locs}}">
 					<p class="text-body-secondary">{{.T "cdn64.f.locations_hint"}}</p>
 					{{with index $d.Errors "locations"}}<div class="alert alert-danger py-1">{{.}}</div>{{end}}
-					{{range $i, $l := $d.Locs}}
-					<div class="border rounded p-2 mb-2">
-						<div class="row g-2">
+					{{range $i, $l := $d.Locs}}{{$new := not $l.Path}}
+					<details class="border rounded mb-2" data-loc{{if $new}} data-loc-new hidden open{{else if index $d.Errors "locations"}} open{{end}}>
+						<summary class="px-2 py-1 small"><span class="font-monospace fw-semibold" data-loc-title>{{if $new}}{{$.T "cdn64.f.loc_new"}}{{else}}{{$l.Path}}{{end}}</span>{{if not $new}} <i class="bi bi-arrow-right text-body-secondary"></i>
+							<span class="text-body-secondary">{{if eq $l.Action "block"}}{{$.T "cdn64.f.loc_action_block"}}{{if $l.Status}} ({{$l.Status}}){{end}}{{else if eq $l.Action "respond"}}{{$.T "cdn64.f.loc_action_respond"}}{{if $l.Status}} ({{$l.Status}}){{end}}{{else}}<span class="font-monospace">{{$l.Scheme}}://{{$l.TargetHost}}{{if $l.TargetPort}}:{{$l.TargetPort}}{{end}}{{$l.ForwardPath}}</span>{{end}}</span>{{if $l.AccessListID}} <i class="bi bi-shield-lock text-body-secondary" title="{{$.T "cdn64.f.access_list"}}"></i>{{end}}{{end}}</summary>
+						<div class="row g-2 px-2 pb-2">
 							<div class="col-sm-3"><label class="form-label" for="loc_{{$i}}_path">{{$.T "cdn64.f.loc_path"}}</label><input class="form-control form-control-sm font-monospace" id="loc_{{$i}}_path" name="loc_{{$i}}_path" value="{{$l.Path}}" placeholder="/api" maxlength="200"></div>
 							<div class="col-sm-2"><label class="form-label" for="loc_{{$i}}_scheme">{{$.T "cdn64.f.scheme"}}</label><select class="form-select form-select-sm" id="loc_{{$i}}_scheme" name="loc_{{$i}}_scheme"><option value="http"{{if eq $l.Scheme "http"}} selected{{end}}>http</option><option value="https"{{if eq $l.Scheme "https"}} selected{{end}}>https</option></select></div>
 							<div class="col-sm-4"><label class="form-label" for="loc_{{$i}}_host">{{$.T "cdn64.f.target_host"}}</label><input class="form-control form-control-sm font-monospace" id="loc_{{$i}}_host" name="loc_{{$i}}_host" value="{{$l.TargetHost}}" maxlength="253"></div>
@@ -197,9 +199,11 @@
 									<div class="col-sm-6"><label class="form-label" for="loc_{{$i}}_resp_del">{{$.T "cdn64.f.loc_resp_del"}}</label><textarea class="form-control form-control-sm font-monospace" id="loc_{{$i}}_resp_del" name="loc_{{$i}}_resp_del" rows="2">{{index $la "resp_del"}}</textarea></div>
 								</div>
 								<div class="form-text">{{$.T "cdn64.f.loc_adv_hint"}}</div></details></div>
+							<div class="col-12 text-end"><button class="btn btn-sm btn-outline-danger" type="button" data-loc-del><i class="bi bi-trash"></i> {{$.T "cdn64.f.loc_del"}}</button></div>
 						</div>
-					</div>
+					</details>
 					{{end}}
+					<button class="btn btn-sm btn-outline-primary" type="button" data-loc-add><i class="bi bi-plus-lg"></i> {{.T "cdn64.f.loc_add"}}</button>
 					<div class="form-text">{{.T "cdn64.f.locations_more"}}</div>
 					<div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" name="only_locations" id="only_locations"{{if $h.Advanced.OnlyLocations}} checked{{end}}><label class="form-check-label" for="only_locations">{{.T "cdn64.f.only_locations"}}</label>
 						<div class="form-text">{{.T "cdn64.f.only_locations_hint"}}</div></div>
@@ -267,6 +271,8 @@
 							<select class="form-select form-select-sm" id="adv_target_http" name="adv_target_http"><option value="">{{.T "cdn64.f.target_http_auto"}}</option><option value="h1"{{if eq $h.Advanced.TargetHTTP "h1"}} selected{{end}}>{{.T "cdn64.f.target_http_h1"}}</option><option value="h2c"{{if eq $h.Advanced.TargetHTTP "h2c"}} selected{{end}}>{{.T "cdn64.f.target_http_h2c"}}</option></select></div>
 					</div>
 					<div class="form-text mb-3">{{.T "cdn64.f.target_http_hint"}}</div>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="adv_nextcloud_dav" id="adv_nextcloud_dav"{{if $h.Advanced.NextcloudDAV}} checked{{end}}><label class="form-check-label" for="adv_nextcloud_dav">{{.T "cdn64.f.adv_nextcloud_dav"}}</label></div>
+					<div class="form-text mb-3">{{.T "cdn64.f.adv_nextcloud_dav_hint"}}</div>
 					<div class="row g-2 mb-1" data-bw>
 						<div class="col-md-3"><label class="form-label fw-semibold" for="adv_bw_down"><i class="bi bi-cloud-download"></i> {{.T "cdn64.f.adv_bw_down"}}</label>
 							<div class="input-group input-group-sm"><input class="form-control" type="number" min="0" max="100000" id="adv_bw_down" name="adv_bw_down" value="{{if $h.Advanced.BWDownMbit}}{{$h.Advanced.BWDownMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
