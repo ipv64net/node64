@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.56.1 – 2026-11-14
+
+### Geändert
+- Benutzerverwaltung: Werte eigener Request-Header von Hosts und Locations (oft `Authorization` oder Tokens) nur für Administratoren; „Nur lesen“ sieht die Namen mit `***` als Wert (Bearbeiten-Seite, `GET /api/cdn64/hosts`, `GET /api/cdn64/hosts/{id}`). Passwörter und Keys der Zugriffslisten sowie Tunnel- und Listen-Token gibt PROXY64 weiterhin an niemanden aus.
+
 ## 1.56.0 – 2026-11-14
 
 ### Neu

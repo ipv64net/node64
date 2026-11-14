@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.56.1 – 2026-11-14
+
+### Changed
+- User management: values of custom request headers of hosts and locations (often `Authorization` or tokens) for administrators only; "Read only" sees the names with `***` as value (edit page, `GET /api/cdn64/hosts`, `GET /api/cdn64/hosts/{id}`). Passwords and keys of access lists as well as tunnel and list tokens are still not shown to anyone.
+
 ## 1.56.0 – 2026-11-14
 
 ### New

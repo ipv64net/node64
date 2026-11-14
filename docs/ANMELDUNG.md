@@ -15,7 +15,7 @@ die AD/LDAP- bzw. SSO-Gruppen-Einstellungen auch per API ändern (`/api/users`, 
 | Rolle | Darf |
 |---|---|
 | **Administrator** | alles |
-| **Nur lesen** | alle Seiten und GET-APIs ansehen, nur das eigene Konto ändern (Profil, Passwort, 2FA, Passkeys, eigene API-/MCP-Keys, Dashboard-Anordnung). Backups, Exporte, private Schlüssel, Passwörter und Tokens (z. B. Basic-Auth von Checks, TSIG, Push-Token) sowie die Benutzerverwaltung bleiben Administratoren vorbehalten. |
+| **Nur lesen** | alle Seiten und GET-APIs ansehen, nur das eigene Konto ändern (Profil, Passwort, 2FA, Passkeys, eigene API-/MCP-Keys, Dashboard-Anordnung). Backups, Exporte, private Schlüssel, Passwörter und Tokens (z. B. Basic-Auth von Checks, TSIG, Push-Token, Werte eigener Request-Header in PROXY64) sowie die Benutzerverwaltung bleiben Administratoren vorbehalten. |
 
 - Die **wirksame Rolle** ist die höchste aus der eigenen Rolle und allen Gruppen des Benutzers. Geprüft wird bei jeder
   Anfrage auf dem Server; oben in der Oberfläche steht für „Nur lesen“ ein Hinweis.

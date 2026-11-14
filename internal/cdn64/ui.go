@@ -511,6 +511,9 @@ func (m *Module) pageEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if m.g.IsReadOnly(r) { // Werte der Request-Header nur fuer Administratoren
+		h = h.redactSecrets()
+	}
 	m.g.Render(w, r, http.StatusOK, Name+"/host_form", "cdn64.edit", m.form(r.Context(), h, false))
 }
 

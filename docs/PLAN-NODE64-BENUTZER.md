@@ -7,7 +7,7 @@ abgeglichen.
 
 **Stand 2026-11-14: B1 und B2 gebaut** (Fundament 00fee2ef, Cluster 880bcee1, AD/LDAP fe1bd034, Rechte und
 Oberfläche b688dee3). Bedienung: [ANMELDUNG.md](ANMELDUNG.md); Cluster: [CLUSTER.md](CLUSTER.md). Offen: Test gegen
-echtes Samba-AD/OpenLDAP auf der Box, eigene Request-Header in PROXY64 für „Nur lesen“ ausblenden.
+echtes Samba-AD/OpenLDAP auf der Box. Eigene Request-Header in PROXY64 blendet „Nur lesen“ seit PROXY64 1.56.1 aus.
 
 Abgrenzung: [PLAN-NODE64-LDAP.md](PLAN-NODE64-LDAP.md) beschreibt Node64 als LDAP-**Server** (LDAP64). Hier geht es um
 das Gegenstück: Node64 meldet Benutzer **gegen** ein vorhandenes AD/LDAP an (LDAP-**Client**). Beides schließt sich

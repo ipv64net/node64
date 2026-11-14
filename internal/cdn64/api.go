@@ -80,6 +80,15 @@ func toAPI(r hostRow) apiHost {
 	return a
 }
 
+// toAPIFor: toAPI fuer den Aufrufer (Rolle „Nur lesen“ ohne Werte der Request-Header, readonly.go).
+func (m *Module) toAPIFor(r *http.Request, x hostRow) apiHost {
+	a := toAPI(x)
+	if m.g.IsReadOnly(r) {
+		a.Host = a.Host.redactSecrets()
+	}
+	return a
+}
+
 func (m *Module) apiHosts(w http.ResponseWriter, r *http.Request) {
 	rows, err := m.rows(r.Context())
 	if k := r.URL.Query().Get("kind"); k != "" && err == nil {
@@ -91,7 +100,7 @@ func (m *Module) apiHosts(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]apiHost, 0, len(rows))
 	for _, x := range rows {
-		out = append(out, toAPI(x))
+		out = append(out, m.toAPIFor(r, x))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -104,7 +113,7 @@ func (m *Module) apiRow(w http.ResponseWriter, r *http.Request, id int64, status
 	}
 	for _, x := range rows {
 		if x.ID == id {
-			writeJSON(w, status, toAPI(x))
+			writeJSON(w, status, m.toAPIFor(r, x))
 			return
 		}
 	}
@@ -124,7 +133,7 @@ func (m *Module) apiRowExtra(w http.ResponseWriter, r *http.Request, id int64, s
 	}
 	for _, x := range rows {
 		if x.ID == id {
-			b, _ := json.Marshal(toAPI(x))
+			b, _ := json.Marshal(m.toAPIFor(r, x))
 			var merged map[string]any
 			_ = json.Unmarshal(b, &merged)
 			for k, v := range extra {
