@@ -425,8 +425,9 @@ func run() error {
 	if err := st.Migrate(ctx, environment.Name, envMigrations); err != nil {
 		return err
 	}
-	envSvc := environment.New(environment.Deps{Store: st, Log: logger.Slog().With("module", "environment")})
-	environment.Register(peerMgr, envSvc) // Environment: Anmelde-Tickets fuer andere Mitglieder
+	envSvc := environment.New(environment.Deps{Store: st, Log: logger.Slog().With("module", "environment"), Box: box, Version: Version,
+		NodeName: func() string { return st.SettingOr(context.Background(), web.SettingNodeName, "Node64") }})
+	environment.Register(peerMgr, envSvc) // Environment: Anmelde-Tickets fuer andere Mitglieder, hinzugefuegte Nodes
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
 	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
 	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster

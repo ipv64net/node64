@@ -22,6 +22,8 @@ type envData struct {
 	SelfURL     string
 	SelfVersion string
 	Nodes       []environment.Node
+	Added       []envAddedRow // E2: hinzugefuegte Nodes (environment_nodes.go)
+	Admin       bool
 }
 
 type envOpenData struct {
@@ -37,12 +39,15 @@ func (s *Server) environmentRoutes() {
 	s.mux.Handle("GET /environment", s.auth(s.environmentPage))
 	s.mux.Handle("POST /environment/open/{id}", s.auth(s.environmentOpen))
 	s.mux.HandleFunc("POST "+envEnterPath, s.environmentEnter)
+	s.environmentNodeRoutes()
 }
 
 func (s *Server) environmentPage(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "environment.title")
-	v.Data = envData{SelfName: s.Store.SettingOr(r.Context(), SettingNodeName, "Node64"), SelfURL: browserOrigin(r), SelfVersion: s.Version,
-		Nodes: s.Env.Nodes(r.Context())}
+	d := envData{SelfName: s.Store.SettingOr(r.Context(), SettingNodeName, "Node64"), SelfURL: browserOrigin(r), SelfVersion: s.Version,
+		Nodes: s.Env.Nodes(r.Context()), Admin: s.isAdmin(r)}
+	d.Added = s.envAddedRows(r.Context(), currentUser(r), d.Nodes)
+	v.Data = d
 	s.render(w, r, http.StatusOK, "environment", v)
 }
 
@@ -91,9 +96,14 @@ func (s *Server) environmentOpen(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.audit(r, "environment.open", n.Name, result)
+	s.renderEnvOpen(w, r, d)
+}
+
+// renderEnvOpen liefert die Seite, die das Ticket an die andere Node schickt (bzw. zu deren Anmeldeseite fuehrt).
+func (s *Server) renderEnvOpen(w http.ResponseWriter, r *http.Request, d envOpenData) {
 	// das Formular geht an die andere Node: nur fuer diese Antwort dorthin erlauben
 	h := w.Header()
-	h.Set("Content-Security-Policy", strings.Replace(h.Get("Content-Security-Policy"), "form-action 'self'", "form-action 'self' "+origin, 1))
+	h.Set("Content-Security-Policy", strings.Replace(h.Get("Content-Security-Policy"), "form-action 'self'", "form-action 'self' "+d.URL, 1))
 	h.Set("Referrer-Policy", "origin") // nur der Ursprung: /environment/enter prueft ihn (bei no-referrer kaeme Origin "null")
 	v := s.view(r, "environment.title")
 	v.Data = d

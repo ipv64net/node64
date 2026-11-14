@@ -1,0 +1,52 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-key text-primary me-1"></i> {{.T "environment.access_title"}}</h1>
+<p class="small text-body-secondary">{{.T "environment.access_intro"}}</p>
+{{if $d.Message}}<div class="alert alert-danger small">{{$d.Message}}</div>{{end}}
+{{if $d.Key}}
+<div class="alert alert-warning" id="env-key">
+	<div class="fw-semibold mb-1">{{.T "environment.key_once" "name" $d.KeyName}}</div>
+	<code class="d-block text-break user-select-all small">{{$d.Key}}</code>
+</div>
+{{end}}
+<div class="card mb-3">
+	<div class="table-responsive">
+	<table class="table table-sm align-middle mb-0 small">
+		<thead><tr><th>{{.T "environment.col_access"}}</th><th>{{.T "environment.col_user"}}</th><th>{{.T "environment.col_created"}}</th><th>{{.T "environment.col_used"}}</th><th></th></tr></thead>
+		<tbody>
+			{{range $d.Accesses}}
+			<tr>
+				<td class="fw-semibold">{{.Name}}</td>
+				<td>{{if .Username}}{{.Username}}{{else}}<span class="text-danger">{{$.T "environment.user_gone"}}</span>{{end}}</td>
+				<td class="text-body-secondary">{{$.Time .CreatedAt}}{{if .CreatedBy}} · {{.CreatedBy}}{{end}}</td>
+				<td class="text-body-secondary">{{if .LastUsedAt.IsZero}}–{{else}}{{$.Time .LastUsedAt}}{{if .LastFromName}} · {{.LastFromName}}{{end}}{{end}}</td>
+				<td class="text-end"><form method="post" action="/environment/access/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i> {{$.T "environment.revoke"}}</button></form></td>
+			</tr>
+			{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{if not $d.Accesses}}<div class="card-body small text-body-secondary">{{.T "environment.access_empty"}}</div>{{end}}
+</div>
+<div class="card mb-3" style="max-width: 42rem">
+	<div class="card-body">
+		<h2 class="h6">{{.T "environment.access_create"}}</h2>
+		<form method="post" action="/environment/access" autocomplete="off">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="mb-3">
+				<label class="form-label small" for="acc-name">{{.T "environment.f_access_name"}}</label>
+				<input class="form-control form-control-sm" id="acc-name" name="name" required maxlength="64" placeholder="{{.T "environment.f_access_name_ph"}}">
+			</div>
+			<div class="mb-3">
+				<label class="form-label small" for="acc-user">{{.T "environment.f_access_user"}}</label>
+				<select class="form-select form-select-sm" id="acc-user" name="user">
+					{{range $d.Users}}<option value="{{.UID}}"{{if eq .UID ($.Val "user")}} selected{{end}}>{{.Username}}</option>{{end}}
+				</select>
+				<div class="form-text">{{.T "environment.f_access_user_hint"}}</div>
+			</div>
+			<button class="btn btn-sm btn-primary"><i class="bi bi-key"></i> {{.T "environment.access_create"}}</button>
+			<a class="btn btn-sm btn-outline-secondary" href="/environment">{{.T "environment.back_list"}}</a>
+		</form>
+	</div>
+</div>
+{{end}}

@@ -67,7 +67,8 @@ var selfService = func() *http.ServeMux {
 		"DELETE /api/mcp/keys/{id}",
 		"PUT /api/dashboard/layout",
 		"DELETE /api/dashboard/layout",
-		"POST /environment/open/{id}", // andere Node oeffnen: Rolle dort nie groesser (environment.go)
+		"POST /environment/open/{id}",        // andere Node oeffnen: Rolle dort nie groesser (environment.go)
+		"POST /environment/nodes/{uid}/open", // hinzugefuegte Node oeffnen (environment_nodes.go), ebenso begrenzt
 	} {
 		m.Handle(p, ok)
 	}

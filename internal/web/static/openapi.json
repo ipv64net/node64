@@ -17919,6 +17919,587 @@
         }
       }
     },
+    "/environment": {
+      "get": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Environment: diese Node, Cluster-Mitglieder und hinzugefügte Nodes mit Status",
+        "description": "Hinzugefügte Nodes werden beim Aufruf parallel abgefragt (je höchstens 3 s): mit Zugangsschlüssel über die gebundenen Endpunkte der anderen Node, sonst über deren /api/health.",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "self",
+                              "cluster",
+                              "added"
+                            ]
+                          },
+                          "online": {
+                            "type": "boolean"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "update": {
+                            "type": "string",
+                            "description": "neuere Version verfügbar (nur hinzugefügte mit Schlüssel)"
+                          },
+                          "suspended": {
+                            "type": "boolean"
+                          },
+                          "login": {
+                            "type": "boolean",
+                            "description": "„Öffnen“ meldet mit dem eigenen Benutzer an (sonst Anmeldeseite)"
+                          },
+                          "browser_url": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "has_key": {
+                            "type": "boolean"
+                          },
+                          "key_error": {
+                            "type": "string",
+                            "description": "warum der Zugangsschlüssel nicht gilt (z. B. widerrufen, Benutzer gesperrt)"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environment/nodes": {
+      "post": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Node hinzufügen (nur Administrator)",
+        "description": "Mit Zugangsschlüssel nur https. Der Schlüssel gehört dem anlegenden Benutzer: nur er wird beim Öffnen auf der anderen Node angemeldet.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "Adresse der Node (https://host:port; ohne Schema wird https ergänzt, kein Pfad)"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "Zugangsschlüssel der anderen Node (n64env1.…); leer = nur Link und Status, beim Ändern: bisherigen behalten"
+                  },
+                  "remove_key": {
+                    "type": "boolean",
+                    "description": "beim Ändern: Schlüssel entfernen"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "leer = Name, den die Node meldet"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "browser_url": {
+                    "type": "string",
+                    "description": "eigene Adresse für den Browser (z. B. über PROXY64)"
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "browser_url": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "node_id": {
+                      "type": "string",
+                      "description": "Kennung der Node aus dem Zugangsschlüssel"
+                    },
+                    "has_key": {
+                      "type": "boolean"
+                    },
+                    "owner_uid": {
+                      "type": "string",
+                      "description": "Benutzer, der den Schlüssel eingetragen hat (nur er wird darüber angemeldet)"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur Administrator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Adresse oder Schlüssel ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environment/nodes/{id}": {
+      "put": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Hinzugefügte Node ändern (nur Administrator)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Kennung der hinzugefügten Node"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "Adresse der Node (https://host:port; ohne Schema wird https ergänzt, kein Pfad)"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "Zugangsschlüssel der anderen Node (n64env1.…); leer = nur Link und Status, beim Ändern: bisherigen behalten"
+                  },
+                  "remove_key": {
+                    "type": "boolean",
+                    "description": "beim Ändern: Schlüssel entfernen"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "leer = Name, den die Node meldet"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "browser_url": {
+                    "type": "string",
+                    "description": "eigene Adresse für den Browser (z. B. über PROXY64)"
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "browser_url": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "node_id": {
+                      "type": "string",
+                      "description": "Kennung der Node aus dem Zugangsschlüssel"
+                    },
+                    "has_key": {
+                      "type": "boolean"
+                    },
+                    "owner_uid": {
+                      "type": "string",
+                      "description": "Benutzer, der den Schlüssel eingetragen hat (nur er wird darüber angemeldet)"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur Administrator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Adresse oder Schlüssel ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Hinzugefügte Node entfernen (nur Administrator)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Kennung der hinzugefügten Node"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "entfernt"
+          },
+          "403": {
+            "description": "nur Administrator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environment/access": {
+      "get": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Zugänge dieser Node für andere Nodes (nur Administrator, ohne Schlüssel)",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "user_uid": {
+                        "type": "string"
+                      },
+                      "username": {
+                        "type": "string",
+                        "description": "leer = Benutzer gelöscht (Zugang wirkt nicht)"
+                      },
+                      "created_by": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "last_used_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "last_from_node": {
+                        "type": "string"
+                      },
+                      "last_from_name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur Administrator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Zugang für eine andere Node erstellen (nur Administrator)",
+        "description": "Der Zugangsschlüssel steht nur in dieser Antwort; gespeichert wird nur ein Prüfwert. Man kommt als der gewählte Benutzer an, mit höchstens seiner Rolle.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "user_uid": {
+                    "type": "string",
+                    "description": "Benutzer hier (leer = ich selbst)"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "erstellt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "user_uid": {
+                          "type": "string"
+                        },
+                        "username": {
+                          "type": "string",
+                          "description": "leer = Benutzer gelöscht (Zugang wirkt nicht)"
+                        },
+                        "created_by": {
+                          "type": "string"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "last_used_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "last_from_node": {
+                          "type": "string"
+                        },
+                        "last_from_name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "key": {
+                      "type": "string",
+                      "description": "n64env1.… – nur jetzt sichtbar"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur Administrator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Name fehlt oder Benutzer unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environment/access/{id}": {
+      "delete": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Zugang widerrufen (nur Administrator)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Nummer des Zugangs"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "widerrufen"
+          },
+          "403": {
+            "description": "nur Administrator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/keys": {
       "get": {
         "tags": [

@@ -24,11 +24,24 @@
 				<td class="text-end">{{if .Login}}<form method="post" action="/environment/open/{{.ID}}" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up-right"></i> {{$.T "environment.open"}}</button></form>{{else}}<a class="btn btn-sm btn-outline-primary" href="{{.URL}}/" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{$.T "environment.open"}}</a>{{end}}</td>
 			</tr>
 			{{end}}
+			{{range $d.Added}}
+			<tr>
+				<td><span class="fw-semibold">{{.Display}}</span>{{if .Description}} <span class="text-body-secondary">· {{.Description}}</span>{{end}}<div class="text-body-secondary font-monospace">{{.Open}}</div></td>
+				<td><span class="badge text-bg-secondary">{{$.T "environment.origin_added"}}</span></td>
+				<td>{{if .Status.Online}}<span class="badge text-bg-success">online</span>{{else}}<span class="badge text-bg-secondary">offline</span>{{end}}{{if .Status.Version}} <span class="text-body-secondary">{{.Status.Version}}</span>{{end}}{{if .Status.Update}} <span class="badge text-bg-info">{{$.T "environment.update" "version" .Status.Update}}</span>{{end}}{{if and .HasKey .Status.KeyErr}}<div class="text-warning-emphasis" title="{{.Status.KeyErr}}"><i class="bi bi-key"></i> {{$.T "environment.key_invalid"}}</div>{{end}}</td>
+				<td>{{if .Login}}<i class="bi bi-person-check text-success"></i> {{$.T "environment.login_user"}}{{else}}<i class="bi bi-box-arrow-in-right text-body-secondary"></i> {{$.T "environment.login_page"}}{{if and .HasKey (not .Mine)}}<div class="text-body-secondary">{{$.T "environment.key_other"}}</div>{{end}}{{end}}</td>
+				<td class="text-end text-nowrap">{{if .Login}}<form method="post" action="/environment/nodes/{{.UID}}/open" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up-right"></i> {{$.T "environment.open"}}</button></form>{{else}}<a class="btn btn-sm btn-outline-primary" href="{{.Open}}/" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{$.T "environment.open"}}</a>{{end}}{{if $d.Admin}} <a class="btn btn-sm btn-outline-secondary" href="/environment/nodes/{{.UID}}" title="{{$.T "environment.edit"}}"><i class="bi bi-pencil"></i></a>{{end}}</td>
+			</tr>
+			{{end}}
 		</tbody>
 	</table>
 	</div>
-	{{if not $d.Nodes}}<div class="card-body small text-body-secondary">{{.T "environment.empty"}} <a href="/cluster">{{.T "cluster.link_open"}}</a></div>{{end}}
+	{{if and (not $d.Nodes) (not $d.Added)}}<div class="card-body small text-body-secondary">{{.T "environment.empty"}} <a href="/cluster">{{.T "cluster.link_open"}}</a></div>{{end}}
 </div>
+{{if $d.Admin}}<div class="mb-3 d-flex flex-wrap gap-2">
+	<a class="btn btn-sm btn-primary" href="/environment/nodes/new"><i class="bi bi-plus-lg"></i> {{.T "environment.add_node"}}</a>
+	<a class="btn btn-sm btn-outline-secondary" href="/environment/access"><i class="bi bi-key"></i> {{.T "environment.access_title"}}</a>
+</div>{{end}}
 <p class="small text-body-secondary"><i class="bi bi-info-circle"></i> {{.T "environment.login_rule"}}</p>
 <p class="small text-body-secondary"><i class="bi bi-shield-exclamation"></i> {{.T "environment.cert_hint"}}</p>
 {{end}}

@@ -319,6 +319,8 @@ var notCovered = map[string]string{
 	"/api/auth/oidc-groups":          "SSO-Anlage ueber Gruppen – nie ueber MCP (nur Administrator)",
 	"/api/mcp":                       "MCP-Schluessel – nie ueber MCP",
 	"/api/link/status":               "Kopplungscode – nie ueber MCP",
+	"/api/environment":               "Environment – fragt beim Aufruf andere Nodes ab (Cluster-Mitglieder in cluster_status)",
+	"/api/environment/access":        "Environment-Zugaenge – nie ueber MCP (nur Administrator)",
 	"/api/push/{token}":              "Push eines Checks (Seiteneffekt, Token ist die Berechtigung)",
 	"/api/monitor64/push/token":      "erzeugt ein neues Push-Token",
 	"/api/dns64/zones/{id}/tsig":     "TSIG-Schluessel",

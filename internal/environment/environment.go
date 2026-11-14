@@ -7,6 +7,9 @@
 // Seiten an) und mit dem Bereich environment/login auf beiden Seiten; sonst Anmeldeseite der anderen Node. Die Rolle
 // wird nie groesser: hoechstens die Rolle auf der Ziel-Node und hoechstens die mitgeschickte der oeffnenden Node.
 // Gesperrte und unbekannte Benutzer bekommen kein Ticket.
+//
+// Phase E2: hinzugefuegte Nodes ausserhalb des Clusters (nodes.go) mit Zugangsschluessel (access.go) und gebundenen
+// Endpunkten /peer/v2/env/* (remote.go); Bereich environment/nodes gleicht sie im Cluster ab.
 package environment
 
 import (
@@ -25,6 +28,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/peer"
+	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -120,6 +124,14 @@ type Deps struct {
 	// Call: Ticket bei einer anderen Node anfragen.
 	Call func(ctx context.Context, nodeID string, in TicketRequest, out *TicketResponse) error
 	Now  func() time.Time
+	// E2: Verschluesselung der Zugangsschluessel (nil nur in Tests), Kennung, Name, oeffentlicher Schluessel und
+	// Version dieser Node, Aenderungen an den Cluster melden (Register fuellt NodeID, PublicKey und Change).
+	Box       *secrets.Box
+	NodeID    func() string
+	NodeName  func() string
+	PublicKey func() string
+	Version   string
+	Change    func(ctx context.Context, module, item, id string, deleted bool)
 }
 
 // Service stellt Tickets aus, loest sie ein und merkt sich die Sitzungen.
@@ -127,6 +139,7 @@ type Service struct {
 	d       Deps
 	mu      sync.Mutex
 	tickets map[string]*Ticket
+	nc      nonces // gebundene Anfragen (remote.go)
 }
 
 // New baut den Dienst.
@@ -140,31 +153,21 @@ func New(d Deps) *Service {
 	return &Service{d: d, tickets: map[string]*Ticket{}}
 }
 
-// provider meldet den Bereich environment/login beim Cluster an; Eintraege gleicht er nicht ab.
-type provider struct{}
-
-func (provider) ClusterModule() peer.ModuleInfo {
-	return peer.ModuleInfo{ID: ModuleID, TitleKey: "cluster.mod.environment", Default: true, Items: []peer.ItemInfo{
-		{ID: ItemLogin, TitleKey: "cluster.item.environment_login", HintKey: "cluster.environment_hint", Default: true},
-	}}
-}
-
-func (provider) ClusterIDs(context.Context, string) ([]string, error) { return nil, nil }
-
-func (provider) ClusterGet(context.Context, string, string) (json.RawMessage, bool, error) {
-	return nil, false, nil
-}
-
-func (provider) ClusterApply(context.Context, string, string, json.RawMessage, bool) error {
-	return nil
-}
+// moduleInfo: Bereiche environment/login (nur Schalter) und environment/nodes (hinzugefuegte Nodes, nodes.go).
+var moduleInfo = peer.ModuleInfo{ID: ModuleID, TitleKey: "cluster.mod.environment", Default: true, Items: []peer.ItemInfo{
+	{ID: ItemLogin, TitleKey: "cluster.item.environment_login", HintKey: "cluster.environment_hint", Default: true},
+	{ID: ItemNodes, TitleKey: "cluster.item.environment_nodes", HintKey: "cluster.environment_nodes_hint", Default: true},
+}}
 
 // Register meldet Environment beim Cluster an (vor peer.Run) und haengt die Cluster-Funktionen an.
 func Register(pm *peer.Manager, s *Service) {
-	pm.RegisterProvider(provider{})
+	pm.RegisterProvider(provider{s})
 	pm.RegisterCall(ModuleID, CallTicket, s.HandleTicket)
 	s.d.Members = pm.Members
 	s.d.AreaOn = pm.AreaMembers
+	s.d.NodeID = pm.NodeID
+	s.d.PublicKey = pm.PublicKey
+	s.d.Change = pm.ClusterChange
 	s.d.Call = func(ctx context.Context, nodeID string, in TicketRequest, out *TicketResponse) error {
 		return pm.Call(ctx, nodeID, ModuleID, CallTicket, in, out)
 	}
@@ -277,8 +280,12 @@ func (s *Service) issue(ctx context.Context, from string, req TicketRequest) (st
 	if p, err := url.Parse(req.Back); err == nil && (p.Scheme == "https" || p.Scheme == "http") && p.Host != "" && len(req.Back) <= 512 {
 		back = p.String()
 	}
-	t := &Ticket{UID: u.UID, Role: MinRole(req.Role, s.d.Store.EffectiveRole(ctx, u)), FromNode: from, FromName: m.Name, Back: back,
-		expires: s.d.Now().Add(TicketTTL)}
+	return s.addTicket(&Ticket{UID: u.UID, Role: MinRole(req.Role, s.d.Store.EffectiveRole(ctx, u)), FromNode: from, FromName: m.Name, Back: back})
+}
+
+// addTicket legt ein Ticket (60 s gueltig) an und liefert es.
+func (s *Service) addTicket(t *Ticket) (string, error) {
+	t.expires = s.d.Now().Add(TicketTTL)
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err

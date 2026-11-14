@@ -1,0 +1,45 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-hdd-stack text-primary me-1"></i> {{if $d.Node}}{{.T "environment.edit_node"}}{{else}}{{.T "environment.add_node"}}{{end}}</h1>
+<p class="small text-body-secondary">{{.T "environment.node_intro"}}</p>
+{{if $d.Message}}<div class="alert alert-danger small" id="env-error">{{$d.Message}}</div>{{end}}
+<div class="card mb-3" style="max-width: 42rem">
+	<div class="card-body">
+		<form method="post" action="{{if $d.Node}}/environment/nodes/{{$d.Node.UID}}{{else}}/environment/nodes{{end}}" autocomplete="off">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="mb-3">
+				<label class="form-label small" for="env-url">{{.T "environment.f_url"}}</label>
+				<input class="form-control form-control-sm font-monospace" id="env-url" name="url" value="{{.Val "url"}}" placeholder="https://192.168.1.20:8443" required maxlength="255">
+			</div>
+			<div class="mb-3">
+				<label class="form-label small" for="env-key">{{.T "environment.f_key"}}</label>
+				<textarea class="form-control form-control-sm font-monospace" id="env-key" name="key" rows="2" spellcheck="false" placeholder="n64env1.…"></textarea>
+				<div class="form-text">{{if and $d.Node $d.Node.HasKey}}{{.T "environment.f_key_keep"}}{{else}}{{.T "environment.f_key_hint"}}{{end}}</div>
+				{{if and $d.Node $d.Node.HasKey}}<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="remove_key" value="1" id="env-remove-key"><label class="form-check-label small" for="env-remove-key">{{.T "environment.f_remove_key"}}</label></div>{{end}}
+			</div>
+			<div class="mb-3">
+				<label class="form-label small" for="env-name">{{.T "environment.f_name"}}</label>
+				<input class="form-control form-control-sm" id="env-name" name="name" value="{{.Val "name"}}" maxlength="64">
+				<div class="form-text">{{.T "environment.f_name_hint"}}</div>
+			</div>
+			<div class="mb-3">
+				<label class="form-label small" for="env-desc">{{.T "environment.f_description"}}</label>
+				<input class="form-control form-control-sm" id="env-desc" name="description" value="{{.Val "description"}}" maxlength="200">
+			</div>
+			<div class="mb-3">
+				<label class="form-label small" for="env-browser">{{.T "environment.f_browser_url"}}</label>
+				<input class="form-control form-control-sm font-monospace" id="env-browser" name="browser_url" value="{{.Val "browser_url"}}" maxlength="255">
+				<div class="form-text">{{.T "environment.f_browser_url_hint"}}</div>
+			</div>
+			<button class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> {{.T "environment.save"}}</button>
+			<a class="btn btn-sm btn-outline-secondary" href="/environment">{{.T "environment.cancel"}}</a>
+		</form>
+	</div>
+</div>
+{{if $d.Node}}
+<form method="post" action="/environment/nodes/{{$d.Node.UID}}/delete" class="m-0">
+	<input type="hidden" name="_csrf" value="{{.CSRF}}">
+	<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> {{.T "environment.remove_node"}}</button>
+</form>
+{{end}}
+{{end}}

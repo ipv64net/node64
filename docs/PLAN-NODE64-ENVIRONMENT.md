@@ -147,6 +147,23 @@ Rechteprüfung der Benutzerverwaltung (`roles.go`) nur die begrenzte Rolle sieht
 
 E2 ist unabhängig von B1/B2.
 
+**Stand E2 (gebaut 2026-11-14):** `internal/environment/nodes.go` (Tabelle `env_nodes`, Bereich `environment/nodes`,
+Geheimnis mit `secret.key` verschlüsselt, beim Empfänger neu verschlüsselt), `access.go` (Tabelle `env_access`),
+`remote.go` (gebundene Endpunkte `POST /peer/v2/env/status|ticket`), `internal/peer/bound.go` (Transport des Clusters
+für Nodes ohne Kopplung: `DialBound`, `HandleBound`), Oberfläche und API in `internal/web/environment_nodes.go`.
+Abweichungen vom Entwurf, bewusst:
+- Statt HMAC(Geheimnis, …) signiert A mit einem aus dem Geheimnis abgeleiteten Ed25519-Schlüssel (über Pfad, Zeit,
+  Nonce, Kennung von B, TLS-Exporter und Body); B speichert nur dessen öffentlichen Teil. So ist der gespeicherte
+  Wert wirklich nur ein Prüfwert – wer die Datenbank von B liest, kann sich damit nicht als A ausgeben.
+- Über einen Schlüssel angemeldet wird nur der Benutzer, der ihn auf A eingetragen hat (gleiche `uid`, im Cluster
+  mit Benutzer-Abgleich auch auf den anderen Mitgliedern). Andere Benutzer auf A sehen die Node und landen auf der
+  Anmeldeseite – der Schlüssel steht für eine Anmeldung als ein bestimmter Benutzer von B.
+- Fehlversuche an `/peer/v2/env/*` bremst ein eigener Topf je IP (5 Versuche, dann 1 je 30 s), getrennt von der
+  Anmeldeseite.
+- Hinzugefügte Nodes, die diese Node oder ein Cluster-Mitglied sind, stehen nur einmal (als Cluster).
+- Zugänge liegen unter Environment → „Zugänge für andere Nodes“ (nicht in den Einstellungen), Anlegen und Bearbeiten
+  von Nodes unter Environment → „Node hinzufügen“ bzw. Stift in der Liste; beides nur für Administratoren.
+
 **Risiken:** Ein Zugangsschlüssel ist so viel wert wie eine Anmeldung als dieser Benutzer → nur einmal angezeigt,
 nur als Hash gespeichert, widerrufbar, Rolle begrenzt. Browser-Zertifikatswarnung bei IP-Adressen ist unschön, aber
 ehrlich (eigene Browser-Adresse je Eintrag als Ausweg).
