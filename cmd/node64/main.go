@@ -158,6 +158,12 @@ func run() error {
 	if err := st.Migrate(ctx, "core", core); err != nil {
 		return err
 	}
+	st.SetTOTPCodec(box.Encrypt, box.Decrypt) // TOTP-Geheimnisse mit secret.key verschluesselt, Altbestand einmalig
+	if n, err := st.EncryptTOTPSecrets(ctx); err != nil {
+		log.Warn("encrypt totp secrets", "err", err)
+	} else if n > 0 {
+		log.Info("totp secrets encrypted", "users", n)
+	}
 	if err := firstAdminFromEnv(ctx, cfg, st, log); err != nil {
 		return err
 	}

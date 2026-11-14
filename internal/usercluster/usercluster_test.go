@@ -45,6 +45,7 @@ func newTestNode(t *testing.T, id string) *node {
 		t.Fatal(err)
 	}
 	box, _ := secrets.Load(filepath.Join(dir, "secret.key"))
+	st.SetTOTPCodec(box.Encrypt, box.Decrypt) // wie cmd/node64
 	n := &node{id: id, st: st, box: box, c: New(st, box, log)}
 	st.SetLoginCluster(func(_ context.Context, item, id string, deleted bool) {
 		n.mu.Lock()
@@ -413,8 +414,13 @@ func TestAreaOffByDefault(t *testing.T) {
 			continue
 		}
 		found = true
-		if m.Enabled || len(m.Items) != 2 || m.Items[0].Enabled || m.Items[1].Enabled {
+		if m.Enabled || len(m.Items) != 4 {
 			t.Fatalf("users area must be off by default: %+v", m)
+		}
+		for _, it := range m.Items {
+			if it.Enabled {
+				t.Fatalf("users area must be off by default: %+v", m)
+			}
 		}
 	}
 	if !found {

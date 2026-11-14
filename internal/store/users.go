@@ -97,7 +97,7 @@ func (s *Store) CreateUserWith(ctx context.Context, n NewUser) (*User, error) {
 
 // UserByUID liefert einen Benutzer ueber seine Cluster-Kennung (nil = gibt es nicht).
 func (s *Store) UserByUID(ctx context.Context, uid string) (*User, error) {
-	u, err := scanUser(s.r.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE uid = ?`, uid))
+	u, err := s.withTOTP(scanUser(s.r.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE uid = ?`, uid)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

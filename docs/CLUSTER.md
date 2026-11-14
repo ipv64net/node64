@@ -126,54 +126,104 @@ bekommen die Kanäle des Portals über ipv64.net (Hinweis am Schalter).
 
 ### Benutzer & Anmeldung (`users`)
 
-Code: `internal/usercluster` (Provider), Hook in `internal/store` (`SetLoginCluster`), Wahl in
-`internal/web/cluster_users.go`. Node64 kennt **keine Rollen und kein Sperren**: jeder lokale Benutzer ist
-Administrator, „letzter Administrator“ heißt also „letzter Benutzer der Node“.
+Code: `internal/usercluster` (Provider; Gruppen in `groups.go`, directory in `directory.go`), Hook in `internal/store`
+(`SetLoginCluster`), Wahl in `internal/web/cluster_users.go`. Benutzerverwaltung siehe
+[PLAN-NODE64-BENUTZER.md](PLAN-NODE64-BENUTZER.md): zwei Rollen (**Administrator**, **Nur lesen**), Sperre, Herkunft
+(`local`, `ldap`, `oidc`), Gruppen mit Rolle; wirksame Rolle = höchste aus eigener Rolle und allen Gruppen. Alle vier
+Bereiche sind ohne Einstellung aus (Schalter je Bereich auf `/cluster`).
 
 | Was | Abgeglichen | Bleibt je Node |
 |---|---|---|
-| Benutzer (`accounts`, Kennung `users.uid`) | Name, Passwort-Hash, App-2FA-Geheimnis, gehashte Wiederherstellungscodes (ein verbrauchter Code gilt danach überall nicht mehr), Sprache, Zeitzone, Anlagedatum, verknüpfte SSO-Konten (Anbieter, Subject, Anzeige) | lokale Nummer, Passkeys (an Hostnamen/RP-ID gebunden), Sitzungen, letzte Anmeldung, API- und MCP-Keys, Sperren nach Fehlversuchen |
-| SSO (`sso`, ein Eintrag `oidc`) | Issuer, Client-ID, Client-Secret, Beschriftung, Scopes; „SSO entfernen“ entfernt es überall | feste Rückleit-Adresse (`auth.oidc.base_url`, enthält den eigenen Hostnamen) |
+| Benutzer (`accounts`, Kennung `users.uid`) | Name, Passwort-Hash, App-2FA-Geheimnis, gehashte Wiederherstellungscodes (ein verbrauchter Code gilt danach überall nicht mehr), Sprache, Zeitzone, Anlagedatum, verknüpfte SSO-Konten (Anbieter, Subject, Anzeige), Rolle, Sperre, Herkunft, E-Mail, Gruppen (von Hand `group_uids` und aus LDAP/SSO `ext_group_uids`), „Passwort beim nächsten Anmelden setzen“ | lokale Nummer, Passkeys (an Hostnamen/RP-ID gebunden), Sitzungen, letzte Anmeldung, API- und MCP-Keys, Sperren nach Fehlversuchen |
+| Gruppen (`groups`, Kennung `user_groups.uid`) | Name, Rolle, Beschreibung, Zuordnungen nach außen (LDAP-Gruppen, OIDC-Gruppen) | – |
+| SSO (`sso`, ein Eintrag `oidc`) | Issuer, Client-ID, Client-Secret, Beschriftung, Scopes, „Benutzer über Gruppen anlegen“ (`auth.oidc.jit`) und Claim-Name (`auth.oidc.group_claim`); „SSO entfernen“ entfernt es überall | feste Rückleit-Adresse (`auth.oidc.base_url`, enthält den eigenen Hostnamen) |
+| Verzeichnis (`directory`, ein Eintrag `auth`) | AD/LDAP-Anbindung (`auth.ldap` samt Bind-Passwort) und „2FA für alle Pflicht“ (`auth.2fa_required`), damit jede Node dieselbe Regel hat | – |
 | Forward-Auth | – | komplett (Proxy-Adressen und Kopf gehören zum Netz der Node) |
 | Zeitzone der Node (`node.timezone`) | – | ja (nur die Zeitzone des Benutzers geht mit) |
 
 Geheimes geht im Klartext über die Cluster-Verbindung (HTTPS, an die Kopplung gebunden) und wird gespeichert wie
-lokal: Passwort-Hash und 2FA-Geheimnis wie bisher in `users`, das Client-Secret mit dem Schlüssel der empfangenden
-Node verschlüsselt. Ein Secret, das sich hier nicht entschlüsseln lässt, geht als `incomplete` hinaus und wird drüben
-nicht übernommen.
+lokal: Passwort-Hash in `users`; App-2FA-Geheimnis, Client-Secret und Bind-Passwort mit dem `secret.key` der
+empfangenden Node verschlüsselt. Ein Client-Secret oder Bind-Passwort, das sich hier nicht entschlüsseln lässt, geht
+als `incomplete` hinaus und wird drüben nicht übernommen (die anderen behalten ihren Stand); ein nicht lesbares
+2FA-Geheimnis geht gar nicht hinaus (der Eintrag gilt als „gerade nicht lesbar“ und wird später erneut abgeholt).
+
+**TOTP-Geheimnis verschlüsselt:** `users.totp_secret` steht mit `secret.key` verschlüsselt in der Datenbank (Store-Hook
+`SetTOTPCodec`, verdrahtet in `cmd/node64`). Beim Start werden noch im Klartext gespeicherte Geheimnisse einmal
+verschlüsselt (`EncryptTOTPSecrets`, keine Meldung an den Cluster – der Inhalt bleibt gleich); gelesen wird
+transparent im Klartext. Verglichen (exaktes Doppel, Sitzungsende) wird der Klartext. Lässt sich ein Geheimnis nicht
+entschlüsseln (falscher `secret.key`), bleibt 2FA an und kein Code passt; Abhilfe `reset-password -disable-2fa`.
 
 **Identität und Konflikte:**
 
 - Dieselbe Kennung auf beiden Seiten (der Benutzer kam schon über den Cluster): die jüngere Änderung gewinnt, als Ganzes.
 - Gleicher Name, andere Kennung, **exakt gleich** (Name ohne Groß/klein, Hash, 2FA-Geheimnis, Codes, Sprache, Zeitzone,
-  SSO-Konten): es gilt die kleinere Kennung; die Node mit der größeren übernimmt sie an Ort und Stelle (lokale Nummer,
-  Passkeys, Keys und Sitzungen bleiben). Anders als bei den übrigen Bereichen geht dabei **kein** Löschvermerk für die
-  alte Kennung hinaus (ein Löschvermerk könnte auf einer dritten Node einen Benutzer samt Passkeys löschen).
-- Gleicher Name, anderer Inhalt (z. B. anderes Passwort – bei zwei Erstinstallationen der Normalfall): **nichts wird
-  überschrieben**, jede Node behält ihren Benutzer. Die Abweichung steht in `users.cluster_conflicts` (Daten
-  verschlüsselt), im Audit (`user.cluster.conflict`) und auf `/cluster` in der Karte „Benutzer im Cluster: bitte
-  wählen“ (Node, 2FA, Zahl der SSO-Verknüpfungen, Anlagedatum, Kennung). API: `GET /api/group` → `user_conflicts`,
-  Wahl mit `POST /api/group/users` Body `{"uid":"…"}`; Audit `user.cluster.choose` mit den verworfenen Versionen.
+  SSO-Konten, Rolle, Sperre, Herkunft, E-Mail, Gruppen, „Passwort setzen“): es gilt die kleinere Kennung; die Node mit
+  der größeren übernimmt sie an Ort und Stelle (lokale Nummer, Passkeys, Keys und Sitzungen bleiben). Anders als bei
+  den übrigen Bereichen geht dabei **kein** Löschvermerk für die alte Kennung hinaus (ein Löschvermerk könnte auf einer
+  dritten Node einen Benutzer samt Passkeys löschen).
+- Gleicher Name, anderer Inhalt (z. B. anderes Passwort – bei zwei Erstinstallationen der Normalfall; auch andere Rolle
+  oder Sperre): **nichts wird überschrieben**, jede Node behält ihren Benutzer. Die Abweichung steht in
+  `users.cluster_conflicts` (Daten verschlüsselt), im Audit (`user.cluster.conflict`) und auf `/cluster` in der Karte
+  „Benutzer im Cluster: bitte wählen“ (Node, 2FA, Zahl der SSO-Verknüpfungen, Anlagedatum, Kennung; `Version` liefert
+  zusätzlich Rolle, Sperre, Herkunft). API: `GET /api/group` → `user_conflicts`, Wahl mit `POST /api/group/users` Body
+  `{"uid":"…"}`; Audit `user.cluster.choose` mit den verworfenen Versionen.
 - Die Wahl ersetzt den Benutzer hier **an Ort und Stelle** (gleiche lokale Nummer, die eigene Sitzung bleibt) und geht
   mit den abgelösten Kennungen (`users.cluster_replaces`) und dem Zeitpunkt (`cluster_chosen_at`) an die anderen
   Nodes; wessen Benutzer darin abgelöst ist, ersetzt ihn ebenso an Ort und Stelle. Eine später eintreffende abgelöste
   Version wird abgewiesen. Bei zwei verschiedenen Wahlen gilt die jüngere.
 - Wird ein Benutzer über den Cluster umbenannt und gibt es den neuen Namen hier schon unter anderer Kennung, gilt das
   ebenfalls als Abweichung zur Wahl.
+- **Über LDAP/SSO angelegte Benutzer** bekommen eine feste Kennung aus der Quelle (`store.ExternalUID`: LDAP
+  `objectGUID`/`entryUUID`, OIDC Issuer+Subject, Hash). Meldet sich dieselbe Person an zwei Nodes zum ersten Mal an,
+  entsteht derselbe Benutzer – kein Konflikt zur Wahl. Sie haben kein lokales Passwort; Namen dürfen dann auch `@`
+  enthalten (bis 128 Zeichen).
+- **Gruppen, gleicher Name mit anderer Kennung** (zwei Nodes legen „Admins“ getrennt an): es gilt die kleinere
+  Kennung, ohne Wahl. Die Node mit der größeren übernimmt sie an Ort und Stelle (Inhalt der kleineren) und biegt die
+  Gruppen ihrer Benutzer um, ohne diese Benutzer neu zu melden (Audit `group.cluster.merge`). Für die alte Kennung
+  liefert sie statt eines Löschvermerks eine **Umleitung** (`into`, gemerkt in `users.group_aliases`): eine dritte
+  Node, die die alte Kennung noch hat, biegt ebenso um, statt die Gruppe samt Mitgliedschaften zu löschen. Auch ein
+  Benutzer, der noch mit der alten Kennung eintrifft, wird umgeleitet. Gleicher Name heißt also dieselbe Gruppe.
+- Eine gelöschte Gruppe wird bei den Benutzern einfach übergangen (die Kennung bleibt am Benutzer stehen und zählt
+  nicht mehr).
+
+**Gemischter Cluster (Update läuft):** Eine Node ohne Benutzerverwaltung sendet Rolle, Sperre, Herkunft, E-Mail,
+Gruppen und „Passwort setzen“ nicht. Dann bleiben diese Felder hier **unverändert** (eine Passwortänderung von dort
+stuft also weder herab noch herauf und entsperrt nicht); neu angelegt gilt der Stand dort (Administrator, lokal). Für
+das exakte Doppel zählt ein solcher Stand als „Administrator, lokal, nicht gesperrt, ohne Gruppen“. Die Bereiche
+`groups` und `directory` und die neuen SSO-Felder kennt eine ältere Node nicht (sie meldet sie nicht im Ping bzw.
+lässt die Felder weg – dann bleiben sie hier). Grenze: Solange eine Node die Benutzerverwaltung noch nicht hat, gelten
+Rolle und Sperre dort nicht (alle Benutzer sind dort Administratoren); nach dem Update aller Nodes greift alles.
+Benutzer aus LDAP/SSO (ohne Passwort) weist eine ältere Node ab.
 
 **Schutzregeln:**
 
 1. Ein Löschen aus dem Cluster entfernt **nie den letzten Benutzer** einer Node (Audit `user.cluster.keep_last`,
    Warnung im Log). Der Benutzer bleibt dann nur dort; ändert ihn dort später jemand, kommt er überall zurück.
-2. Weder Abgleich noch Wahl löschen einen Benutzer, um einen anderen einzusetzen: die Wahl ersetzt den Inhalt an Ort
+2. **Letzter aktiver lokaler Administrator:** Eine Übernahme, die einer Node ihren letzten nicht gesperrten lokalen
+   Benutzer mit wirksamer Rolle Administrator nähme – sperren, herabstufen, Herkunft ändern, löschen, auch über die
+   Rolle oder das Löschen einer Gruppe –, wird für diesen Benutzer bzw. diese Gruppe nicht übernommen (Audit
+   `user.cluster.keep_last` mit der Änderung, Warnung im Log, der Cluster versucht es später erneut). Jede Node prüft
+   das bei sich; LDAP/SSO-Administratoren zählen nicht (Verzeichnis kann ausfallen). Gibt es schon keinen lokalen
+   Administrator mehr, greift die Regel nicht.
+3. Weder Abgleich noch Wahl löschen einen Benutzer, um einen anderen einzusetzen: die Wahl ersetzt den Inhalt an Ort
    und Stelle, die Sitzung der Person, die wählt, bleibt.
-3. Den eigenen Benutzer kann man auf der Seite Anmeldung nicht löschen (die Liste „Benutzer dieser Node“ erscheint ab
+4. Den eigenen Benutzer kann man auf der Seite Anmeldung nicht löschen (die Liste „Benutzer dieser Node“ erscheint ab
    zwei Benutzern, Audit `user.delete`).
-4. Ändert eine Übernahme Passwort oder 2FA-Geheimnis, enden die Sitzungen dieses Benutzers auf der Node (wie beim
-   Ändern auf der Node selbst); er meldet sich mit dem neuen Passwort an.
-5. Gleiche SSO-Identität hier bei einem anderen Benutzer: diese Verknüpfung wird nicht übernommen (Warnung im Log).
-6. Aus dem Cluster übernommene Änderungen stehen im Audit-Log mit Herkunft `cluster` und Urheber `node:<Name>`
-   (`user.cluster.create|update|delete|merge|choice|keep_last`, `sso.cluster.update|delete`; Bereich „Anmeldung“).
+5. Ändert eine Übernahme Passwort, 2FA-Geheimnis, Rolle, Sperre, Herkunft oder Gruppen, enden die Sitzungen dieses
+   Benutzers auf der Node (wie beim Ändern auf der Node selbst); gesperrt enden alle, auch die der wählenden Person.
+   Gelöschte Benutzer verlieren ihre Sitzungen mit dem Benutzer. Die wirksame Rolle wird bei jeder Anfrage neu
+   ermittelt, daher wirken Änderungen an Gruppen (Rolle, Zusammenführen) ohne Sitzungsende.
+6. Gleiche SSO-Identität hier bei einem anderen Benutzer: diese Verknüpfung wird nicht übernommen (Warnung im Log).
+7. Ein Löschvermerk für `directory` ändert nichts (Einstellungen werden nie gelöscht); eine unbekannte (neuere) Rolle
+   wird als „Nur lesen“ übernommen.
+8. Aus dem Cluster übernommene Änderungen stehen im Audit-Log mit Herkunft `cluster` und Urheber `node:<Name>`
+   (`user.cluster.create|update|delete|merge|choice|keep_last`, `group.cluster.create|update|delete|merge`,
+   `sso.cluster.update|delete`, `auth.cluster.directory`; Bereich „Anmeldung“).
+
+Meldungen: Benutzer und Gruppen meldet der Store selbst (`LoginChanged`), LDAP und 2FA-Pflicht `authcfg.SaveLDAP` bzw.
+`authcfg.SetTwoFARequired`, die SSO-Einrichtung `usercluster.SSOChanged` (nach dem Speichern in der Oberfläche) und
+„Benutzer über Gruppen anlegen“ `authcfg.SaveOIDCJIT`. Wer `auth.oidc.*` direkt mit `SetSetting` schreibt, muss danach
+`SSOChanged` rufen (es gibt keinen Setting-Hook für diese Schlüssel).
 
 `reset-password` per Kommandozeile wirkt nur auf der eigenen Node (der Befehl läuft ohne Cluster); es gilt im Cluster
 erst, wenn das Passwort danach in der Oberfläche geändert wird. Bis dahin kann eine Änderung desselben Benutzers auf

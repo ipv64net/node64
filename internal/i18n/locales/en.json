@@ -3489,6 +3489,8 @@
       "node_settings": "General settings (time zone, self-update, MCP on/off)",
       "user_accounts": "Users – with password, app 2FA and SSO links (passkeys, sessions and API keys stay per node)",
       "user_sso": "SSO (OIDC) – provider including client secret (redirect address and forward auth stay per node)",
+      "groups": "User groups – with role and mappings to LDAP and SSO groups",
+      "directory": "AD/LDAP connection including bind password and “2FA required for everyone”",
       "dyndns_config": "Names and settings – including tokens; only one node updates at a time",
       "monitor64_config": "Hosts, accesses including secrets, thresholds, notifications, maintenance and cluster key – each host is monitored by exactly one node",
       "monitor64_status": "Problems, acknowledgements and current state of the hosts"

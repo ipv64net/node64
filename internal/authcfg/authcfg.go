@@ -98,6 +98,26 @@ func SetTwoFARequired(ctx context.Context, st *store.Store, on bool) error {
 	return nil
 }
 
+// SaveOIDCJIT speichert „Benutzer ueber Gruppen anlegen“ und den Claim-Namen ("" = Standard) und meldet die
+// SSO-Einrichtung an den Cluster (Bereich sso, Kennung "oidc" wie usercluster). Ohne eingerichtetes SSO gibt es dort
+// nichts zu melden (es wuerde als Entfernen gelten); die Werte gehen mit dem naechsten Speichern des SSO mit.
+func SaveOIDCJIT(ctx context.Context, st *store.Store, on bool, claim string) error {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	if err := st.SetSetting(ctx, SetOIDCJIT, v); err != nil {
+		return err
+	}
+	if err := st.SetSetting(ctx, SetOIDCGroupClaim, strings.TrimSpace(claim)); err != nil {
+		return err
+	}
+	if st.SettingOr(ctx, "auth.oidc.issuer", "") != "" {
+		st.LoginChanged(ctx, "sso", "oidc", false)
+	}
+	return nil
+}
+
 // OIDCJIT: SSO legt Benutzer ueber den Gruppen-Claim an; Claim-Name (Standard "groups").
 func OIDCJIT(ctx context.Context, st *store.Store) (on bool, claim string) {
 	claim = strings.TrimSpace(st.SettingOr(ctx, SetOIDCGroupClaim, ""))

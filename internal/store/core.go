@@ -102,6 +102,79 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	return &u, nil
 }
 
+// SetTOTPCodec: das TOTP-Geheimnis kuenftig verschluesselt speichern (secret.key; vor dem Start, nil = Klartext).
+// dec muss Klartext unveraendert zurueckgeben (secrets.Box.Decrypt), damit der Altbestand lesbar bleibt.
+func (s *Store) SetTOTPCodec(enc func(string) string, dec func(string) (string, error)) {
+	s.totpEnc, s.totpDec = enc, dec
+}
+
+// EncodeTOTP: Geheimnis so, wie es in users.totp_secret steht (leer bleibt leer).
+func (s *Store) EncodeTOTP(plain string) string {
+	if plain == "" || s.totpEnc == nil {
+		return plain
+	}
+	return s.totpEnc(plain)
+}
+
+// DecodeTOTP: Geheimnis aus users.totp_secret im Klartext (Fehler: hier nicht entschluesselbar).
+func (s *Store) DecodeTOTP(stored string) (string, error) {
+	if stored == "" || s.totpDec == nil {
+		return stored, nil
+	}
+	return s.totpDec(stored)
+}
+
+// withTOTP entschluesselt das Geheimnis eines gelesenen Benutzers. Nicht entschluesselbar (falscher secret.key):
+// der gespeicherte Wert bleibt, 2FA gilt als eingeschaltet und kein Code passt (sicher zu).
+func (s *Store) withTOTP(u *User, err error) (*User, error) {
+	if err == nil && u != nil {
+		if p, derr := s.DecodeTOTP(u.TOTPSecret); derr == nil {
+			u.TOTPSecret = p
+		} else {
+			s.log.Warn("totp secret not readable (secret.key?)", "user", u.Username)
+		}
+	}
+	return u, err
+}
+
+// EncryptTOTPSecrets verschluesselt einmalig alle noch im Klartext gespeicherten TOTP-Geheimnisse (beim Start nach
+// SetTOTPCodec). Der Inhalt bleibt gleich, daher keine Meldung an den Cluster. Liefert die Zahl der geaenderten.
+func (s *Store) EncryptTOTPSecrets(ctx context.Context) (int, error) {
+	if s.totpEnc == nil || s.totpDec == nil {
+		return 0, nil
+	}
+	rows, err := s.r.QueryContext(ctx, `SELECT id, totp_secret FROM users WHERE totp_secret <> ''`)
+	if err != nil {
+		return 0, err
+	}
+	type row struct {
+		id int64
+		v  string
+	}
+	var plain []row
+	for rows.Next() {
+		var r row
+		if rows.Scan(&r.id, &r.v) != nil {
+			continue
+		}
+		if p, err := s.totpDec(r.v); err == nil && p == r.v { // Klartext (ein verschluesselter Wert ergibt etwas anderes)
+			plain = append(plain, r)
+		}
+	}
+	rows.Close()
+	n := 0
+	for _, r := range plain {
+		res, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ? WHERE id = ? AND totp_secret = ?`, s.totpEnc(r.v), r.id, r.v)
+		if err != nil {
+			return n, err
+		}
+		if c, _ := res.RowsAffected(); c > 0 {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (s *Store) UserCount(ctx context.Context) (int, error) {
 	var n int
 	err := s.r.QueryRowContext(ctx, `SELECT count(*) FROM users`).Scan(&n)
@@ -180,7 +253,7 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) (bool, error) {
 }
 
 func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
-	u, err := scanUser(s.r.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE id = ?`, id))
+	u, err := s.withTOTP(scanUser(s.r.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE id = ?`, id)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -188,7 +261,7 @@ func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
 }
 
 func (s *Store) UserByName(ctx context.Context, name string) (*User, error) {
-	u, err := scanUser(s.r.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE username = ?`, name))
+	u, err := s.withTOTP(scanUser(s.r.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE username = ?`, name)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -203,7 +276,7 @@ func (s *Store) Users(ctx context.Context) ([]*User, error) {
 	defer rows.Close()
 	var out []*User
 	for rows.Next() {
-		u, err := scanUser(rows)
+		u, err := s.withTOTP(scanUser(rows))
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +307,7 @@ func (s *Store) UpdateUserPassword(ctx context.Context, id int64, hash string) e
 }
 
 func (s *Store) UpdateUserTOTP(ctx context.Context, id int64, secret string) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ? WHERE id = ?`, secret, id)
+	_, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ? WHERE id = ?`, s.EncodeTOTP(secret), id)
 	if err == nil {
 		s.userChanged(ctx, id)
 	}

@@ -53,6 +53,9 @@ type Store struct {
 
 	settingHook  atomic.Pointer[func(ctx context.Context, key string)]    // nach jedem SetSetting (core.go)
 	loginCluster func(ctx context.Context, item, id string, deleted bool) // Benutzer & Anmeldung im Cluster (nil = ohne)
+
+	totpEnc func(string) string          // TOTP-Geheimnis verschluesseln (secret.key; nil = Klartext), core.go
+	totpDec func(string) (string, error) // und entschluesseln (Klartext kommt unveraendert zurueck)
 }
 
 // Open oeffnet oder erzeugt die Datenbank.

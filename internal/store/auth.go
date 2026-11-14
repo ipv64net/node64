@@ -35,7 +35,7 @@ func (s *Store) SetSessionTOTP(ctx context.Context, id string, ok bool) error {
 
 // SetUserTOTP speichert Geheimnis und Wiederherstellungscodes (gehasht, kommagetrennt).
 func (s *Store) SetUserTOTP(ctx context.Context, id int64, secret, recoveryHashes string) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ?, totp_recovery = ? WHERE id = ?`, secret, recoveryHashes, id)
+	_, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ?, totp_recovery = ? WHERE id = ?`, s.EncodeTOTP(secret), recoveryHashes, id)
 	if err == nil {
 		s.userChanged(ctx, id) // auch ein verbrauchter Wiederherstellungscode: gilt dann auf keiner Node mehr
 	}
@@ -54,7 +54,7 @@ func (s *Store) UserTOTPRecovery(ctx context.Context, id int64) (string, error) 
 // alles, wie es ist.
 func (s *Store) EnableUserTOTP(ctx context.Context, id int64, secret, recoveryHashes string, step int64) (bool, error) {
 	res, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ?, totp_recovery = ?, totp_last_step = ? WHERE id = ? AND totp_secret = ''`,
-		secret, recoveryHashes, step, id)
+		s.EncodeTOTP(secret), recoveryHashes, step, id)
 	if err != nil {
 		return false, err
 	}
