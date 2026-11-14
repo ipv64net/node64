@@ -75,6 +75,8 @@ type DHCPReservation struct {
 	Name    string `json:"name"`
 	Comment string `json:"comment,omitempty"`
 	GroupID int64  `json:"group_id,omitempty"` // nur beim Anlegen: MAC zusaetzlich in diese Geraetegruppe aufnehmen
+	Origin  string `json:"origin,omitempty"`   // Herkunft: "" (von Hand) oder ipam64 (nur lesen, nie aus Eingaben)
+	Ref     string `json:"ref,omitempty"`      // Bezug in der Herkunft (IPAM64: uid der Adresse)
 }
 
 // dhcpState: laufender DHCP-Server (dhcpMu).
@@ -221,6 +223,15 @@ func (m *Module) dhcpConfig(ctx context.Context) (dhcp.Config, error) {
 	for _, r := range res {
 		ip, _ := netip.ParseAddr(r.IP)
 		cfg.Reservations = append(cfg.Reservations, dhcp.Reservation{Scope: r.ScopeID, MAC: r.MAC, IP: ip, Name: r.Name})
+	}
+	excl, err := m.DHCPExcludes(ctx)
+	if err != nil && !m.noTable(err) {
+		return cfg, err
+	}
+	for _, x := range excl { // Ausnahmen im Adressbereich (IPAM64)
+		if ip, err := netip.ParseAddr(x.IP); err == nil {
+			cfg.Excludes = append(cfg.Excludes, dhcp.Exclude{Scope: x.ScopeID, IP: ip})
+		}
 	}
 	cfg.Leases, err = m.dhcpLeaseRows(ctx)
 	return cfg, err
@@ -639,7 +650,7 @@ func (m *Module) dhcpExec(ctx context.Context, q string, args ...any) error {
 
 // DHCPReservations liefert alle festen Adressen (nach Netz und IP).
 func (m *Module) DHCPReservations(ctx context.Context) ([]DHCPReservation, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, scope_id, mac, ip, name, comment FROM dns64_dhcp_reservations ORDER BY scope_id, id`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, scope_id, mac, ip, name, comment, origin, ref FROM dns64_dhcp_reservations ORDER BY scope_id, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +658,7 @@ func (m *Module) DHCPReservations(ctx context.Context) ([]DHCPReservation, error
 	out := []DHCPReservation{}
 	for rows.Next() {
 		var r DHCPReservation
-		if err := rows.Scan(&r.ID, &r.ScopeID, &r.MAC, &r.IP, &r.Name, &r.Comment); err != nil {
+		if err := rows.Scan(&r.ID, &r.ScopeID, &r.MAC, &r.IP, &r.Name, &r.Comment, &r.Origin, &r.Ref); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -735,6 +746,9 @@ func (m *Module) AddDHCPReservation(ctx context.Context, r DHCPReservation) (DHC
 
 // UpdateDHCPReservation aendert eine feste Adresse.
 func (m *Module) UpdateDHCPReservation(ctx context.Context, id int64, r DHCPReservation) (DHCPReservation, error) {
+	if err := m.lockedRow(ctx, "dns64_dhcp_reservations", id); err != nil {
+		return r, err
+	}
 	if err := m.normalizeDHCPReservation(ctx, &r, true); err != nil {
 		return r, err
 	}
@@ -744,6 +758,9 @@ func (m *Module) UpdateDHCPReservation(ctx context.Context, id int64, r DHCPRese
 
 // DeleteDHCPReservation loescht eine feste Adresse.
 func (m *Module) DeleteDHCPReservation(ctx context.Context, id int64) error {
+	if err := m.lockedRow(ctx, "dns64_dhcp_reservations", id); err != nil {
+		return err
+	}
 	return m.dhcpExec(ctx, `DELETE FROM dns64_dhcp_reservations WHERE id = ?`, id)
 }
 

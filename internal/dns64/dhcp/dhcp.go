@@ -51,6 +51,13 @@ type Reservation struct {
 	Name  string
 }
 
+// Exclude ist eine Ausnahme im Adressbereich: die Adresse vergibt der Server nie (z. B. ein fest eingestelltes Geraet
+// im Pool, IPAM64). Ein Lease darauf wird bei der naechsten Verlaengerung abgelehnt (NAK).
+type Exclude struct {
+	Scope int64
+	IP    netip.Addr
+}
+
 // Zustaende eines Lease.
 const (
 	StateOffered = "offered" // angeboten, wartet auf REQUEST
@@ -105,6 +112,7 @@ type Foreign struct {
 type Config struct {
 	Scopes       []Scope
 	Reservations []Reservation
+	Excludes     []Exclude
 	Leases       []Lease
 	Observe      bool // Probelauf: nur zuhoeren, nie antworten, nichts vergeben
 }
@@ -167,6 +175,11 @@ func New(cfg Config, st Store, log *slog.Logger) *Server {
 		for _, r := range cfg.Reservations {
 			if r.Scope == c.ID && c.Subnet.Contains(r.IP) {
 				sc.res[r.MAC], sc.resIP[r.IP] = r, r.MAC
+			}
+		}
+		for _, x := range cfg.Excludes { // reservierte IP ohne MAC: passt zu keinem Client (feste Adresse geht vor)
+			if _, taken := sc.resIP[x.IP]; x.Scope == c.ID && c.Subnet.Contains(x.IP) && !taken {
+				sc.resIP[x.IP] = ""
 			}
 		}
 		for _, l := range cfg.Leases {

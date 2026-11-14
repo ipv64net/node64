@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - IPAM64 (new, module, off by default): IP address management for IPv4 and IPv6 – prefixes with hierarchy, status, VLAN and tags, fixed addresses and ranges, merged with DHCP and local DNS of DNS64, Monitor64, Healthchecks, PROXY64 and the neighbour table; grid, list with free blocks, "next free address", limited network scan, cluster sync, API `/api/ipam64`. Based on a community draft (UlrichSchwarz).
+- DNS64: fixed addresses, exclusions in the DHCP range and A/AAAA records from IPAM64 are labelled and, while IPAM64 runs, only changeable there; new exclusions in the DHCP range (addresses the DHCP server never assigns).
 
 ## 1.7.0 – 2026-11-14
 

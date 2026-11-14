@@ -423,6 +423,17 @@ type clDHCPRes struct {
 	IP      string `json:"ip"`
 	Name    string `json:"name,omitempty"`
 	Comment string `json:"comment,omitempty"`
+	Origin  string `json:"origin,omitempty"` // ipam64: Reservierung aus IPAM64 (aeltere Nodes lassen das Feld weg)
+	Ref     string `json:"ref,omitempty"`
+}
+
+// clDHCPExclude ist eine Ausnahme im Adressbereich (x:<Netz>|<IP>, im Bereich feste Adressen).
+type clDHCPExclude struct {
+	Subnet  string `json:"subnet"`
+	IP      string `json:"ip"`
+	Comment string `json:"comment,omitempty"`
+	Origin  string `json:"origin,omitempty"`
+	Ref     string `json:"ref,omitempty"`
 }
 
 type clDHCPLease struct {
@@ -475,7 +486,14 @@ func (m *Module) clDHCPCurrent(ctx context.Context, item string) (map[string]str
 			return nil, err
 		}
 		for _, r := range list {
-			out["r:"+subnet[r.ScopeID]+"|"+r.MAC] = jsonString(clDHCPRes{subnet[r.ScopeID], r.MAC, r.IP, r.Name, r.Comment})
+			out["r:"+subnet[r.ScopeID]+"|"+r.MAC] = jsonString(clDHCPRes{subnet[r.ScopeID], r.MAC, r.IP, r.Name, r.Comment, clOrigin(r.Origin), clRef(r.Origin, r.Ref)})
+		}
+		excl, err := m.DHCPExcludes(ctx)
+		if err != nil && !m.noTable(err) {
+			return nil, err
+		}
+		for _, x := range excl {
+			out["x:"+subnet[x.ScopeID]+"|"+x.IP] = jsonString(clDHCPExclude{subnet[x.ScopeID], x.IP, x.Comment, clOrigin(x.Origin), clRef(x.Origin, x.Ref)})
 		}
 	case ItemDHCPLeases:
 		list, err := m.dhcpLeaseRows(ctx)
@@ -580,6 +598,12 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 		}
 		m.clSetSnap(item, id, jsonString(clScopeOf(s)))
 	case ItemDHCPRes:
+		if strings.HasPrefix(id, "x:") {
+			if err := m.clApplyExclude(ctx, id, data, deleted); err != nil {
+				return err
+			}
+			break
+		}
 		subnet, mac, _ := strings.Cut(strings.TrimPrefix(id, "r:"), "|")
 		sc, ok, err := m.dhcpScopeBySubnet(ctx, subnet)
 		if err != nil {
@@ -601,18 +625,20 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 		if err := json.Unmarshal(data, &in); err != nil {
 			return err
 		}
-		r := DHCPReservation{ScopeID: sc.ID, MAC: in.MAC, IP: in.IP, Name: in.Name, Comment: in.Comment}
+		r := DHCPReservation{ScopeID: sc.ID, MAC: in.MAC, IP: in.IP, Name: in.Name, Comment: in.Comment, Origin: clOrigin(in.Origin)}
+		r.Ref = clRef(r.Origin, in.Ref)
 		if err := m.normalizeDHCPReservation(ctx, &r, false); err != nil {
 			return err
 		}
 		if _, err := w.ExecContext(ctx, `DELETE FROM dns64_dhcp_reservations WHERE scope_id = ? AND ip = ? AND mac <> ?`, sc.ID, r.IP, r.MAC); err != nil {
 			return err
 		}
-		if _, err := w.ExecContext(ctx, `INSERT INTO dns64_dhcp_reservations (scope_id, mac, ip, name, comment) VALUES (?,?,?,?,?)
-			ON CONFLICT(scope_id, mac) DO UPDATE SET ip = excluded.ip, name = excluded.name, comment = excluded.comment`, sc.ID, r.MAC, r.IP, r.Name, r.Comment); err != nil {
+		if _, err := w.ExecContext(ctx, `INSERT INTO dns64_dhcp_reservations (scope_id, mac, ip, name, comment, origin, ref) VALUES (?,?,?,?,?,?,?)
+			ON CONFLICT(scope_id, mac) DO UPDATE SET ip = excluded.ip, name = excluded.name, comment = excluded.comment, origin = excluded.origin, ref = excluded.ref`,
+			sc.ID, r.MAC, r.IP, r.Name, r.Comment, r.Origin, r.Ref); err != nil {
 			return err
 		}
-		m.clSetSnap(item, id, jsonString(clDHCPRes{subnet, r.MAC, r.IP, r.Name, r.Comment}))
+		m.clSetSnap(item, id, jsonString(clDHCPRes{subnet, r.MAC, r.IP, r.Name, r.Comment, r.Origin, r.Ref}))
 	case ItemDHCPLeases:
 		subnet, mac, _ := strings.Cut(strings.TrimPrefix(id, "l:"), "|")
 		sc, ok, err := m.dhcpScopeBySubnet(ctx, subnet)
@@ -664,6 +690,44 @@ func (m *Module) clDHCPApply(ctx context.Context, item, id string, data json.Raw
 	}
 	m.dhcpApplySoon()
 	m.dhcpNamesSoon()
+	return nil
+}
+
+// clApplyExclude uebernimmt eine Ausnahme im Adressbereich (x:<Netz>|<IP>) einer anderen Node.
+func (m *Module) clApplyExclude(ctx context.Context, id string, data json.RawMessage, deleted bool) error {
+	subnet, ipText, _ := strings.Cut(strings.TrimPrefix(id, "x:"), "|")
+	sc, ok, err := m.dhcpScopeBySubnet(ctx, subnet)
+	if err != nil {
+		return err
+	}
+	w := m.core.Writer()
+	if deleted {
+		if ok {
+			if _, err := w.ExecContext(ctx, `DELETE FROM dns64_dhcp_excludes WHERE scope_id = ? AND ip = ?`, sc.ID, ipText); err != nil {
+				return err
+			}
+		}
+		m.clSetSnap(ItemDHCPRes, id, "")
+		return nil
+	}
+	if !ok {
+		return fmt.Errorf("dhcp cluster: network %s not here yet", subnet)
+	}
+	var in clDHCPExclude
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	p, _ := netip.ParsePrefix(sc.Subnet)
+	ip, err := netip.ParseAddr(in.IP)
+	if err != nil || ip.String() != ipText || !p.Contains(ip) || len(in.Comment) > 200 {
+		return fmt.Errorf("dhcp cluster: bad exclude %s", id)
+	}
+	x := clDHCPExclude{subnet, ip.String(), strings.TrimSpace(in.Comment), clOrigin(in.Origin), clRef(in.Origin, in.Ref)}
+	if _, err := w.ExecContext(ctx, `INSERT INTO dns64_dhcp_excludes (scope_id, ip, comment, origin, ref) VALUES (?,?,?,?,?)
+		ON CONFLICT (scope_id, ip) DO UPDATE SET comment = excluded.comment, origin = excluded.origin, ref = excluded.ref`, sc.ID, x.IP, x.Comment, x.Origin, x.Ref); err != nil {
+		return err
+	}
+	m.clSetSnap(ItemDHCPRes, id, jsonString(x))
 	return nil
 }
 

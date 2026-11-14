@@ -132,6 +132,8 @@ type clRecord struct {
 	Comment string `json:"comment,omitempty"`
 	NoPTR   bool   `json:"no_ptr,omitempty"`
 	Enabled bool   `json:"enabled"`
+	Origin  string `json:"origin,omitempty"` // ipam64: Eintrag aus IPAM64 (aeltere Nodes lassen das Feld weg)
+	Ref     string `json:"ref,omitempty"`
 }
 
 type clZone struct {
@@ -199,6 +201,22 @@ type clMember struct {
 	Tags  []string `json:"tags,omitempty"`
 }
 
+// clOrigin: im Cluster gibt es nur die Herkunft IPAM64 (Docker-Eintraege sind nur lokal), alles andere ist "von Hand".
+func clOrigin(origin string) string {
+	if origin == OriginIPAM {
+		return origin
+	}
+	return ""
+}
+
+// clRef: Bezug nur zusammen mit der Herkunft IPAM64 (hoechstens 64 Zeichen).
+func clRef(origin, ref string) string {
+	if origin != OriginIPAM || len(ref) > 64 {
+		return ""
+	}
+	return ref
+}
+
 func recordKey(name, typ, value string) string {
 	h := sha256.Sum256([]byte(name + "\x00" + typ + "\x00" + value))
 	return "r:" + hex.EncodeToString(h[:12])
@@ -238,7 +256,7 @@ func (m *Module) clCurrent(ctx context.Context, item string) (map[string]string,
 		}
 		for _, r := range recs {
 			if !r.LocalOnly {
-				out[recordKey(r.Name, r.Type, r.Value)] = jsonString(clRecord{r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.Enabled})
+				out[recordKey(r.Name, r.Type, r.Value)] = jsonString(clRecord{r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.Enabled, clOrigin(r.Origin), clRef(r.Origin, r.Ref)})
 			}
 		}
 		zones, err := m.Zones(ctx)
@@ -442,7 +460,8 @@ func (m *Module) clApplyRecord(ctx context.Context, id string, data json.RawMess
 	if err := json.Unmarshal(data, &in); err != nil {
 		return err
 	}
-	r := Record{Name: in.Name, Type: in.Type, Value: in.Value, TTL: in.TTL, Comment: in.Comment, NoPTR: in.NoPTR}
+	r := Record{Name: in.Name, Type: in.Type, Value: in.Value, TTL: in.TTL, Comment: in.Comment, NoPTR: in.NoPTR, Origin: clOrigin(in.Origin)}
+	r.Ref = clRef(r.Origin, in.Ref)
 	if err := normalizeRecord(&r); err != nil {
 		return err
 	}
@@ -453,18 +472,18 @@ func (m *Module) clApplyRecord(ctx context.Context, id string, data json.RawMess
 	case err == nil && local:
 		return nil // hier gilt der eigene Eintrag
 	case err == nil:
-		_, err = w.ExecContext(ctx, `UPDATE dns64_records SET ttl = ?, comment = ?, no_ptr = ?, enabled = ? WHERE id = ?`, r.TTL, r.Comment, r.NoPTR, in.Enabled, rowID)
+		_, err = w.ExecContext(ctx, `UPDATE dns64_records SET ttl = ?, comment = ?, no_ptr = ?, enabled = ?, origin = ?, ref = ? WHERE id = ?`, r.TTL, r.Comment, r.NoPTR, in.Enabled, r.Origin, r.Ref, rowID)
 	case errors.Is(err, sql.ErrNoRows):
 		if err = m.checkRecord(ctx, &r, 0); err != nil {
 			return err // z. B. CNAME neben anderen Typen hier
 		}
-		_, err = w.ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, enabled, created_at) VALUES (?,?,?,?,?,?,?,?)`,
-			r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, in.Enabled, time.Now().UTC().Format(time.RFC3339))
+		_, err = w.ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, enabled, created_at, origin, ref) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, in.Enabled, time.Now().UTC().Format(time.RFC3339), r.Origin, r.Ref)
 	}
 	if err != nil {
 		return err
 	}
-	m.clSetSnap(ItemRecords, id, jsonString(clRecord{r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, in.Enabled}))
+	m.clSetSnap(ItemRecords, id, jsonString(clRecord{r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, in.Enabled, r.Origin, r.Ref}))
 	m.reloadRecordsSoon()
 	return nil
 }

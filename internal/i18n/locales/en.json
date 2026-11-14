@@ -3795,6 +3795,11 @@
     "delete_here_confirm": "Delete the entry on this node? ipv64 does not have it."
   },
   "dns64": {
+    "ipam": {
+      "badge_hint": "Managed by IPAM64",
+      "edit_there": "In IPAM64",
+      "excludes": "Not assigned from the range (exclusions from IPAM64):"
+    },
     "dhcp": {
       "title": "DHCP server",
       "mode_off": "Off",
@@ -4486,6 +4491,8 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "ipam_managed": "This entry belongs to IPAM64 – please change it there.",
+      "ipam_input": "Invalid data from IPAM64.",
       "dhcp_mode": "Unknown DHCP server mode.",
       "dhcp_bridge": "DHCP only works in the host network (network_mode: host) or with macvlan, not in the Docker bridge network.",
       "dhcp_name": "The label is too long (at most 60 characters).",

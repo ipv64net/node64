@@ -30,6 +30,8 @@ type Record struct {
 	Dynamic   bool      `json:"dynamic,omitempty"`    // per dynamischem Update (RFC 2136) angelegt
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
+	Origin    string    `json:"origin,omitempty"` // Herkunft: "" (von Hand), docker, ipam64 (nur lesen, nie aus Eingaben)
+	Ref       string    `json:"ref,omitempty"`    // Bezug in der Herkunft (IPAM64: uid der Adresse)
 }
 
 var recordTypes = []string{"A", "AAAA", "CNAME", "TXT", "MX", "SRV", "PTR", "CAA"}
@@ -204,7 +206,7 @@ func (m *Module) recordLabel(arpa string) string {
 
 // Records liefert alle eigenen Eintraege, nach Name sortiert.
 func (m *Module) Records(ctx context.Context) ([]Record, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, ttl, comment, no_ptr, local_only, dynamic, enabled, created_at FROM dns64_records ORDER BY name, type, value`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, ttl, comment, no_ptr, local_only, dynamic, enabled, created_at, origin, ref FROM dns64_records ORDER BY name, type, value`)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +215,7 @@ func (m *Module) Records(ctx context.Context) ([]Record, error) {
 	for rows.Next() {
 		var r Record
 		var created string
-		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Comment, &r.NoPTR, &r.LocalOnly, &r.Dynamic, &r.Enabled, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Comment, &r.NoPTR, &r.LocalOnly, &r.Dynamic, &r.Enabled, &created, &r.Origin, &r.Ref); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = time.Parse(time.RFC3339, created)
@@ -347,6 +349,9 @@ func (m *Module) AddRecord(ctx context.Context, r Record) (Record, error) {
 
 // UpdateRecord aendert einen Eintrag (Name, Typ, Wert, TTL, Kommentar, PTR); an/aus bleibt.
 func (m *Module) UpdateRecord(ctx context.Context, id int64, r Record) (Record, error) {
+	if err := m.lockedRow(ctx, "dns64_records", id); err != nil {
+		return r, err
+	}
 	if err := m.checkRecord(ctx, &r, id); err != nil {
 		return r, err
 	}
@@ -395,11 +400,17 @@ func (m *Module) checkRecord(ctx context.Context, r *Record, self int64) error {
 
 // DeleteRecord loescht einen Eintrag.
 func (m *Module) DeleteRecord(ctx context.Context, id int64) error {
+	if err := m.lockedRow(ctx, "dns64_records", id); err != nil {
+		return err
+	}
 	return m.recordExec(ctx, `DELETE FROM dns64_records WHERE id = ?`, id)
 }
 
 // SetRecordEnabled schaltet einen Eintrag an oder aus.
 func (m *Module) SetRecordEnabled(ctx context.Context, id int64, on bool) error {
+	if err := m.lockedRow(ctx, "dns64_records", id); err != nil {
+		return err
+	}
 	return m.recordExec(ctx, `UPDATE dns64_records SET enabled = ? WHERE id = ?`, on, id)
 }
 

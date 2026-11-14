@@ -187,18 +187,21 @@
 						<thead><tr><th class="ps-3" data-nolabel>{{.T "dns64.dhcp.res_name"}}</th><th>{{.T "dns64.dhcp.ip"}}</th><th>{{.T "dns64.dhcp.mac"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $h.Res}}<tr>
-							<td class="ps-3 text-break">{{if .Name}}{{.Name}}{{else}}<span class="text-body-secondary">–</span>{{end}}{{if .DNSName}}<div class="text-body-secondary font-monospace">{{.DNSName}}</div>{{end}}{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}{{if gt (len $h.Scopes) 1}}<div class="text-body-secondary">{{index $h.ResScope .ScopeID}}</div>{{end}}</td>
+							<td class="ps-3 text-break">{{if .Name}}{{.Name}}{{else}}<span class="text-body-secondary">–</span>{{end}}{{if .DNSName}}<div class="text-body-secondary font-monospace">{{.DNSName}}</div>{{end}}{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}{{if gt (len $h.Scopes) 1}}<div class="text-body-secondary">{{index $h.ResScope .ScopeID}}</div>{{end}}{{if eq .Origin "ipam64"}}<div><a class="badge text-bg-light border text-decoration-none" href="/ipam64/address?ip={{.IP}}" title="{{$.T "dns64.ipam.badge_hint"}}"><i class="bi bi-grid-3x3-gap"></i> IPAM64</a></div>{{end}}</td>
 							<td class="font-monospace">{{.IP}}</td>
 							<td class="font-monospace">{{.MAC}}</td>
 							<td class="text-end pe-3 text-nowrap">
+								{{if and (eq .Origin "ipam64") $h.IPAM}}<a class="btn btn-sm btn-outline-secondary py-0" href="/ipam64/address?ip={{.IP}}" title="{{$.T "dns64.ipam.edit_there"}}"><i class="bi bi-grid-3x3-gap"></i> {{$.T "dns64.ipam.edit_there"}}</a>{{else}}
 								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-edit-form="dhcp-res-form" data-id="{{.ID}}" data-scope="{{.ScopeID}}" data-mac="{{.MAC}}" data-ip="{{.IP}}" data-name="{{.Name}}" data-comment="{{.Comment}}" title="{{$.T "dns64.dhcp.res_edit"}}"><i class="bi bi-pencil"></i></button>
-								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/dhcp/reservations/{{.ID}}/delete" data-confirm="{{$.T "dns64.dhcp.res_delete_confirm" "ip" .IP}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/dhcp/reservations/{{.ID}}/delete" data-confirm="{{$.T "dns64.dhcp.res_delete_confirm" "ip" .IP}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>{{end}}
 							</td>
 						</tr>{{end}}
 						</tbody>
 					</table>
 				</div>
 			</form>{{else}}<div class="card-body text-body-secondary small">{{.T "dns64.dhcp.no_reservations"}}</div>{{end}}
+			{{if $h.Excludes}}<div class="card-footer small" id="dhcp-excludes"><div class="text-body-secondary mb-1"><i class="bi bi-slash-circle"></i> {{.T "dns64.ipam.excludes"}}</div>
+				{{range $h.Excludes}}<span class="badge text-bg-light border font-monospace me-1" title="{{.Comment}}">{{if eq .Origin "ipam64"}}<a class="text-decoration-none" href="/ipam64/address?ip={{.IP}}">{{.IP}}</a>{{else}}{{.IP}}{{end}}</span>{{end}}</div>{{end}}
 		</div>
 		<div class="card mt-3">
 			<div class="card-header"><i class="bi bi-list-ul text-primary"></i> {{.T "dns64.dhcp.events"}}</div>

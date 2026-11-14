@@ -103,6 +103,8 @@ type dhcpPage struct {
 	Self      string              // Adresse dieser Node (Hinweis DNS-Server)
 	Conflicts map[string][]string // Netz -> andere Haupt-Nodes, die dort auch vergeben
 	RA        raView              // IPv6-DNS per Router Advertisement
+	IPAM      bool                // IPAM64 laeuft: Eintraege aus IPAM64 nur dort aendern
+	Excludes  []DHCPExclude       // Ausnahmen im Adressbereich (IPAM64)
 }
 
 func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
@@ -118,6 +120,10 @@ func (m *Module) dhcpView(ctx context.Context, d *pageData) error {
 	for _, x := range res {
 		ip, _ := netip.ParseAddr(x.IP)
 		v.Res = append(v.Res, dhcpResView{x, m.dhcpDNSName(ip)})
+	}
+	v.IPAM = m.IPAMLocked(OriginIPAM)
+	if v.Excludes, err = m.DHCPExcludes(ctx); err != nil && !m.noTable(err) {
+		return err
 	}
 	if gl, err := m.Groups(ctx); err == nil {
 		v.Groups = gl

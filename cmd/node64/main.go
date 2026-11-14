@@ -47,6 +47,7 @@ import (
 	"github.com/ipv64net/node64/internal/healthchecks/hccluster"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/ipam64"
 	"github.com/ipv64net/node64/internal/ipam64/ipamcluster"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
@@ -333,6 +334,7 @@ func run() error {
 	// Cluster: Anmeldung unten beim peer-Manager
 	ipamModule := newIPAM(st, logger.Slog(), modules, dnsModule, hcModule, m64Module, cdnModule)
 	modules.Register(ipamModule)
+	dnsModule.SetIPAM(func() bool { return modules.IsRunning(ipam64.Name) }) // Eintraege aus IPAM64 nur dort aendern
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
 	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version), Modules: modules,
 		UnlinkAPI: func(ctx context.Context, nodeID string, keep bool) error { // hubs nicht erreichbar: ueber die API v2 trennen

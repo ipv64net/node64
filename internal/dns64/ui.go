@@ -79,6 +79,7 @@ type pageData struct {
 	Cfg     config
 	Hours   []int
 	Records []Record
+	IPAM    bool                     // IPAM64 laeuft: Eintraege aus IPAM64 nur dort aendern
 	Fwds    []forwardView            // Seite Weiterleitungen
 	Rws     []Rewrite                // Seite Weiterleitungen: Umschreiben
 	Zones   []Zone                   // Seite Lokaler DNS: Zonen

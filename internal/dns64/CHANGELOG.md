@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.41.0 – unveröffentlicht
+
+### Neu
+- Zusammenarbeit mit IPAM64: Feste Adressen, Ausnahmen im DHCP-Adressbereich und A/AAAA-Einträge aus IPAM64 tragen das Kennzeichen „IPAM64“ mit Link dorthin. Solange IPAM64 läuft, lassen sie sich hier nicht ändern (Oberfläche und API); ohne IPAM64 normal. DHCP und DNS arbeiten unverändert aus den eigenen Tabellen – auch auf der Reserve-Node und auf Nodes ohne IPAM64.
+- DHCP: Ausnahmen im Adressbereich – solche Adressen vergibt der Server nie (z. B. fest eingestellte Geräte im Pool); ein Lease darauf wird bei der nächsten Verlängerung abgelehnt. Die DHCP-Seite listet sie unter den festen Adressen.
+- Cluster: Kennzeichen und Ausnahmen werden mit den festen Adressen bzw. Einträgen abgeglichen.
+
 ## 1.40.1 – 2026-11-14
 
 ### Geändert

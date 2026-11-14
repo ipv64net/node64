@@ -3795,6 +3795,11 @@
     "delete_here_confirm": "Den Eintrag auf dieser Node löschen? ipv64 hat ihn nicht."
   },
   "dns64": {
+    "ipam": {
+      "badge_hint": "Verwaltet von IPAM64",
+      "edit_there": "In IPAM64",
+      "excludes": "Im Adressbereich nicht vergeben (Ausnahmen aus IPAM64):"
+    },
     "dhcp": {
       "title": "DHCP-Server",
       "mode_off": "Aus",
@@ -4486,6 +4491,8 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "ipam_managed": "Dieser Eintrag gehört zu IPAM64 – bitte dort ändern.",
+      "ipam_input": "Ungültige Angaben aus IPAM64.",
       "dhcp_mode": "Unbekannter Schalter für den DHCP-Server.",
       "dhcp_bridge": "DHCP geht nur im Host-Netz (network_mode: host) oder mit macvlan, nicht im Docker-Bridge-Netz.",
       "dhcp_name": "Die Bezeichnung ist zu lang (höchstens 60 Zeichen).",

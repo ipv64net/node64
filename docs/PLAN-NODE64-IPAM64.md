@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 umgesetzt (IPAM64 0.1.0, Zweig `claude/zen-goldberg-805131`, auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0) und I2 (DNS64 1.41.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -141,8 +141,9 @@ durch (die DNS64-Zeilen kommen über den DNS64-Abgleich). Ein Abgleich-Job (alle
 - **`ipam_seen`** (je Node, nicht im Cluster): `ip`, `mac`, `iface`, `source` (neigh/scan/lease), `first`, `last`;
   30 Tage. Index auf `last`.
 - VLANs sind in v1 ein Feld am Präfix; die VLAN-Liste entsteht daraus.
-- **DNS64-Migrationen** (neu): `origin` und `ref` an `dns64_dhcp_reservations`, `ref` an `dns64_records`; Reservierung
-  ohne MAC erlaubt (Ausnahme), nur mit `origin='ipam64'`.
+- **DNS64-Migration 0019** (umgesetzt): `origin` und `ref` an `dns64_dhcp_reservations`, `ref` an `dns64_records`, neue
+  Tabelle `dns64_dhcp_excludes` (Ausnahmen im Adressbereich). Eine Reservierung ohne MAC ging nicht: die Tabelle hat
+  `UNIQUE(scope_id, mac)` fest eingebaut; eine eigene Tabelle ist sauberer.
 
 ### Schnittstelle DNS64 ↔ IPAM64
 
@@ -270,3 +271,23 @@ Umgesetzt im Zweig `claude/zen-goldberg-805131` (auf `main` mit 1.7.0), Modul `i
   API über den Webserver.
 - Offen für I2/I3: Schreiben nach DNS64 (Reservierung, A/AAAA/PTR mit Kennzeichen), Ausnahmen im Pool, DNS- und
   DHCP-Schalter an der Adresse. MCP-Routen stehen bis I6 als Ausnahme im MCP-Test.
+
+## Stand I2 (2026-11-14)
+
+DNS64 1.41.0, im selben Zweig:
+- `dns64/ipam_bridge.go`: `PutIPAMReservation`/`DeleteIPAMReservation`, `PutIPAMExclude`/`DeleteIPAMExclude`,
+  `PutIPAMRecords`/`DeleteIPAMRecords` (A und AAAA, PTR wie immer aus A/AAAA, `no_ptr` = PTR aus), `ReleaseIPAM`
+  (Übergabe), `IPAMEntries` (Abgleich in I3), `DHCPExcludes`, `DHCPLeases`. Gleiche Einträge von Hand werden
+  gekennzeichnet statt doppelt angelegt; Konflikte (andere MAC/IP, CNAME, fremde IPAM-Adresse) sind Fehler.
+- `dhcp`-Paket: `Config.Excludes`; eine Ausnahme ist eine reservierte IP ohne MAC – nie angeboten, Anfrage bzw.
+  Verlängerung darauf bekommt NAK, eine feste Adresse auf derselben IP geht vor, zählt in „reserviert“.
+- Sperre: Solange IPAM64 läuft (`SetIPAM` aus main.go), lehnen Ändern/Löschen/An-Aus gekennzeichneter
+  Reservierungen und Einträge in Oberfläche und API ab (`dns64.err.ipam_managed`); ohne IPAM64 normal.
+- Seiten DHCP und Lokaler DNS: Kennzeichen „IPAM64“ mit Link zur Adresse, bei laufendem IPAM64 statt Bearbeiten/
+  Löschen „In IPAM64“; Liste der Ausnahmen unter den festen Adressen.
+- Cluster: `origin`/`ref` in Reservierungen und Einträgen (ältere Nodes lassen die Felder weg), Ausnahmen als
+  `x:<Netz>|<IP>` im Bereich feste Adressen. Ältere Nodes lehnen `x:`-Einträge ab (Netz unbekannt) – im gemischten
+  Cluster nur ein Hinweis im Log, bis alle Nodes 1.41.0 haben.
+- Tests: Ausnahme im DHCP-Server, Brücke (Reservierung, Ausnahme, Einträge, Sperre, Übergabe), Cluster, Seiten.
+- Offen für I3: IPAM64 ruft die Brücke beim Speichern auf (Schalter DNS/DHCP an der Adresse, „Beim Speichern
+  passiert“), Abgleich-Job, Übergabe beim Abschalten, Lease → feste Adresse.

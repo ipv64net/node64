@@ -66,7 +66,7 @@ func (m *Module) localView(r *http.Request, d *pageData) error {
 	if d.SelZone == nil && d.Sel != "-" {
 		d.Sel = "*"
 	}
-	d.Records = []Record{}
+	d.Records, d.IPAM = []Record{}, m.IPAMLocked(OriginIPAM)
 	for i, x := range recs {
 		if d.Sel == "*" || of[i] == d.Sel {
 			d.Records = append(d.Records, x)

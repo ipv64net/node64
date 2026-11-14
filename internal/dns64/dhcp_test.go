@@ -395,7 +395,7 @@ func TestDHCPReservationLocalAddr(t *testing.T) {
 	if _, err := m.AddDHCPReservation(ctx, DHCPReservation{ScopeID: scopes[0].ID, MAC: "02:00:00:00:00:01", IP: own.Addr().String()}); err == nil {
 		t.Fatal("local reservation on this node's address accepted")
 	}
-	data := jsonString(clDHCPRes{p.String(), "02:00:00:00:00:01", own.Addr().String(), "", ""})
+	data := jsonString(clDHCPRes{Subnet: p.String(), MAC: "02:00:00:00:00:01", IP: own.Addr().String()})
 	if err := m.ClusterApply(ctx, ItemDHCPRes, "r:"+p.String()+"|02:00:00:00:00:01", json.RawMessage(data), false); err != nil {
 		t.Fatalf("cluster reservation rejected: %v", err)
 	}
