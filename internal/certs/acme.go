@@ -309,7 +309,7 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	if err != nil {
 		return fmt.Errorf("order: %w", err)
 	}
-	key, err := selfKey(c.KeyType) // ECDSA P-256, auf Wunsch RSA 2048 (#62)
+	key, err := selfKey(c.KeyType) // ECDSA P-256, auf Wunsch RSA 2048 oder 4096 (#62)
 	if err != nil {
 		return err
 	}

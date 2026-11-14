@@ -52,11 +52,48 @@ type StatusGroup struct {
 	Items []StatusItem `json:"items"`
 }
 
-// StatusItem ist ein Check auf der Seite (bzw. ein Eintrag aus Monitor64, statusm64.go).
+// StatusItem ist ein Check auf der Seite (bzw. ein Eintrag aus Monitor64, statusm64.go) oder ein Element der
+// Gliederung (#131): Ueberschrift (Token "@heading", Label = Text) bzw. Trenner (Token "@divider"). Die Gliederung
+// steht als Token in der Liste, damit sie im Cluster und im Export mitgeht; aeltere Nodes lassen sie beim Anzeigen
+// weg wie einen geloeschten Check.
 type StatusItem struct {
 	ID    int64  `json:"id"`
-	Token string `json:"token"` // Check-Token oder Quelle "m64:host:<uid>" / "m64:svc:<uid>/<key>"
-	Label string `json:"label"` // "" = Name des Checks
+	Token string `json:"token"`          // Check-Token oder Quelle "m64:host:<uid>" / "m64:svc:<uid>/<key>"; "@heading", "@divider"
+	Label string `json:"label"`          // "" = Name des Checks; bei einer Ueberschrift ihr Text
+	Kind  string `json:"kind,omitempty"` // heading | divider ("" = Eintrag); Eingabe statt des Tokens moeglich
+}
+
+// Gliederung einer Statusseite: Ueberschriften und Trenner als eigene Eintraege (#131).
+const (
+	statusHeadingTok = "@heading"
+	statusDividerTok = "@divider"
+)
+
+// isStatusLayout: Element der Gliederung (Ueberschrift, Trenner) statt eines Checks.
+func isStatusLayout(tok string) bool { return strings.HasPrefix(tok, "@") }
+
+// statusKindOf liefert die Art eines Eintrags fuer die API ("" = Check bzw. Monitor64).
+func statusKindOf(tok string) string {
+	switch tok {
+	case statusHeadingTok:
+		return "heading"
+	case statusDividerTok:
+		return "divider"
+	}
+	return ""
+}
+
+// ordered: Die Seite hat eine eigene Gliederung (mindestens eine Ueberschrift oder ein Trenner) - dann zeigt sie die
+// Eintraege genau in ihrer Reihenfolge, statt nach Abschnitten und Gruppen der Healthchecks.
+func (p *StatusPage) ordered() bool {
+	for _, g := range p.Groups {
+		for _, it := range g.Items {
+			if isStatusLayout(it.Token) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // StatusNotice ist eine Ankuendigung von Hand.
@@ -129,11 +166,30 @@ func (p *StatusPage) normalize() error {
 			return fieldErr("groups", "hc.status.err.group")
 		}
 		for ii := range g.Items {
-			g.Items[ii].Label = strings.TrimSpace(g.Items[ii].Label)
-			tok := g.Items[ii].Token
-			if tok == "" || len(g.Items[ii].Label) > 120 || (isM64Source(tok) && !validM64Source(tok)) {
+			it := &g.Items[ii]
+			it.Label = strings.TrimSpace(it.Label)
+			switch it.Kind {
+			case "":
+			case "heading":
+				it.Token = statusHeadingTok
+			case "divider":
+				it.Token = statusDividerTok
+			default:
 				return fieldErr("groups", "hc.status.err.item")
 			}
+			tok := it.Token
+			if tok == "" || len(it.Label) > 120 || (isM64Source(tok) && !validM64Source(tok)) {
+				return fieldErr("groups", "hc.status.err.item")
+			}
+			switch tok {
+			case statusHeadingTok:
+				if it.Label == "" {
+					return fieldErr("groups", "hc.status.err.heading")
+				}
+			case statusDividerTok:
+				it.Label = ""
+			}
+			it.Kind = statusKindOf(tok)
 			n++
 		}
 	}
@@ -223,7 +279,7 @@ func (s *Store) statusPageWhere(ctx context.Context, where string, arg any) (*St
 		}
 		if iid.Valid {
 			g := &p.Groups[len(p.Groups)-1]
-			g.Items = append(g.Items, StatusItem{ID: iid.Int64, Token: tok.String, Label: label.String})
+			g.Items = append(g.Items, StatusItem{ID: iid.Int64, Token: tok.String, Label: label.String, Kind: statusKindOf(tok.String)})
 		}
 	}
 	return p, rows.Err()

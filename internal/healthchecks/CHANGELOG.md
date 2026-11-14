@@ -1,5 +1,15 @@
 # Änderungen – Healthchecks
 
+## 3.2.0 – 2026-11-14
+
+### Neu
+- Statusseiten: Einträge frei sortieren – im Editor mit den Pfeilen oder durch Ziehen (#131, #102). Ohne eigene Gliederung bleibt die Seite wie bisher (Dienste vor Systemen, Gruppen der Healthchecks, Störungen zuerst).
+- Statusseiten: Überschriften und Trenner als eigene Einträge (#131). Sobald eine Seite eine davon hat, zeigt sie alles genau in der Reihenfolge des Editors, gegliedert nach diesen Überschriften. API: Eintrag mit `kind` `heading` bzw. `divider` (Token `@heading`/`@divider`), `/view` meldet `ordered` und `divider`.
+- Beim Update wird die Reihenfolge bestehender Seiten so gespeichert, wie sie bisher angezeigt wurde (Healthchecks vor Monitor64); die Anzeige ändert sich nicht.
+
+### Behoben
+- Neuer Healthcheck → Messende Nodes: Die Auswahl (und „Messende Nodes“ in den Details) zeigt die aktuellen Namen. Bisher kamen die Namen aus der zwischengespeicherten Liste von ipv64 – nach einer Umbenennung, ohne Verbindung zu ipv64 oder nach dem Trennen blieben dort alte Namen stehen; jetzt gilt für die eigene Node ihr eingestellter Name und für Nodes der lokalen Gruppe der Name, den sie selbst melden (#134).
+
 ## 3.1.2 – 2026-11-13
 
 ### Behoben

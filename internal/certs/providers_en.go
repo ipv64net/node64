@@ -7,9 +7,11 @@ var providerEN = map[string]string{
 	"HTTP-Request (eigener Dienst)":   "HTTP request (own service)",
 	"PowerDNS (eigener Server)":       "PowerDNS (own server)",
 	"Technitium DNS (eigener Server)": "Technitium DNS (own server)",
+	"netcup CloudDNS (REST-API)":      "netcup CloudDNS (REST API)",
 	// Hinweise
 	"https://console.hetzner.com (Security → API-Tokens)":                                           "https://console.hetzner.com (Security → API tokens)",
 	"https://www.customercontrolpanel.de (Stammdaten → API)":                                        "https://www.customercontrolpanel.de (Master data → API)",
+	"Domains mit Nameservern netcup.firstns.cc …: API-Key der netcup-REST-API (api.netcup.com)":     "Domains on the name servers netcup.firstns.cc …: API key of the netcup REST API (api.netcup.com)",
 	"https://www.inwx.de (Konto → API-Zugang)":                                                      "https://www.inwx.de (Account → API access)",
 	"https://developer.hosting.ionos.de (Präfix.Secret)":                                            "https://developer.hosting.ionos.de (prefix.secret)",
 	"https://kas.all-inkl.com (KAS-Login)":                                                          "https://kas.all-inkl.com (KAS login)",

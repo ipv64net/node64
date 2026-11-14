@@ -162,20 +162,30 @@ func (s *Server) apiCertUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		AutoRenew *bool `json:"auto_renew"`
+		AutoRenew *bool   `json:"auto_renew"`
+		KeyType   *string `json:"key_type"` // ab der naechsten Erneuerung (#62)
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if in.AutoRenew == nil {
-		writeErr(w, http.StatusUnprocessableEntity, "auto_renew required")
+	if in.AutoRenew == nil && in.KeyType == nil {
+		writeErr(w, http.StatusUnprocessableEntity, "auto_renew or key_type required")
 		return
 	}
-	if err := s.Certs.SetAutoRenew(r.Context(), id, *in.AutoRenew); err != nil {
-		certErr(w, err)
-		return
+	if in.KeyType != nil {
+		if err := s.Certs.SetKeyType(r.Context(), id, *in.KeyType); err != nil {
+			certErr(w, err)
+			return
+		}
+		s.audit(r, "cert.update", strconv.FormatInt(id, 10), "key_type="+*in.KeyType)
 	}
-	s.audit(r, "cert.update", strconv.FormatInt(id, 10), fmt.Sprintf("auto_renew=%v", *in.AutoRenew))
+	if in.AutoRenew != nil {
+		if err := s.Certs.SetAutoRenew(r.Context(), id, *in.AutoRenew); err != nil {
+			certErr(w, err)
+			return
+		}
+		s.audit(r, "cert.update", strconv.FormatInt(id, 10), fmt.Sprintf("auto_renew=%v", *in.AutoRenew))
+	}
 	s.apiCertGet(w, r)
 }
 

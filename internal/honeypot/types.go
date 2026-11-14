@@ -224,7 +224,8 @@ type Stats struct {
 	// Herkunft (geo.go): alle Laender mit Ereignissen, nach Anzahl; ohne Land = privat, unbekannt oder keine Daten.
 	ByCountry      []CountryCount `json:"by_country"`
 	CountryUnknown int64          `json:"country_unknown"`
-	ByDecoy        []Count        `json:"by_decoy"` // Key = "page:<koeder>" bzw. "device:<geraet>" (Detail device=…)
+	ByDecoy        []Count        `json:"by_decoy"`  // Key = "page:<koeder>" bzw. "device:<geraet>" (Detail device=…)
+	TopHosts       []Count        `json:"top_hosts"` // angefragte Namen (Host bzw. SNI, ohne IP-Adressen), mindestens 20 (#113)
 }
 
 // Count ist ein Eintrag einer Rangliste.

@@ -22,15 +22,28 @@ import (
 // SourceSelf: selbst signiert (Namen und IPs, ohne Voraussetzung).
 const SourceSelf = "self"
 
-// Schluessel fuer selbst signierte Zertifikate.
+// Schluessel fuer selbst signierte und Let's-Encrypt-Zertifikate.
 const (
-	KeyECDSA = "ecdsa" // P-256 (Standard)
-	KeyRSA   = "rsa"   // 2048 Bit, fuer sehr alte Geraete
+	KeyECDSA   = "ecdsa"   // P-256 (Standard)
+	KeyRSA     = "rsa"     // 2048 Bit, fuer sehr alte Geraete
+	KeyRSA4096 = "rsa4096" // 4096 Bit (#62)
 )
 
+// validKeyType: bekannte Schluesselart ("" = ECDSA).
+func validKeyType(kind string) bool {
+	switch kind {
+	case "", KeyECDSA, KeyRSA, KeyRSA4096:
+		return true
+	}
+	return false
+}
+
 func selfKey(kind string) (crypto.Signer, error) {
-	if kind == KeyRSA {
+	switch kind {
+	case KeyRSA:
 		return rsa.GenerateKey(rand.Reader, 2048)
+	case KeyRSA4096:
+		return rsa.GenerateKey(rand.Reader, 4096)
 	}
 	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 }

@@ -68,7 +68,7 @@ func init() {
 			c.APIToken = v["token"]
 			return hetzner.NewDNSProviderConfig(c)
 		})
-	register(ProviderInfo{ID: "netcup", Name: "netcup", Docs: "https://www.customercontrolpanel.de (Stammdaten → API)",
+	register(ProviderInfo{ID: "netcup", Name: "netcup (CCP-API)", Docs: "https://www.customercontrolpanel.de (Stammdaten → API)",
 		Fields: []Field{{Key: "customer", Label: "Kundennummer"}, {Key: "key", Label: "API-Key", Secret: true}, {Key: "password", Label: "API-Passwort", Secret: true}}},
 		func(v map[string]string) (challenge.Provider, error) {
 			c := netcup.NewDefaultConfig()

@@ -39,8 +39,9 @@
 				<div class="mb-3" data-key-box>
 					<label class="form-label" for="key_type">{{.T "certs.self.key_type"}}</label>
 					<select class="form-select form-select-sm" id="key_type" name="key_type" style="max-width:24rem">
-						<option value="ecdsa"{{if ne $d.KeyType "rsa"}} selected{{end}}>ECDSA P-256</option>
+						<option value="ecdsa"{{if and (ne $d.KeyType "rsa") (ne $d.KeyType "rsa4096")}} selected{{end}}>ECDSA P-256</option>
 						<option value="rsa"{{if eq $d.KeyType "rsa"}} selected{{end}}>RSA 2048 ({{.T "certs.ca.rsa_hint"}})</option>
+						<option value="rsa4096"{{if eq $d.KeyType "rsa4096"}} selected{{end}}>RSA 4096</option>
 					</select>
 				</div>
 				<div class="border rounded p-2 mb-3" data-self-box>

@@ -82,6 +82,7 @@ type stPage struct {
 	HTMLClass     string
 	Scheme        string
 	Layout        string
+	Ordered       bool // eigene Gliederung: Reihenfolge der Seite, keine Sortierung nach Zustand (#131)
 	NoIndex       bool
 	Preview       bool
 	NeedPassword  bool
@@ -124,6 +125,7 @@ type stGroup struct {
 	Key         string
 	Open        bool
 	Heading     bool // false: einzelne Gruppe ohne Namen (keine Ueberschrift)
+	Divider     bool // Trennlinie davor (eigene Gliederung)
 	Counts      string
 	Items       []stItem
 }
@@ -321,6 +323,7 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 	for _, g := range v.Groups {
 		total += len(g.Items)
 	}
+	p.Ordered = v.Ordered
 	inSec := map[string]int{} // Gruppen je Abschnitt (Healthchecks, Monitor64-Systeme)
 	for _, g := range v.Groups {
 		inSec[g.Section]++
@@ -338,7 +341,10 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 		seen[g.Section] = true
 		// Ueberschrift immer, ausser bei einer einzigen Gruppe ohne Namen (je Abschnitt); mehrere namenlose heissen "Weitere"
 		sg.Heading = strings.TrimSpace(g.Name) != "" || inSec[g.Section] > 1
-		if strings.TrimSpace(sg.Name) == "" && sg.Heading {
+		if v.Ordered { // eigene Gliederung: Ueberschrift nur, wo eine steht (Kompakt-Ansicht nennt den Rest "Weitere")
+			sg.Heading, sg.Divider = strings.TrimSpace(g.Name) != "", g.Divider
+		}
+		if strings.TrimSpace(sg.Name) == "" && (sg.Heading || v.Ordered) {
 			sg.Name = p.T("hc.status.pub.group_other")
 		}
 		p.Groups = append(p.Groups, sg)
@@ -442,7 +448,9 @@ func (p *stPage) group(g StatusViewGroup, total int) stGroup {
 	sg := stGroup{Name: g.Name, Overall: stKnownOverall(g.Overall)}
 	sg.OverallText = p.T("hc.status.pub.overall." + sg.Overall)
 	items := append([]StatusViewItem(nil), g.Items...)
-	sort.SliceStable(items, func(i, j int) bool { return stItemRank(items[i].State) < stItemRank(items[j].State) })
+	if !p.Ordered { // Probleme zuerst; mit eigener Gliederung bleibt die Reihenfolge der Seite
+		sort.SliceStable(items, func(i, j int) bool { return stItemRank(items[i].State) < stItemRank(items[j].State) })
+	}
 	counts := map[string]int{}
 	flag := false
 	for _, it := range items {

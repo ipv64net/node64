@@ -273,6 +273,7 @@ func ranks(st *Stats, lang string) []uiRank {
 		mk("users", "honeypot.top.users", "bi-person", true, st.TopUsers),
 		mk("passwords", "honeypot.top.passwords", "bi-key", true, st.TopPass),
 		mk("credentials", "honeypot.top.credentials", "bi-person-lock", true, st.TopCreds),
+		mk("hosts", "honeypot.top.hosts", "bi-globe2", true, st.TopHosts),
 		mk("paths", "honeypot.top.paths", "bi-signpost", true, st.TopPaths),
 		mk("uas", "honeypot.top.user_agents", "bi-window", true, st.TopUAs),
 		mk("fingerprints", "honeypot.top.fingerprints", "bi-fingerprint", true, st.TopFingerprints),

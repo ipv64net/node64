@@ -382,6 +382,9 @@ func (s *Store) Stats(ctx context.Context, since time.Time, top int) (*Stats, er
 	if out.ByDecoy, err = s.byDecoy(ctx, from, top); err != nil {
 		return nil, err
 	}
+	if out.TopHosts, err = s.topHosts(ctx, from, max(top, topHostsMin)); err != nil {
+		return nil, err
+	}
 	tl, err := s.timeline(ctx, since, now)
 	if err != nil {
 		return nil, err

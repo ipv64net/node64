@@ -1,5 +1,10 @@
 # Changes – Honeypot64
 
+## 0.23.0 – 2026-11-14
+
+### New
+- Top list "Requested domains (Host, SNI)": which domains or subdomains are requested at the web trap and the PROXY64 decoy, top 20 in the selected period (without port, plain IP addresses do not count); API: `top_hosts` in `/api/honeypot/stats` (#113).
+
 ## 0.22.1 – 2026-11-13
 
 ### Fixed

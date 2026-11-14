@@ -27,12 +27,17 @@ type StatusView struct {
 	Generated   time.Time         `json:"generated"`
 
 	Logo string `json:"logo,omitempty"` // eigenes Logo: Pfad relativ zur Seite ("logo?v=<unix>"), leer = keins (dann Node64)
+
+	// Ordered: eigene Gliederung (Ueberschriften, Trenner) - Gruppen und Eintraege genau in der Reihenfolge der Seite,
+	// ohne Abschnitte und ohne Sortierung nach Zustand (#131)
+	Ordered bool `json:"ordered,omitempty"`
 }
 
 // StatusViewGroup ist eine Gruppe.
 type StatusViewGroup struct {
 	Name    string           `json:"name"`
 	Section string           `json:"section,omitempty"` // "" = Healthchecks, "systems" = Monitor64 (eigener Abschnitt)
+	Divider bool             `json:"divider,omitempty"` // Trennlinie vor der Gruppe (eigene Gliederung, Ordered)
 	Overall string           `json:"overall"`           // wie StatusView.Overall
 	Items   []StatusViewItem `json:"items"`
 }

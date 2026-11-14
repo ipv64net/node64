@@ -1,5 +1,10 @@
 # Änderungen – Honeypot64
 
+## 0.23.0 – 2026-11-14
+
+### Neu
+- Rangliste „Angefragte Domains (Host, SNI)“: welche Domains bzw. Subdomains an der Web-Falle und am PROXY64-Köder angefragt werden, Top 20 im gewählten Zeitraum (ohne Port, reine IP-Adressen zählen nicht); API: `top_hosts` in `/api/honeypot/stats` (#113).
+
 ## 0.22.1 – 2026-11-13
 
 ### Behoben

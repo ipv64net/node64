@@ -95,3 +95,5 @@ details .its{border-top:1px solid var(--ln)}
 .sec{font-size:.95em;font-weight:600;color:var(--mu);margin:1.4em 0 .2em}
 main>.sec:first-child{margin-top:.3em}
 .cg li.sec{display:block;margin:0;padding:.4em .9em;font-size:.85em}
+hr.dv{border:0;border-top:2px solid var(--ln);margin:1.3em 0}
+.cg li.dv{display:block;padding:0;border-top:2px solid var(--ln)}

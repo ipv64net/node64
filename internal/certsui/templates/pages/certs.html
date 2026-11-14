@@ -28,7 +28,12 @@
 						{{if and .CNAMEs (ne .Status "valid")}}<details class="mt-1"><summary class="text-body-secondary">{{$.T "certs.cname_needed"}}</summary>
 							{{range .CNAMEs}}<div class="font-monospace text-break">{{.From}} <span class="text-body-secondary">CNAME</span> {{.To}}</div>{{end}}</details>{{end}}
 					</td>
-					<td><span class="badge text-bg-light">{{$.T (print "certs.source." .Source)}}</span>{{if .ACMECA}}<div class="text-body-secondary">{{index $d.ACMENames .ACMECA}}</div>{{end}}{{if .Issuer}}<div class="text-body-secondary">{{.Issuer}}</div>{{end}}</td>
+					<td><span class="badge text-bg-light">{{$.T (print "certs.source." .Source)}}</span>{{if .ACMECA}}<div class="text-body-secondary">{{index $d.ACMENames .ACMECA}}</div>{{end}}{{if .Issuer}}<div class="text-body-secondary">{{.Issuer}}</div>{{end}}
+						{{if .KeyTypeChangeable}}{{$id := .ID}}{{$kt := .KeyType}}<div class="dropdown"><button class="btn btn-link btn-sm p-0 text-body-secondary text-decoration-none small dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "certs.key_change"}}"><i class="bi bi-key"></i> {{.KeyTypeName}}</button>
+							<ul class="dropdown-menu small"><li><h6 class="dropdown-header">{{$.T "certs.key_change_hint"}}</h6></li>
+							{{range $k := (split "ecdsa rsa rsa4096")}}<li><form method="post" action="/certificates/{{$id}}/keytype" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key_type" value="{{$k}}">
+								<button class="dropdown-item{{if or (eq $k $kt) (and (eq $k "ecdsa") (eq $kt ""))}} active{{end}}" type="submit">{{if eq $k "ecdsa"}}ECDSA P-256{{else if eq $k "rsa"}}RSA 2048{{else}}RSA 4096{{end}}</button></form></li>{{end}}
+							</ul></div>{{end}}</td>
 					<td>{{if eq .Pill "none"}}<span class="badge text-bg-light">{{$.T "certs.none_yet"}}</span>
 						{{else}}<span class="badge {{if eq .Pill "ok"}}text-bg-success{{else if eq .Pill "soon"}}text-bg-warning{{else}}text-bg-danger{{end}}">{{if lt .DaysLeft 0}}{{$.T "certs.expired"}}{{else}}{{$.T "certs.days" "days" .DaysLeft}}{{end}}</span>
 						<div class="text-body-secondary">{{$.Date .NotAfter}}</div>{{end}}</td>

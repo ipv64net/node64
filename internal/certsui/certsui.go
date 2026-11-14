@@ -56,6 +56,7 @@ func (u *UI) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST "+Base+"/dns-check", page(u.pageDNSCheckSave))
 	mux.Handle("POST "+Base+"/{id}/renew", page(u.pageCertRenew))
 	mux.Handle("POST "+Base+"/{id}/autorenew", page(u.pageCertAutoRenew))
+	mux.Handle("POST "+Base+"/{id}/keytype", page(u.pageCertKeyType))
 	mux.Handle("POST "+Base+"/{id}/delete", page(u.pageCertDelete))
 	mux.Handle("GET "+Base+"/{id}/chain.pem", page(u.pageCertChain))
 	mux.Handle("GET "+Base+"/{id}/download", page(u.pageCertDownload))
@@ -356,6 +357,23 @@ func (u *UI) pageCertAutoRenew(w http.ResponseWriter, r *http.Request) {
 		u.g.Flash(w, r, "danger", u.certError(r, err))
 	} else {
 		u.g.Audit(r, "cert.update", strconv.FormatInt(c.ID, 10), fmt.Sprintf("auto_renew=%v", on))
+	}
+	http.Redirect(w, r, Base, http.StatusSeeOther)
+}
+
+// pageCertKeyType aendert die Schluesselart; sie gilt ab der naechsten Erneuerung (#62).
+func (u *UI) pageCertKeyType(w http.ResponseWriter, r *http.Request) {
+	c, ok := u.certFromPath(w, r)
+	if !ok {
+		return
+	}
+	kt := r.PostFormValue("key_type")
+	if err := u.m.SetKeyType(r.Context(), c.ID, kt); err != nil {
+		u.g.Flash(w, r, "danger", u.certError(r, err))
+	} else {
+		u.g.Audit(r, "cert.update", strconv.FormatInt(c.ID, 10), "key_type="+kt)
+		c, _ = u.m.Get(r.Context(), c.ID)
+		u.g.Flash(w, r, "success", u.g.T(r, "certs.key_changed", "name", c.Title(), "key", c.KeyTypeName()))
 	}
 	http.Redirect(w, r, Base, http.StatusSeeOther)
 }

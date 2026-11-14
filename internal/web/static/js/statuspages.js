@@ -1,4 +1,4 @@
-// Statusseiten (Healthchecks): Slug-Vorschlag aus dem Titel und Filter der Check-Auswahl.
+// Statusseiten (Healthchecks): Slug-Vorschlag aus dem Titel, Eintraege ziehen und Filter der Check-Auswahl.
 // Vanilla-JS, keine externen Quellen; das Formular funktioniert auch ohne. Rueckfragen (data-confirm) macht app.js.
 (function () {
 	"use strict";
@@ -26,6 +26,63 @@
 			if (slug.getAttribute("data-auto") === "1") { slug.value = slugify(title.value); }
 		});
 		slug.addEventListener("input", function () { slug.setAttribute("data-auto", "0"); });
+	}
+
+	// Eintraege durch Ziehen umsortieren (#131), nur innerhalb desselben Abschnitts (data-part). Danach die Knoepfe
+	// (Hoch/Runter/Entfernen) und die Auswahl "Einfuegen" neu nummerieren - sie zaehlen nach der Position im Formular.
+	// Ohne JavaScript bleiben die Pfeile.
+	var body = document.querySelector("[data-sp-rows]");
+	if (body) {
+		var moved = document.querySelector("[data-sp-moved]");
+		var at = document.querySelector("[data-sp-at]");
+		var drag = null;
+		var renumber = function () {
+			var rows = body.querySelectorAll("tr[data-sp-row]");
+			rows.forEach(function (tr, i) {
+				var prev = rows[i - 1], next = rows[i + 1];
+				var up = tr.querySelector("button[value^='up-']");
+				var dn = tr.querySelector("button[value^='dn-']");
+				var rm = tr.querySelector("button[value^='rm-']");
+				if (up) { up.value = "up-" + i; up.disabled = !prev || prev.getAttribute("data-part") !== tr.getAttribute("data-part"); }
+				if (dn) { dn.value = "dn-" + i; dn.disabled = !next || next.getAttribute("data-part") !== tr.getAttribute("data-part"); }
+				if (rm) { rm.value = "rm-" + i; }
+				var o = at ? at.querySelector("option[data-k='" + tr.getAttribute("data-k") + "']") : null;
+				if (o) { o.value = String(i); at.appendChild(o); }
+			});
+		};
+		body.querySelectorAll("[data-sp-handle]").forEach(function (h) {
+			h.classList.remove("d-none");
+			h.addEventListener("mousedown", function () { h.closest("tr").draggable = true; });
+		});
+		document.addEventListener("mouseup", function () {
+			if (!drag) { body.querySelectorAll("tr[draggable='true']").forEach(function (tr) { tr.draggable = false; }); }
+		});
+		body.addEventListener("dragstart", function (e) {
+			var tr = e.target.closest ? e.target.closest("tr[data-sp-row]") : null;
+			if (!tr || !tr.draggable) { e.preventDefault(); return; }
+			drag = tr;
+			tr.classList.add("opacity-50");
+			e.dataTransfer.effectAllowed = "move";
+			try { e.dataTransfer.setData("text/plain", ""); } catch (x) { /* aeltere Browser */ }
+		});
+		body.addEventListener("dragover", function (e) {
+			if (!drag) { return; }
+			var tr = e.target.closest ? e.target.closest("tr[data-sp-row]") : null;
+			if (!tr || tr.getAttribute("data-part") !== drag.getAttribute("data-part")) { return; }
+			e.preventDefault();
+			if (tr === drag) { return; }
+			var r = tr.getBoundingClientRect();
+			body.insertBefore(drag, e.clientY > r.top + r.height / 2 ? tr.nextSibling : tr);
+		});
+		body.addEventListener("drop", function (e) { if (drag) { e.preventDefault(); } });
+		body.addEventListener("dragend", function () {
+			if (!drag) { return; }
+			drag.classList.remove("opacity-50");
+			drag.draggable = false;
+			drag = null;
+			renumber();
+			if (moved) { moved.classList.remove("d-none"); }
+		});
 	}
 
 	// Auswahl der Checks: nach Name, Tag und Healthchecks-Gruppe filtern

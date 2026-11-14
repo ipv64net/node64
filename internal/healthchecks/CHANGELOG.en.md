@@ -1,5 +1,15 @@
 # Changes – Healthchecks
 
+## 3.2.0 – 2026-11-14
+
+### New
+- Status pages: order entries freely – in the editor with the arrows or by dragging (#131, #102). Without an outline of your own the page stays as before (services before systems, Healthchecks groups, problems first).
+- Status pages: headings and dividers as entries of their own (#131). As soon as a page has one of them, it shows everything exactly in the editor's order, structured by these headings. API: entry with `kind` `heading` or `divider` (token `@heading`/`@divider`), `/view` reports `ordered` and `divider`.
+- On update the order of existing pages is stored the way it was shown so far (Healthchecks before Monitor64); the display does not change.
+
+### Fixed
+- New healthcheck → measuring nodes: the selection (and "measuring nodes" in the details) shows the current names. So far the names came from the cached list from ipv64 – after a rename, without a connection to ipv64 or after unlinking, old names remained there; now the own node uses its configured name and nodes of the local group the name they report themselves (#134).
+
 ## 3.1.2 – 2026-11-13
 
 ### Fixed

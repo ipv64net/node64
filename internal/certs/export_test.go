@@ -106,11 +106,12 @@ func TestMoreProviders(t *testing.T) {
 		"hurricane":   {"tokens": "example.org:abc, example.net:def"},
 		"infomaniak":  {"token": "t"},
 		"namecheap":   {"user": "u", "key": "k", "client_ip": "192.0.2.1"},
+		"netcupv1":    {"key": "k"},
 		"pdns":        {"url": "http://192.168.1.2:8081", "key": "k"},
 		"rfc2136":     {"nameserver": "192.168.1.1", "tsig_key": "acme.", "tsig_secret": "c2VjcmV0c2VjcmV0c2VjcmV0"},
 		"technitium":  {"url": "http://192.168.1.2:5380/", "token": "t"},
 	}
-	if n := len(Providers()); n != 35 { // 27 + 8 aus providers_extra.go (#39)
+	if n := len(Providers()); n != 36 { // 27 + 8 aus providers_extra.go (#39) + netcup CloudDNS (#108)
 		t.Fatalf("providers: %d", n)
 	}
 	for id, v := range vals {

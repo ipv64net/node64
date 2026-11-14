@@ -86,7 +86,7 @@ type Cert struct {
 	DNSAccount  int64     `json:"dns_account,omitempty"` // source dns
 	CAID        int64     `json:"ca_id,omitempty"`       // source ca
 	Days        int       `json:"days,omitempty"`        // source ca/self: Laufzeit
-	KeyType     string    `json:"key_type,omitempty"`    // self und Lets Encrypt: ecdsa oder rsa ("" = ecdsa)
+	KeyType     string    `json:"key_type,omitempty"`    // self und Lets Encrypt: ecdsa, rsa (2048) oder rsa4096 ("" = ecdsa)
 	ACMECA      int64     `json:"acme_ca,omitempty"`     // 0 = Let's Encrypt, sonst weitere ACME-Stelle
 	Staging     bool      `json:"staging"`
 	AutoRenew   bool      `json:"auto_renew"`
@@ -528,7 +528,7 @@ type Request struct {
 	DNSAccount  int64    `json:"dns_account"`  // dns: Zugang
 	CAID        int64    `json:"ca_id"`        // ca: eigene CA
 	Days        int      `json:"days"`         // ca/self: Laufzeit (Standard 397, hoechstens 825)
-	KeyType     string   `json:"key_type"`     // self und Lets Encrypt (ipv64, alias, http, dns): ecdsa (Standard) oder rsa
+	KeyType     string   `json:"key_type"`     // self und Lets Encrypt (ipv64, alias, http, dns): ecdsa (Standard), rsa (2048) oder rsa4096
 	ACMECA      int64    `json:"acme_ca"`      // weitere ACME-Stelle statt Let's Encrypt (0)
 	Staging     bool     `json:"staging"`
 	AutoRenew   *bool    `json:"auto_renew"` // Standard an
@@ -636,12 +636,11 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 		if req.Days < 1 || req.Days > maxCADays {
 			return nil, invalid("days", "1 to %d days", maxCADays)
 		}
-		switch req.KeyType {
-		case "":
+		if !validKeyType(req.KeyType) {
+			return nil, invalid("key_type", "ecdsa, rsa or rsa4096")
+		}
+		if req.KeyType == "" {
 			req.KeyType = KeyECDSA
-		case KeyECDSA, KeyRSA:
-		default:
-			return nil, invalid("key_type", "ecdsa or rsa")
 		}
 		req.ACMECA, req.Staging = 0, false
 	default:
@@ -650,12 +649,11 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 	switch req.Source {
 	case SourceSelf:
 	case SourceIPv64, SourceAlias, SourceHTTP, SourceDNS: // Let's Encrypt: wahlweise RSA (aeltere Geraete, z. B. DSM 6; #62)
-		switch req.KeyType {
-		case "", KeyECDSA:
+		if !validKeyType(req.KeyType) {
+			return nil, invalid("key_type", "ecdsa, rsa or rsa4096")
+		}
+		if req.KeyType == KeyECDSA {
 			req.KeyType = ""
-		case KeyRSA:
-		default:
-			return nil, invalid("key_type", "ecdsa or rsa")
 		}
 	default:
 		req.KeyType = ""
@@ -769,6 +767,56 @@ func (m *Manager) SetAutoRenew(ctx context.Context, id int64, on bool) error {
 		m.changed(ctx, ItemCertificates, id)
 	}
 	return err
+}
+
+// KeyTypeChangeable: Die Schluesselart laesst sich waehlen bzw. aendern (selbst signiert und Let's Encrypt bzw. andere
+// ACME-Stelle, nicht hochgeladen oder von der eigenen CA).
+func (c *Cert) KeyTypeChangeable() bool {
+	switch c.Source {
+	case SourceSelf, SourceIPv64, SourceAlias, SourceHTTP, SourceDNS:
+		return true
+	}
+	return false
+}
+
+// SetKeyType aendert die Schluesselart (ecdsa, rsa, rsa4096). Das vorhandene Zertifikat bleibt, wie es ist; die
+// naechste Erneuerung holt es mit der neuen Schluesselart (#62).
+func (m *Manager) SetKeyType(ctx context.Context, id int64, kind string) error {
+	c, err := m.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !c.KeyTypeChangeable() {
+		return invalid("key_type", "key type cannot be chosen for source %s", c.Source)
+	}
+	if !validKeyType(kind) {
+		return invalid("key_type", "ecdsa, rsa or rsa4096")
+	}
+	switch {
+	case c.Source == SourceSelf && kind == "":
+		kind = KeyECDSA
+	case c.Source != SourceSelf && kind == KeyECDSA:
+		kind = "" // Let's Encrypt: Standard leer (wie beim Anlegen)
+	}
+	if kind == c.KeyType {
+		return nil
+	}
+	_, err = m.w.ExecContext(ctx, `UPDATE certs SET key_type = ?, updated_at = ? WHERE id = ?`, kind, store.Now(), id)
+	if err == nil {
+		m.changed(ctx, ItemCertificates, id)
+	}
+	return err
+}
+
+// KeyTypeName ist die Schluesselart zur Anzeige.
+func (c *Cert) KeyTypeName() string {
+	switch c.KeyType {
+	case KeyRSA:
+		return "RSA 2048"
+	case KeyRSA4096:
+		return "RSA 4096"
+	}
+	return "ECDSA P-256"
 }
 
 // Delete entfernt ein Zertifikat; benutzt nur mit force.

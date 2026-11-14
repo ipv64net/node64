@@ -137,24 +137,56 @@
 		{{if $d.M64Off}}<div class="alert alert-warning py-2 small"><i class="bi bi-activity"></i> {{.T "hc.status.m64_off"}}</div>{{end}}
 		{{if not $d.PageList}}<p class="text-body-secondary small mb-0">{{.T "hc.status.items_empty"}}</p>
 		{{else}}
-		{{/* nicht sortierbar: die Reihenfolge ist die der Seite, und "entfernen" zaehlt nach der Position */}}
+		<p class="form-text mt-0 mb-2"><i class="bi bi-arrow-down-up"></i> {{if $d.Ordered}}{{.T "hc.status.order_hint_own"}}{{else}}{{.T "hc.status.order_hint_auto"}}{{end}}</p>
+		{{/* nicht sortierbar per Spaltenkopf: die Reihenfolge ist die der Seite, und die Knoepfe zaehlen nach der Position;
+		     Hoch/Runter ohne JavaScript, Ziehen mit statuspages.js (zaehlt die Knoepfe danach neu) */}}
 		<div class="table-responsive"><table class="table table-sm align-middle mb-0" data-nosort>
-			<thead><tr><th class="small">{{.T "common.name"}}</th><th class="small">{{.T "hc.group.label"}}</th><th class="small">{{.T "hc.status.label"}}</th><th></th></tr></thead>
-			<tbody>
+			<thead><tr><th style="width:1%"></th><th class="small">{{.T "common.name"}}</th><th class="small">{{.T "hc.group.label"}}</th><th class="small">{{.T "hc.status.label"}}</th><th></th></tr></thead>
+			<tbody data-sp-rows>
 			{{range $ii, $it := $d.PageList}}
-			{{if $it.Sec}}<tr class="table-group"><td colspan="4" class="small fw-semibold text-body-secondary">{{if $it.M64}}<i class="bi bi-activity"></i> {{else}}<i class="bi bi-heart-pulse"></i> {{end}}{{$.T $it.Sec}}</td></tr>{{end}}
-			<tr>
+			{{if $it.Sec}}<tr class="table-group"><td colspan="5" class="small fw-semibold text-body-secondary">{{if $it.M64}}<i class="bi bi-activity"></i> {{else}}<i class="bi bi-heart-pulse"></i> {{end}}{{$.T $it.Sec}}</td></tr>{{end}}
+			<tr data-sp-row data-k="{{$ii}}" data-part="{{$it.Part}}"{{if $it.Kind}} class="table-light"{{end}}>
+				<td class="text-nowrap"><span class="d-none text-body-secondary px-1" data-sp-handle title="{{$.T "hc.status.drag"}}" aria-hidden="true" style="cursor:grab"><i class="bi bi-grip-vertical"></i></span><div class="btn-group btn-group-sm" role="group">
+					<button class="btn btn-outline-secondary" type="submit" name="op" value="up-{{$ii}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.move_up"}}" aria-label="{{$.T "hc.status.move_up"}}"{{if not $it.Up}} disabled{{end}}><i class="bi bi-arrow-up"></i></button>
+					<button class="btn btn-outline-secondary" type="submit" name="op" value="dn-{{$ii}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.move_down"}}" aria-label="{{$.T "hc.status.move_down"}}"{{if not $it.Down}} disabled{{end}}><i class="bi bi-arrow-down"></i></button>
+				</div></td>
+				{{if eq $it.Kind "heading"}}
+				<td class="small" colspan="2"><input type="hidden" name="it_tok" value="{{$it.Token}}"><span class="badge text-bg-primary"><i class="bi bi-type-h2"></i> {{$.T "hc.status.heading"}}</span></td>
+				<td><input class="form-control form-control-sm fw-semibold" name="it_lbl" value="{{$it.Label}}" maxlength="120" required placeholder="{{$.T "hc.status.heading_placeholder"}}" aria-label="{{$.T "hc.status.heading"}}"></td>
+				{{else if eq $it.Kind "divider"}}
+				<td class="small" colspan="3"><input type="hidden" name="it_tok" value="{{$it.Token}}"><input type="hidden" name="it_lbl" value=""><span class="badge text-bg-secondary"><i class="bi bi-dash-lg"></i> {{$.T "hc.status.divider"}}</span> <hr class="d-inline-block align-middle m-0 ms-2 w-50"></td>
+				{{else}}
 				<td class="small"><input type="hidden" name="it_tok" value="{{$it.Token}}">
 					{{if $it.M64}}{{if $it.Name}}<a href="{{$it.Link}}" class="text-decoration-none" target="_blank" rel="noopener"><i class="bi bi-activity text-primary" title="Monitor64"></i> {{$it.Name}}</a>{{else if $d.M64On}}<span class="text-danger"><i class="bi bi-x-circle"></i> {{$.T "hc.status.m64_gone"}}</span>{{else}}<span class="text-body-secondary"><i class="bi bi-eye-slash"></i> {{$.T "hc.status.m64_hidden"}}</span>{{end}}
 					{{else if $it.Name}}<a href="/healthchecks/{{$it.Token}}" class="text-decoration-none" target="_blank" rel="noopener">{{$it.Name}}</a>{{else}}<span class="text-danger"><i class="bi bi-x-circle"></i> {{$.T "hc.status.check_gone"}}</span>{{end}}</td>
 				<td class="small">{{if $it.Group}}<span class="badge text-bg-light"><i class="bi bi-collection"></i> {{$it.Group}}</span>{{else}}<span class="text-body-secondary">{{$.T "hc.group.none"}}</span>{{end}}</td>
 				<td><input class="form-control form-control-sm" name="it_lbl" value="{{$it.Label}}" maxlength="120" placeholder="{{if $it.Name}}{{$it.Name}}{{else}}{{$.T "hc.status.label"}}{{end}}" aria-label="{{$.T "hc.status.label"}}"></td>
+				{{end}}
 				<td class="text-end" style="width:1%"><button class="btn btn-sm btn-outline-danger" type="submit" name="op" value="rm-{{$ii}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.item_remove"}}"><i class="bi bi-x-lg"></i></button></td>
 			</tr>
 			{{end}}
 			</tbody>
 		</table></div>
+		<div class="alert alert-warning py-1 px-2 small mt-2 mb-0 d-none" data-sp-moved><i class="bi bi-pencil"></i> {{.T "hc.status.unsaved"}}</div>
 		{{end}}
+		{{/* Gliederung: Ueberschrift bzw. Trenner vor einem Eintrag einfuegen */}}
+		<div class="border-top mt-3 pt-3">
+			<div class="small fw-semibold mb-1"><i class="bi bi-type-h2 text-primary"></i> {{.T "hc.status.outline_add"}}</div>
+			<div class="row g-2 align-items-end">
+				<div class="col-sm-5"><label class="form-label small mb-1" for="sp-new-heading">{{.T "hc.status.heading"}}</label>
+					<input class="form-control form-control-sm" id="sp-new-heading" name="new_heading" maxlength="120" placeholder="{{.T "hc.status.heading_placeholder"}}"></div>
+				<div class="col-sm-4"><label class="form-label small mb-1" for="sp-new-at">{{.T "hc.status.insert_at"}}</label>
+					<select class="form-select form-select-sm" id="sp-new-at" name="new_at" data-sp-at>
+						<option value="end">{{.T "hc.status.at_end"}}</option>
+						{{range $ii, $it := $d.PageList}}<option value="{{$ii}}" data-k="{{$ii}}">{{$.T "hc.status.at_before" "name" (or $it.Label $it.Name ($.T (print "hc.status." (or $it.Kind "label"))))}}</option>{{end}}
+					</select></div>
+				<div class="col-sm-3 d-flex flex-wrap gap-1">
+					<button class="btn btn-sm btn-outline-primary" type="submit" name="op" value="add-heading" formaction="{{$act}}#sp-groups" formnovalidate><i class="bi bi-plus-lg"></i> {{.T "hc.status.heading"}}</button>
+					<button class="btn btn-sm btn-outline-secondary" type="submit" name="op" value="add-divider" formaction="{{$act}}#sp-groups" formnovalidate><i class="bi bi-plus-lg"></i> {{.T "hc.status.divider"}}</button>
+				</div>
+			</div>
+			<div class="form-text">{{.T "hc.status.outline_hint"}}</div>
+		</div>
 	</div>
 </div>
 </div>

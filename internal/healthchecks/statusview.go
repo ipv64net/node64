@@ -527,6 +527,38 @@ func statusGroupsFor(p *StatusPage, groupOf func(tok string) (string, bool)) []S
 	return out
 }
 
+// statusOrderedGroup ist eine Gruppe einer Seite mit eigener Gliederung.
+type statusOrderedGroup struct {
+	StatusGroup
+	divider bool // Trennlinie davor
+}
+
+// statusOrderedGroups: Seite mit eigener Gliederung (#131) - Eintraege genau in der Reihenfolge der Seite; jede
+// Ueberschrift beginnt eine Gruppe mit ihrem Text, jeder Trenner eine Gruppe ohne Namen mit Linie davor. Eintraege vor
+// der ersten Ueberschrift stehen in einer Gruppe ohne Namen. Leere Gruppen laesst die Anzeige weg.
+func statusOrderedGroups(p *StatusPage) []statusOrderedGroup {
+	var out []statusOrderedGroup
+	for _, g := range p.Groups {
+		for _, it := range g.Items {
+			switch {
+			case it.Token == statusHeadingTok:
+				out = append(out, statusOrderedGroup{StatusGroup: StatusGroup{Name: it.Label}})
+				continue
+			case it.Token == statusDividerTok:
+				out = append(out, statusOrderedGroup{divider: true})
+				continue
+			case isStatusLayout(it.Token): // unbekannte Art (neuere Node): weglassen
+				continue
+			}
+			if len(out) == 0 {
+				out = append(out, statusOrderedGroup{})
+			}
+			out[len(out)-1].Items = append(out[len(out)-1].Items, it)
+		}
+	}
+	return out
+}
+
 // statusPick waehlt die Messungen eines Balkens: eigene, sonst fremde Einzelpunkte, sonst fremde Stundenwerte.
 func statusPick(i int, sets ...[]statusAgg) statusAgg {
 	for _, s := range sets {
@@ -838,25 +870,36 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		}
 		return "", false
 	}
-	// erst die Healthchecks, dann Monitor64 als eigener Abschnitt (je mit seinen Gruppen)
+	// erst die Healthchecks, dann Monitor64 als eigener Abschnitt (je mit seinen Gruppen); mit eigener Gliederung
+	// (Ueberschriften, Trenner) genau in der Reihenfolge der Seite
 	type secGroup struct {
-		g   StatusGroup
-		sec string
+		g       StatusGroup
+		sec     string
+		divider bool
 	}
 	var groups []secGroup
-	for _, sec := range []string{"", "systems"} {
-		only := func(tok string) (string, bool) {
-			if isM64Source(tok) != (sec == "systems") {
-				return "", false
-			}
-			return groupOf(tok)
+	if p.ordered() {
+		v.Ordered = true
+		for _, g := range statusOrderedGroups(p) {
+			groups = append(groups, secGroup{g: g.StatusGroup, divider: g.divider})
 		}
-		for _, g := range statusGroupsFor(p, only) {
-			groups = append(groups, secGroup{g, sec})
+	} else {
+		for _, sec := range []string{"", "systems"} {
+			only := func(tok string) (string, bool) {
+				if isM64Source(tok) != (sec == "systems") {
+					return "", false
+				}
+				return groupOf(tok)
+			}
+			for _, g := range statusGroupsFor(p, only) {
+				groups = append(groups, secGroup{g: g, sec: sec})
+			}
 		}
 	}
+	divider := false // Trenner vor einer leeren Gruppe gilt fuer die naechste
 	for _, sg := range groups {
 		g := sg.g
+		divider = divider || sg.divider
 		vg := StatusViewGroup{Name: g.Name, Section: sg.sec, Items: []StatusViewItem{}}
 		var states []string
 		for _, it := range g.Items {
@@ -880,6 +923,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		if len(vg.Items) == 0 {
 			continue
 		}
+		vg.Divider, divider = divider && len(v.Groups) > 0, false
 		vg.Overall = statusOverall(states)
 		pageStates = append(pageStates, states...)
 		v.Groups = append(v.Groups, vg)

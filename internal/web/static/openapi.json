@@ -1730,8 +1730,12 @@
           },
           "proxy_protocol": {
             "type": "string",
-            "description": "Adressen bzw. Netze vorgeschalteter Proxys (z. B. Traefik mit proxyProtocol), die auf den Ports 80/443 einen PROXY-Kopf (v1/v2) mit der echten Besucher-Adresse schicken dürfen; durch Leerzeichen oder Komma getrennt, leer = aus. Von anderen Adressen wird kein Kopf gelesen.",
+            "description": "Adressen bzw. Netze vorgeschalteter Proxys (z. B. Traefik mit proxyProtocol), die auf den Ports 80/443 einen PROXY-Kopf (v1/v2) mit der echten Besucher-Adresse schicken dürfen; durch Leerzeichen oder Komma getrennt, leer = aus. Von anderen Adressen wird kein Kopf gelesen (Verbindungen mit Kopf werden geschlossen und gebremst geloggt).",
             "example": "172.18.0.0/16"
+          },
+          "proxy_protocol_peers": {
+            "type": "boolean",
+            "description": "PROXY-Kopf auch von den aktuellen Adressen der Nodes des eigenen Clusters annehmen (aus deren Cluster-Adressen, jede Minute neu bestimmt)"
           }
         }
       },
@@ -1791,6 +1795,13 @@
                 }
               }
             }
+          },
+          "proxy_peers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Adressen der Cluster-Nodes, von denen gerade ein PROXY-Kopf angenommen wird (nur mit config.proxy_protocol_peers)"
           }
         }
       },
@@ -1890,7 +1901,8 @@
             "description": "0 = Let's Encrypt"
           },
           "key_type": {
-            "type": "string"
+            "type": "string",
+            "description": "ecdsa, rsa (2048) oder rsa4096; leer = ECDSA P-256. Gilt ab der nächsten Erneuerung"
           }
         }
       },
@@ -2799,7 +2811,7 @@
               "block",
               "allow"
             ],
-            "description": "Ländersperre: leer = aus, block = diese Länder sperren, allow = nur diese Länder zulassen. Private Netze und die Ausnahmen der Blocklisten werden nie gesperrt; allow greift erst, wenn eine der Länderlisten geladen ist."
+            "description": "Ländersperre: leer = aus, block = diese Länder sperren, allow = nur diese Länder zulassen. Entschieden wird nach dem Standort der Adresse (Länderdaten von ipv64.net nach DB-IP), für Adressen ohne Standort nach den Länderlisten der Registrierungsstellen (allow greift dann erst, wenn alle Listen geladen sind). Private Netze und die Ausnahmen der Blocklisten werden nie gesperrt. Welches Land gilt: GET /cdn64/geo/lookup."
           },
           "geo_countries": {
             "type": "array",
@@ -2821,6 +2833,10 @@
           "ai_robots": {
             "type": "boolean",
             "description": "/robots.txt mit Disallow für alle KI-Bots ausliefern, wenn das Ziel keine hat (404). Nur Proxy-Hosts."
+          },
+          "nextcloud_dav": {
+            "type": "boolean",
+            "description": "Nextcloud: /.well-known/caldav und /.well-known/carddav mit 301 auf /remote.php/dav/ beantworten (eine eigene Location für den Pfad geht vor). Nur Proxy-Hosts."
           },
           "no_probe": {
             "type": "boolean",
@@ -3296,6 +3312,32 @@
           "geo_blocked": {
             "type": "integer",
             "description": "von der Ländersperre abgewiesen seit dem Start"
+          },
+          "geo_data": {
+            "type": "object",
+            "description": "Standortdaten (DB-IP über ipv64.net), nach denen die Ländersperre entscheidet; countries sind nur der Rückfall für Adressen ohne Standort",
+            "properties": {
+              "loaded": {
+                "type": "boolean"
+              },
+              "ranges_v4": {
+                "type": "integer"
+              },
+              "ranges_v6": {
+                "type": "integer"
+              },
+              "bytes": {
+                "type": "integer",
+                "description": "Speicherbedarf"
+              },
+              "updated": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "error": {
+                "type": "string"
+              }
+            }
           },
           "token_set": {
             "type": "boolean",
@@ -4181,12 +4223,20 @@
           },
           "token": {
             "type": "string",
-            "description": "Token des Checks"
+            "description": "Token des Checks bzw. Monitor64-Quelle (m64:host:<uid>, m64:svc:<uid>/<key>); Gliederung: @heading (Überschrift) oder @divider (Trenner)"
           },
           "label": {
             "type": "string",
             "maxLength": 120,
-            "description": "Anzeigename; leer = Name des Checks"
+            "description": "Anzeigename; leer = Name des Checks. Bei einer Überschrift ihr Text (Pflicht)"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "heading",
+              "divider"
+            ],
+            "description": "Gliederung statt eines Checks (fehlt = Eintrag). Beim Schreiben anstelle des Tokens möglich. Hat die Seite mindestens eine Überschrift oder einen Trenner, zeigt sie alle Einträge genau in der Reihenfolge der Liste (ohne Abschnitte, Gruppen der Healthchecks und Sortierung nach Zustand)."
           }
         }
       },
@@ -4805,6 +4855,13 @@
               "$ref": "#/components/schemas/Honeypot64Count"
             },
             "description": "Fingerabdrücke der Clients (H6), Key = \"ja4:<ja4>\" (TLS-ClientHello) bzw. \"hassh:<md5>\" (SSH-KEXINIT des Clients)"
+          },
+          "top_hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            },
+            "description": "Angefragte Domains bzw. Subdomains (Host-Kopfzeile bzw. SNI der Anfragen an die Web-Falle und den PROXY64-Köder; ohne Port, klein geschrieben, reine IP-Adressen zählen nicht), mindestens 20 Einträge"
           },
           "timeline": {
             "type": "array",
@@ -13019,6 +13076,272 @@
         }
       }
     },
+    "/dns64/rules": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Filterregeln (AdGuard/Adblock-Stil)",
+        "description": "Eigene Sperrliste und Freigaben als Regeln, eine je Zeile: ||example.com^ (sperren samt Subdomains), @@||example.com^ (freigeben samt Subdomains).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "string",
+                      "example": "||ads.example.com^\n@@||example.org^"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Filterregeln ersetzen",
+        "description": "Setzt eigene Sperrliste und Freigaben auf die Regeln: ||example.com^ und einfache Domains bzw. hosts-Zeilen sperren, @@||example.com^ gibt frei (je samt Subdomains; $important erlaubt, Kommentare mit # oder ! werden ignoriert). Nicht moeglich: $client= (dafuer Geraetegruppen) und |example.com^ (nur genau dieser Name). Sind alle Zeilen ungueltig, bleibt alles unveraendert (422).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "||ads.example.com^",
+                      "@@||example.org^"
+                    ]
+                  }
+                },
+                "required": [
+                  "rules"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ersetzt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deny": {
+                      "type": "integer",
+                      "description": "Sperren danach"
+                    },
+                    "allow": {
+                      "type": "integer",
+                      "description": "Freigaben danach"
+                    },
+                    "added": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "invalid": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "ungueltige Zeilen (hoechstens 20)"
+                    },
+                    "client": {
+                      "type": "integer",
+                      "description": "davon mit $client= (Regeln je Geraet: Geraetegruppen)"
+                    },
+                    "exact": {
+                      "type": "integer",
+                      "description": "davon nur fuer genau einen Namen (|example.com^)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungueltiges JSON"
+          },
+          "422": {
+            "description": "keine gueltige Regel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deny": {
+                      "type": "integer",
+                      "description": "Sperren danach"
+                    },
+                    "allow": {
+                      "type": "integer",
+                      "description": "Freigaben danach"
+                    },
+                    "added": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "invalid": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "ungueltige Zeilen (hoechstens 20)"
+                    },
+                    "client": {
+                      "type": "integer",
+                      "description": "davon mit $client= (Regeln je Geraet: Geraetegruppen)"
+                    },
+                    "exact": {
+                      "type": "integer",
+                      "description": "davon nur fuer genau einen Namen (|example.com^)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dns64/lookup": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "In welcher Liste steht diese Domain?",
+        "description": "Sucht die Domain in allen geladenen Blocklisten (auch Regeln fuer Elterndomains), eigener Sperrliste und Freigaben, Freigabe-Listen, eigenen Regeln der Geraetegruppen sowie eingebauten Diensten und Kategorien - nach denselben Regeln, nach denen DNS64 antwortet. blocked/reason gelten fuer Geraete ohne Gruppe.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "ads.example.com"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "blocked": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "wie im Abfrage-Log: Name der Blockliste, own:<Eintrag>, released:<Liste>"
+                    },
+                    "lists": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "global": {
+                            "type": "boolean",
+                            "description": "gilt fuer Geraete ohne Gruppe"
+                          }
+                        }
+                      }
+                    },
+                    "excepted": {
+                      "type": "boolean",
+                      "description": "Ausnahme (@@) in einer Blockliste"
+                    },
+                    "own": {
+                      "type": "string"
+                    },
+                    "allowed": {
+                      "type": "string"
+                    },
+                    "released": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "group": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "block",
+                              "allow"
+                            ]
+                          },
+                          "entry": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltiger Domainname"
+          },
+          "503": {
+            "description": "DNS-Dienst laeuft nicht"
+          }
+        }
+      }
+    },
     "/dns64/settings": {
       "get": {
         "tags": [
@@ -18142,10 +18465,11 @@
                     "type": "string",
                     "enum": [
                       "ecdsa",
-                      "rsa"
+                      "rsa",
+                      "rsa4096"
                     ],
                     "default": "ecdsa",
-                    "description": "bei source self und den Let's-Encrypt-Quellen (ipv64, alias, http, dns): ECDSA P-256 oder RSA 2048 (z. B. für ältere Geräte wie DSM 6); sonst ignoriert"
+                    "description": "bei source self und den Let's-Encrypt-Quellen (ipv64, alias, http, dns): ECDSA P-256, RSA 2048 (z. B. für ältere Geräte wie DSM 6) oder RSA 4096; sonst ignoriert"
                   }
                 }
               }
@@ -18405,7 +18729,7 @@
         "tags": [
           "Ports & Zertifikate"
         ],
-        "summary": "Automatische Erneuerung schalten",
+        "summary": "Automatische Erneuerung schalten, Schlüsselart ändern",
         "parameters": [
           {
             "name": "id",
@@ -18425,6 +18749,15 @@
                 "properties": {
                   "auto_renew": {
                     "type": "boolean"
+                  },
+                  "key_type": {
+                    "type": "string",
+                    "enum": [
+                      "ecdsa",
+                      "rsa",
+                      "rsa4096"
+                    ],
+                    "description": "Schlüsselart (selbst signiert und Let's-Encrypt-Quellen): ECDSA P-256, RSA 2048 oder RSA 4096. Das vorhandene Zertifikat bleibt unverändert, die nächste Erneuerung holt es mit der neuen Art (sofort: POST /certs/{id}/renew). Mindestens eines der Felder ist nötig."
                   }
                 }
               }
@@ -19906,7 +20239,7 @@
         "tags": [
           "PROXY64"
         ],
-        "summary": "Aufbewahrung des Zugriffs-Logs",
+        "summary": "Aufbewahrung des Zugriffs-Logs und Log-Datei",
         "responses": {
           "200": {
             "description": "OK",
@@ -19921,6 +20254,18 @@
                     },
                     "anonymize": {
                       "type": "boolean"
+                    },
+                    "access_file": {
+                      "type": "boolean",
+                      "description": "Zugriffs-Log zusätzlich als Datei <data>/cdn64/access.log (nginx combined mit Host vorn, jede Anfrage aller Hosts, z. B. für CrowdSec)"
+                    },
+                    "access_file_mb": {
+                      "type": "integer",
+                      "description": "Größe bis zum Wechsel auf access.log.1, 1–1000 (Standard 50)"
+                    },
+                    "access_file_path": {
+                      "type": "string",
+                      "readOnly": true
                     }
                   }
                 }
@@ -19933,7 +20278,7 @@
         "tags": [
           "PROXY64"
         ],
-        "summary": "Aufbewahrung ändern",
+        "summary": "Aufbewahrung und Log-Datei ändern",
         "requestBody": {
           "required": true,
           "content": {
@@ -19947,6 +20292,13 @@
                   },
                   "anonymize": {
                     "type": "boolean"
+                  },
+                  "access_file": {
+                    "type": "boolean"
+                  },
+                  "access_file_mb": {
+                    "type": "integer",
+                    "description": "1–1000"
                   }
                 }
               }
@@ -19967,6 +20319,18 @@
                     },
                     "anonymize": {
                       "type": "boolean"
+                    },
+                    "access_file": {
+                      "type": "boolean",
+                      "description": "Zugriffs-Log zusätzlich als Datei <data>/cdn64/access.log (nginx combined mit Host vorn, jede Anfrage aller Hosts, z. B. für CrowdSec)"
+                    },
+                    "access_file_mb": {
+                      "type": "integer",
+                      "description": "Größe bis zum Wechsel auf access.log.1, 1–1000 (Standard 50)"
+                    },
+                    "access_file_path": {
+                      "type": "string",
+                      "readOnly": true
                     }
                   }
                 }
@@ -19974,7 +20338,7 @@
             }
           },
           "422": {
-            "description": "Tage ungültig",
+            "description": "Tage bzw. Größe ungültig",
             "content": {
               "application/json": {
                 "schema": {
@@ -21323,6 +21687,84 @@
           },
           "503": {
             "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/geo/lookup": {
+      "get": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Ländersperre: welches Land gilt für eine Adresse",
+        "description": "Land nach dem Standort (DB-IP über ipv64.net, source = location) bzw. für Adressen ohne Standort nach den geladenen Länderlisten der Registrierungsstellen (source = registry). Private Adressen haben kein Land.",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "3.64.10.10"
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "de",
+                "en"
+              ]
+            },
+            "description": "Sprache des Ländernamens"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ip": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string",
+                      "description": "ISO-Ländercode, leer = keins"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "location",
+                        "registry",
+                        ""
+                      ]
+                    },
+                    "location_data": {
+                      "type": "boolean",
+                      "description": "Standortdaten geladen"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ip fehlt oder ungültig",
             "content": {
               "application/json": {
                 "schema": {
@@ -24417,7 +24859,7 @@
           "Healthchecks"
         ],
         "summary": "Was die Statusseite gerade zeigt",
-        "description": "Gesamtzustand, Abschnitte (section: leer = Healthchecks, systems = Monitor64) mit Gruppen und dem Zustand jedes Eintrags, Wartungen und Stoerungen - dieselben Daten wie status.json der Seite, aber auch fuer abgeschaltete oder passwortgeschuetzte Seiten (Anmeldung wie die uebrige API).",
+        "description": "Gesamtzustand, Abschnitte (section: leer = Healthchecks, systems = Monitor64) mit Gruppen und dem Zustand jedes Eintrags, Wartungen und Stoerungen; ordered = true: eigene Gliederung (Gruppen sind die Ueberschriften, divider = Trennlinie davor, Reihenfolge wie auf der Seite) - dieselben Daten wie status.json der Seite, aber auch fuer abgeschaltete oder passwortgeschuetzte Seiten (Anmeldung wie die uebrige API).",
         "parameters": [
           {
             "name": "id",

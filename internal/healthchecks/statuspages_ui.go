@@ -19,8 +19,9 @@ import (
 // Statusseiten: Verwaltung (Liste, Formular mit Gruppen und Eintraegen, Ankuendigungen, Vorschau).
 // Das Formular kommt ohne JavaScript aus: Gruppen und Eintraege stehen als Felder im Formular, Knoepfe mit
 // name="op" aendern den Stand und zeigen das Formular erneut (gespeichert wird erst mit "Speichern").
-// statuspages.js schlaegt nur den Slug vor und filtert die Auswahl der Checks. Mit Monitor64 stehen dessen Hosts und
-// Dienste mit in der Auswahl (Gruppe "Monitor64", Feld add_m64, statusm64.go).
+// statuspages.js schlaegt nur den Slug vor, laesst Eintraege ziehen (sonst Pfeile) und filtert die Auswahl der
+// Checks. Mit Monitor64 stehen dessen Hosts und Dienste mit in der Auswahl (Gruppe "Monitor64", Feld add_m64,
+// statusm64.go).
 
 const statusPagesPath = "/healthchecks/status-pages"
 
@@ -51,12 +52,16 @@ type statusCheckOpt struct {
 	Sec    string // i18n-Schluessel der Abschnitts-Ueberschrift vor diesem Eintrag ("" = keine)
 }
 
-// statusPageItem ist ein Eintrag der Seite im Formular (eine Liste, gruppiert wird nach den Healthchecks-Gruppen).
+// statusPageItem ist ein Eintrag der Seite im Formular (eine Liste, gruppiert wird nach den Healthchecks-Gruppen bzw.
+// nach eigenen Ueberschriften).
 type statusPageItem struct {
 	Token, Name, Label, Group string
 	M64                       bool   // Eintrag aus Monitor64 (Name "" = Monitor64 aus bzw. Host/Dienst unbekannt)
 	Link                      string // Monitor64: Seite des Hosts
 	Sec                       string // i18n-Schluessel der Abschnitts-Ueberschrift vor diesem Eintrag ("" = keine)
+	Kind                      string // heading | divider ("" = Check bzw. Monitor64)
+	Up, Down                  bool   // laesst sich verschieben (ohne eigene Gliederung nur innerhalb des Abschnitts)
+	Part                      string // Abschnitt fuers Ziehen (statuspages.js): c = Healthchecks, s = Monitor64, a = alle
 }
 
 type statusFormData struct {
@@ -74,6 +79,7 @@ type statusFormData struct {
 	Themes   []string
 	DaysOpts []int
 	Items    int
+	Ordered  bool // eigene Gliederung (Ueberschriften, Trenner): die Seite zeigt genau diese Reihenfolge
 	M64On    bool // Monitor64 laeuft (Auswahl enthaelt Hosts und Dienste)
 	M64Off   bool // Seite hat Monitor64-Eintraege, Monitor64 laeuft aber nicht (Hinweis: ausgeblendet)
 }
@@ -141,7 +147,7 @@ func (m *Module) statusCounts(ctx context.Context) (items, open map[int64]int) {
 		sql string
 		out map[int64]int
 	}{
-		{`SELECT g.page_id, COUNT(i.id) FROM hc_status_groups g JOIN hc_status_items i ON i.group_id = g.id GROUP BY g.page_id`, items},
+		{`SELECT g.page_id, COUNT(i.id) FROM hc_status_groups g JOIN hc_status_items i ON i.group_id = g.id WHERE i.token NOT LIKE '@%' GROUP BY g.page_id`, items},
 		{`SELECT page_id, COUNT(*) FROM hc_status_notices WHERE resolved_at = '' GROUP BY page_id`, open},
 	} {
 		rows, err := m.st.r.QueryContext(ctx, q.sql)
@@ -213,8 +219,13 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 	for _, t := range m64 {
 		d.Names[t.Source], m64Group[t.Source] = statusM64Label(t), t.Group
 	}
+	d.Ordered = d.Page.ordered()
 	for _, g := range d.Page.Groups {
 		for _, it := range g.Items {
+			if isStatusLayout(it.Token) { // Ueberschriften und Trenner duerfen mehrfach vorkommen
+				d.PageList = append(d.PageList, statusPageItem{Token: it.Token, Label: it.Label, Kind: statusKindOf(it.Token)})
+				continue
+			}
 			if on[it.Token] {
 				continue
 			}
@@ -230,10 +241,28 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 			d.PageList = append(d.PageList, pi)
 		}
 	}
-	// Healthchecks vor Monitor64 (die Seite zeigt beide als eigene Abschnitte)
-	sort.SliceStable(d.PageList, func(i, j int) bool { return !d.PageList[i].M64 && d.PageList[j].M64 })
-	statusMarkSections(d.PageList, func(i int) bool { return d.PageList[i].M64 }, func(i int, k string) { d.PageList[i].Sec = k })
-	d.Items = len(d.PageList)
+	// ohne eigene Gliederung: Healthchecks vor Monitor64 (die Seite zeigt beide als eigene Abschnitte), verschieben nur
+	// innerhalb des Abschnitts; mit Gliederung genau die Reihenfolge der Seite
+	if !d.Ordered {
+		sort.SliceStable(d.PageList, func(i, j int) bool { return !d.PageList[i].M64 && d.PageList[j].M64 })
+		statusMarkSections(d.PageList, func(i int) bool { return d.PageList[i].M64 }, func(i int, k string) { d.PageList[i].Sec = k })
+	}
+	for i := range d.PageList {
+		it := &d.PageList[i]
+		switch {
+		case d.Ordered:
+			it.Part = "a"
+		case it.M64:
+			it.Part = "s"
+		default:
+			it.Part = "c"
+		}
+		it.Up = i > 0 && (d.Ordered || d.PageList[i-1].M64 == it.M64)
+		it.Down = i < len(d.PageList)-1 && (d.Ordered || d.PageList[i+1].M64 == it.M64)
+		if it.Kind == "" {
+			d.Items++
+		}
+	}
 	if err == nil {
 		for _, c := range list {
 			d.Checks = append(d.Checks, statusCheckOpt{Token: c.Token, Value: c.Token, Name: c.Name, Tags: strings.Join(c.Tags, ","), Group: c.Group,
@@ -333,6 +362,33 @@ func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPag
 		if i, err := strconv.Atoi(n); err == nil && i >= 0 && i < len(g.Items) {
 			g.Items = append(g.Items[:i], g.Items[i+1:]...)
 		}
+		return nil
+	}
+	// verschieben (#131): mit dem Nachbarn tauschen
+	for _, mv := range []struct {
+		prefix string
+		delta  int
+	}{{"up-", -1}, {"dn-", 1}} {
+		if n, ok := strings.CutPrefix(op, mv.prefix); ok {
+			if i, err := strconv.Atoi(n); err == nil && i >= 0 && i < len(g.Items) && i+mv.delta >= 0 && i+mv.delta < len(g.Items) {
+				g.Items[i], g.Items[i+mv.delta] = g.Items[i+mv.delta], g.Items[i]
+			}
+			return nil
+		}
+	}
+	if op == "add-heading" || op == "add-divider" { // Ueberschrift bzw. Trenner einfuegen (vor dem gewaehlten Eintrag)
+		it := StatusItem{Token: statusDividerTok}
+		if op == "add-heading" {
+			it = StatusItem{Token: statusHeadingTok, Label: strings.TrimSpace(r.PostFormValue("new_heading"))}
+			if it.Label == "" {
+				return fieldErr("groups", "hc.status.err.heading")
+			}
+		}
+		at := len(g.Items)
+		if i, err := strconv.Atoi(r.PostFormValue("new_at")); err == nil && i >= 0 && i < len(g.Items) {
+			at = i
+		}
+		g.Items = append(g.Items[:at], append([]StatusItem{it}, g.Items[at:]...)...)
 		return nil
 	}
 	if op != "add" {
@@ -464,7 +520,12 @@ func (m *Module) pageStatusSave(w http.ResponseWriter, r *http.Request) {
 	d := statusFormData{Page: p, Edit: edit}
 	if op := r.PostFormValue("op"); op != "" && op != "save" {
 		if err := m.statusFormOp(ctx, r, p, op); err != nil {
-			d.Error = err.Error()
+			var fe *StatusFieldError
+			if errors.As(err, &fe) {
+				d.Errors = map[string]string{fe.Field: m.g.T(r, fe.Key)}
+			} else {
+				d.Error = err.Error()
+			}
 		}
 		d.Dirty = true
 		m.renderStatusForm(w, r, http.StatusOK, d)

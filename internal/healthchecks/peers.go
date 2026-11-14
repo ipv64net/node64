@@ -88,22 +88,29 @@ func (c *Check) measures() bool {
 }
 
 // peers liefert die Nodes des Accounts; die eigene ist markiert und steht vorn.
+// Die Liste vom hub ist nur ein Zwischenstand (alle 5 Minuten, nach dem Trennen nicht mehr erneuert): der eigene
+// Name kommt aus node.name, Nodes der lokalen Gruppe melden ihren Namen bei jedem Ping selbst (#134).
 func (m *Module) peers(ctx context.Context) []Peer {
 	var list []Peer
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, SettingPeers, "[]")), &list)
 	me := selfNodeID()
+	myName := m.core.SettingOr(ctx, "node.name", "")
+	if myName == "" {
+		myName = m.core.SettingOr(ctx, "sync.node_name", "Node")
+	}
 	out := make([]Peer, 0, len(list)+1)
 	found := false
 	for _, p := range list {
 		if p.ID == me {
 			p.Self, found = true, true
+			p.Name = myName
 			out = append([]Peer{p}, out...)
 			continue
 		}
 		out = append(out, p)
 	}
 	if !found && me != "" {
-		out = append([]Peer{{ID: me, Name: m.core.SettingOr(ctx, "sync.node_name", "Node"), Online: true, Self: true}}, out...)
+		out = append([]Peer{{ID: me, Name: myName, Online: true, Self: true}}, out...)
 	}
 	if m.groupPeers != nil { // Nodes der lokalen Gruppe (auch ohne hub)
 		at := map[string]int{}
@@ -113,6 +120,9 @@ func (m *Module) peers(ctx context.Context) []Peer {
 		for _, g := range m.groupPeers(ctx) {
 			if i, ok := at[g.ID]; ok {
 				out[i].Online = out[i].Online || g.Online
+				if g.Name != "" {
+					out[i].Name = g.Name
+				}
 				continue
 			}
 			out = append(out, g)

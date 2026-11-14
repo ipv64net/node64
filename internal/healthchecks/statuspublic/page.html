@@ -36,11 +36,11 @@
 {{- if not .Groups}}<p class="mu empty">{{$.T "hc.status.pub.empty"}}</p>{{end}}
 {{- if eq .Layout "compact"}}
 <ul class="cg card">
-{{- range .Groups}}{{if .Section}}<li class="sec">{{.Section}}</li>{{end}}<li class="s-{{.Overall}}"><span class="dot" aria-hidden="true"></span><span class="lb">{{.Name}}</span><span class="cnt">{{.Counts}}</span><span class="sr">{{.OverallText}}</span></li>{{end}}
+{{- range .Groups}}{{if .Section}}<li class="sec">{{.Section}}</li>{{end}}{{if .Divider}}<li class="dv" aria-hidden="true"></li>{{end}}<li class="s-{{.Overall}}"><span class="dot" aria-hidden="true"></span><span class="lb">{{.Name}}</span><span class="cnt">{{.Counts}}</span><span class="sr">{{.OverallText}}</span></li>{{end}}
 </ul>
 {{- else if eq .Layout "tiles"}}
 {{- range .Groups}}
-{{if .Section}}<h2 class="sec">{{.Section}}</h2>{{end}}
+{{if .Section}}<h2 class="sec">{{.Section}}</h2>{{end}}{{if .Divider}}<hr class="dv">{{end}}
 <section class="grp">{{if .Heading}}<h2 class="gh s-{{.Overall}}"><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span><span class="sr">{{.OverallText}}</span></h2>{{end}}
 <ul class="its">
 {{- range .Items}}<li class="it tl s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="lb">{{.Label}}</span><span class="st">{{.StateText}}</span>{{if $.ShowUptime}}{{template "up" .}}{{end}}</div></li>{{end}}
@@ -48,7 +48,7 @@
 {{- end}}
 {{- else}}
 {{- range .Groups}}
-{{if .Section}}<h2 class="sec">{{.Section}}</h2>{{end}}
+{{if .Section}}<h2 class="sec">{{.Section}}</h2>{{end}}{{if .Divider}}<hr class="dv">{{end}}
 {{if .Heading}}<details class="grp card s-{{.Overall}}" data-k="{{.Key}}"{{if .Open}} open{{end}}><summary><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span></summary>{{else}}<div class="grp card">{{end}}
 <ul class="its">
 {{- range .Items}}
