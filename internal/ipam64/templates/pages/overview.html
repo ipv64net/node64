@@ -2,6 +2,7 @@
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
 	<h1 class="h4 mb-0 me-auto"><i class="bi bi-grid-3x3-gap text-primary"></i> {{.T "ipam64.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/conflicts" id="ipam-conflicts-link"><i class="bi bi-radar"></i> {{.T "ipam64.conflicts.title"}}</a>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/setup" id="ipam-setup"><i class="bi bi-magic"></i> {{.T "ipam64.setup.button"}}</a>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/export.csv" id="ipam-export"><i class="bi bi-download"></i> {{.T "ipam64.export"}}</a>
 	<button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#ipam-new" aria-expanded="{{if $d.FormOpen}}true{{else}}false{{end}}" aria-controls="ipam-new" id="ipam-new-btn"><i class="bi bi-plus-lg"></i> {{.T "ipam64.prefix.new"}}</button>
@@ -38,7 +39,7 @@
 <div class="row g-3 mb-3">
 	<div class="col-6 col-lg-3"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "ipam64.kpi.prefixes"}}</div><div class="stat-value" id="ipam-kpi-prefixes">{{len $d.Nets}}</div><div class="stat-sub">{{.T "ipam64.kpi.families" "v4" $d.V4 "v6" $d.V6}}</div></div><i class="bi bi-diagram-2 stat-icon"></i></div></div></div>
 	<div class="col-6 col-lg-3"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "ipam64.kpi.used"}}</div><div class="stat-value">{{$d.Used}}</div><div class="stat-sub">{{.T "ipam64.kpi.vlans" "n" $d.VLANs}}</div></div><i class="bi bi-hdd-network stat-icon"></i></div></div></div>
-	<div class="col-6 col-lg-3"><div class="card stat {{if $d.Conflicts}}stat-down{{else}}stat-ok{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "ipam64.kpi.conflicts"}}</div><div class="stat-value{{if $d.Conflicts}} text-danger{{end}}" id="ipam-conflicts">{{$d.Conflicts}}</div><div class="stat-sub">{{.T "ipam64.kpi.conflicts_sub"}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></div></div>
+	<div class="col-6 col-lg-3"><div class="card stat {{if $d.Conflicts}}stat-down{{else}}stat-ok{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "ipam64.kpi.conflicts"}}</div><div class="stat-value{{if $d.Conflicts}} text-danger{{end}}" id="ipam-conflicts"><a class="text-reset text-decoration-none" href="/ipam64/conflicts">{{$d.Conflicts}}</a></div><div class="stat-sub">{{.T "ipam64.kpi.conflicts_sub"}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></div></div>
 	<div class="col-6 col-lg-3"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "ipam64.kpi.scan"}}</div><div class="stat-value fs-6">{{if $d.Scan.Running}}{{.T "ipam64.scan.running"}}{{else if $d.LastScan.IsZero}}–{{else}}{{.Ago $d.LastScan}}{{end}}</div>
 		<form method="post" action="/ipam64/autoscan" class="d-flex align-items-center gap-1 mt-1">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">

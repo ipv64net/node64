@@ -1943,6 +1943,8 @@
       "mcp": "AI (MCP)"
     },
     "actions": {
+      "ipam64_ignore": "IPAM64: device ignored",
+      "ipam64_notify": "IPAM64: notifications set",
       "ipam64_setup": "IPAM64: set up from existing data",
       "ipam64_prefix_renumber": "IPAM64: IPv6 prefix moved",
       "ipam64_handover": "IPAM64: handed over to DNS64",
@@ -3187,6 +3189,7 @@
       }
     },
     "subject": {
+      "ipam64": "🔎 IPAM64: {name}",
       "monitor_better": "🟡 {name}: {summary} better, but not OK yet",
       "monitor_problem": "{icon} {name}: {summary}",
       "monitor_ok": "✅ {name}: {summary} OK again",
@@ -3261,6 +3264,10 @@
       "summary_item": "• {name}: {message}"
     },
     "text": {
+      "ipam64_conflict_dup": "Duplicate address {ip}: two devices answer ({macs}).",
+      "ipam64_conflict_mac": "Foreign device on the fixed address {ip} ({macs}).",
+      "ipam64_conflict_lease": "The DHCP server assigned the fixed address {ip} ({macs}).",
+      "ipam64_new_device": "New device on the network: {ip} ({mac}) {vendor}",
       "dyndns_addr_failed": "Public {family} address not determined {count} times in a row.",
       "dyndns_limit_reached": "ipv64: daily update limit reached.",
       "cluster_suspended": "Suspended: {reason}",
@@ -5574,6 +5581,43 @@
     }
   },
   "ipam64": {
+    "vendor_random": "random MAC",
+    "finding": {
+      "dup": "Duplicate address {ip}",
+      "dup_hint": "two devices answer alternately",
+      "mac": "Foreign device on {ip}",
+      "mac_hint": "MAC does not match the fixed address",
+      "lease": "Lease versus fixed address {ip}",
+      "lease_hint": "the DHCP server assigned the fixed address",
+      "pool": "Unknown device in the DHCP range: {ip}",
+      "pool_hint": "set statically, no lease – take over as fixed address",
+      "stale": "{ip} not seen for a long time",
+      "stale_hint": "DNS record points to an address without device",
+      "foreign": "Foreign DHCP server {ip} in {prefix}",
+      "foreign_hint": "from DNS64 – switch it off"
+    },
+    "conflicts": {
+      "title": "Scan & conflicts",
+      "intro": "What this node's neighbour table, DHCP and DNS64 reveal about the networks: conflicts, hints and devices IPAM64 does not know yet.",
+      "last_scan": "Last network scan {time}.",
+      "findings": "Conflicts and hints",
+      "open": "Open",
+      "none": "No conflicts, no hints.",
+      "unknown": "Unknown devices",
+      "first": "First seen",
+      "take": "Take over",
+      "ignore": "Ignore",
+      "no_unknown": "No unknown devices.",
+      "ignored": "Ignored:",
+      "unignore": "Stop ignoring",
+      "notify": "Notifications",
+      "notify_conflicts": "Report new conflicts",
+      "notify_new": "Report new devices",
+      "notify_hint": "Via the default channels (notifications). New devices only one hour after IPAM64 started.",
+      "how": "How it checks",
+      "how_text": "Two MAC addresses on one IP are a conflict when both answer alternately – swapping a device does not count. A foreign MAC on a fixed address counts after 5 minutes. The neighbour table only knows devices in networks this node is attached to; in a cluster each node sees its own networks.",
+      "no_oui": "The vendor list is not built in – only random MACs are detected."
+    },
     "dyn": {
       "title": "Dynamic IPv6 prefix",
       "check": "Check now",
@@ -5687,6 +5731,7 @@
       "hint": "Touches every address once and then reads the neighbour table. Only private IPv4 networks up to /22 that this node is attached to."
     },
     "col": {
+      "vendor": "Vendor",
       "prefix": "Prefix",
       "name": "Name",
       "status": "Status",
@@ -5797,6 +5842,9 @@
       "anycast": "Anycast"
     },
     "note": {
+      "conflict_dup": "Conflict – two devices",
+      "conflict_mac": "Conflict – foreign MAC",
+      "conflict_lease": "Conflict – lease versus fixed address",
       "self": "this node",
       "router": "Router (gateway)",
       "conflict": "Conflict – several MAC addresses"
@@ -5807,6 +5855,7 @@
       "conflicts": "Conflicts"
     },
     "flash": {
+      "notify_saved": "Notifications saved.",
       "setup": "Taken over: {p} prefixes, {a} addresses.",
       "setup_failed": "Not taken over: {list}",
       "dyn_none": "No change detected.",

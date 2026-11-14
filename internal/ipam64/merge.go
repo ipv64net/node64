@@ -86,8 +86,11 @@ type Entry struct {
 	Kind        string    `json:"kind"`
 	Sources     []string  `json:"sources"`
 	Seen        time.Time `json:"last_seen,omitzero"`
-	State       string    `json:"state"`         // online | offline | unknown | conflict
-	UID         string    `json:"uid,omitempty"` // feste Adresse in IPAM64
+	First       time.Time `json:"first_seen,omitzero"` // erste Sichtung in der Nachbartabelle (30 Tage)
+	State       string    `json:"state"`               // online | offline | unknown | conflict
+	Conflict    string    `json:"conflict,omitempty"`  // dup (zwei Geraete) | mac (fremde MAC) | lease (Lease gegen feste Adresse)
+	Vendor      string    `json:"vendor,omitempty"`    // Hersteller aus der MAC (Herstellerliste) bzw. "random"
+	UID         string    `json:"uid,omitempty"`       // feste Adresse in IPAM64
 	Status      string    `json:"status,omitempty"`
 	Role        string    `json:"role,omitempty"`
 	Description string    `json:"description,omitempty"`
@@ -290,9 +293,12 @@ func hostOf(target string) string {
 type acc struct {
 	e        Entry
 	assigned []string        // der Adresse zugewiesene MAC-Adressen (DHCP, IPAM64)
-	recent   []string        // in den letzten conflictFor gesehene MAC-Adressen
+	recent   []seenRow       // in den letzten conflictFor gesehene MAC-Adressen (mit erster/letzter Sichtung)
 	lastMAC  string          // zuletzt gesehene MAC
 	names    map[string]bool // alle bekannten Namen (klein)
+	ipamMAC  string          // MAC der festen Adresse in IPAM64
+	ipamDHCP bool            // feste Adresse mit DHCP-Reservierung
+	leaseMAC string          // MAC einer aktiven Lease auf der Adresse
 }
 
 func (a *acc) source(key string) {
@@ -384,6 +390,7 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 			a.name(r.Name, r.Description)
 			a.assign(r.MAC)
 			a.e.UID, a.e.Status, a.e.Role, a.e.Description, a.e.Tags = r.UID, r.Status, r.Role, r.Description, r.Tags
+			a.ipamMAC, a.ipamDHCP = r.MAC, r.DHCP
 		}
 	}
 	for _, l := range m.locals() { // die Node selbst
@@ -421,6 +428,9 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 			if s.Kind == KindFixed || (s.Kind == KindDHCP && a.e.Kind == "") {
 				a.e.Kind = s.Kind
 			}
+			if s.Kind == KindDHCP {
+				a.leaseMAC = strings.ToLower(s.MAC)
+			}
 		}
 	}
 	seen, err := m.seenRows(ctx)
@@ -435,8 +445,11 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 		a.source(SrcScan)
 		a.seen(s.Last)
 		a.lastMAC = s.MAC
-		if now.Sub(s.Last) <= conflictFor && !slices.Contains(a.recent, s.MAC) {
-			a.recent = append(a.recent, s.MAC)
+		if a.e.First.IsZero() || s.First.Before(a.e.First) {
+			a.e.First = s.First
+		}
+		if now.Sub(s.Last) <= conflictFor {
+			a.recent = append(a.recent, s)
 		}
 	}
 	names := map[string]*acc{} // Name -> Adresse, auch der erste Teil eines vollen Namens (nas.home.lan -> nas)
@@ -462,14 +475,19 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 		if len(a.assigned) > 0 && !slices.Contains(a.assigned, a.lastMAC) { // zugewiesen geht vor gesehen
 			e.MAC = a.assigned[0]
 		}
-		conflict := len(a.recent) > 1
-		for _, mac := range a.recent { // erreichbar mit einer anderen MAC als zugewiesen
-			conflict = conflict || (len(a.assigned) > 0 && !slices.Contains(a.assigned, mac))
-		}
+		e.Conflict = a.conflict()
+		e.Vendor = vendorOf(e.MAC)
+		conflict := e.Conflict != ""
 		switch {
 		case conflict:
-			e.Kind, e.State, e.NoteKey = KindConflict, "conflict", "ipam64.note.conflict"
-			e.MACs = append(slices.Clone(a.assigned), a.recent...)
+			e.Kind, e.State, e.NoteKey = KindConflict, "conflict", "ipam64.note.conflict_"+e.Conflict
+			e.MACs = slices.Clone(a.assigned)
+			for _, r := range a.recent {
+				e.MACs = append(e.MACs, r.MAC)
+			}
+			if a.leaseMAC != "" {
+				e.MACs = append(e.MACs, a.leaseMAC)
+			}
 			slices.Sort(e.MACs)
 			e.MACs = slices.Compact(e.MACs)
 			n.Conflicts++
@@ -521,6 +539,37 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 		}
 	}
 	return snap, nil
+}
+
+// conflictMin: so lange muss eine fremde MAC an einer festen Adresse gesehen werden (zwei Sichtungen), bevor es ein
+// Konflikt ist.
+const conflictMin = 5 * time.Minute
+
+// conflict bewertet die Hinweise einer Adresse (Daempfung gegen Fehlalarme):
+//   - dup: zwei MAC-Adressen, deren Sichtungen sich zeitlich ueberschneiden (abwechselnd erreichbar). Ein Geraetetausch
+//     (die alte MAC verschwindet, bevor die neue auftaucht) und ein DHCP-Wechsel sind kein Konflikt.
+//   - mac: eine MAC, die nicht zur Zuweisung (IPAM64, Reservierung, Lease) passt, seit mindestens conflictMin.
+//   - lease: feste Adresse in IPAM64 ohne Reservierung, aber der DHCP-Server hat sie an eine andere MAC vergeben.
+func (a *acc) conflict() string {
+	for i := range a.recent {
+		for j := i + 1; j < len(a.recent); j++ {
+			x, y := a.recent[i], a.recent[j]
+			if x.MAC != y.MAC && !x.Last.Before(y.First) && !y.Last.Before(x.First) {
+				return "dup"
+			}
+		}
+	}
+	if len(a.assigned) > 0 {
+		for _, r := range a.recent {
+			if !slices.Contains(a.assigned, r.MAC) && r.Last.Sub(r.First) >= conflictMin {
+				return "mac"
+			}
+		}
+	}
+	if a.e.UID != "" && !a.ipamDHCP && a.leaseMAC != "" && a.leaseMAC != a.ipamMAC {
+		return "lease"
+	}
+	return ""
 }
 
 func u32(a netip.Addr) uint32 {

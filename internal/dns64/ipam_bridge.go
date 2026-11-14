@@ -89,6 +89,29 @@ func (m *Module) DHCPLeases() []dhcp.Lease {
 	return out
 }
 
+// DHCPForeign liefert die fremden DHCP-Server, die der laufende Server gesehen hat (Netz -> Server; nil = DHCP aus).
+func (m *Module) DHCPForeign(ctx context.Context) map[string][]netip.Addr {
+	s := m.dhcpSrv.Load()
+	if s == nil {
+		return nil
+	}
+	scopes, err := m.DHCPScopes(ctx)
+	if err != nil {
+		return nil
+	}
+	subnet := map[int64]string{}
+	for _, sc := range scopes {
+		subnet[sc.ID] = sc.Subnet
+	}
+	out := map[string][]netip.Addr{}
+	for _, f := range s.Snapshot().Foreign {
+		if n := subnet[f.Scope]; n != "" {
+			out[n] = append(out[n], f.Server)
+		}
+	}
+	return out
+}
+
 // DHCPExcludes liefert alle Ausnahmen im DHCP-Adressbereich.
 func (m *Module) DHCPExcludes(ctx context.Context) ([]DHCPExclude, error) {
 	return m.dhcpExcludesWhere(ctx, "1 = 1")

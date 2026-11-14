@@ -1,5 +1,14 @@
 # IPAM64 – Änderungen
 
+## 0.4.0 – unveröffentlicht
+
+Neu:
+
+- Seite „Scan & Konflikte“: Konflikte (doppelte Adresse, fremdes Gerät an einer festen Adresse, Lease gegen feste Adresse) und Hinweise (fest eingestelltes Gerät im DHCP-Adressbereich, feste Adresse mit DNS-Eintrag lange nicht gesehen, fremder DHCP-Server aus DNS64), dazu unbekannte Geräte aus der Nachbartabelle zum Übernehmen oder Ignorieren.
+- Weniger Fehlalarme: Zwei MAC-Adressen an einer IP sind nur ein Konflikt, wenn beide abwechselnd antworten (ein Gerätetausch zählt nicht); eine fremde MAC an einer festen Adresse erst nach 5 Minuten.
+- Benachrichtigungen über die Standardkanäle: neue Konflikte (Standard an) und neue Geräte (Standard aus, erst eine Stunde nach dem Start).
+- Hersteller zur MAC (Herstellerliste der IEEE, erzeugt mit `go run gen.go` in `internal/ipam64/oui`), zufällige MACs werden erkannt.
+
 ## 0.3.0 – unveröffentlicht
 
 Neu:

@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) , I3 (IPAM64 0.2.0) und I4 (IPAM64 0.3.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) , I3 (IPAM64 0.2.0) , I4 (IPAM64 0.3.0) und I5 (IPAM64 0.4.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -327,3 +327,19 @@ IPAM64 0.3.0, im selben Zweig; Assistent auf der Testnode Ende-zu-Ende geprüft:
   Zielen anderer Module, die noch auf das alte Präfix zeigen (werden nicht selbst geändert).
 - Im Cluster nummeriert jede Node mit eigener globaler Adresse selbst um; das Ergebnis ist gleich, die Abgleiche treffen
   sich (gleiche Werte). Nicht geprüft: echter Präfixwechsel an einem Anschluss (nur Tests mit simulierten Adressen).
+
+## Stand I5 (2026-11-14)
+
+IPAM64 0.4.0, im selben Zweig; Seite auf der Testnode geprüft:
+- Konfliktregeln in `merge.go` (`acc.conflict`): `dup` = zwei MACs, deren Sichtungen sich zeitlich überschneiden (ein
+  Gerätetausch zählt nicht), `mac` = MAC passt nicht zur Zuweisung und ist seit ≥ 5 Minuten zu sehen, `lease` = feste
+  Adresse ohne Reservierung, aber Lease an eine andere MAC. Die Liste für Repeater mit MAC-NAT (Plan) ist nicht
+  umgesetzt – bisher nicht nötig, weil Überschneidung und Dauer die meisten Fehlalarme abfangen.
+- `conflicts.go`, Seite `/ipam64/conflicts`: Hinweise (`pool`, `stale`, `foreign` aus DNS64 über `DHCPForeign`),
+  unbekannte Geräte (nur Nachbartabelle) mit Übernehmen/Ignorieren (ignorierte MACs je Node), Schalter für
+  Benachrichtigungen.
+- Benachrichtigungen: neue Meldungsart `notify.KindIPAM` (Text des Moduls wie bei DHCP), Link auf die Seite; je Fund
+  einmal, neue Geräte erst nach einer Stunde Laufzeit.
+- Herstellerliste: Paket `ipam64/oui` mit eingebetteter `oui.txt.gz`; Generator `gen.go` lädt die IEEE-Register
+  (MA-L, MA-M, MA-S). **Eingebaut ist noch eine leere Liste** – der Download wartet auf Dennis' Freigabe (Datei und
+  Größe in der Übergabe genannt). Zufällige MACs erkennt IPAM64 ohne Liste.

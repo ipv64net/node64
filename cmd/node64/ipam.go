@@ -74,6 +74,18 @@ func newIPAM(st *store.Store, log *slog.Logger, modules *module.Registry, dns *d
 		list, _ := dns.DHCPScopes(ctx)
 		return list
 	}
+	m.SetForeign(func(ctx context.Context) []ipam64.ForeignDHCP { // fremde DHCP-Server (Hinweis in Scan & Konflikte)
+		if !running() {
+			return nil
+		}
+		var out []ipam64.ForeignDHCP
+		for n, list := range dns.DHCPForeign(ctx) {
+			for _, s := range list {
+				out = append(out, ipam64.ForeignDHCP{Net: n, Server: s.String()})
+			}
+		}
+		return out
+	})
 	m.SetNetworks(func(ctx context.Context) []ipam64.NetHint {
 		var out []ipam64.NetHint
 		for _, s := range scopes(ctx) {

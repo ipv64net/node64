@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -37,7 +38,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.3.0"
+	version = "0.4.0"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -119,8 +120,12 @@ type Module struct {
 	cluster ClusterHooks
 	dns     DNS64 // Verbindung zu DNS64 (dns64link.go)
 
-	recMu   sync.Mutex
-	orphans map[string]bool // verwaiste Eintraege in DNS64 aus dem letzten Abgleich
+	recMu    sync.Mutex
+	orphans  map[string]bool // verwaiste Eintraege in DNS64 aus dem letzten Abgleich
+	notified map[string]bool // gemeldete Konflikte und Geraete (conflicts.go)
+	notifier func(notify.Alert)
+	foreign  func(ctx context.Context) []ForeignDHCP
+	started  time.Time // Start des Moduls (neue Geraete erst nach newDevGrace melden)
 
 	scan   scanState // laufender bzw. letzter Netz-Scan
 	snapMu sync.Mutex
@@ -183,6 +188,7 @@ func (m *Module) Start(ctx context.Context) error {
 	}
 	life, cancel := context.WithCancel(context.Background())
 	m.life, m.cancel, m.done = life, cancel, make(chan struct{})
+	m.started = m.now()
 	go m.loop(life, m.done)
 	return nil
 }
@@ -239,6 +245,7 @@ func (m *Module) loop(ctx context.Context, done chan struct{}) {
 		} else if err := m.poll(ctx); err != nil && ctx.Err() == nil {
 			m.log.Debug("ipam64: neighbour table", "err", err)
 		}
+		m.notifyCheck(ctx)
 		select {
 		case <-ctx.Done():
 			return

@@ -44,6 +44,9 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /ipam64/setup", page(m.pageSetup))
 	mux.Handle("POST /ipam64/setup", page(m.postSetup))
 	mux.Handle("POST /ipam64/dyncheck", page(m.postDynCheck))
+	mux.Handle("GET /ipam64/conflicts", page(m.pageConflicts))
+	mux.Handle("POST /ipam64/ignore", page(m.postIgnore))
+	mux.Handle("POST /ipam64/notify", page(m.postNotify))
 }
 
 const (
@@ -695,6 +698,56 @@ func (m *Module) postDynCheck(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.dyn_changed", "from", list[0].From, "to", list[0].To))
 	}
 	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+type conflictsData struct {
+	Findings   []Finding
+	Unknown    []Entry
+	Ignored    []string
+	NotifyConf bool
+	NotifyNew  bool
+	Scan       ScanStatus
+	LastScan   time.Time
+	OUI        int
+}
+
+// Crumb ist die letzte Stufe der Brotkrumen.
+func (d *conflictsData) Crumb() string { return "" }
+
+func (m *Module) pageConflicts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	d := &conflictsData{Ignored: m.Ignored(ctx), Scan: m.Scanning(), LastScan: m.LastScan(ctx), OUI: ouiSize()}
+	var err error
+	if d.Findings, err = m.Findings(ctx); err == nil {
+		d.Unknown, err = m.Unknown(ctx)
+	}
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	d.NotifyConf, d.NotifyNew = m.NotifyFlags(ctx)
+	m.g.Render(w, r, http.StatusOK, "ipam64/conflicts", "ipam64.conflicts.title", d)
+}
+
+func (m *Module) postIgnore(w http.ResponseWriter, r *http.Request) {
+	mac, on := r.PostFormValue("mac"), r.PostFormValue("on") != "0"
+	if err := m.SetIgnored(r.Context(), mac, on); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.ignore", mac, boolText(on))
+	}
+	http.Redirect(w, r, "/ipam64/conflicts", http.StatusSeeOther)
+}
+
+func (m *Module) postNotify(w http.ResponseWriter, r *http.Request) {
+	conf, dev := r.PostFormValue("conflicts") == "1", r.PostFormValue("devices") == "1"
+	if err := m.SetNotifyFlags(r.Context(), conf, dev); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.notify", Name, "conflicts="+boolText(conf)+" devices="+boolText(dev))
+		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.notify_saved"))
+	}
+	http.Redirect(w, r, "/ipam64/conflicts", http.StatusSeeOther)
 }
 
 // effectText beschreibt die Wirkung einer Adresse in DNS64 fuer das Audit-Log.

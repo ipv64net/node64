@@ -333,6 +333,7 @@ func run() error {
 	// IPAM64 (standardmaessig aus): Praefixe und feste Adressen, fuehrt die Adressen der Module zusammen (ipam.go);
 	// Cluster: Anmeldung unten beim peer-Manager
 	ipamModule := newIPAM(st, logger.Slog(), modules, dnsModule, hcModule, m64Module, cdnModule)
+	ipamModule.SetNotifier(dispatcher.Dispatch) // neue Konflikte, neue Geraete
 	modules.Register(ipamModule)
 	dnsModule.SetIPAM(func() bool { return modules.IsRunning(ipam64.Name) }) // Eintraege aus IPAM64 nur dort aendern
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt

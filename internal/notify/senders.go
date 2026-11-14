@@ -53,6 +53,7 @@ const (
 	KindDNS64Lists Kind = "dns64_lists"       // Blockliste laesst sich nicht aktualisieren
 	KindDNS64Cert  Kind = "dns64_cert"        // Zertifikat (Let's Encrypt) laesst sich nicht holen/verlaengern
 	KindDNS64DHCP  Kind = "dns64_dhcp"        // DHCP: fremder DHCP-Server im Netz bzw. Adressbereich fast voll
+	KindIPAM       Kind = "ipam64"            // IPAM64: neuer Konflikt bzw. neues Geraet (Text des Moduls)
 	// Zertifikatsverwaltung des Kerns (ebenfalls nur lokal)
 	KindCertFail   Kind = "cert_fail"   // Zertifikat laesst sich nicht holen bzw. verlaengern
 	KindCertExpiry Kind = "cert_expiry" // Zertifikat laeuft bald ab
@@ -127,6 +128,9 @@ func IsDNS64(k Kind) bool {
 	return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists || k == KindDNS64Cert || k == KindDNS64DHCP
 }
 
+// IsIPAM: Meldung von IPAM64.
+func IsIPAM(k Kind) bool { return k == KindIPAM }
+
 // IsCert: Meldung der Zertifikatsverwaltung.
 func IsCert(k Kind) bool { return k == KindCertFail || k == KindCertExpiry || k == KindCertOK }
 
@@ -154,7 +158,7 @@ func IsUpdate(k Kind) bool { return k == KindUpdateOK || k == KindUpdateFailed }
 // IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64, Proxmox VE,
 // Selbst-Update).
 func IsModule(k Kind) bool {
-	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k) || IsProxmox(k) || IsUpdate(k)
+	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k) || IsProxmox(k) || IsUpdate(k) || IsIPAM(k)
 }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.

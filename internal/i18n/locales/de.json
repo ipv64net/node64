@@ -1943,6 +1943,8 @@
       "mcp": "KI (MCP)"
     },
     "actions": {
+      "ipam64_ignore": "IPAM64: Gerät ignoriert",
+      "ipam64_notify": "IPAM64: Benachrichtigungen eingestellt",
       "ipam64_setup": "IPAM64: aus dem Bestand eingerichtet",
       "ipam64_prefix_renumber": "IPAM64: IPv6-Präfix nachgezogen",
       "ipam64_handover": "IPAM64: an DNS64 übergeben",
@@ -3187,6 +3189,7 @@
       }
     },
     "subject": {
+      "ipam64": "🔎 IPAM64: {name}",
       "monitor_better": "🟡 {name}: {summary} besser, aber noch nicht OK",
       "monitor_problem": "{icon} {name}: {summary}",
       "monitor_ok": "✅ {name}: {summary} wieder OK",
@@ -3261,6 +3264,10 @@
       "summary_item": "• {name}: {message}"
     },
     "text": {
+      "ipam64_conflict_dup": "Doppelte Adresse {ip}: zwei Geräte antworten ({macs}).",
+      "ipam64_conflict_mac": "Fremdes Gerät an der festen Adresse {ip} ({macs}).",
+      "ipam64_conflict_lease": "Der DHCP-Server hat die feste Adresse {ip} vergeben ({macs}).",
+      "ipam64_new_device": "Neues Gerät im Netz: {ip} ({mac}) {vendor}",
       "dyndns_addr_failed": "Öffentliche {family}-Adresse {count}-mal hintereinander nicht ermittelt.",
       "dyndns_limit_reached": "ipv64: Tageslimit für Updates erreicht.",
       "cluster_suspended": "Ausgesetzt: {reason}",
@@ -5574,6 +5581,43 @@
     }
   },
   "ipam64": {
+    "vendor_random": "zufällige MAC",
+    "finding": {
+      "dup": "Doppelte Adresse {ip}",
+      "dup_hint": "zwei Geräte antworten abwechselnd",
+      "mac": "Fremdes Gerät an {ip}",
+      "mac_hint": "MAC passt nicht zur festen Adresse",
+      "lease": "Lease gegen feste Adresse {ip}",
+      "lease_hint": "der DHCP-Server hat die feste Adresse vergeben",
+      "pool": "Unbekanntes Gerät im DHCP-Adressbereich: {ip}",
+      "pool_hint": "fest eingestellt, keine Lease – als feste Adresse übernehmen",
+      "stale": "{ip} lange nicht gesehen",
+      "stale_hint": "DNS-Eintrag zeigt auf eine Adresse ohne Gerät",
+      "foreign": "Fremder DHCP-Server {ip} in {prefix}",
+      "foreign_hint": "aus DNS64 – abschalten"
+    },
+    "conflicts": {
+      "title": "Scan & Konflikte",
+      "intro": "Was die Nachbartabelle dieser Node, DHCP und DNS64 über die Netze verraten: Konflikte, Hinweise und Geräte, die IPAM64 noch nicht kennt.",
+      "last_scan": "Letzter Netz-Scan {time}.",
+      "findings": "Konflikte und Hinweise",
+      "open": "Öffnen",
+      "none": "Keine Konflikte, keine Hinweise.",
+      "unknown": "Unbekannte Geräte",
+      "first": "Erstmals",
+      "take": "Übernehmen",
+      "ignore": "Ignorieren",
+      "no_unknown": "Keine unbekannten Geräte.",
+      "ignored": "Ignoriert:",
+      "unignore": "Nicht mehr ignorieren",
+      "notify": "Benachrichtigungen",
+      "notify_conflicts": "Neue Konflikte melden",
+      "notify_new": "Neue Geräte melden",
+      "notify_hint": "Über die Standardkanäle (Benachrichtigungen). Neue Geräte erst eine Stunde nach dem Start von IPAM64.",
+      "how": "So wird geprüft",
+      "how_text": "Zwei MAC-Adressen an einer IP sind ein Konflikt, wenn beide abwechselnd antworten – ein Gerätetausch zählt nicht. Eine fremde MAC an einer festen Adresse zählt erst nach 5 Minuten. Die Nachbartabelle kennt nur Geräte in Netzen, an denen diese Node hängt; im Cluster sieht jede Node ihre eigenen Netze.",
+      "no_oui": "Herstellerliste ist nicht eingebaut – nur zufällige MACs werden erkannt."
+    },
     "dyn": {
       "title": "Dynamisches IPv6-Präfix",
       "check": "Jetzt prüfen",
@@ -5687,6 +5731,7 @@
       "hint": "Spricht jede Adresse einmal kurz an und liest danach die Nachbartabelle. Nur private IPv4-Netze bis /22, an denen diese Node hängt."
     },
     "col": {
+      "vendor": "Hersteller",
       "prefix": "Präfix",
       "name": "Name",
       "status": "Status",
@@ -5797,6 +5842,9 @@
       "anycast": "Anycast"
     },
     "note": {
+      "conflict_dup": "Konflikt – zwei Geräte",
+      "conflict_mac": "Konflikt – fremde MAC",
+      "conflict_lease": "Konflikt – Lease gegen feste Adresse",
       "self": "diese Node",
       "router": "Router (Gateway)",
       "conflict": "Konflikt – mehrere MAC-Adressen"
@@ -5807,6 +5855,7 @@
       "conflicts": "Konflikte"
     },
     "flash": {
+      "notify_saved": "Benachrichtigungen gespeichert.",
       "setup": "Übernommen: {p} Präfixe, {a} Adressen.",
       "setup_failed": "Nicht übernommen: {list}",
       "dyn_none": "Kein Wechsel erkannt.",

@@ -1,0 +1,71 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-radar text-primary"></i> {{.T "ipam64.conflicts.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary" href="/ipam64"><i class="bi bi-arrow-left"></i> {{.T "ipam64.title"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "ipam64.conflicts.intro"}}{{if not $d.LastScan.IsZero}} {{.T "ipam64.conflicts.last_scan" "time" (.Ago $d.LastScan)}}{{end}}</p>
+
+<h2 class="h6 text-uppercase text-body-secondary mb-2">{{.T "ipam64.conflicts.findings"}}</h2>
+<div class="d-flex flex-column gap-2 mb-4" id="ipam-findings">
+	{{range $d.Findings}}
+	<div class="card border-start border-4 {{if eq .Severity "conflict"}}border-danger{{else}}border-warning{{end}}">
+		<div class="card-body py-2 d-flex flex-wrap align-items-center gap-2 small">
+			<i class="bi {{if eq .Severity "conflict"}}bi-exclamation-octagon text-danger{{else}}bi-exclamation-triangle text-warning{{end}}"></i>
+			<span class="fw-semibold">{{$.T (print "ipam64.finding." .Kind) "ip" .IP "prefix" .Prefix}}</span>
+			{{if .Name}}<span class="text-body-secondary">{{.Name}}</span>{{end}}
+			{{if .MACs}}<span class="font-monospace text-body-secondary">{{join .MACs ", "}}</span>{{end}}
+			<span class="ms-auto text-body-secondary">{{$.T (print "ipam64.finding." .Kind "_hint")}}</span>
+			{{if ne .Kind "foreign"}}<a class="btn btn-sm btn-outline-secondary py-0" href="/ipam64/address?ip={{.IP}}">{{$.T "ipam64.conflicts.open"}}</a>{{end}}
+		</div>
+	</div>
+	{{else}}
+	<div class="alert alert-success small mb-0"><i class="bi bi-check-circle"></i> {{.T "ipam64.conflicts.none"}}</div>
+	{{end}}
+</div>
+
+<h2 class="h6 text-uppercase text-body-secondary mb-2">{{.T "ipam64.conflicts.unknown"}}</h2>
+<div class="card mb-3" id="ipam-unknown">
+	<div class="table-responsive">
+		<table class="table table-sm table-hover align-middle mb-0 small table-stack">
+			<thead><tr><th>{{.T "ipam64.col.ip"}}</th><th>{{.T "ipam64.col.mac"}}</th><th>{{.T "ipam64.col.vendor"}}</th><th>{{.T "ipam64.conflicts.first"}}</th><th>{{.T "ipam64.col.seen"}}</th><th></th></tr></thead>
+			<tbody>
+			{{range $d.Unknown}}<tr>
+				<td data-label="{{$.T "ipam64.col.ip"}}" class="font-monospace">{{.IP}}</td>
+				<td data-label="{{$.T "ipam64.col.mac"}}" class="font-monospace">{{.MAC}}</td>
+				<td data-label="{{$.T "ipam64.col.vendor"}}">{{if eq .Vendor "random"}}<span class="text-body-secondary">{{$.T "ipam64.vendor_random"}}</span>{{else if .Vendor}}{{.Vendor}}{{else}}–{{end}}</td>
+				<td data-label="{{$.T "ipam64.conflicts.first"}}">{{if .First.IsZero}}–{{else}}{{$.Ago .First}}{{end}}</td>
+				<td data-label="{{$.T "ipam64.col.seen"}}">{{if .Seen.IsZero}}–{{else}}{{$.Ago .Seen}}{{end}}</td>
+				<td class="text-end text-nowrap">
+					<a class="btn btn-sm btn-primary py-0" href="/ipam64/address?ip={{.IP}}"><i class="bi bi-box-arrow-in-down"></i> {{$.T "ipam64.conflicts.take"}}</a>
+					<form method="post" action="/ipam64/ignore" class="d-inline"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="mac" value="{{.MAC}}">
+						<button class="btn btn-sm btn-outline-secondary py-0" type="submit">{{$.T "ipam64.conflicts.ignore"}}</button></form>
+				</td>
+			</tr>{{else}}<tr><td colspan="6" class="text-body-secondary">{{$.T "ipam64.conflicts.no_unknown"}}</td></tr>{{end}}
+			</tbody>
+		</table>
+	</div>
+	{{if $d.Ignored}}<div class="card-footer small"><span class="text-body-secondary">{{.T "ipam64.conflicts.ignored"}}</span>
+		{{range $d.Ignored}}<form method="post" action="/ipam64/ignore" class="d-inline"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="mac" value="{{.}}"><input type="hidden" name="on" value="0">
+			<button class="btn btn-sm btn-link py-0 font-monospace" type="submit" title="{{$.T "ipam64.conflicts.unignore"}}">{{.}} ×</button></form>{{end}}</div>{{end}}
+</div>
+
+<div class="row g-3">
+	<div class="col-lg-6"><div class="card h-100">
+		<div class="card-header small"><i class="bi bi-bell text-primary"></i> {{.T "ipam64.conflicts.notify"}}</div>
+		<div class="card-body small">
+			<form method="post" action="/ipam64/notify" class="d-flex flex-column gap-1">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="ipam-n-conf" name="conflicts" value="1"{{if $d.NotifyConf}} checked{{end}}><label class="form-check-label" for="ipam-n-conf">{{.T "ipam64.conflicts.notify_conflicts"}}</label></div>
+				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="ipam-n-new" name="devices" value="1"{{if $d.NotifyNew}} checked{{end}}><label class="form-check-label" for="ipam-n-new">{{.T "ipam64.conflicts.notify_new"}}</label></div>
+				<div class="form-text">{{.T "ipam64.conflicts.notify_hint"}}</div>
+				<div><button class="btn btn-sm btn-outline-secondary" type="submit">{{.T "common.save"}}</button></div>
+			</form>
+		</div>
+	</div></div>
+	<div class="col-lg-6"><div class="card h-100">
+		<div class="card-header small"><i class="bi bi-info-circle text-primary"></i> {{.T "ipam64.conflicts.how"}}</div>
+		<div class="card-body small text-body-secondary">{{.T "ipam64.conflicts.how_text"}}{{if eq $d.OUI 0}} {{.T "ipam64.conflicts.no_oui"}}{{end}}</div>
+	</div></div>
+</div>
+{{end}}
