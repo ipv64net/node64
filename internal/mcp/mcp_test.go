@@ -223,7 +223,7 @@ func TestToolsAndSecrets(t *testing.T) {
 			t.Errorf("%s: no input schema", tool.Name)
 		}
 	}
-	if len(names) != len(Tools()) || len(names) != 29 {
+	if len(names) != len(Tools()) || len(names) != 44 {
 		t.Fatalf("tools: %d %v", len(names), names)
 	}
 	for _, tool := range Tools() {
@@ -353,7 +353,7 @@ func TestScopesAndAvailability(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	want := []string{"check_history", "get_check", "list_checks", "list_incidents", "list_maintenance", "list_status_pages"}
+	want := []string{"api_reference", "check_events", "check_history", "get_check", "list_checks", "list_incidents", "list_maintenance", "list_status_pages", "online_checks", "status_page_details"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools: %v", names)
 	}
@@ -369,7 +369,7 @@ func TestScopesAndAvailability(t *testing.T) {
 	for _, p := range pl.Prompts {
 		pn = append(pn, p.Name)
 	}
-	if !slices.Equal(pn, []string{"incident_analysis", "weekly_report"}) {
+	if !slices.Equal(pn, []string{"incident_analysis", "plan_change", "weekly_report"}) {
 		t.Fatalf("prompts: %v", pn)
 	}
 	gp, err := cs.GetPrompt(context.Background(), &sdk.GetPromptParams{Name: "incident_analysis", Arguments: map[string]string{"check": "Webseite"}})

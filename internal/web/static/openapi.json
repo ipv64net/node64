@@ -16306,6 +16306,7 @@
           "Node"
         ],
         "summary": "KI-Schnittstelle (MCP): Schalter, Bereiche, eigene Schlüssel",
+        "description": "Die MCP-Werkzeuge lesen nur, decken aber alle Module ab. Geändert wird über diese REST-API mit einem API-Key (ein MCP-Schlüssel gilt hier nicht); das MCP-Werkzeug `api_reference` zeigt der KI die passenden Endpunkte aus dieser Beschreibung und steht jedem MCP-Schlüssel ohne eigenes Recht zur Verfügung.",
         "responses": {
           "200": {
             "description": "OK",
@@ -16440,7 +16441,7 @@
                     "items": {
                       "type": "string"
                     },
-                    "description": "Bereiche aus GET /mcp"
+                    "description": "Bereiche aus GET /mcp: node, healthchecks, monitor64, dns64, proxy64, honeypot, sonar64, dyndns, certs, notifications, audit (je nur lesen)"
                   }
                 },
                 "required": [

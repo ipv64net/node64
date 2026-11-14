@@ -3,6 +3,7 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -36,6 +37,14 @@ func healthTools() []Tool {
 		{Name: "list_maintenance", Area: AreaHealthchecks, Title: "List maintenance windows",
 			Desc:   "Maintenance windows (times, repetition, affected checks, active now).",
 			Schema: schema(nil, pBool("active_only", "Only windows that are active now.")), Run: listMaintenance},
+		{Name: "check_events", Area: AreaHealthchecks, Title: "Check state changes", Untrusted: true,
+			Desc: "State changes (up/down/degraded/paused ...) of all checks or one check, newest first, with reason and duration. Page with before.",
+			Schema: schema(nil, pStr("check", "Only this check (id or exact name).", 200), pInt("limit", "Maximum number of events.", 50, 1, 200),
+				pIntOpt("before", "Only events with an id lower than this (paging).", 1, maxID)),
+			Run: checkEvents},
+		{Name: "online_checks", Area: AreaHealthchecks, Title: "Online checks", Untrusted: true,
+			Desc:   "Online checks of the ipv64.net account (measured by ipv64 locations, API mode without healthchecks sync): configuration summary and state. When the node is linked, online checks are part of list_checks instead.",
+			Schema: schema(nil, pStr("check", "Only this online check (id or exact name).", 200)), Run: onlineChecks},
 	}
 }
 
@@ -340,4 +349,80 @@ func listMaintenance(c *call, a map[string]any) (map[string]any, error) {
 		out = append(out, o)
 	}
 	return obj{"maintenance": out, "count": len(out)}, nil
+}
+
+// ---------------------------------------------------------------- Statuswechsel und Online-Checks
+
+func checkEvents(c *call, a map[string]any) (map[string]any, error) {
+	limit := argInt(a, "limit", 50, 1, 200)
+	q := url.Values{"limit": {strconv.Itoa(limit)}}
+	if b := argInt(a, "before", 0, 0, maxID); b > 0 {
+		q.Set("before", strconv.Itoa(b))
+	}
+	path := "/api/events"
+	if ref := argStr(a, "check"); ref != "" {
+		m, err := c.findCheck(ref)
+		if err != nil {
+			return nil, err
+		}
+		path = "/api/checks/" + url.PathEscape(str(m, "token")) + "/events"
+	}
+	list, err := c.getArr(path, q)
+	if err != nil {
+		return nil, err
+	}
+	names := c.checkNames()
+	out := []any{}
+	var last int64
+	for _, e := range list {
+		m := asObj(e)
+		last = i64(m, "id")
+		o := eventOut(m)
+		o["id"] = last
+		n := names[str(m, "token")]
+		o["check"] = obj{"id": shortID(str(m, "token")), "name": clean(n[1], 120)}
+		out = append(out, o)
+		if len(out) >= limit {
+			break
+		}
+	}
+	res := obj{"events": out, "count": len(out)}
+	if len(out) == limit && last > 1 {
+		res["next_before"] = last
+	}
+	return res, nil
+}
+
+func onlineChecks(c *call, a map[string]any) (map[string]any, error) {
+	list, err := c.getArr("/api/online-checks", nil)
+	var ae *apiError
+	if errors.As(err, &ae) && ae.Status == http.StatusConflict { // verknuepft bzw. ohne API-Key: Online-Checks stehen in list_checks
+		return obj{"available": false, "note": "online checks via this endpoint need a stored ipv64 API key and no healthchecks sync; when the node is linked they are in list_checks"}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	ref := argStr(a, "check")
+	out := []any{}
+	for _, e := range list {
+		m := asObj(e)
+		tok := str(m, "token")
+		if ref != "" && ref != shortID(tok) && ref != tok && !strings.EqualFold(str(m, "name"), ref) {
+			continue
+		}
+		if ref != "" { // einzeln: aktueller Stand
+			if cur, err := c.getObj("/api/online-checks/"+url.PathEscape(tok), nil); err == nil && len(cur) > 0 {
+				m = cur
+			}
+		}
+		o := checkOut(m, ref != "")
+		for k, v := range pick(m, "policy", "locations", "nodes", "owner", "execution") {
+			o[k] = v
+		}
+		out = append(out, o)
+	}
+	if ref != "" && len(out) == 0 {
+		return nil, fmt.Errorf("online check %q not found", clean(ref, 60))
+	}
+	return obj{"available": true, "online_checks": out, "count": len(out)}, nil
 }

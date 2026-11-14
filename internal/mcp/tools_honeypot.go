@@ -26,6 +26,10 @@ func honeypotTools() []Tool {
 			Desc:   "Everything the node knows locally about one IP: Honeypot64 events (count, first/last seen, services, recent events) and, if allowed for this key, PROXY64 blocks and access-log entries.",
 			Schema: schema([]string{"ip"}, pStr("ip", "IPv4 or IPv6 address.", 45)),
 			Run:    honeypotLookupIP},
+		{Name: "honeypot_config", Area: AreaHoneypot, Title: "Honeypot64 configuration", Untrusted: true,
+			Desc:   "Honeypot64 configuration and state by part: config (profile, services, limits, retention, reporting, log sensor), status (trap services, warnings, counters, reporting to ipv64, log sensor state), catalog (all trap services with selection and state), watch (early warning: own networks and DynDNS IPs watched at ipv64, recent hits), live (attacks of the last minutes with country).",
+			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "config", "status", "catalog", "watch", "live"), pInt("minutes", "Period for part live.", 15, 1, 60)),
+			Run:    honeypotConfig},
 	}
 }
 
@@ -218,6 +222,82 @@ func honeypotLookupIP(c *call, a map[string]any) (map[string]any, error) {
 		out["proxy64"] = px
 	} else {
 		out["proxy64"] = "not available for this key"
+	}
+	return out, nil
+}
+
+func honeypotConfig(c *call, a map[string]any) (map[string]any, error) {
+	part, err := argPart(a, "", "config", "status", "catalog", "watch", "live")
+	if err != nil {
+		return nil, err
+	}
+	out := obj{"part": part}
+	switch part {
+	case "config":
+		d, err := c.getObj("/api/honeypot/config", nil)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range pick(d, "profile", "scan", "max_conns_per_ip", "max_conns_total", "retention_days", "max_events", "notify_new", "report", "no_local_block",
+			"country", "cert_id", "cert_ports") {
+			out[k] = v
+		}
+		out["services"] = pickList(d["services"], 100, "service", "port", "page")
+		lg := asObj(d["log"])
+		out["log_sensor"] = obj{"files": pickList(lg["files"], 50, "path", "format"), "syslog_port": i64(lg, "syslog_port"), "syslog_allow": strs(lg, "syslog_allow")}
+		out["login"] = plain(d["login"], 2)
+	case "status":
+		d, err := c.getObj("/api/honeypot/status", nil)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range pick(d, "version", "running", "started_at", "profile", "scan", "buffered", "dropped") {
+			out[k] = v
+		}
+		out["services"] = pickList(d["services"], 100, "service", "port", "listen", "error", "conns")
+		out["warnings"] = pickList(d["warnings"], 50, "service", "port", "owner", "purpose", "skipped")
+		out["counters"] = plain(d["counters"], 2)
+		rp := asObj(d["report"])
+		rep := pick(rp, "enabled", "key_set", "active", "last_success", "last_end", "last_error_at", "next_attempt", "errors", "sources_today", "sources_total", "last_rejected")
+		rep["last_rejected_reasons"] = plain(rp["last_rejected_reasons"], 2)
+		if le := str(rp, "last_error"); le != "" {
+			rep["untrusted"] = obj{"last_error": clean(le, 200)}
+		}
+		out["report_to_ipv64"] = rep
+		lg := asObj(d["logs"])
+		out["log_sensor"] = obj{"files": pickList(lg["files"], 50, "path", "format", "ok", "error", "lines", "last"),
+			"syslog": pick(asObj(lg["syslog"]), "port", "udp", "tcp", "error", "messages", "denied"), "lines": i64(lg, "lines"), "hits": i64(lg, "hits"), "events": i64(lg, "events")}
+	case "catalog":
+		d, err := c.getObj("/api/honeypot/catalog", nil)
+		if err != nil {
+			return nil, err
+		}
+		keys := []string{"service", "port", "default_port", "page", "proto", "group", "profiles", "on", "state", "owner", "purpose", "error", "conns"}
+		out["profile"], out["running"] = str(d, "profile"), boolean(d, "running")
+		out["entries"], out["extra"] = pickList(d["entries"], 300, keys...), pickList(d["extra"], 100, keys...)
+	case "watch":
+		d, err := c.getObj("/api/honeypot/watch", nil)
+		if err != nil {
+			return nil, err
+		}
+		out["limits"], out["full"], out["running"] = plain(d["limits"], 2), boolean(d, "full"), boolean(d, "running")
+		out["networks"] = pickList(d["networks"], 200, "id", "cidr", "label", "verified", "created_at")
+		out["dyndns"] = pickList(d["dyndns"], 100, "ip", "domain")
+		st := asObj(d["state"])
+		state := pick(st, "total", "networks", "dyndns", "last_check", "last_success", "next_attempt", "last_error_at", "error_status")
+		if le := str(st, "last_error"); le != "" {
+			state["untrusted"] = obj{"last_error": clean(le, 200)}
+		}
+		state["hits"] = pickList(st["hits"], 50, "id", "ip", "cidr", "label", "source", "listed", "score", "kinds", "first_seen", "last_seen", "created_at")
+		out["state"] = state
+	case "live":
+		d, err := c.getObj("/api/honeypot/live", url.Values{"minutes": {strconv.Itoa(argInt(a, "minutes", 15, 1, 60))}})
+		if err != nil {
+			return nil, err
+		}
+		out["minutes"], out["now"] = i64(d, "minutes"), ts(d["now"])
+		out["target"] = pick(asObj(d["target"]), "cc", "name", "known", "manual")
+		out["events"] = pickList(d["events"], 100, "t", "cc", "name", "ip", "kind", "group", "service", "port", "source")
 	}
 	return out, nil
 }

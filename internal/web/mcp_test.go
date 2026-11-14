@@ -187,7 +187,8 @@ func TestMCPEndToEnd(t *testing.T) {
 	// Echter MCP-Client
 	cs := mcpClient(t, a, key)
 	names := toolNames(t, cs)
-	want := []string{"audit_log", "check_history", "cluster_status", "get_check", "list_checks", "list_incidents", "list_maintenance", "list_modules", "list_status_pages", "node_logs", "node_status"}
+	want := []string{"api_reference", "audit_log", "check_events", "check_history", "cluster_status", "get_check", "list_checks", "list_incidents", "list_maintenance", "list_modules",
+		"list_status_pages", "node_config", "node_logs", "node_status", "online_checks", "status_page_details"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools: %v", names)
 	}
@@ -198,6 +199,14 @@ func TestMCPEndToEnd(t *testing.T) {
 	txt := res.Content[0].(*sdk.TextContent).Text
 	if !strings.Contains(txt, `"version":"test"`) || !strings.Contains(txt, `"name":"healthchecks"`) {
 		t.Fatalf("node_status: %s", txt)
+	}
+	// Wegweiser zur REST-API aus der echten openapi.json (MCP liest nur)
+	res, err = cs.CallTool(ctx, &sdk.CallToolParams{Name: "api_reference", Arguments: map[string]any{"tag": "healthchecks", "search": "pause"}})
+	if err != nil || res.IsError {
+		t.Fatalf("api_reference: %v %+v", err, res)
+	}
+	if txt := res.Content[0].(*sdk.TextContent).Text; !strings.Contains(txt, `"path":"/api/checks/{token}/pause"`) || !strings.Contains(txt, `"base_path":"/api"`) {
+		t.Fatalf("api_reference: %s", txt)
 	}
 	// In-process ueber den Handler des Moduls (g.Auth mit dem Inhaber des Schluessels)
 	res, err = cs.CallTool(ctx, &sdk.CallToolParams{Name: "list_checks", Arguments: map[string]any{"state": "down"}})
@@ -235,7 +244,7 @@ func TestMCPEndToEnd(t *testing.T) {
 
 	// Schluessel nur fuer node: keine Healthchecks-Werkzeuge
 	nodeKey, _, _ := a.store.NewMCPKey(ctx, u.ID, "nur node", []string{"node:read"})
-	if n := toolNames(t, mcpClient(t, a, nodeKey)); !slices.Equal(n, []string{"cluster_status", "list_modules", "node_status"}) {
+	if n := toolNames(t, mcpClient(t, a, nodeKey)); !slices.Equal(n, []string{"api_reference", "cluster_status", "list_modules", "node_config", "node_status"}) {
 		t.Fatalf("node key tools: %v", n)
 	}
 	// Modul aus: Werkzeuge verschwinden

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,6 +20,9 @@ func moreTools() []Tool {
 		{Name: "list_status_pages", Area: AreaHealthchecks, Title: "Status pages",
 			Desc:   "Status pages of the node: title, address, enabled/public, password protected, and what each page currently shows (overall state, sections and groups with the state of every entry, running maintenance and recent incidents).",
 			Schema: schema(nil, pStr("page", "Only this page (slug or exact title).", 120)), Run: statusPages},
+		{Name: "status_page_details", Area: AreaHealthchecks, Title: "Status page configuration",
+			Desc:   "Configuration of one status page as stored (layout, theme, options, sections and entries with their check or Monitor64 source) and its notices (announcements with updates). Never includes the page password.",
+			Schema: schema([]string{"page"}, pStr("page", "Page id, slug or exact title (from list_status_pages).", 120)), Run: statusPageDetails},
 		{Name: "cluster_status", Area: AreaNode, Title: "Cluster status",
 			Desc:   "Cluster of this node: members with name, address, online, version, last seen, last error and synced areas, plus the synced modules. Never includes pairing codes.",
 			Schema: noArgs, Run: clusterStatus},
@@ -116,8 +120,26 @@ func dhcpLeases(c *call, a map[string]any) (map[string]any, error) {
 		events = append(events, obj{"time": ts(ev["time"]), "type": str(ev, "type"), "ip": str(ev, "ip"), "mac": str(ev, "mac"), "result": clean(str(ev, "result"), 120),
 			"untrusted": obj{"hostname": clean(str(ev, "hostname"), 120)}})
 	}
-	return obj{"mode": str(st, "mode"), "role": str(st, "role"), "running": boolean(st, "running"), "standby_networks": strs(st, "standby"),
-		"networks": nets, "foreign_servers": foreign, "events": events}, nil
+	out := obj{"mode": str(st, "mode"), "role": str(st, "role"), "running": boolean(st, "running"), "standby_networks": strs(st, "standby"),
+		"networks": nets, "foreign_servers": foreign, "events": events}
+	if v6, err := c.getObj("/api/dns64/dhcp/ipv6", nil); err == nil { // IPv6-DNS per Router Advertisement
+		ra := obj{"config": plain(v6["config"], 3), "running": boolean(v6, "running"), "error": clean(str(v6, "error"), 200),
+			"status": pickList(v6["status"], 20, "interface", "dns", "last_sent", "error", "error_kind")}
+		var routers []any
+		for _, e := range asArr(v6["routers"]) { // Router Advertisements anderer Geraete im Netz
+			r := asObj(e)
+			x := pick(r, "interface", "source", "router_lifetime", "managed", "other", "last_seen")
+			x["prefixes"] = pickList(r["prefixes"], 10, "prefix", "slaac", "on_link", "valid_lifetime")
+			x["untrusted"] = obj{"dns": strs(r, "dns"), "domains": strs(r, "domains")}
+			routers = append(routers, x)
+			if len(routers) >= 20 {
+				break
+			}
+		}
+		ra["routers_seen"] = routers
+		out["ipv6_router_advertisement"] = ra
+	}
+	return out, nil
 }
 
 func statusPages(c *call, a map[string]any) (map[string]any, error) {
@@ -133,7 +155,7 @@ func statusPages(c *call, a map[string]any) (map[string]any, error) {
 			continue
 		}
 		x := obj{"title": clean(str(p, "title"), 120), "slug": str(p, "slug"), "path": "/status/" + str(p, "slug"), "enabled": boolean(p, "enabled"),
-			"public_on_node_port": boolean(p, "publish_node"), "password_protected": boolean(p, "has_password"), "days": i64(p, "days")}
+			"public_on_node_port": boolean(p, "publish_node"), "pw_protected": boolean(p, "has_password"), "days": i64(p, "days")}
 		v, err := c.getObj("/api/status-pages/"+strconv.FormatInt(i64(p, "id"), 10)+"/view", url.Values{"lang": {"en"}})
 		if err == nil {
 			x["overall"] = str(v, "overall")
@@ -200,4 +222,67 @@ func clusterStatus(c *call, _ map[string]any) (map[string]any, error) {
 		members = append(members, x)
 	}
 	return obj{"members": members, "synced_modules": g["sync_modules"], "linked_to_ipv64": boolean(g, "linked")}, nil
+}
+
+// statusPageDetails: gespeicherte Konfiguration einer Statusseite und ihre Ankuendigungen (ohne Passwort).
+func statusPageDetails(c *call, a map[string]any) (map[string]any, error) {
+	list, err := c.getArr("/api/status-pages", nil)
+	if err != nil {
+		return nil, err
+	}
+	ref := strings.TrimSpace(argStr(a, "page"))
+	var id string
+	for _, e := range list {
+		p := asObj(e)
+		pid := strconv.FormatInt(i64(p, "id"), 10)
+		if ref == pid || strings.EqualFold(str(p, "slug"), ref) || strings.EqualFold(str(p, "title"), ref) {
+			id = pid
+			break
+		}
+	}
+	if id == "" {
+		return nil, fmt.Errorf("status page %q not found (use list_status_pages)", clean(ref, 60))
+	}
+	p, err := c.getObj("/api/status-pages/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := pick(p, "id", "slug", "title", "description", "footer", "enabled", "publish_node", "layout", "theme", "lang", "accent", "days",
+		"show_uptime", "show_history", "refresh_sec", "noindex", "powered_by", "hc_groups", "has_logo", "created_at", "updated_at")
+	out["pw_protected"] = boolean(p, "has_password")
+	out["path"] = "/status/" + str(p, "slug")
+	groups := []any{}
+	for _, g := range asArr(p["groups"]) {
+		gm := asObj(g)
+		items := []any{}
+		for _, it := range asArr(gm["items"]) {
+			im := asObj(it)
+			x := pick(im, "id", "label", "kind")
+			// Quelle: Check (nur Kurz-Id, das Token ist bei Push-Checks die Berechtigung), Monitor64-Quelle oder Gliederung
+			switch tok := str(im, "token"); {
+			case tok == "":
+			case strings.HasPrefix(tok, "m64:"), strings.HasPrefix(tok, "@"):
+				x["source"] = clean(tok, 200)
+			default:
+				x["check_id"] = shortID(tok)
+			}
+			items = append(items, x)
+		}
+		groups = append(groups, obj{"id": i64(gm, "id"), "name": clean(str(gm, "name"), 120), "items": items})
+	}
+	out["groups"] = groups
+	if ns, err := c.getArr("/api/status-pages/"+id+"/notices", nil); err == nil {
+		notices := []any{}
+		for _, e := range ns {
+			n := asObj(e)
+			x := pick(n, "id", "title", "level", "created_at", "updated_at", "resolved_at")
+			x["updates"] = pickList(n["updates"], 20, "id", "time", "text")
+			notices = append(notices, x)
+			if len(notices) >= 30 {
+				break
+			}
+		}
+		out["notices"] = notices
+	}
+	return out, nil
 }

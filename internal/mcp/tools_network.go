@@ -13,8 +13,8 @@ func networkTools() []Tool {
 	rng := pEnum("range", "Time range.", "24h", "1h", "24h", "7d")
 	return []Tool{
 		{Name: "dns64_summary", Area: AreaDNS64, Title: "DNS64 summary",
-			Desc:   "DNS64 key figures for a time range: queries, blocked share, cache, clients, blocklists and upstream servers (without URLs).",
-			Schema: schema(nil, rng), Run: dns64Summary},
+			Desc:   "DNS64 key figures for a time range: queries, blocked share, cache, clients, blocklists and upstream servers (without URLs), optionally the queries over time.",
+			Schema: schema(nil, rng, pBool("timeline", "Also return queries and blocked queries over time.")), Run: dns64Summary},
 		{Name: "dns64_top", Area: AreaDNS64, Title: "DNS64 top lists", Untrusted: true,
 			Desc: "Top domains (blocked or allowed) or top clients of DNS64 in a time range.",
 			Schema: schema([]string{"kind"}, pEnum("kind", "Which list.", "", "blocked", "allowed", "clients"), rng,
@@ -94,6 +94,9 @@ func dns64Summary(c *call, a map[string]any) (map[string]any, error) {
 			list = append(list, u)
 		}
 		out["upstreams"] = obj{"mode": str(up, "mode"), "servers": list}
+	}
+	if argBool(a, "timeline") {
+		out["timeline"] = dns64Timeline(c, rng)
 	}
 	return out, nil
 }

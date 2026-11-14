@@ -11,6 +11,7 @@ Short summary of what changes per version. Details per module are in the node un
 - Cluster: joining a copied node (cloned VM, copied data folder) names the cause instead of "HTTP 400 cannot pair with itself" (forum 5174).
 - Settings: "Changelog" link to the GitHub release next to an offered Node64 update.
 - Healthchecks: same channel of its own (e.g. ntfy) on several linked nodes – problems and recoveries from ipv64.net now arrive once instead of once per node (forum 5172; with the update of the ipv64 servers).
+- MCP: all modules readable (configuration of node, health checks, Monitor64, DNS64, PROXY64, DynDNS, certificates, Honeypot64, notifications, new Sonar64) – still read-only and without secrets; changes go through the REST API, the new tool `api_reference` shows the AI the right endpoints (#152, #153).
 
 ## 1.6.0 – 2026-11-14
 

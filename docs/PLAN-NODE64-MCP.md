@@ -4,6 +4,14 @@ Stand 2026-10-21, Wunsch Dennis: KI-Anwendungen (Claude, ChatGPT, Cursor, VS Cod
 Context Protocol (MCP)** mit der Node sprechen – Zustand abfragen, Zusammenhänge erklären, später auch gezielt
 handeln.
 
+**Stand 2026-11-14 (Entscheidung Dennis, #152, #153):** MCP bleibt **nur lesend**, deckt aber **alle Module**
+vollständig ab (44 Werkzeuge, dazu der Bereich `sonar64`). Ändernde MCP-Werkzeuge (M2) gibt es nicht: Schreiben
+erledigt die KI über die vorhandene REST-API `/api` mit einem API-Key der Node. Das Werkzeug `api_reference` (für
+jeden Schlüssel, liest nur `openapi.json`) zeigt ihr Methode, Pfad, Parameter und Felder; Server-Hinweise und der
+Prompt `plan_change` verlangen, die Anfrage vorher dem Benutzer zu zeigen. Ein Test stellt sicher, dass jede
+GET-Route der API von einem Werkzeug gelesen wird oder begründet ausgenommen ist (Schlüssel, Benutzer, Backup,
+Kopplungscodes, TSIG, private Schlüssel, Dateien). Umsetzung und Werkzeugliste: [MCP.md](MCP.md).
+
 ## Grundsätze
 
 1. **Erst lesen, dann (ausdrücklich) handeln.** Erste Version nur lesende Werkzeuge. Ändernde Werkzeuge kommen je
@@ -62,7 +70,11 @@ handeln.
 Dazu **Prompts** (vorgefertigte Aufgaben, die die Anwendung anbietet): „Störung analysieren“ (Check + Proxmox +
 PROXY64 + DNS64 im selben Zeitraum), „Wochenbericht“, „Sicherheitslage“ (Honeypot + PROXY64-Sperren).
 
-## Werkzeuge M2 (ändernd, je Bereich einzeln freischaltbar, Standard aus)
+## Werkzeuge M2 (ändernd) – ersetzt durch die REST-API (2026-11-14)
+
+Nicht umgesetzt: Statt eigener ändernder Werkzeuge nutzt die KI die REST-API (gleiche Prüfungen, gleiches
+Audit-Log, Herkunft `api:<Key-Name>`), MCP hilft mit `api_reference` beim Finden der Endpunkte. Der ursprüngliche
+Entwurf zur Einordnung:
 
 - Healthchecks: Check pausieren/fortsetzen, jetzt prüfen, Check anlegen (einfache Typen), Wartungsfenster anlegen.
 - DNS64: Domain erlauben/sperren (eigene Listen), Cache leeren, Filter kurz pausieren.
@@ -92,3 +104,8 @@ ChatGPT) sicher zugreifen können; Ressourcen (z. B. Kurz-Doku je Modul), Benach
 1. **Offizielles Go-SDK** (`github.com/modelcontextprotocol/go-sdk`).
 2. **Nur Heimnetz** (private Netze, VPN) – kein Schalter „überall“ in M1.
 3. **Erstmal nur lesen (M1).** M2 (ändernd) und M3 (OAuth) später auf Ansage.
+
+## Entscheidung (Dennis 2026-11-14)
+
+4. **MCP bleibt nur lesend, für alle Module.** Schreiben über die REST-API mit API-Key; `api_reference` als
+   Wegweiser. M2 entfällt.

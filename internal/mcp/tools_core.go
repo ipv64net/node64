@@ -7,15 +7,19 @@ import (
 	"time"
 )
 
-// Tools liefert alle Werkzeuge (M1: nur lesen).
+// Tools liefert alle Werkzeuge (nur lesen; Aendern ueber die REST-API, siehe api_reference).
 func Tools() []Tool {
 	var out []Tool
 	out = append(out, coreTools()...)
+	out = append(out, nodeTools()...)
 	out = append(out, healthTools()...)
 	out = append(out, networkTools()...)
+	out = append(out, networkMoreTools()...)
 	out = append(out, honeypotTools()...)
 	out = append(out, monitor64Tools()...)
+	out = append(out, monitor64MoreTools()...)
 	out = append(out, moreTools()...)
+	out = append(out, apiRefTools()...)
 	return out
 }
 
