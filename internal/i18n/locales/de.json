@@ -1943,6 +1943,7 @@
       "mcp": "KI (MCP)"
     },
     "actions": {
+      "ipam64_handover": "IPAM64: an DNS64 übergeben",
       "ipam64_autoscan": "IPAM64: Automatischer Scan eingestellt",
       "ipam64_scan": "IPAM64: Netz-Scan gestartet",
       "ipam64_address_delete": "IPAM64: Adresse entfernt",
@@ -3796,6 +3797,7 @@
   },
   "dns64": {
     "ipam": {
+      "reserve_there": "In IPAM64 als feste Adresse anlegen",
       "badge_hint": "Verwaltet von IPAM64",
       "edit_there": "In IPAM64",
       "excludes": "Im Adressbereich nicht vergeben (Ausnahmen aus IPAM64):"
@@ -5570,6 +5572,25 @@
     }
   },
   "ipam64": {
+    "handover": {
+      "title": "An DNS64 übergeben",
+      "text": "Nimmt das Kennzeichen „IPAM64“ von allen Reservierungen, Ausnahmen und Einträgen in DNS64. Sie bleiben bestehen und sind dort wieder frei bearbeitbar; an den Adressen hier gehen die Schalter DNS und DHCP aus. Sinnvoll, bevor IPAM64 abgeschaltet wird.",
+      "confirm": "Alle Einträge aus IPAM64 an DNS64 übergeben?",
+      "button": "Übergeben"
+    },
+    "fx": {
+      "title": "Wirkung in DNS64",
+      "title_new": "Beim Speichern entsteht in DNS64",
+      "reservation": "Reservierung",
+      "exclude": "Ausnahme im Adressbereich",
+      "record": "Eintrag",
+      "state_ok": "vorhanden",
+      "state_missing": "fehlt – wird abgeglichen",
+      "state_off": "DNS64 aus",
+      "state_planned": "neu",
+      "none": "Nichts – weder DNS noch DHCP an.",
+      "hint": "Gekennzeichnete Einträge sind in DNS64 nur hier änderbar. Der Abgleich prüft alle 10 Minuten."
+    },
     "title": "IPAM64",
     "intro": "Präfixe und feste Adressen für IPv4 und IPv6 an einer Stelle – zusammen mit dem, was DHCP, lokaler DNS, Monitor64, Healthchecks, PROXY64 und die Nachbartabelle über dein Netz wissen.",
     "export": "CSV",
@@ -5711,6 +5732,18 @@
       "end": "Bis"
     },
     "addr": {
+      "dns_title": "DNS (lokaler DNS von DNS64)",
+      "dns": "Lokalen Eintrag führen (A bzw. AAAA)",
+      "ptr": "Rückwärtsauflösung (PTR)",
+      "zone_inherit": "Leer = Zone des Präfixes ({zone}).",
+      "zone_none": "Das Präfix hat keine Zone – hier eine eintragen.",
+      "dhcp_title": "DHCP (DHCP-Server von DNS64)",
+      "dhcp": "Feste Zuweisung (Reservierung) für diese MAC",
+      "no_dhcpv6": "IPv6: kein DHCPv6 – die Adresse wird am Gerät eingestellt (oder per SLAAC/Token).",
+      "no_dhcp_net": "Für dieses Präfix gibt es kein DHCP-Netz in DNS64.",
+      "in_pool": "Liegt im DHCP-Adressbereich {from} – {to}: ohne Reservierung nimmt DNS64 die Adresse aus der Vergabe aus.",
+      "dhcp_hint": "Mit Reservierung bekommt das Gerät die Adresse per DHCP – am Gerät bleibt DHCP an.",
+      "no_dns64": "DNS64 läuft nicht: gespeichert wird nur in IPAM64, die Einträge in DNS64 folgen, sobald es läuft.",
       "new": "neu",
       "in_ipam": "in IPAM64",
       "title": "Adresse",
@@ -5738,6 +5771,7 @@
       "conflicts": "Konflikte"
     },
     "flash": {
+      "handover": "{n} Einträge an DNS64 übergeben.",
       "prefix_saved": "Präfix gespeichert.",
       "prefix_deleted": "Präfix gelöscht.",
       "range_saved": "Adressbereich gespeichert.",
@@ -5748,6 +5782,9 @@
       "autoscan_saved": "Automatischer Scan gespeichert."
     },
     "err": {
+      "no_zone": "DNS ist an, aber es gibt keine Zone – trage eine an der Adresse oder am Präfix ein.",
+      "no_dns64": "DNS64 läuft nicht.",
+      "dns64": "DNS64 lehnt ab: {text}",
       "prefix": "Bitte ein gültiges Präfix angeben (z. B. 192.168.1.0/24 oder fd00:10::/64).",
       "size": "Das Präfix ist zu groß (IPv4 ab /8, IPv6 ab /16).",
       "dup": "Dieses Präfix gibt es schon.",

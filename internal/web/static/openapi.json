@@ -10320,6 +10320,22 @@
               "type": "string"
             },
             "maxItems": 10
+          },
+          "dns": {
+            "type": "boolean",
+            "description": "lokaler A/AAAA-Eintrag in DNS64 (beim Ändern: fehlt = bisheriger Wert)"
+          },
+          "dns_zone": {
+            "type": "string",
+            "description": "Zone; leer = Zone des Präfixes"
+          },
+          "ptr": {
+            "type": "boolean",
+            "description": "Rückwärtsauflösung aus dem Eintrag"
+          },
+          "dhcp": {
+            "type": "boolean",
+            "description": "Reservierung im DHCP-Server von DNS64 (nur IPv4, braucht MAC)"
           }
         }
       },
@@ -34207,7 +34223,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Trägt die Adresse ein und schreibt – je nach dns/dhcp – Eintrag, Reservierung bzw. Ausnahme gekennzeichnet nach DNS64. Lehnt DNS64 ab, wird nichts gespeichert (409 `dns64: <code>`)."
       }
     },
     "/ipam64/addresses/{uid}": {
@@ -34438,6 +34455,22 @@
                       "type": "string"
                     },
                     "maxItems": 10
+                  },
+                  "dns": {
+                    "type": "boolean",
+                    "description": "lokaler A/AAAA-Eintrag in DNS64 (beim Ändern: fehlt = bisheriger Wert)"
+                  },
+                  "dns_zone": {
+                    "type": "string",
+                    "description": "Zone; leer = Zone des Präfixes"
+                  },
+                  "ptr": {
+                    "type": "boolean",
+                    "description": "Rückwärtsauflösung aus dem Eintrag"
+                  },
+                  "dhcp": {
+                    "type": "boolean",
+                    "description": "Reservierung im DHCP-Server von DNS64 (nur IPv4, braucht MAC)"
                   }
                 }
               }

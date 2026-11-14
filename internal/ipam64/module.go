@@ -37,7 +37,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.1.0"
+	version = "0.2.0"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -117,6 +117,10 @@ type Module struct {
 	wait    time.Duration // nach dem Ansprechen auf Antworten warten
 
 	cluster ClusterHooks
+	dns     DNS64 // Verbindung zu DNS64 (dns64link.go)
+
+	recMu   sync.Mutex
+	orphans map[string]bool // verwaiste Eintraege in DNS64 aus dem letzten Abgleich
 
 	scan   scanState // laufender bzw. letzter Netz-Scan
 	snapMu sync.Mutex
@@ -212,12 +216,20 @@ func (m *Module) loop(ctx context.Context, done chan struct{}) {
 	defer close(done)
 	t := time.NewTicker(pollEvery)
 	defer t.Stop()
-	var pruned time.Time
+	var pruned, reconciled time.Time
 	for {
 		now := m.now()
 		if now.Sub(pruned) >= 24*time.Hour {
 			m.pruneSeen(ctx, now)
 			pruned = now
+		}
+		if now.Sub(reconciled) >= reconcileEvery {
+			if n, err := m.reconcile(ctx); err != nil && ctx.Err() == nil {
+				m.log.Warn("ipam64: reconcile", "err", err)
+			} else if n > 0 {
+				m.log.Info("ipam64: reconciled with dns64", "fixed", n)
+			}
+			reconciled = now
 		}
 		if n := m.AutoScan(ctx); n > 0 && now.Sub(m.LastScan(ctx)) >= time.Duration(n)*time.Minute {
 			m.scanAll(ctx)

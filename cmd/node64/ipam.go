@@ -22,6 +22,32 @@ import (
 // gewinnt (DHCP vor lokalem DNS vor Monitor64, Healthchecks, PROXY64); feste Adressen in IPAM64 gehen allen vor.
 func newIPAM(st *store.Store, log *slog.Logger, modules *module.Registry, dns *dns64.Module, hc *healthchecks.Module, m64 *monitor64.Module, cdn *cdn64.Module) *ipam64.Module {
 	m := ipam64.New(st, log)
+	running := func() bool { return modules.IsRunning(dns64.Name) }
+	m.SetDNS64(ipam64.DNS64{ // Schreibweg nach DNS64 (Plan E1): gekennzeichnete Reservierungen, Ausnahmen, Eintraege
+		Running:           running,
+		PutReservation:    dns.PutIPAMReservation,
+		DeleteReservation: dns.DeleteIPAMReservation,
+		PutExclude:        dns.PutIPAMExclude,
+		DeleteExclude:     dns.DeleteIPAMExclude,
+		PutRecords:        dns.PutIPAMRecords,
+		DeleteRecords:     dns.DeleteIPAMRecords,
+		Release:           dns.ReleaseIPAM,
+		Entries: func(ctx context.Context) (ipam64.Owned, error) {
+			st, err := dns.IPAMEntries(ctx)
+			var o ipam64.Owned
+			for _, r := range st.Reservations {
+				o.Reservations = append(o.Reservations, ipam64.OwnedRes{Ref: r.Ref, MAC: r.MAC, IP: r.IP, Name: r.Name})
+			}
+			for _, x := range st.Excludes {
+				o.Excludes = append(o.Excludes, ipam64.OwnedExcl{Ref: x.Ref, IP: x.IP})
+			}
+			for _, r := range st.Records {
+				o.Records = append(o.Records, ipam64.OwnedRec{Ref: r.Ref, Name: r.Name, Type: r.Type, Value: r.Value, NoPTR: r.NoPTR})
+			}
+			return o, err
+		},
+		ErrKey: dns64.ErrKey,
+	})
 	scopes := func(ctx context.Context) []dns64.DHCPScope {
 		if !modules.IsRunning(dns64.Name) {
 			return nil

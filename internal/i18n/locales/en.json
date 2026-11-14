@@ -1943,6 +1943,7 @@
       "mcp": "AI (MCP)"
     },
     "actions": {
+      "ipam64_handover": "IPAM64: handed over to DNS64",
       "ipam64_autoscan": "IPAM64: automatic scan set",
       "ipam64_scan": "IPAM64: network scan started",
       "ipam64_address_delete": "IPAM64: address removed",
@@ -3796,6 +3797,7 @@
   },
   "dns64": {
     "ipam": {
+      "reserve_there": "Create as fixed address in IPAM64",
       "badge_hint": "Managed by IPAM64",
       "edit_there": "In IPAM64",
       "excludes": "Not assigned from the range (exclusions from IPAM64):"
@@ -5570,6 +5572,25 @@
     }
   },
   "ipam64": {
+    "handover": {
+      "title": "Hand over to DNS64",
+      "text": "Removes the label \"IPAM64\" from all reservations, exclusions and records in DNS64. They stay and can be edited there again; the DNS and DHCP switches of the addresses here are turned off. Useful before turning IPAM64 off.",
+      "confirm": "Hand over all entries from IPAM64 to DNS64?",
+      "button": "Hand over"
+    },
+    "fx": {
+      "title": "Effect in DNS64",
+      "title_new": "Saving creates in DNS64",
+      "reservation": "Reservation",
+      "exclude": "Exclusion in the range",
+      "record": "Record",
+      "state_ok": "present",
+      "state_missing": "missing – will be reconciled",
+      "state_off": "DNS64 off",
+      "state_planned": "new",
+      "none": "Nothing – neither DNS nor DHCP is on.",
+      "hint": "Labelled entries can only be changed here. Reconciliation runs every 10 minutes."
+    },
     "title": "IPAM64",
     "intro": "Prefixes and fixed addresses for IPv4 and IPv6 in one place – together with what DHCP, local DNS, Monitor64, Healthchecks, PROXY64 and the neighbour table know about your network.",
     "export": "CSV",
@@ -5711,6 +5732,18 @@
       "end": "To"
     },
     "addr": {
+      "dns_title": "DNS (local DNS of DNS64)",
+      "dns": "Keep a local record (A or AAAA)",
+      "ptr": "Reverse lookup (PTR)",
+      "zone_inherit": "Empty = zone of the prefix ({zone}).",
+      "zone_none": "The prefix has no zone – enter one here.",
+      "dhcp_title": "DHCP (DHCP server of DNS64)",
+      "dhcp": "Fixed assignment (reservation) for this MAC",
+      "no_dhcpv6": "IPv6: no DHCPv6 – the address is set on the device (or via SLAAC/token).",
+      "no_dhcp_net": "There is no DHCP network in DNS64 for this prefix.",
+      "in_pool": "Lies in the DHCP range {from} – {to}: without a reservation DNS64 excludes the address from assignment.",
+      "dhcp_hint": "With a reservation the device gets the address via DHCP – keep DHCP on at the device.",
+      "no_dns64": "DNS64 is not running: only IPAM64 is saved, the entries in DNS64 follow once it runs.",
       "new": "new",
       "in_ipam": "in IPAM64",
       "title": "Address",
@@ -5738,6 +5771,7 @@
       "conflicts": "Conflicts"
     },
     "flash": {
+      "handover": "{n} entries handed over to DNS64.",
       "prefix_saved": "Prefix saved.",
       "prefix_deleted": "Prefix deleted.",
       "range_saved": "Range saved.",
@@ -5748,6 +5782,9 @@
       "autoscan_saved": "Automatic scan saved."
     },
     "err": {
+      "no_zone": "DNS is on but there is no zone – enter one on the address or the prefix.",
+      "no_dns64": "DNS64 is not running.",
+      "dns64": "DNS64 refuses: {text}",
       "prefix": "Please enter a valid prefix (e.g. 192.168.1.0/24 or fd00:10::/64).",
       "size": "The prefix is too large (IPv4 from /8, IPv6 from /16).",
       "dup": "This prefix already exists.",

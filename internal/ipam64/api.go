@@ -46,6 +46,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (m *Module) apiFail(w http.ResponseWriter, err error) {
+	if k := m.dnsErrKey(err); k != "" { // aus DNS64: Schluessel als Code
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "dns64: " + strings.TrimPrefix(k, "dns64.err.")})
+		return
+	}
 	if errKey(err) == "" {
 		m.log.Error("ipam64: api", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -243,10 +247,31 @@ type addressIn struct {
 	MAC         string   `json:"mac"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
+	DNS         *bool    `json:"dns"`      // lokaler Eintrag in DNS64 (fehlt: bisheriger Wert, neu: aus)
+	DNSZone     *string  `json:"dns_zone"` // fehlt: bisheriger Wert (leer = Zone des Praefixes)
+	PTR         *bool    `json:"ptr"`      // fehlt: bisheriger Wert, neu: an
+	DHCP        *bool    `json:"dhcp"`     // Reservierung im DHCP-Server (fehlt: bisheriger Wert, neu: aus)
 }
 
-func (in addressIn) address(uid string) Address {
-	return Address{UID: uid, Address: in.Address, Status: in.Status, Role: in.Role, Name: in.Name, MAC: in.MAC, Description: in.Description, Tags: in.Tags, PTR: true}
+// address baut die Adresse; Felder fuer DNS/DHCP, die fehlen, kommen aus cur (nil = neu).
+func (in addressIn) address(uid string, cur *Address) Address {
+	a := Address{UID: uid, Address: in.Address, Status: in.Status, Role: in.Role, Name: in.Name, MAC: in.MAC, Description: in.Description, Tags: in.Tags, PTR: true}
+	if cur != nil {
+		a.DNS, a.DNSZone, a.PTR, a.DHCP = cur.DNS, cur.DNSZone, cur.PTR, cur.DHCP
+	}
+	if in.DNS != nil {
+		a.DNS = *in.DNS
+	}
+	if in.DNSZone != nil {
+		a.DNSZone = *in.DNSZone
+	}
+	if in.PTR != nil {
+		a.PTR = *in.PTR
+	}
+	if in.DHCP != nil {
+		a.DHCP = *in.DHCP
+	}
+	return a
 }
 
 func (m *Module) apiAddressSave(w http.ResponseWriter, r *http.Request) {
@@ -254,18 +279,20 @@ func (m *Module) apiAddressSave(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	a := in.address(r.PathValue("uid"))
-	if a.UID != "" { // Felder der Stufe I3 (DNS, DHCP) bleiben
-		if cur, err := m.addressWhere(r.Context(), `uid = ?`, a.UID); err == nil && cur != nil {
-			a.DNS, a.DNSZone, a.PTR, a.DHCP = cur.DNS, cur.DNSZone, cur.PTR, cur.DHCP
+	var cur *Address
+	if uid := r.PathValue("uid"); uid != "" {
+		var err error
+		if cur, err = m.addressWhere(r.Context(), `uid = ?`, uid); err != nil {
+			m.apiFail(w, err)
+			return
 		}
 	}
-	out, err := m.SaveAddress(r.Context(), a, m.g.Actor(r))
+	out, err := m.ApplyAddress(r.Context(), in.address(r.PathValue("uid"), cur), m.g.Actor(r))
 	if err != nil {
 		m.apiFail(w, err)
 		return
 	}
-	m.g.Audit(r, "ipam64.address.save", out.Address, out.Name)
+	m.g.Audit(r, "ipam64.address.save", out.Address, m.effectText(r.Context(), out))
 	status := http.StatusOK
 	if r.Method == http.MethodPost {
 		status = http.StatusCreated
@@ -274,7 +301,7 @@ func (m *Module) apiAddressSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiAddressDelete(w http.ResponseWriter, r *http.Request) {
-	a, err := m.DeleteAddress(r.Context(), r.PathValue("uid"))
+	a, err := m.RemoveAddress(r.Context(), r.PathValue("uid"))
 	if err != nil {
 		m.apiFail(w, err)
 		return
@@ -330,12 +357,12 @@ func (m *Module) apiAllocate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Address = list[0].String()
-	out, err := m.SaveAddress(r.Context(), in.address(""), m.g.Actor(r))
+	out, err := m.ApplyAddress(r.Context(), in.address("", nil), m.g.Actor(r))
 	if err != nil {
 		m.apiFail(w, err)
 		return
 	}
-	m.g.Audit(r, "ipam64.address.save", out.Address, out.Name)
+	m.g.Audit(r, "ipam64.address.save", out.Address, m.effectText(r.Context(), out))
 	writeJSON(w, http.StatusCreated, out)
 }
 

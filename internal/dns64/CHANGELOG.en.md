@@ -6,6 +6,7 @@
 - Works with IPAM64: fixed addresses, exclusions in the DHCP range and A/AAAA records from IPAM64 carry the label "IPAM64" with a link there. While IPAM64 runs they cannot be changed here (UI and API); without IPAM64 as usual. DHCP and DNS keep working from their own tables – also on the reserve node and on nodes without IPAM64.
 - DHCP: exclusions in the range – the server never assigns such addresses (e.g. devices with a fixed setting inside the pool); a lease on one is refused at the next renewal. The DHCP page lists them below the fixed addresses.
 - Cluster: labels and exclusions are synced with the fixed addresses and records.
+- DHCP: while IPAM64 runs, "make fixed" on a lease creates the fixed address in IPAM64 (with DNS record and reservation).
 
 ## 1.40.1 – 2026-11-14
 

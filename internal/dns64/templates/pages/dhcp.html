@@ -169,7 +169,7 @@
 						<td class="text-end pe-3 text-nowrap">
 							<form method="post" class="d-inline">
 								<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="scope" value="{{.Scope}}"><input type="hidden" name="mac" value="{{.MAC}}"><input type="hidden" name="ip" value="{{.IP}}"><input type="hidden" name="name" value="{{.Hostname}}">
-								{{if not .Fixed}}<button type="submit" class="btn btn-sm btn-outline-primary py-0" formaction="/dns64/dhcp/leases/reserve" title="{{$.T "dns64.dhcp.reserve"}}"><i class="bi bi-pin-angle"></i></button>{{end}}
+								{{if not .Fixed}}{{if $h.IPAM}}<a class="btn btn-sm btn-outline-primary py-0" href="/ipam64/address?ip={{.IP.String}}" title="{{$.T "dns64.ipam.reserve_there"}}"><i class="bi bi-pin-angle"></i></a>{{else}}<button type="submit" class="btn btn-sm btn-outline-primary py-0" formaction="/dns64/dhcp/leases/reserve" title="{{$.T "dns64.dhcp.reserve"}}"><i class="bi bi-pin-angle"></i></button>{{end}}{{end}}
 								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/dhcp/leases/release" data-confirm="{{$.T "dns64.dhcp.release_confirm" "ip" .IP.String}}" title="{{$.T "dns64.dhcp.release"}}"><i class="bi bi-x-circle"></i></button>
 							</form>
 						</td>

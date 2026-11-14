@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0) und I2 (DNS64 1.41.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) und I3 (IPAM64 0.2.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -291,3 +291,23 @@ DNS64 1.41.0, im selben Zweig:
 - Tests: Ausnahme im DHCP-Server, Brücke (Reservierung, Ausnahme, Einträge, Sperre, Übergabe), Cluster, Seiten.
 - Offen für I3: IPAM64 ruft die Brücke beim Speichern auf (Schalter DNS/DHCP an der Adresse, „Beim Speichern
   passiert“), Abgleich-Job, Übergabe beim Abschalten, Lease → feste Adresse.
+
+## Stand I3 (2026-11-14)
+
+IPAM64 0.2.0, im selben Zweig, auf der Testnode (agentbox, Container `node64-ipam`) Ende-zu-Ende geprüft:
+- `ipam64/dns64link.go`: Verbindung über Hooks (`SetDNS64`, verdrahtet in `cmd/node64/ipam.go`), Soll-Stand je
+  Adresse (Reservierung bei DHCP an + MAC + IPv4; sonst Ausnahme, wenn im DHCP-Adressbereich; A/AAAA bei DNS an +
+  Rechnername + Zone; nichts bei „veraltet“).
+- `ApplyAddress`/`RemoveAddress`: erst IPAM64, dann DNS64; lehnt DNS64 ab, wird IPAM64 und DNS64 auf den alten Stand
+  zurückgesetzt, die Meldung kommt übersetzt aus DNS64 (`dns64.ErrKey`). Ohne laufendes DNS64 nur IPAM64.
+- Abgleich alle 10 Minuten: repariert nur Adressen, die seit 5 Minuten ruhen; verwaiste Einträge erst im zweiten Lauf
+  (Cluster: Einträge können in anderer Reihenfolge ankommen).
+- Übergabe an DNS64 (Knopf in der Übersicht): Kennzeichen weg, Schalter DNS/DHCP der Adressen aus.
+- Oberfläche: Schalter DNS (mit Zone, PTR) und DHCP an der Adresse, Vorschlag aus Lease/Scan, Karte „Wirkung in DNS64“
+  mit Abgleich; DNS64-DHCP-Seite: „fest machen“ einer Vergabe führt bei laufendem IPAM64 zur Adresse in IPAM64.
+  Brotkrumen mit Präfix/Adresse, Übersicht schmaler.
+- API: `dns`, `dns_zone`, `ptr`, `dhcp` an Adressen (fehlen sie beim Ändern, bleibt der Wert); Fehler aus DNS64 als
+  409 `dns64: <code>`.
+- **Erkenntnis für I4 (Assistent, E5):** Beim Kennzeichnen vorhandener DNS64-Einträge müssen an der IPAM-Adresse die
+  Schalter DNS/DHCP passend gesetzt werden – sonst entfernt der Abgleich die Einträge wieder (IPAM64 ist führend).
+  Auf der Testnode so passiert mit einer von Hand gekennzeichneten Reservierung.

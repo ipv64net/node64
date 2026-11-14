@@ -1,6 +1,7 @@
 package ipam64
 
 import (
+	"context"
 	"embed"
 	"encoding/csv"
 	"errors"
@@ -39,6 +40,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /ipam64/address/delete", page(m.postAddressDelete))
 	mux.Handle("POST /ipam64/scan", page(m.postScan))
 	mux.Handle("POST /ipam64/autoscan", page(m.postAutoScan))
+	mux.Handle("POST /ipam64/handover", page(m.postHandover))
 }
 
 const (
@@ -51,7 +53,7 @@ func errKey(err error) string {
 	for e, k := range map[error]string{ErrPrefix: "prefix", ErrSize: "size", ErrDup: "dup", ErrName: "name", ErrHost: "host", ErrStatus: "status",
 		ErrVLAN: "vlan", ErrTags: "tags", ErrRange: "range", ErrRangeNet: "range_net", ErrOverlap: "overlap", ErrIP: "ip", ErrNoNet: "no_net",
 		ErrNetAddr: "net_addr", ErrMAC: "mac", ErrTaken: "taken", ErrRole: "role", ErrNotFound: "not_found", ErrBusy: "busy",
-		ErrNotAttached: "not_attached", ErrNoScan: "no_scan"} {
+		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64"} {
 		if errors.Is(err, e) {
 			return "ipam64.err." + k
 		}
@@ -62,6 +64,9 @@ func errKey(err error) string {
 func (m *Module) errText(r *http.Request, err error) string {
 	if k := errKey(err); k != "" {
 		return m.g.T(r, k)
+	}
+	if k := m.dnsErrKey(err); k != "" { // aus DNS64 (z. B. MAC schon vergeben, CNAME auf dem Namen)
+		return m.g.T(r, "ipam64.err.dns64", "text", m.g.T(r, k))
 	}
 	m.log.Error("ipam64: request failed", "err", err)
 	return m.g.T(r, "ipam64.err.internal")
@@ -101,6 +106,7 @@ type overviewData struct {
 	AutoOpts  []int
 	LastScan  time.Time
 	Scan      ScanStatus
+	DNS64     bool // DNS64 laeuft (Uebergabe moeglich)
 }
 
 func (m *Module) overview(r *http.Request) (*overviewData, error) {
@@ -109,7 +115,7 @@ func (m *Module) overview(r *http.Request) (*overviewData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &overviewData{Nets: snap.Nets, AutoScan: m.AutoScan(ctx), AutoOpts: AutoScans, LastScan: m.LastScan(ctx), Scan: m.Scanning(),
+	d := &overviewData{Nets: snap.Nets, AutoScan: m.AutoScan(ctx), AutoOpts: AutoScans, LastScan: m.LastScan(ctx), Scan: m.Scanning(), DNS64: m.DNS64Running(),
 		Form: Prefix{Status: StatusActive, Scan: ScanPassive}}
 	vlans := map[int]bool{}
 	for _, n := range snap.Nets {
@@ -190,6 +196,9 @@ type prefixData struct {
 	Err       string
 	ErrForm   string // prefix | range
 }
+
+// Crumb ist die letzte Stufe der Brotkrumen (Praefix).
+func (d *prefixData) Crumb() string { return d.Net.CIDR }
 
 // listRow ist eine Zeile der Liste: belegte Adresse oder Luecke.
 type listRow struct {
@@ -397,14 +406,22 @@ func (m *Module) pagePrefix(w http.ResponseWriter, r *http.Request) {
 // ---- Adresse ----
 
 type addressData struct {
-	Form   Address
-	New    bool
-	Entry  *Entry // was die Quellen ueber die Adresse wissen (nil = frei)
-	Net    *Net
-	Err    string
-	Roles  []string
-	Prefix string // Ruecksprung
+	Form    Address
+	New     bool
+	Entry   *Entry // was die Quellen ueber die Adresse wissen (nil = frei)
+	Net     *Net
+	Err     string
+	Roles   []string
+	Prefix  string   // Ruecksprung
+	Zone    string   // Zone vom Praefix bzw. DHCP-Netz (gilt, wenn an der Adresse keine steht)
+	InPool  bool     // liegt im DHCP-Adressbereich
+	DNS64   bool     // DNS64 laeuft
+	Effects []Effect // Wirkung in DNS64 (gespeicherter Stand, mit Abgleich)
+	ZoneErr bool     // DNS an, aber keine Zone
 }
+
+// Crumb ist die letzte Stufe der Brotkrumen (Adresse).
+func (d *addressData) Crumb() string { return d.Form.Address }
 
 func (m *Module) addressPage(r *http.Request, ip string) (*addressData, error) {
 	ctx := r.Context()
@@ -416,25 +433,36 @@ func (m *Module) addressPage(r *http.Request, ip string) (*addressData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &addressData{Net: snap.NetOf(a), Entry: snap.Entry(a), Roles: addrRoles}
+	d := &addressData{Net: snap.NetOf(a), Entry: snap.Entry(a), Roles: addrRoles, DNS64: m.DNS64Running()}
 	if d.Net == nil {
 		return nil, ErrNoNet
 	}
-	d.Prefix = d.Net.CIDR
+	d.Prefix, d.Zone, d.InPool = d.Net.CIDR, d.Net.DNSZone, a.Is4() && d.Net.inPool(a)
 	cur, err := m.addressWhere(ctx, `address = ?`, a.String())
 	if err != nil {
 		return nil, err
 	}
 	if cur != nil {
 		d.Form = *cur
+		if d.Effects, d.ZoneErr, err = m.Effects(ctx, *cur); err != nil {
+			return nil, err
+		}
 	} else {
 		d.New = true
 		d.Form = Address{Address: a.String(), Status: StatusActive, PTR: true}
-		if e := d.Entry; e != nil { // bekannte Adresse uebernehmen: Name und MAC vorbelegen
+		if e := d.Entry; e != nil { // bekannte Adresse (z. B. Lease) uebernehmen: Name und MAC vorbelegen
 			d.Form.MAC = e.MAC
-			if hostRe.MatchString(strings.ToLower(e.Name)) {
-				d.Form.Name = strings.ToLower(e.Name)
+			if name, _, _ := strings.Cut(strings.ToLower(e.Name), "."); hostOK(name) {
+				d.Form.Name = name
 			}
+		}
+		// Vorschlag: DNS-Eintrag, wenn es eine Zone gibt; Reservierung, wenn MAC und DHCP-Netz bekannt sind
+		d.Form.DNS = d.Zone != "" && d.Form.Name != ""
+		d.Form.DHCP = d.Form.MAC != "" && d.Net.DHCP && a.Is4()
+		w := desired(snap, d.Form)
+		d.Effects, d.ZoneErr = w.effects(), w.zoneErr
+		for i := range d.Effects {
+			d.Effects[i].State = "planned"
 		}
 	}
 	return d, nil
@@ -534,13 +562,8 @@ func (m *Module) postRangeDelete(w http.ResponseWriter, r *http.Request) {
 func (m *Module) postAddress(w http.ResponseWriter, r *http.Request) {
 	in := Address{UID: r.PostFormValue("uid"), Address: r.PostFormValue("address"), Status: r.PostFormValue("status"), Role: r.PostFormValue("role"),
 		Name: r.PostFormValue("name"), MAC: r.PostFormValue("mac"), Description: r.PostFormValue("description"), Tags: []string{r.PostFormValue("tags")},
-		PTR: true}
-	if in.UID != "" { // Felder der Stufe I3 (DNS, DHCP) bleiben, wie sie sind
-		if cur, err := m.addressWhere(r.Context(), `uid = ?`, in.UID); err == nil && cur != nil {
-			in.DNS, in.DNSZone, in.PTR, in.DHCP = cur.DNS, cur.DNSZone, cur.PTR, cur.DHCP
-		}
-	}
-	out, err := m.SaveAddress(r.Context(), in, m.g.Actor(r))
+		DNS: r.PostFormValue("dns") == "1", DNSZone: r.PostFormValue("dns_zone"), PTR: r.PostFormValue("ptr") == "1", DHCP: r.PostFormValue("dhcp") == "1"}
+	out, err := m.ApplyAddress(r.Context(), in, m.g.Actor(r))
 	if err != nil {
 		text := m.errText(r, err)
 		d, perr := m.addressPage(r, in.Address)
@@ -553,7 +576,7 @@ func (m *Module) postAddress(w http.ResponseWriter, r *http.Request) {
 		m.g.Render(w, r, http.StatusUnprocessableEntity, "ipam64/address", "ipam64.title", d)
 		return
 	}
-	m.g.Audit(r, "ipam64.address.save", out.Address, out.Name)
+	m.g.Audit(r, "ipam64.address.save", out.Address, m.effectText(r.Context(), out))
 	m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.address_saved"))
 	if snap, err := m.Snapshot(r.Context()); err == nil {
 		if n := snap.NetOf(netip.MustParseAddr(out.Address)); n != nil {
@@ -566,7 +589,7 @@ func (m *Module) postAddress(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) postAddressDelete(w http.ResponseWriter, r *http.Request) {
 	back := r.PostFormValue("back")
-	if a, err := m.DeleteAddress(r.Context(), r.PostFormValue("uid")); err != nil {
+	if a, err := m.RemoveAddress(r.Context(), r.PostFormValue("uid")); err != nil {
 		m.g.Flash(w, r, "danger", m.errText(r, err))
 	} else {
 		m.g.Audit(r, "ipam64.address.delete", a.Address, a.Name)
@@ -599,6 +622,33 @@ func (m *Module) postAutoScan(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.autoscan_saved"))
 	}
 	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+func (m *Module) postHandover(w http.ResponseWriter, r *http.Request) {
+	n, err := m.Handover(r.Context(), m.g.Actor(r))
+	if err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.handover", Name, strconv.FormatInt(n, 10))
+		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.handover", "n", n))
+	}
+	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+// effectText beschreibt die Wirkung einer Adresse in DNS64 fuer das Audit-Log.
+func (m *Module) effectText(ctx context.Context, a Address) string {
+	snap, err := m.Snapshot(ctx)
+	if err != nil {
+		return a.Name
+	}
+	var parts []string
+	if a.Name != "" {
+		parts = append(parts, a.Name)
+	}
+	for _, e := range desired(snap, a).effects() {
+		parts = append(parts, e.Kind+": "+e.Text)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // ---- CSV ----

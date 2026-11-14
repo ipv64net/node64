@@ -42,6 +42,16 @@ type IPAMState struct {
 
 var errIPAMManaged = errCfg("err_ipam_managed")
 
+// ErrKey liefert den i18n-Schluessel eines Eingabefehlers von DNS64 (dns64.err.*, "" = kein solcher Fehler), damit
+// IPAM64 ihn uebersetzt anzeigen kann.
+func ErrKey(err error) string {
+	var ce *cfgError
+	if errors.As(err, &ce) {
+		return "dns64.err." + strings.TrimPrefix(ce.Key, "err_")
+	}
+	return ""
+}
+
 // SetIPAM meldet, ob IPAM64 laeuft (main.go); nur dann sind gekennzeichnete Eintraege hier gesperrt.
 func (m *Module) SetIPAM(running func() bool) { m.ipamRunning = running }
 

@@ -37,6 +37,20 @@
 						<input class="form-control form-control-sm" id="ipam-a-tags" name="tags" value="{{join $f.Tags " "}}" maxlength="330"></div>
 					<div class="col-12"><label class="form-label small" for="ipam-a-desc">{{.T "ipam64.col.description"}}</label>
 						<input class="form-control form-control-sm" id="ipam-a-desc" name="description" value="{{$f.Description}}" maxlength="200"></div>
+					<div class="col-12 border-top pt-2 mt-2 fw-semibold small"><i class="bi bi-diagram-3 text-primary"></i> {{.T "ipam64.addr.dns_title"}}</div>
+					<div class="col-md-6">
+						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="ipam-a-dns" name="dns" value="1"{{if $f.DNS}} checked{{end}}><label class="form-check-label small" for="ipam-a-dns">{{.T "ipam64.addr.dns"}}</label></div>
+						<div class="form-check"><input class="form-check-input" type="checkbox" id="ipam-a-ptr" name="ptr" value="1"{{if $f.PTR}} checked{{end}}><label class="form-check-label small" for="ipam-a-ptr">{{.T "ipam64.addr.ptr"}}</label></div>
+					</div>
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-zone">{{.T "ipam64.col.zone"}}</label>
+						<input class="form-control form-control-sm font-monospace" id="ipam-a-zone" name="dns_zone" value="{{$f.DNSZone}}" placeholder="{{if $d.Zone}}{{$d.Zone}}{{else}}home.lan{{end}}" maxlength="253">
+						<div class="form-text">{{if $d.Zone}}{{.T "ipam64.addr.zone_inherit" "zone" $d.Zone}}{{else}}{{.T "ipam64.addr.zone_none"}}{{end}}</div></div>
+					<div class="col-12 border-top pt-2 mt-2 fw-semibold small"><i class="bi bi-router text-primary"></i> {{.T "ipam64.addr.dhcp_title"}}</div>
+					<div class="col-12">
+						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="ipam-a-dhcp" name="dhcp" value="1"{{if $f.DHCP}} checked{{end}}{{if or (not $d.Net.DHCP) (not $d.Net.IsV4)}} disabled{{end}}><label class="form-check-label small" for="ipam-a-dhcp">{{.T "ipam64.addr.dhcp"}}</label></div>
+						<div class="form-text">{{if not $d.Net.IsV4}}{{.T "ipam64.addr.no_dhcpv6"}}{{else if not $d.Net.DHCP}}{{.T "ipam64.addr.no_dhcp_net"}}{{else if $d.InPool}}{{.T "ipam64.addr.in_pool" "from" $d.Net.PoolStart "to" $d.Net.PoolEnd}}{{else}}{{.T "ipam64.addr.dhcp_hint"}}{{end}}</div>
+					</div>
+					{{if not $d.DNS64}}<div class="col-12"><div class="alert alert-warning small py-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "ipam64.addr.no_dns64"}}</div></div>{{end}}
 					<div class="col-12 d-flex flex-wrap gap-2">
 						<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
 						<a class="btn btn-sm btn-outline-secondary" href="/ipam64/prefix?p={{$d.Prefix}}">{{.T "common.cancel"}}</a>
@@ -52,6 +66,15 @@
 		</div>
 	</div>
 	<div class="col-xl-5 d-flex flex-column gap-3">
+		<div class="card" id="ipam-effects">
+			<div class="card-header"><i class="bi bi-list-check text-primary"></i> {{if $d.New}}{{.T "ipam64.fx.title_new"}}{{else}}{{.T "ipam64.fx.title"}}{{end}}</div>
+			{{if $d.Effects}}<ul class="list-group list-group-flush small">
+				{{range $d.Effects}}<li class="list-group-item d-flex flex-wrap gap-2 align-items-center"><i class="bi {{if eq .Kind "record"}}bi-diagram-3{{else if eq .Kind "exclude"}}bi-slash-circle{{else}}bi-pin-angle{{end}} text-primary"></i><span>{{$.T (print "ipam64.fx." .Kind)}}</span><span class="font-monospace">{{.Text}}</span>
+					<span class="ms-auto badge {{if eq .State "ok"}}text-bg-success{{else if eq .State "missing"}}text-bg-warning{{else}}text-bg-light border{{end}}">{{$.T (print "ipam64.fx.state_" .State)}}</span></li>{{end}}
+			</ul>{{else}}<div class="card-body small text-body-secondary">{{.T "ipam64.fx.none"}}</div>{{end}}
+			{{if $d.ZoneErr}}<div class="card-footer small text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "ipam64.err.no_zone"}}</div>{{end}}
+			<div class="card-footer small text-body-secondary">{{.T "ipam64.fx.hint"}}</div>
+		</div>
 		<div class="card" id="ipam-known">
 			<div class="card-header"><i class="bi bi-eye text-primary"></i> {{.T "ipam64.addr.known"}}</div>
 			{{if $e}}

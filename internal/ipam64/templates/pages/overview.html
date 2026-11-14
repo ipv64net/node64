@@ -56,7 +56,7 @@
 	<div class="card-header d-flex align-items-center gap-2"><i class="bi bi-diagram-2 text-primary"></i> {{.T "ipam64.prefixes"}}</div>
 	<div class="table-responsive">
 		<table class="table table-sm table-hover mb-0 small table-stack">
-			<thead><tr><th>{{.T "ipam64.col.prefix"}}</th><th>{{.T "ipam64.col.name"}}</th><th>VLAN</th><th>{{.T "ipam64.col.status"}}</th><th>{{.T "ipam64.col.dhcp"}}</th><th>{{.T "ipam64.col.zone"}}</th><th>{{.T "ipam64.col.usage"}}</th><th class="text-end">{{.T "ipam64.kpi.conflicts"}}</th></tr></thead>
+			<thead><tr><th>{{.T "ipam64.col.prefix"}}</th><th>{{.T "ipam64.col.name"}}</th><th>VLAN</th><th>{{.T "ipam64.col.status"}}</th><th class="d-none d-lg-table-cell">{{.T "ipam64.col.dhcp"}}</th><th class="d-none d-xl-table-cell">{{.T "ipam64.col.zone"}}</th><th>{{.T "ipam64.col.usage"}}</th><th class="text-end">{{.T "ipam64.kpi.conflicts"}}</th></tr></thead>
 			<tbody>
 			{{range $d.Nets}}
 			<tr>
@@ -64,8 +64,8 @@
 				<td data-label="{{$.T "ipam64.col.name"}}">{{.Name}}</td>
 				<td data-label="VLAN">{{if .VLAN}}<span class="badge text-bg-light border">{{.VLAN}}</span>{{end}}</td>
 				<td data-label="{{$.T "ipam64.col.status"}}"><span class="badge {{if eq .Status "container"}}text-bg-secondary{{else if eq .Status "active"}}text-bg-success{{else if eq .Status "reserved"}}text-bg-warning{{else}}text-bg-light border{{end}}">{{$.T (print "ipam64.status." .Status)}}</span></td>
-				<td data-label="{{$.T "ipam64.col.dhcp"}}">{{if .DHCP}}<a href="/dns64/dhcp" class="font-monospace">{{.PoolStart}}–{{.PoolEnd}}</a>{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
-				<td data-label="{{$.T "ipam64.col.zone"}}">{{if .DNSZone}}<span class="font-monospace">{{.DNSZone}}</span>{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
+				<td data-label="{{$.T "ipam64.col.dhcp"}}" class="d-none d-lg-table-cell">{{if .DHCP}}<a href="/dns64/dhcp" class="font-monospace">{{.PoolStart}}–{{.PoolEnd}}</a>{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
+				<td data-label="{{$.T "ipam64.col.zone"}}" class="d-none d-xl-table-cell">{{if .DNSZone}}<span class="font-monospace">{{.DNSZone}}</span>{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
 				<td data-label="{{$.T "ipam64.col.usage"}}">{{if or .IsV4 .Container .MarkFull}}<div class="d-flex align-items-center gap-2"><div class="ipam-bar" role="img" aria-label="{{$.Float .Pct 0}} %"><span class="{{if ge .Pct 95.0}}ipam-bar-full{{else if ge .Pct 80.0}}ipam-bar-warn{{end}}" style="width: {{pct .Pct}}%"></span></div><span class="text-body-secondary">{{$.Float .Pct 0}} %</span></div>{{else}}<span class="text-body-secondary">{{$.T "ipam64.used_n" "n" .Used}}</span>{{end}}</td>
 				<td data-label="{{$.T "ipam64.kpi.conflicts"}}" class="text-end">{{if .Conflicts}}<a class="badge text-bg-danger text-decoration-none" href="/ipam64/prefix?p={{.CIDR}}&amp;view=list&amp;kind=conflict">{{.Conflicts}}</a>{{else}}<i class="bi bi-check-circle text-success"></i>{{end}}</td>
 			</tr>
@@ -75,5 +75,17 @@
 	</div>
 	<div class="card-footer small text-body-secondary">{{.T "ipam64.tree_hint"}}</div>
 </div>
+{{end}}
+{{if $d.DNS64}}
+<details class="card mt-3" id="ipam-handover">
+	<summary class="card-header small"><i class="bi bi-box-arrow-right text-primary"></i> {{.T "ipam64.handover.title"}}</summary>
+	<div class="card-body small">
+		<p class="mb-2">{{.T "ipam64.handover.text"}}</p>
+		<form method="post" action="/ipam64/handover">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{.T "ipam64.handover.confirm"}}"><i class="bi bi-box-arrow-right"></i> {{.T "ipam64.handover.button"}}</button>
+		</form>
+	</div>
+</details>
 {{end}}
 {{end}}
