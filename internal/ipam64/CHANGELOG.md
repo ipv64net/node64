@@ -1,5 +1,15 @@
 # IPAM64 – Änderungen
 
+## 0.5.0 – unveröffentlicht
+
+Neu:
+
+- CSV-Import mit Vorschau: Präfixe oder Adressen (samt Schaltern DNS/DHCP), Komma oder Semikolon, vorhandene Einträge werden ergänzt; der eigene Export lässt sich wieder einlesen.
+- Prometheus unter `/api/metrics`: `node64_ipam64_*` – Belegung, Auslastung und Konflikte je Präfix, freie Adressen im DHCP-Adressbereich, Konflikte, Hinweise, unbekannte Geräte, letzter Scan.
+- MCP (lesend): neuer Bereich IPAM64 mit `ipam64_overview`, `ipam64_addresses`, `ipam64_conflicts`, `ipam64_available`.
+- API: `GET /api/ipam64/conflicts` (Konflikte, Hinweise, unbekannte Geräte).
+- Anleitung in docs/IPAM64.md, Abschnitt im README.
+
 ## 0.4.0 – unveröffentlicht
 
 Neu:

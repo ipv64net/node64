@@ -1,0 +1,52 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-filetype-csv text-primary"></i> {{.T "ipam64.import.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary" href="/ipam64"><i class="bi bi-arrow-left"></i> {{.T "ipam64.title"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "ipam64.import.intro"}}</p>
+{{if $d.Err}}<div class="alert alert-danger small" id="ipam-import-error">{{$d.Err}}</div>{{end}}
+
+{{if $d.Rows}}
+<div class="card mb-3" id="ipam-import-preview">
+	<div class="card-header d-flex flex-wrap gap-2 small"><i class="bi bi-list-check text-primary"></i> {{.T "ipam64.import.preview"}}
+		<span class="badge text-bg-success">{{.T "ipam64.import.valid" "n" $d.Valid}}</span>{{if $d.Invalid}}<span class="badge text-bg-danger">{{.T "ipam64.import.invalid" "n" $d.Invalid}}</span>{{end}}</div>
+	<div class="table-responsive" style="max-height: 28rem">
+		<table class="table table-sm align-middle mb-0 small table-stack">
+			<thead><tr><th>{{.T "ipam64.import.line"}}</th><th>{{.T "ipam64.import.entry"}}</th><th>{{.T "ipam64.col.name"}}</th><th>{{.T "ipam64.setup.switches"}}</th><th>{{.T "ipam64.col.state"}}</th></tr></thead>
+			<tbody>
+			{{range $d.Rows}}<tr{{if .ErrText}} class="table-danger"{{end}}>
+				<td data-label="{{$.T "ipam64.import.line"}}">{{.Line}}</td>
+				<td data-label="{{$.T "ipam64.import.entry"}}" class="font-monospace">{{.Key}}</td>
+				<td data-label="{{$.T "ipam64.col.name"}}">{{if eq .Kind "prefix"}}{{.Prefix.Name}}{{else}}{{.Address.Name}}{{if .Address.MAC}} <span class="font-monospace text-body-secondary">{{.Address.MAC}}</span>{{end}}{{end}}</td>
+				<td data-label="{{$.T "ipam64.setup.switches"}}">{{if eq .Kind "address"}}{{if .Address.DNS}}<span class="badge text-bg-light border">DNS</span> {{end}}{{if .Address.DHCP}}<span class="badge text-bg-light border">DHCP</span>{{end}}{{end}}</td>
+				<td data-label="{{$.T "ipam64.col.state"}}">{{if .ErrText}}<span class="text-danger-emphasis">{{.ErrText}}</span>{{else if .Exists}}{{$.T "ipam64.import.update"}}{{else}}{{$.T "ipam64.import.new"}}{{end}}</td>
+			</tr>{{end}}
+			</tbody>
+		</table>
+	</div>
+	<div class="card-footer">
+		<form method="post" action="/ipam64/import" class="d-flex flex-wrap gap-2">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="apply">
+			<textarea class="d-none" name="csv" aria-hidden="true">{{$d.CSV}}</textarea>
+			<button class="btn btn-sm btn-primary" type="submit" id="ipam-import-apply"{{if not $d.Valid}} disabled{{end}}><i class="bi bi-check-lg"></i> {{.T "ipam64.import.apply" "n" $d.Valid}}</button>
+			<a class="btn btn-sm btn-outline-secondary" href="/ipam64/import">{{.T "common.cancel"}}</a>
+		</form>
+	</div>
+</div>
+{{end}}
+
+<div class="card">
+	<div class="card-body">
+		<form method="post" action="/ipam64/import" enctype="multipart/form-data" class="row g-2" id="ipam-import-form">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="preview">
+			<div class="col-12"><label class="form-label small" for="ipam-import-file">{{.T "ipam64.import.file"}}</label>
+				<input class="form-control form-control-sm" type="file" id="ipam-import-file" name="file" accept=".csv,text/csv,text/plain"></div>
+			<div class="col-12"><label class="form-label small" for="ipam-import-csv">{{.T "ipam64.import.paste"}}</label>
+				<textarea class="form-control form-control-sm font-monospace" id="ipam-import-csv" name="csv" rows="6" placeholder="ip;name;mac;dns;dhcp&#10;192.168.1.10;nas;00:11:32:aa:10:10;1;1">{{if not $d.Rows}}{{$d.CSV}}{{end}}</textarea>
+				<div class="form-text">{{.T "ipam64.import.columns"}}</div></div>
+			<div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-eye"></i> {{.T "ipam64.import.check"}}</button></div>
+		</form>
+	</div>
+</div>
+{{end}}

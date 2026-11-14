@@ -10496,6 +10496,22 @@
             "items": {
               "type": "string"
             }
+          },
+          "first_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "conflict": {
+            "type": "string",
+            "enum": [
+              "dup",
+              "mac",
+              "lease"
+            ]
+          },
+          "vendor": {
+            "type": "string",
+            "description": "Hersteller aus der MAC; random = zufällige MAC"
           }
         }
       },
@@ -10521,6 +10537,44 @@
           },
           "error": {
             "type": "string"
+          }
+        }
+      },
+      "IPAM64Finding": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "dup",
+              "mac",
+              "lease",
+              "pool",
+              "stale",
+              "foreign"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "conflict",
+              "hint"
+            ]
+          },
+          "ip": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "macs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
@@ -34613,6 +34667,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/conflicts": {
+      "get": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Konflikte, Hinweise und unbekannte Geräte",
+        "description": "Wie die Seite „Scan & Konflikte“: Konflikte (dup: zwei Geräte antworten abwechselnd; mac: fremde MAC an einer festen Adresse seit ≥ 5 Minuten; lease: Lease gegen feste Adresse), Hinweise (pool, stale, foreign) und Geräte, die nur die Nachbartabelle kennt (ignorierte nicht).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "findings": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IPAM64Finding"
+                      }
+                    },
+                    "unknown": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ip": {
+                            "type": "string"
+                          },
+                          "prefix": {
+                            "type": "string"
+                          },
+                          "mac": {
+                            "type": "string"
+                          },
+                          "vendor": {
+                            "type": "string"
+                          },
+                          "first_seen": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "last_seen": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

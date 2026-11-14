@@ -19,6 +19,7 @@ func Tools() []Tool {
 	out = append(out, monitor64Tools()...)
 	out = append(out, monitor64MoreTools()...)
 	out = append(out, moreTools()...)
+	out = append(out, ipam64Tools()...)
 	out = append(out, apiRefTools()...)
 	return out
 }

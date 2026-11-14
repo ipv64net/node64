@@ -189,6 +189,8 @@ var sampleArgs = map[string][]map[string]any{
 	"monitor64_host":       {{"host": "nas01"}, {"host": "H1"}},
 	"monitor64_problems":   {{}, {"host": "nas01", "status": "all"}},
 	"dns64_dhcp":           {{}, {"find": "laptop", "network": "LAN"}},
+	"ipam64_available":     {{"prefix": "192.168.1.0/24"}},
+	"ipam64_addresses":     {{}, {"prefix": "192.168.1.0/24", "query": "nas"}},
 	"list_status_pages":    {{}, {"page": "main"}},
 }
 
@@ -223,7 +225,7 @@ func TestToolsAndSecrets(t *testing.T) {
 			t.Errorf("%s: no input schema", tool.Name)
 		}
 	}
-	if len(names) != len(Tools()) || len(names) != 44 {
+	if len(names) != len(Tools()) || len(names) != 48 {
 		t.Fatalf("tools: %d %v", len(names), names)
 	}
 	for _, tool := range Tools() {

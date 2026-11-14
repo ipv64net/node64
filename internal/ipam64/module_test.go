@@ -717,6 +717,22 @@ func TestPagesRender(t *testing.T) {
 	if code, _ = post("/ipam64/notify", url.Values{"conflicts": {"1"}}); code != http.StatusSeeOther {
 		t.Fatalf("notify: %d", code)
 	}
+	if code, body = get("/api/ipam64/conflicts"); code != 200 || !strings.Contains(body, `"kind":"mac"`) {
+		t.Fatalf("api conflicts: %d %s", code, body)
+	}
+	if code, body = get("/ipam64/import"); code != 200 || !strings.Contains(body, `id="ipam-import-form"`) || strings.Contains(body, "ipam64.") {
+		t.Fatalf("import page: %d\n%s", code, body)
+	}
+	if code, body = post("/ipam64/import", url.Values{"action": {"preview"}, "csv": {"ip;name\n192.168.1.77;csvtest\n10.99.0.1;fremd\n"}}); code != 200 ||
+		!strings.Contains(body, `id="ipam-import-preview"`) || !strings.Contains(body, "csvtest") || strings.Contains(body, "ipam64.") {
+		t.Fatalf("import preview: %d\n%s", code, body)
+	}
+	if code, _ = post("/ipam64/import", url.Values{"action": {"apply"}, "csv": {"ip;name\n192.168.1.77;csvtest\n"}}); code != http.StatusSeeOther {
+		t.Fatalf("import apply: %d", code)
+	}
+	if code, body = get("/api/ipam64/addresses?q=csvtest"); code != 200 || !strings.Contains(body, `"total":1`) {
+		t.Fatalf("imported: %d %s", code, body)
+	}
 	if code, body = get("/ipam64/setup"); code != 200 || !strings.Contains(body, `id="ipam-setup-form"`) || !strings.Contains(body, "192.168.20.0/24") || strings.Contains(body, "ipam64.") {
 		t.Fatalf("setup: %d\n%s", code, body)
 	}

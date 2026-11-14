@@ -40,6 +40,7 @@ const (
 	AreaNotifications = "notifications"
 	AreaAudit         = "audit"
 	AreaSonar64       = "sonar64"
+	AreaIPAM64        = "ipam64"
 
 	// AreaAll: Werkzeug fuer jeden Schluessel, ohne eigenes Recht. Nur fuer api_reference: es liest allein die
 	// mitgelieferte API-Beschreibung (openapi.json, auch im oeffentlichen Repo), keine Daten der Node. Kein Bereich
@@ -48,12 +49,12 @@ const (
 )
 
 // Areas in der Reihenfolge der Oberflaeche.
-var Areas = []string{AreaNode, AreaHealthchecks, AreaMonitor64, AreaDNS64, AreaProxy64, AreaHoneypot, AreaSonar64, AreaDynDNS, AreaCerts, AreaNotifications, AreaAudit}
+var Areas = []string{AreaNode, AreaHealthchecks, AreaMonitor64, AreaDNS64, AreaIPAM64, AreaProxy64, AreaHoneypot, AreaSonar64, AreaDynDNS, AreaCerts, AreaNotifications, AreaAudit}
 
 // ModuleOf: Modul, das fuer den Bereich laufen muss ("" = Kern, entscheidet Backend.Available).
 var ModuleOf = map[string]string{
 	AreaHealthchecks: "healthchecks", AreaDNS64: "dns64", AreaProxy64: "cdn64",
-	AreaHoneypot: "honeypot", AreaDynDNS: "dyndns", AreaMonitor64: "monitor64", AreaSonar64: "sonar64",
+	AreaHoneypot: "honeypot", AreaDynDNS: "dyndns", AreaMonitor64: "monitor64", AreaSonar64: "sonar64", AreaIPAM64: "ipam64",
 }
 
 // ValidArea sagt, ob es den Bereich gibt.

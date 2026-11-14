@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/csv"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/netip"
@@ -47,6 +48,8 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /ipam64/conflicts", page(m.pageConflicts))
 	mux.Handle("POST /ipam64/ignore", page(m.postIgnore))
 	mux.Handle("POST /ipam64/notify", page(m.postNotify))
+	mux.Handle("GET /ipam64/import", page(m.pageImport))
+	mux.Handle("POST /ipam64/import", page(m.postImport))
 }
 
 const (
@@ -59,7 +62,7 @@ func errKey(err error) string {
 	for e, k := range map[error]string{ErrPrefix: "prefix", ErrSize: "size", ErrDup: "dup", ErrName: "name", ErrHost: "host", ErrStatus: "status",
 		ErrVLAN: "vlan", ErrTags: "tags", ErrRange: "range", ErrRangeNet: "range_net", ErrOverlap: "overlap", ErrIP: "ip", ErrNoNet: "no_net",
 		ErrNetAddr: "net_addr", ErrMAC: "mac", ErrTaken: "taken", ErrRole: "role", ErrNotFound: "not_found", ErrBusy: "busy",
-		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn"} {
+		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn", ErrImport: "import"} {
 		if errors.Is(err, e) {
 			return "ipam64.err." + k
 		}
@@ -748,6 +751,69 @@ func (m *Module) postNotify(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.notify_saved"))
 	}
 	http.Redirect(w, r, "/ipam64/conflicts", http.StatusSeeOther)
+}
+
+type importData struct {
+	Rows    []importView
+	CSV     string
+	Valid   int
+	Invalid int
+	Err     string
+}
+
+type importView struct {
+	ImportRow
+	ErrText string
+}
+
+func (m *Module) pageImport(w http.ResponseWriter, r *http.Request) {
+	m.g.Render(w, r, http.StatusOK, "ipam64/import", "ipam64.import.title", &importData{})
+}
+
+func (m *Module) postImport(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes+64<<10)
+	_ = r.ParseMultipartForm(maxImportBytes)
+	text := r.PostFormValue("csv")
+	if f, _, err := r.FormFile("file"); err == nil {
+		b, _ := io.ReadAll(io.LimitReader(f, maxImportBytes+1))
+		f.Close()
+		if len(b) > 0 {
+			text = string(b)
+		}
+	}
+	d := &importData{CSV: text}
+	rows, err := m.ParseImport(r.Context(), []byte(text))
+	if err != nil {
+		d.Err = m.errText(r, err)
+		m.g.Render(w, r, http.StatusUnprocessableEntity, "ipam64/import", "ipam64.import.title", d)
+		return
+	}
+	if r.PostFormValue("action") == "apply" {
+		n, failed := m.ApplyImport(r.Context(), rows, m.g.Actor(r), func(e error) string { return m.errText(r, e) })
+		m.g.Audit(r, "ipam64.import", Name, strconv.Itoa(n))
+		kind, msg := "success", m.g.T(r, "ipam64.flash.imported", "n", n)
+		if len(failed) > 0 {
+			var parts []string
+			for _, f := range failed {
+				parts = append(parts, f.What+": "+f.Reason)
+			}
+			kind, msg = "warning", msg+" "+m.g.T(r, "ipam64.flash.setup_failed", "list", strings.Join(parts, "; "))
+		}
+		m.g.Flash(w, r, kind, msg)
+		http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+		return
+	}
+	for _, row := range rows {
+		v := importView{ImportRow: row}
+		if row.Err != nil {
+			v.ErrText = m.errText(r, row.Err)
+			d.Invalid++
+		} else {
+			d.Valid++
+		}
+		d.Rows = append(d.Rows, v)
+	}
+	m.g.Render(w, r, http.StatusOK, "ipam64/import", "ipam64.import.title", d)
 }
 
 // effectText beschreibt die Wirkung einer Adresse in DNS64 fuer das Audit-Log.

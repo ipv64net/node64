@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -36,6 +37,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/ipam64/available", api(m.apiAvailable))
 	mux.Handle("POST /api/ipam64/available", api(m.apiAllocate))
 	mux.Handle("GET /api/ipam64/scan", api(m.apiScanStatus))
+	mux.Handle("GET /api/ipam64/conflicts", api(m.apiConflicts))
 	mux.Handle("POST /api/ipam64/scan", api(m.apiScan))
 }
 
@@ -371,6 +373,43 @@ func (m *Module) apiAllocate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.g.Audit(r, "ipam64.address.save", out.Address, m.effectText(r.Context(), out))
 	writeJSON(w, http.StatusCreated, out)
+}
+
+// apiConflicts: Konflikte und Hinweise sowie unbekannte Geraete (Seite Scan & Konflikte).
+func (m *Module) apiConflicts(w http.ResponseWriter, r *http.Request) {
+	found, err := m.Findings(r.Context())
+	if err != nil {
+		m.apiFail(w, err)
+		return
+	}
+	unk, err := m.Unknown(r.Context())
+	if err != nil {
+		m.apiFail(w, err)
+		return
+	}
+	if found == nil {
+		found = []Finding{}
+	}
+	type dev struct {
+		IP     string    `json:"ip"`
+		Prefix string    `json:"prefix,omitempty"`
+		MAC    string    `json:"mac"`
+		Vendor string    `json:"vendor,omitempty"`
+		First  time.Time `json:"first_seen,omitzero"`
+		Seen   time.Time `json:"last_seen,omitzero"`
+	}
+	snap, _ := m.Snapshot(r.Context())
+	devs := []dev{}
+	for _, e := range unk {
+		d := dev{IP: e.IP, MAC: e.MAC, Vendor: e.Vendor, First: e.First, Seen: e.Seen}
+		if snap != nil {
+			if n := snap.NetOf(e.ip); n != nil {
+				d.Prefix = n.CIDR
+			}
+		}
+		devs = append(devs, d)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"findings": found, "unknown": devs})
 }
 
 func (m *Module) apiScanStatus(w http.ResponseWriter, r *http.Request) {

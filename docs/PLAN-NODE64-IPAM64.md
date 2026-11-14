@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) , I3 (IPAM64 0.2.0) , I4 (IPAM64 0.3.0) und I5 (IPAM64 0.4.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) , I3 (IPAM64 0.2.0) , I4 (IPAM64 0.3.0) , I5 (IPAM64 0.4.0) und I6 (IPAM64 0.5.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -344,3 +344,16 @@ IPAM64 0.4.0, im selben Zweig; Seite auf der Testnode geprüft:
   (MA-L, MA-M, MA-S). Von Dennis freigegeben und am 2026-11-14 erzeugt: 54.466 Einträge, 559 KB gepackt (die IEEE
   verlangt ein eigenes User-Agent-Kennzeichen, sonst 418). Neu erzeugen: `go run gen.go` im Ordner. Zufällige MACs
   erkennt IPAM64 ohne Liste.
+
+## Stand I6 (2026-11-14)
+
+IPAM64 0.5.0, im selben Zweig; Import und Metriken auf der Testnode geprüft:
+- `import.go`, Seite `/ipam64/import`: CSV mit Vorschau (Präfixe oder Adressen, Aliase für Spalten, Komma/Semikolon,
+  BOM, höchstens 2 MB/10.000 Zeilen), Ergänzen vorhandener Einträge, Übernehmen über `SavePrefix`/`ApplyAddress`.
+- `metrics.go`: `node64_ipam64_*` je Präfix (Labels prefix, name) und gesamt.
+- MCP: Bereich `ipam64` (`mcp.AreaIPAM64`, Modul ipam64), Werkzeuge `ipam64_overview`, `ipam64_addresses`,
+  `ipam64_conflicts`, `ipam64_available`; Namen/Hersteller als fremde Daten. Die Ausnahmen im MCP-Test sind entfernt.
+- API `GET /api/ipam64/conflicts`, OpenAPI vollständig für alle Routen.
+- Doku: `docs/IPAM64.md`, Abschnitt im README. Die Doku auf node64.de zieht die Sitzung „Node64 Webseite“ nach,
+  sobald der Zweig in `main` ist (Hash dann schicken).
+- Offen: I7 Praxistest (echtes Netz, DHCP-Failover, Präfixwechsel, 20.000 Adressen, „Nur lesen“, beide Designs).

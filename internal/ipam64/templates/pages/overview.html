@@ -4,7 +4,7 @@
 	<h1 class="h4 mb-0 me-auto"><i class="bi bi-grid-3x3-gap text-primary"></i> {{.T "ipam64.title"}}</h1>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/conflicts" id="ipam-conflicts-link"><i class="bi bi-radar"></i> {{.T "ipam64.conflicts.title"}}</a>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/setup" id="ipam-setup"><i class="bi bi-magic"></i> {{.T "ipam64.setup.button"}}</a>
-	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/export.csv" id="ipam-export"><i class="bi bi-download"></i> {{.T "ipam64.export"}}</a>
+	<div class="btn-group btn-group-sm" role="group" aria-label="CSV"><a class="btn btn-outline-secondary" href="/ipam64/export.csv" id="ipam-export"><i class="bi bi-download"></i> {{.T "ipam64.export"}}</a><a class="btn btn-outline-secondary" href="/ipam64/import" id="ipam-import"><i class="bi bi-upload"></i> {{.T "ipam64.import.button"}}</a></div>
 	<button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#ipam-new" aria-expanded="{{if $d.FormOpen}}true{{else}}false{{end}}" aria-controls="ipam-new" id="ipam-new-btn"><i class="bi bi-plus-lg"></i> {{.T "ipam64.prefix.new"}}</button>
 </div>
 <p class="text-body-secondary small">{{.T "ipam64.intro"}}</p>

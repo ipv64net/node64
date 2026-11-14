@@ -343,6 +343,18 @@ Das Modul *Monitor64* (in den Einstellungen einschalten, standardmäßig aus –
 
 Der Verlauf liegt in einer eigenen Datei `monitor64.db` im Datenverzeichnis (1-Minuten-Werte 48 Stunden, 5-Minuten-Werte 30 Tage, Stundenwerte 1 Jahr). Agent-Dateien und Ablauf: [docs/MONITOR64-AGENT-RELEASE.md](docs/MONITOR64-AGENT-RELEASE.md), Cluster: [docs/CLUSTER.md](docs/CLUSTER.md).
 
+## IPAM64 (IP-Adressverwaltung)
+
+Das Modul *IPAM64* (in den Einstellungen einschalten, standardmäßig aus) verwaltet Netze und feste Adressen für IPv4 und IPv6 – nur den IP-Teil, wie man ihn von Netbox kennt, ohne Räume und Racks:
+
+- **Präfixe** mit Hierarchie (ergibt sich aus den Präfixen), Status, VLAN, Rolle, Tags und DNS-Zone; Adressbereiche für feste Adressen oder zum Freihalten; Raster (IPv4 bis /22), Liste mit freien Lücken und „nächste freie Adresse“ (auch per API am Stück).
+- **DHCP und DNS aus IPAM64:** An jeder Adresse lassen sich ein lokaler DNS-Eintrag (A/AAAA, PTR) und eine DHCP-Reservierung einschalten; IPAM64 legt sie in DNS64 an (dort mit Kennzeichen „IPAM64“). Feste Adressen im DHCP-Adressbereich nimmt DNS64 aus der Vergabe aus. Ein Assistent übernimmt den Bestand aus DNS64.
+- **Was wirklich im Netz ist:** zusammengeführt aus DHCP-Leases, lokalem DNS, Monitor64, Healthchecks, PROXY64 und der Nachbartabelle (ARP/NDP), mit Hersteller zur MAC; optional ein begrenzter Netz-Scan (nur private IPv4-Netze bis /22). *Scan & Konflikte* zeigt doppelte Adressen, fremde Geräte, Leases gegen feste Adressen und unbekannte Geräte und meldet neue Konflikte.
+- **IPv6 vom Provider:** dynamische Präfixe werden beim Wechsel samt AAAA-Einträgen nachgezogen.
+- **Mehr:** Cluster-Abgleich, CSV-Import und -Export, Prometheus (`node64_ipam64_*`), MCP (lesend), API `/api/ipam64/*`.
+
+Einzelheiten: [docs/IPAM64.md](docs/IPAM64.md). Grundlage war ein Entwurf aus der Community (UlrichSchwarz).
+
 ## Honeypot64 (Fallen-Dienste)
 
 Das Modul *Honeypot64* (in den Einstellungen einschalten, standardmäßig aus) stellt Fallen-Dienste auf, die Angreifer anlocken: SSH und Telnet (Logins werden immer abgelehnt und mit Benutzername und Passwort erfasst), HTTP/HTTPS mit neutralen Login-Ködern und Einordnung der Web-Angriffe nach OWASP (SQL-Injection, Log4Shell, Path Traversal …), beliebige TCP-Ports (erste Bytes, z. B. RDP-Benutzername) und Port-Scan-Erkennung. Je Port wählbare Dienst-Profile (z. B. OpenSSH Debian/Ubuntu oder Dropbear, BusyBox- oder Linux-Telnet, MySQL oder MariaDB, nginx, Apache, Proxmox VE, Webmin, Home Assistant, Grafana, NAS, Elasticsearch) bestimmen Banner, Kopfzeilen, Antworten und Zertifikat; Hostname und Versionen variieren stabil je Sensor. Low Interaction: nichts wird ausgeführt, keine ausgehenden Verbindungen, Limits je IP. Profile `minimal`, `standard`, `full` oder eigene Auswahl; belegte Ports (PROXY64, DNS64, Streams) werden erkannt. Auswertung unter *Honeypot64*: Dienste, Verlauf, Top-IPs, Zugangsdaten, Pfade, User-Agents, letzte Ereignisse; Prometheus (`node64_honeypot_*`), optional Meldung bei neuen Angreifern. Daten lokal 7 Tage. API: `/api/honeypot/*`.

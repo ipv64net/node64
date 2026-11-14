@@ -1,5 +1,15 @@
 # IPAM64 – Changes
 
+## 0.5.0 – unreleased
+
+New:
+
+- CSV import with preview: prefixes or addresses (including DNS/DHCP switches), comma or semicolon, existing entries are extended; the own export can be read back in.
+- Prometheus at `/api/metrics`: `node64_ipam64_*` – usage, utilisation and conflicts per prefix, free addresses in the DHCP range, conflicts, hints, unknown devices, last scan.
+- MCP (read only): new area IPAM64 with `ipam64_overview`, `ipam64_addresses`, `ipam64_conflicts`, `ipam64_available`.
+- API: `GET /api/ipam64/conflicts` (conflicts, hints, unknown devices).
+- Guide in docs/IPAM64.md, section in the README.
+
 ## 0.4.0 – unreleased
 
 New:

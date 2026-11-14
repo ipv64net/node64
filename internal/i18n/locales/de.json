@@ -1943,6 +1943,7 @@
       "mcp": "KI (MCP)"
     },
     "actions": {
+      "ipam64_import": "IPAM64: CSV importiert",
       "ipam64_ignore": "IPAM64: Gerät ignoriert",
       "ipam64_notify": "IPAM64: Benachrichtigungen eingestellt",
       "ipam64_setup": "IPAM64: aus dem Bestand eingerichtet",
@@ -5280,6 +5281,7 @@
     }
   },
   "mcp": {
+    "area_ipam64": "IPAM64",
     "title": "KI-Schnittstelle (MCP)",
     "intro": "KI-Anwendungen wie Claude Code oder Cursor fragen über MCP den Zustand dieser Node ab. Nur lesen – die KI kann nichts ändern.",
     "lan_only": "Nur aus dem Heimnetz: Anfragen von öffentlichen Adressen (auch über PROXY64 oder einen Reverse-Proxy) werden mit 403 abgewiesen. Erlaubt sind private Netze, VPN (z. B. 100.64.0.0/10) und localhost.",
@@ -5581,6 +5583,23 @@
     }
   },
   "ipam64": {
+    "import": {
+      "title": "CSV-Import",
+      "button": "Import",
+      "intro": "Präfixe oder Adressen aus einer Tabelle übernehmen – erst prüfen, dann übernehmen. Der eigene CSV-Export lässt sich wieder einlesen; vorhandene Einträge werden ergänzt, leere Zellen ändern nichts.",
+      "preview": "Vorschau",
+      "valid": "{n} gültig",
+      "invalid": "{n} fehlerhaft",
+      "line": "Zeile",
+      "entry": "Präfix / Adresse",
+      "update": "wird ergänzt",
+      "new": "neu",
+      "apply": "{n} übernehmen",
+      "file": "CSV-Datei (höchstens 2 MB, 10.000 Zeilen)",
+      "paste": "oder hier einfügen",
+      "columns": "Erste Zeile: Spaltennamen, getrennt durch Komma oder Semikolon. Adressen: ip, name, mac, status, role, description, tags, dns, dns_zone, ptr, dhcp. Präfixe (ohne Spalte ip): prefix, name, status, vlan, role, description, tags, dns_zone, scan, dynamic. Ja/Nein als 1/0.",
+      "check": "Prüfen"
+    },
     "vendor_random": "zufällige MAC",
     "finding": {
       "dup": "Doppelte Adresse {ip}",
@@ -5855,6 +5874,7 @@
       "conflicts": "Konflikte"
     },
     "flash": {
+      "imported": "{n} Einträge übernommen.",
       "notify_saved": "Benachrichtigungen gespeichert.",
       "setup": "Übernommen: {p} Präfixe, {a} Adressen.",
       "setup_failed": "Nicht übernommen: {list}",
@@ -5871,6 +5891,7 @@
       "autoscan_saved": "Automatischer Scan gespeichert."
     },
     "err": {
+      "import": "Die Datei ist leer, zu groß oder hat keine Spalte ip bzw. prefix.",
       "dyn": "„Dynamisch“ geht nur für globale IPv6-Präfixe (2000::/3).",
       "no_zone": "DNS ist an, aber es gibt keine Zone – trage eine an der Adresse oder am Präfix ein.",
       "no_dns64": "DNS64 läuft nicht.",

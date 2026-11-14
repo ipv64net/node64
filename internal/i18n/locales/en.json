@@ -1943,6 +1943,7 @@
       "mcp": "AI (MCP)"
     },
     "actions": {
+      "ipam64_import": "IPAM64: CSV imported",
       "ipam64_ignore": "IPAM64: device ignored",
       "ipam64_notify": "IPAM64: notifications set",
       "ipam64_setup": "IPAM64: set up from existing data",
@@ -5280,6 +5281,7 @@
     }
   },
   "mcp": {
+    "area_ipam64": "IPAM64",
     "title": "AI interface (MCP)",
     "intro": "AI apps like Claude Code or Cursor query this node’s state via MCP. Read-only – the AI cannot change anything.",
     "lan_only": "Home network only: requests from public addresses (also via PROXY64 or a reverse proxy) are rejected with 403. Private networks, VPN (e.g. 100.64.0.0/10) and localhost are allowed.",
@@ -5581,6 +5583,23 @@
     }
   },
   "ipam64": {
+    "import": {
+      "title": "CSV import",
+      "button": "Import",
+      "intro": "Take over prefixes or addresses from a table – check first, then take over. The CSV export can be read back in; existing entries are extended, empty cells change nothing.",
+      "preview": "Preview",
+      "valid": "{n} valid",
+      "invalid": "{n} invalid",
+      "line": "Line",
+      "entry": "Prefix / address",
+      "update": "will be extended",
+      "new": "new",
+      "apply": "Take over {n}",
+      "file": "CSV file (at most 2 MB, 10,000 rows)",
+      "paste": "or paste here",
+      "columns": "First row: column names, separated by comma or semicolon. Addresses: ip, name, mac, status, role, description, tags, dns, dns_zone, ptr, dhcp. Prefixes (without column ip): prefix, name, status, vlan, role, description, tags, dns_zone, scan, dynamic. Yes/no as 1/0.",
+      "check": "Check"
+    },
     "vendor_random": "random MAC",
     "finding": {
       "dup": "Duplicate address {ip}",
@@ -5855,6 +5874,7 @@
       "conflicts": "Conflicts"
     },
     "flash": {
+      "imported": "{n} entries taken over.",
       "notify_saved": "Notifications saved.",
       "setup": "Taken over: {p} prefixes, {a} addresses.",
       "setup_failed": "Not taken over: {list}",
@@ -5871,6 +5891,7 @@
       "autoscan_saved": "Automatic scan saved."
     },
     "err": {
+      "import": "The file is empty, too large or has no column ip or prefix.",
       "dyn": "\"Dynamic\" only works for global IPv6 prefixes (2000::/3).",
       "no_zone": "DNS is on but there is no zone – enter one on the address or the prefix.",
       "no_dns64": "DNS64 is not running.",
