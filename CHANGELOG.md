@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.6.0 – 2026-11-14
+
 - Monitor64: Redfish mit HPE iLO 4 (Weiterleitung 308) und Adressen mit Pfad (#141); getrennte Mounts mit Quelle „none“ (virtiofs) einzeln (#140); kurze SNMP-Aussetzer (QNAP) überbrückt statt „Unbekannt“ (#136); Firmware-Updates von FRITZ!Box, MikroTik und UniFi warnen sofort (Forum 5134).
 - Monitor64: Probleme von Hosts im Wartungsfenster eingeklappt am Ende der Problemliste (#142); „Neustart nötig“ auch bei neuerem installiertem Kernel (#130); smartctl_exporter und node_exporter unter macOS (RAM/Swap) im Prometheus-Zugang (#135, #114).
 - Monitor64-Agent 0.1.5: Mounts mit Quelle „none“ einzeln (#140), Kernel-Vergleich für „Neustart nötig“ (#130).
