@@ -695,7 +695,7 @@ func mtUpdates(u, rb mtRow) model.Service {
 	case inst != "" && latest != inst:
 		t := model.T("monitor64.txt.mt_update", "v", latest, "cur", inst)
 		s.Metrics = []model.Metric{{Name: "pending", Value: 1}}
-		s.Facts = append(s.Facts, model.Fact{Code: "updates_security", Text: t})
+		s.Facts = append(s.Facts, model.Fact{Code: "firmware_update", Text: t})
 		parts = append(parts, t)
 	default:
 		s.Metrics = []model.Metric{{Name: "pending", Value: 0}}

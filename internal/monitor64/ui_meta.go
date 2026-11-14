@@ -52,6 +52,7 @@ var ruleKinds = []ruleKind{
 	{Kind: eval.KindUPSOnBattery, Group: "fixed", State: true},
 	{Kind: eval.KindUpdatesSecurity, Group: "fixed", State: true},
 	{Kind: eval.KindRebootRequired, Group: "fixed", State: true},
+	{Kind: eval.KindFirmwareUpdate, Group: "fixed", State: true},
 	{Kind: eval.KindGuestDown, Group: "fixed", State: true},
 	{Kind: eval.KindSystemdFailed, Group: "fixed", State: true},
 	{Kind: eval.KindWinSvcStopped, Group: "fixed", State: true},

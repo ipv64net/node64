@@ -254,7 +254,7 @@ func TestDefaultsTable(t *testing.T) {
 		KindSmartFailed: {SevCrit, 0}, KindSmartSectors: {SevWarn, 0}, KindSmartSectorsUp: {SevCrit, 0},
 		KindRAIDDegraded: {SevCrit, 0}, KindBondMemberDown: {SevWarn, 0}, KindBondLACP: {SevWarn, 0},
 		KindUPSOnBattery: {SevWarn, 0}, KindUpdatesSecurity: {SevWarn, 24 * time.Hour},
-		KindRebootRequired: {SevWarn, 24 * time.Hour}, KindGuestDown: {SevCrit, 0}, KindSystemdFailed: {SevWarn, 0}, KindWinSvcStopped: {SevWarn, 5 * time.Minute},
+		KindRebootRequired: {SevWarn, 24 * time.Hour}, KindFirmwareUpdate: {SevWarn, 0}, KindGuestDown: {SevCrit, 0}, KindSystemdFailed: {SevWarn, 0}, KindWinSvcStopped: {SevWarn, 5 * time.Minute},
 		KindUPSLowBattery: {SevCrit, 0}, KindUPSReplace: {SevWarn, 0}, KindUPSOverload: {SevWarn, 0},
 		KindDeviceWarn: {SevWarn, 0}, KindDeviceCrit: {SevCrit, 0}, KindParityErrors: {SevWarn, 0},
 		KindHostRestarted: {SevWarn, 0}, KindIfDown: {SevWarn, 0}, KindIfSpeedLow: {SevWarn, 0}, KindIfHalfDuplex: {SevWarn, 0},

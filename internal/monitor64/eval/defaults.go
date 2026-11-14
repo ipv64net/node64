@@ -36,6 +36,7 @@ const (
 	KindUPSOnBattery    = "ups.on_battery"       // USV auf Batterie
 	KindUpdatesSecurity = "updates.security"     // Sicherheitsupdates ausstehend
 	KindRebootRequired  = "reboot.required"      // Neustart noetig
+	KindFirmwareUpdate  = "firmware.update"      // Geraet: Firmware-Update verfuegbar (FRITZ!Box, MikroTik, UniFi)
 	KindGuestDown       = "guest.down"           // Gast/Container laeuft nicht, obwohl er soll
 	KindSystemdFailed   = "systemd.failed"       // fehlgeschlagene systemd-Dienste
 	KindWinSvcStopped   = "winsvc.stopped"       // Windows-Dienst mit Starttyp Automatisch laeuft nicht
@@ -139,6 +140,8 @@ func Defaults() Table {
 		KindUPSOnBattery:    stateRule(SevWarn, 0),
 		KindUpdatesSecurity: stateRule(SevWarn, 24*time.Hour),
 		KindRebootRequired:  stateRule(SevWarn, 24*time.Hour),
+		// Firmware von Geraeten spielt sich nicht wie apt-Sicherheitsupdates von selbst ein: sofort melden
+		KindFirmwareUpdate:  stateRule(SevWarn, 0),
 		KindGuestDown:       stateRule(SevCrit, 0),
 		KindSystemdFailed:   stateRule(SevWarn, 0),
 		KindWinSvcStopped:   stateRule(SevWarn, 5*time.Minute),

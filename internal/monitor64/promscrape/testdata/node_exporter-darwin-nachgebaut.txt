@@ -1,0 +1,50 @@
+# Nachgebaut (kein Mitschnitt): node_exporter 1.9 unter macOS 15, Mac mini 16 GB. Metriknamen aus
+# collector/meminfo_darwin.go bzw. den Collectorn cpu, loadavg, boottime, filesystem; Werte plausibel.
+# HELP node_exporter_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which node_exporter was built, and the goos and goarch for the build.
+# TYPE node_exporter_build_info gauge
+node_exporter_build_info{branch="HEAD",goarch="arm64",goos="darwin",goversion="go1.24.3",revision="b2a8c1f",tags="unknown",version="1.9.1"} 1
+# HELP node_memory_active_bytes Memory information field active_bytes.
+# TYPE node_memory_active_bytes gauge
+node_memory_active_bytes 5.24288e+09
+# HELP node_memory_compressed_bytes Memory information field compressed_bytes.
+# TYPE node_memory_compressed_bytes gauge
+node_memory_compressed_bytes 1.073741824e+09
+# HELP node_memory_free_bytes Memory information field free_bytes.
+# TYPE node_memory_free_bytes gauge
+node_memory_free_bytes 3.0408704e+08
+# HELP node_memory_inactive_bytes Memory information field inactive_bytes.
+# TYPE node_memory_inactive_bytes gauge
+node_memory_inactive_bytes 5.0331648e+09
+# HELP node_memory_internal_bytes Memory information field internal_bytes.
+# TYPE node_memory_internal_bytes gauge
+node_memory_internal_bytes 7.516192768e+09
+# HELP node_memory_purgeable_bytes Memory information field purgeable_bytes.
+# TYPE node_memory_purgeable_bytes gauge
+node_memory_purgeable_bytes 5.36870912e+08
+# HELP node_memory_swap_total_bytes Memory information field swap_total_bytes.
+# TYPE node_memory_swap_total_bytes gauge
+node_memory_swap_total_bytes 2.147483648e+09
+# HELP node_memory_swap_used_bytes Memory information field swap_used_bytes.
+# TYPE node_memory_swap_used_bytes gauge
+node_memory_swap_used_bytes 5.36870912e+08
+# HELP node_memory_swapped_in_bytes_total Memory information field swapped_in_bytes_total.
+# TYPE node_memory_swapped_in_bytes_total counter
+node_memory_swapped_in_bytes_total 1.2345678e+09
+# HELP node_memory_swapped_out_bytes_total Memory information field swapped_out_bytes_total.
+# TYPE node_memory_swapped_out_bytes_total counter
+node_memory_swapped_out_bytes_total 4.56789e+08
+# HELP node_memory_total_bytes Memory information field total_bytes.
+# TYPE node_memory_total_bytes gauge
+node_memory_total_bytes 1.7179869184e+10
+# HELP node_memory_wired_bytes Memory information field wired_bytes.
+# TYPE node_memory_wired_bytes gauge
+node_memory_wired_bytes 2.147483648e+09
+# HELP node_load1 1m load average.
+# TYPE node_load1 gauge
+node_load1 1.82
+# HELP node_load5 5m load average.
+# TYPE node_load5 gauge
+node_load5 1.95
+# HELP node_load15 15m load average.
+# TYPE node_load15 gauge
+node_load15 2.01

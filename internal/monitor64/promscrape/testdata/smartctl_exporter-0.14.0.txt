@@ -1,0 +1,302 @@
+# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 0.000101948
+go_gc_duration_seconds{quantile="0.25"} 0.000101948
+go_gc_duration_seconds{quantile="0.5"} 0.000101948
+go_gc_duration_seconds{quantile="0.75"} 0.000101948
+go_gc_duration_seconds{quantile="1"} 0.000101948
+go_gc_duration_seconds_sum 0.000101948
+go_gc_duration_seconds_count 1
+# HELP go_gc_gogc_percent Heap size target percentage configured by the user, otherwise 100. This value is set by the GOGC environment variable, and the runtime/debug.SetGCPercent function. Sourced from /gc/gogc:percent.
+# TYPE go_gc_gogc_percent gauge
+go_gc_gogc_percent 100
+# HELP go_gc_gomemlimit_bytes Go runtime memory limit configured by the user, otherwise math.MaxInt64. This value is set by the GOMEMLIMIT environment variable, and the runtime/debug.SetMemoryLimit function. Sourced from /gc/gomemlimit:bytes.
+# TYPE go_gc_gomemlimit_bytes gauge
+go_gc_gomemlimit_bytes 9.223372036854776e+18
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 8
+# HELP go_info Information about the Go environment.
+# TYPE go_info gauge
+go_info{version="go1.23.7"} 1
+# HELP go_memstats_alloc_bytes Number of bytes allocated in heap and currently in use. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_alloc_bytes gauge
+go_memstats_alloc_bytes 986720
+# HELP go_memstats_alloc_bytes_total Total number of bytes allocated in heap until now, even if released already. Equals to /gc/heap/allocs:bytes.
+# TYPE go_memstats_alloc_bytes_total counter
+go_memstats_alloc_bytes_total 1.682784e+06
+# HELP go_memstats_buck_hash_sys_bytes Number of bytes used by the profiling bucket hash table. Equals to /memory/classes/profiling/buckets:bytes.
+# TYPE go_memstats_buck_hash_sys_bytes gauge
+go_memstats_buck_hash_sys_bytes 4178
+# HELP go_memstats_frees_total Total number of heap objects frees. Equals to /gc/heap/frees:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_frees_total counter
+go_memstats_frees_total 7003
+# HELP go_memstats_gc_sys_bytes Number of bytes used for garbage collection system metadata. Equals to /memory/classes/metadata/other:bytes.
+# TYPE go_memstats_gc_sys_bytes gauge
+go_memstats_gc_sys_bytes 2.115456e+06
+# HELP go_memstats_heap_alloc_bytes Number of heap bytes allocated and currently in use, same as go_memstats_alloc_bytes. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_heap_alloc_bytes gauge
+go_memstats_heap_alloc_bytes 986720
+# HELP go_memstats_heap_idle_bytes Number of heap bytes waiting to be used. Equals to /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_idle_bytes gauge
+go_memstats_heap_idle_bytes 4.308992e+06
+# HELP go_memstats_heap_inuse_bytes Number of heap bytes that are in use. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes
+# TYPE go_memstats_heap_inuse_bytes gauge
+go_memstats_heap_inuse_bytes 3.162112e+06
+# HELP go_memstats_heap_objects Number of currently allocated objects. Equals to /gc/heap/objects:objects.
+# TYPE go_memstats_heap_objects gauge
+go_memstats_heap_objects 3878
+# HELP go_memstats_heap_released_bytes Number of heap bytes released to OS. Equals to /memory/classes/heap/released:bytes.
+# TYPE go_memstats_heap_released_bytes gauge
+go_memstats_heap_released_bytes 3.047424e+06
+# HELP go_memstats_heap_sys_bytes Number of heap bytes obtained from system. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes + /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_sys_bytes gauge
+go_memstats_heap_sys_bytes 7.471104e+06
+# HELP go_memstats_last_gc_time_seconds Number of seconds since 1970 of last garbage collection.
+# TYPE go_memstats_last_gc_time_seconds gauge
+go_memstats_last_gc_time_seconds 1.7946540216772103e+09
+# HELP go_memstats_mallocs_total Total number of heap objects allocated, both live and gc-ed. Semantically a counter version for go_memstats_heap_objects gauge. Equals to /gc/heap/allocs:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_mallocs_total counter
+go_memstats_mallocs_total 10881
+# HELP go_memstats_mcache_inuse_bytes Number of bytes in use by mcache structures. Equals to /memory/classes/metadata/mcache/inuse:bytes.
+# TYPE go_memstats_mcache_inuse_bytes gauge
+go_memstats_mcache_inuse_bytes 14400
+# HELP go_memstats_mcache_sys_bytes Number of bytes used for mcache structures obtained from system. Equals to /memory/classes/metadata/mcache/inuse:bytes + /memory/classes/metadata/mcache/free:bytes.
+# TYPE go_memstats_mcache_sys_bytes gauge
+go_memstats_mcache_sys_bytes 15600
+# HELP go_memstats_mspan_inuse_bytes Number of bytes in use by mspan structures. Equals to /memory/classes/metadata/mspan/inuse:bytes.
+# TYPE go_memstats_mspan_inuse_bytes gauge
+go_memstats_mspan_inuse_bytes 125600
+# HELP go_memstats_mspan_sys_bytes Number of bytes used for mspan structures obtained from system. Equals to /memory/classes/metadata/mspan/inuse:bytes + /memory/classes/metadata/mspan/free:bytes.
+# TYPE go_memstats_mspan_sys_bytes gauge
+go_memstats_mspan_sys_bytes 130560
+# HELP go_memstats_next_gc_bytes Number of heap bytes when next garbage collection will take place. Equals to /gc/heap/goal:bytes.
+# TYPE go_memstats_next_gc_bytes gauge
+go_memstats_next_gc_bytes 4.194304e+06
+# HELP go_memstats_other_sys_bytes Number of bytes used for other system allocations. Equals to /memory/classes/other:bytes.
+# TYPE go_memstats_other_sys_bytes gauge
+go_memstats_other_sys_bytes 2.345294e+06
+# HELP go_memstats_stack_inuse_bytes Number of bytes obtained from system for stack allocator in non-CGO environments. Equals to /memory/classes/heap/stacks:bytes.
+# TYPE go_memstats_stack_inuse_bytes gauge
+go_memstats_stack_inuse_bytes 917504
+# HELP go_memstats_stack_sys_bytes Number of bytes obtained from system for stack allocator. Equals to /memory/classes/heap/stacks:bytes + /memory/classes/os-stacks:bytes.
+# TYPE go_memstats_stack_sys_bytes gauge
+go_memstats_stack_sys_bytes 917504
+# HELP go_memstats_sys_bytes Number of bytes obtained from system. Equals to /memory/classes/total:byte.
+# TYPE go_memstats_sys_bytes gauge
+go_memstats_sys_bytes 1.2999696e+07
+# HELP go_sched_gomaxprocs_threads The current runtime.GOMAXPROCS setting, or the number of operating system threads that can execute user-level Go code simultaneously. Sourced from /sched/gomaxprocs:threads.
+# TYPE go_sched_gomaxprocs_threads gauge
+go_sched_gomaxprocs_threads 12
+# HELP go_threads Number of OS threads created.
+# TYPE go_threads gauge
+go_threads 13
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 0.03
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 524288
+# HELP process_network_receive_bytes_total Number of bytes received by the process over the network.
+# TYPE process_network_receive_bytes_total counter
+process_network_receive_bytes_total 968
+# HELP process_network_transmit_bytes_total Number of bytes sent by the process over the network.
+# TYPE process_network_transmit_bytes_total counter
+process_network_transmit_bytes_total 28362
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 30
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 1.611776e+07
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds 1.7946540146e+09
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes 1.267744768e+09
+# HELP process_virtual_memory_max_bytes Maximum amount of virtual memory available in bytes.
+# TYPE process_virtual_memory_max_bytes gauge
+process_virtual_memory_max_bytes 1.8446744073709552e+19
+# HELP smartctl_device Device info
+# TYPE smartctl_device gauge
+smartctl_device{ata_additional_product_id="unknown",ata_version="",device="nvme0",firmware_version="5B2QGXA7",form_factor="",interface="nvme",model_family="unknown",model_name="Samsung SSD 980 PRO 1TB",protocol="NVMe",sata_version="",scsi_product="",scsi_revision="",scsi_vendor="",scsi_version="",serial_number="S5GXNF0R123456A"} 1
+smartctl_device{ata_additional_product_id="unknown",ata_version="",device="sda",firmware_version="",form_factor="",interface="sat",model_family="unknown",model_name="Samsung SSD 870 EVO 1TB",protocol="ATA",sata_version="",scsi_product="",scsi_revision="",scsi_vendor="",scsi_version="",serial_number="S6PTNM0T123456K"} 1
+smartctl_device{ata_additional_product_id="unknown",ata_version="",device="sdc",firmware_version="",form_factor="",interface="scsi",model_family="unknown",model_name="SEAGATE ST4000NM0023",protocol="SCSI",sata_version="",scsi_product="ST4000NM0023",scsi_revision="GS0F",scsi_vendor="SEAGATE",scsi_version="",serial_number="Z1Z0ABCD0000C1234567"} 1
+smartctl_device{ata_additional_product_id="unknown",ata_version="",device="sde",firmware_version="",form_factor="",interface="sat",model_family="unknown",model_name="Crucial_CT500MX200SSD1",protocol="ATA",sata_version="",scsi_product="",scsi_revision="",scsi_vendor="",scsi_version="",serial_number="1530ABCDEF12"} 1
+# HELP smartctl_device_attribute Device attributes
+# TYPE smartctl_device_attribute gauge
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="raw",device="sde"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="thresh",device="sde"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="value",device="sde"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="worst",device="sde"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="202",attribute_name="Percent_Lifetime_Remain",attribute_value_type="raw",device="sde"} 91
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="202",attribute_name="Percent_Lifetime_Remain",attribute_value_type="thresh",device="sde"} 1
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="202",attribute_name="Percent_Lifetime_Remain",attribute_value_type="value",device="sde"} 9
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="202",attribute_name="Percent_Lifetime_Remain",attribute_value_type="worst",device="sde"} 9
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="5",attribute_name="Reallocate_NAND_Blk_Cnt",attribute_value_type="raw",device="sde"} 3
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="5",attribute_name="Reallocate_NAND_Blk_Cnt",attribute_value_type="thresh",device="sde"} 10
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="5",attribute_name="Reallocate_NAND_Blk_Cnt",attribute_value_type="value",device="sde"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="5",attribute_name="Reallocate_NAND_Blk_Cnt",attribute_value_type="worst",device="sde"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="raw",device="sde"} 40123
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="thresh",device="sde"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="value",device="sde"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="worst",device="sde"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="----CK",attribute_id="198",attribute_name="Offline_Uncorrectable",attribute_value_type="raw",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="----CK",attribute_id="198",attribute_name="Offline_Uncorrectable",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="----CK",attribute_id="198",attribute_name="Offline_Uncorrectable",attribute_value_type="value",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="----CK",attribute_id="198",attribute_name="Offline_Uncorrectable",attribute_value_type="worst",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O---K",attribute_id="194",attribute_name="Temperature_Celsius",attribute_value_type="raw",device="sda"} 2.36224364577e+11
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O---K",attribute_id="194",attribute_name="Temperature_Celsius",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O---K",attribute_id="194",attribute_name="Temperature_Celsius",attribute_value_type="value",device="sda"} 67
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O---K",attribute_id="194",attribute_name="Temperature_Celsius",attribute_value_type="worst",device="sda"} 52
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="12",attribute_name="Power_Cycle_Count",attribute_value_type="raw",device="sda"} 98
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="12",attribute_name="Power_Cycle_Count",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="12",attribute_name="Power_Cycle_Count",attribute_value_type="value",device="sda"} 99
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="12",attribute_name="Power_Cycle_Count",attribute_value_type="worst",device="sda"} 99
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="187",attribute_name="Uncorrectable_Error_Cnt",attribute_value_type="raw",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="187",attribute_name="Uncorrectable_Error_Cnt",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="187",attribute_name="Uncorrectable_Error_Cnt",attribute_value_type="value",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="187",attribute_name="Uncorrectable_Error_Cnt",attribute_value_type="worst",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="raw",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="value",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="197",attribute_name="Current_Pending_Sector",attribute_value_type="worst",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="241",attribute_name="Total_LBAs_Written",attribute_value_type="raw",device="sda"} 4.5678901234e+10
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="241",attribute_name="Total_LBAs_Written",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="241",attribute_name="Total_LBAs_Written",attribute_value_type="value",device="sda"} 99
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="241",attribute_name="Total_LBAs_Written",attribute_value_type="worst",device="sda"} 99
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="raw",device="sda"} 12045
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="value",device="sda"} 97
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-O--CK",attribute_id="9",attribute_name="Power_On_Hours",attribute_value_type="worst",device="sda"} 97
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-OSRCK",attribute_id="199",attribute_name="UDMA_CRC_Error_Count",attribute_value_type="raw",device="sda"} 2
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-OSRCK",attribute_id="199",attribute_name="UDMA_CRC_Error_Count",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-OSRCK",attribute_id="199",attribute_name="UDMA_CRC_Error_Count",attribute_value_type="value",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="-OSRCK",attribute_id="199",attribute_name="UDMA_CRC_Error_Count",attribute_value_type="worst",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--C-",attribute_id="177",attribute_name="Wear_Leveling_Count",attribute_value_type="raw",device="sda"} 42
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--C-",attribute_id="177",attribute_name="Wear_Leveling_Count",attribute_value_type="thresh",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--C-",attribute_id="177",attribute_name="Wear_Leveling_Count",attribute_value_type="value",device="sda"} 96
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--C-",attribute_id="177",attribute_name="Wear_Leveling_Count",attribute_value_type="worst",device="sda"} 96
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--CK",attribute_id="5",attribute_name="Reallocated_Sector_Ct",attribute_value_type="raw",device="sda"} 0
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--CK",attribute_id="5",attribute_name="Reallocated_Sector_Ct",attribute_value_type="thresh",device="sda"} 10
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--CK",attribute_id="5",attribute_name="Reallocated_Sector_Ct",attribute_value_type="value",device="sda"} 100
+smartctl_device_attribute{attribute_flags_long="",attribute_flags_short="PO--CK",attribute_id="5",attribute_name="Reallocated_Sector_Ct",attribute_value_type="worst",device="sda"} 100
+# HELP smartctl_device_available_spare Normalized percentage (0 to 100%) of the remaining spare capacity available
+# TYPE smartctl_device_available_spare counter
+smartctl_device_available_spare{device="nvme0"} 100
+# HELP smartctl_device_available_spare_threshold When the Available Spare falls below the threshold indicated in this field, an asynchronous event completion may occur. The value is indicated as a normalized percentage (0 to 100%)
+# TYPE smartctl_device_available_spare_threshold counter
+smartctl_device_available_spare_threshold{device="nvme0"} 10
+# HELP smartctl_device_block_size Device block size
+# TYPE smartctl_device_block_size gauge
+smartctl_device_block_size{blocks_type="logical",device="nvme0"} 512
+smartctl_device_block_size{blocks_type="logical",device="sda"} 0
+smartctl_device_block_size{blocks_type="logical",device="sdc"} 0
+smartctl_device_block_size{blocks_type="logical",device="sde"} 0
+smartctl_device_block_size{blocks_type="physical",device="nvme0"} 0
+smartctl_device_block_size{blocks_type="physical",device="sda"} 0
+smartctl_device_block_size{blocks_type="physical",device="sdc"} 0
+smartctl_device_block_size{blocks_type="physical",device="sde"} 0
+# HELP smartctl_device_bytes_read 
+# TYPE smartctl_device_bytes_read counter
+smartctl_device_bytes_read{device="nvme0"} 6.3209875968e+13
+smartctl_device_bytes_read{device="sdc"} 1.23456789e+14
+# HELP smartctl_device_bytes_written 
+# TYPE smartctl_device_bytes_written counter
+smartctl_device_bytes_written{device="nvme0"} 1.2009875968e+14
+smartctl_device_bytes_written{device="sdc"} 9.8765432e+13
+# HELP smartctl_device_capacity_blocks Device capacity in blocks
+# TYPE smartctl_device_capacity_blocks gauge
+smartctl_device_capacity_blocks{device="nvme0"} 1.953525168e+09
+smartctl_device_capacity_blocks{device="sda"} 1.953525168e+09
+smartctl_device_capacity_blocks{device="sdc"} 7.814037168e+09
+smartctl_device_capacity_blocks{device="sde"} 9.76773168e+08
+# HELP smartctl_device_capacity_bytes Device capacity in bytes
+# TYPE smartctl_device_capacity_bytes gauge
+smartctl_device_capacity_bytes{device="nvme0"} 1.000204886016e+12
+smartctl_device_capacity_bytes{device="sda"} 1.000204886016e+12
+smartctl_device_capacity_bytes{device="sdc"} 4.000787030016e+12
+smartctl_device_capacity_bytes{device="sde"} 5.00107862016e+11
+# HELP smartctl_device_critical_warning This field indicates critical warnings for the state of the controller
+# TYPE smartctl_device_critical_warning counter
+smartctl_device_critical_warning{device="nvme0"} 0
+# HELP smartctl_device_media_errors Contains the number of occurrences where the controller detected an unrecovered data integrity error. Errors such as uncorrectable ECC, CRC checksum failure, or LBA tag mismatch are included in this field
+# TYPE smartctl_device_media_errors counter
+smartctl_device_media_errors{device="nvme0"} 0
+# HELP smartctl_device_num_err_log_entries Contains the number of Error Information log entries over the life of the controller
+# TYPE smartctl_device_num_err_log_entries counter
+smartctl_device_num_err_log_entries{device="nvme0"} 0
+# HELP smartctl_device_nvme_capacity_bytes NVMe device total capacity bytes
+# TYPE smartctl_device_nvme_capacity_bytes gauge
+smartctl_device_nvme_capacity_bytes{device="nvme0"} 1.000204886016e+12
+# HELP smartctl_device_percentage_used Device write percentage used
+# TYPE smartctl_device_percentage_used counter
+smartctl_device_percentage_used{device="nvme0"} 7
+# HELP smartctl_device_power_cycle_count Device power cycle count
+# TYPE smartctl_device_power_cycle_count counter
+smartctl_device_power_cycle_count{device="nvme0"} 123
+smartctl_device_power_cycle_count{device="sda"} 98
+# HELP smartctl_device_power_on_seconds Device power on seconds
+# TYPE smartctl_device_power_on_seconds counter
+smartctl_device_power_on_seconds{device="nvme0"} 6.56424e+07
+smartctl_device_power_on_seconds{device="sda"} 4.3362e+07
+smartctl_device_power_on_seconds{device="sdc"} 1.6444152e+08
+smartctl_device_power_on_seconds{device="sde"} 1.444428e+08
+# HELP smartctl_device_rotation_rate Device rotation rate
+# TYPE smartctl_device_rotation_rate gauge
+smartctl_device_rotation_rate{device="sdc"} 7200
+# HELP smartctl_device_smart_status General smart status
+# TYPE smartctl_device_smart_status gauge
+smartctl_device_smart_status{device="nvme0"} 1
+smartctl_device_smart_status{device="sda"} 1
+smartctl_device_smart_status{device="sdc"} 1
+# HELP smartctl_device_smartctl_exit_status Exit status of smartctl on device
+# TYPE smartctl_device_smartctl_exit_status gauge
+smartctl_device_smartctl_exit_status{device="nvme0"} 0
+smartctl_device_smartctl_exit_status{device="sda"} 0
+smartctl_device_smartctl_exit_status{device="sdc"} 0
+smartctl_device_smartctl_exit_status{device="sde"} 24
+# HELP smartctl_device_temperature Device temperature celsius
+# TYPE smartctl_device_temperature gauge
+smartctl_device_temperature{device="nvme0",temperature_type="current"} 42
+smartctl_device_temperature{device="sda",temperature_type="current"} 33
+smartctl_device_temperature{device="sdc",temperature_type="current"} 38
+smartctl_device_temperature{device="sdc",temperature_type="drive_trip"} 68
+smartctl_device_temperature{device="sde",temperature_type="current"} 31
+# HELP smartctl_devices Number of devices configured or dynamically discovered
+# TYPE smartctl_devices gauge
+smartctl_devices 5
+# HELP smartctl_exporter_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which smartctl_exporter was built, and the goos and goarch for the build.
+# TYPE smartctl_exporter_build_info gauge
+smartctl_exporter_build_info{branch="HEAD",goarch="amd64",goos="linux",goversion="go1.23.7",revision="ef5c03de02cb793e6a1540bef943fe6a167de635",tags="unknown",version="0.14.0"} 1
+# HELP smartctl_read_errors_corrected_by_eccdelayed Read Errors Corrected by ECC Delayed
+# TYPE smartctl_read_errors_corrected_by_eccdelayed gauge
+smartctl_read_errors_corrected_by_eccdelayed{device="sdc"} 0
+# HELP smartctl_read_errors_corrected_by_eccfast Read Errors Corrected by ECC Fast
+# TYPE smartctl_read_errors_corrected_by_eccfast gauge
+smartctl_read_errors_corrected_by_eccfast{device="sdc"} 123
+# HELP smartctl_read_errors_corrected_by_rereads_rewrites Read Errors Corrected by ReReads/ReWrites
+# TYPE smartctl_read_errors_corrected_by_rereads_rewrites gauge
+smartctl_read_errors_corrected_by_rereads_rewrites{device="sdc"} 0
+# HELP smartctl_read_total_uncorrected_errors Read Total Uncorrected Errors
+# TYPE smartctl_read_total_uncorrected_errors gauge
+smartctl_read_total_uncorrected_errors{device="sdc"} 1
+# HELP smartctl_scsi_grown_defect_list Device SCSI grown defect list counter
+# TYPE smartctl_scsi_grown_defect_list gauge
+smartctl_scsi_grown_defect_list{device="sdc"} 12
+# HELP smartctl_version smartctl version
+# TYPE smartctl_version gauge
+smartctl_version{build_info="",json_format_version="1.0",smartctl_version="7.3",svn_revision=""} 1
+# HELP smartctl_write_errors_corrected_by_eccdelayed Write Errors Corrected by ECC Delayed
+# TYPE smartctl_write_errors_corrected_by_eccdelayed gauge
+smartctl_write_errors_corrected_by_eccdelayed{device="sdc"} 0
+# HELP smartctl_write_errors_corrected_by_eccfast Write Errors Corrected by ECC Fast
+# TYPE smartctl_write_errors_corrected_by_eccfast gauge
+smartctl_write_errors_corrected_by_eccfast{device="sdc"} 0
+# HELP smartctl_write_errors_corrected_by_rereads_rewrites Write Errors Corrected by ReReads/ReWrites
+# TYPE smartctl_write_errors_corrected_by_rereads_rewrites gauge
+smartctl_write_errors_corrected_by_rereads_rewrites{device="sdc"} 0
+# HELP smartctl_write_total_uncorrected_errors Write Total Uncorrected Errors
+# TYPE smartctl_write_total_uncorrected_errors gauge
+smartctl_write_total_uncorrected_errors{device="sdc"} 2

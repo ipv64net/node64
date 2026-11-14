@@ -181,14 +181,16 @@ func leadInt(t testing.TB, s string) int64 {
 
 // fakeConn beantwortet Anfragen aus einer mib (v2c-Verhalten bzw. v1 mit noSuchName).
 type fakeConn struct {
-	m       *mib
-	isV1    bool
-	reqs    int
-	failOn  string // OID-Praefix, bei dem die Anfrage scheitert (Teilfehler)
-	emptyOn string // OID-Praefix, bei dem GETBULK eine Antwort ohne Werte liefert (wie HP LaserJet bei fehlender Tabelle)
-	fail    bool   // jede Anfrage scheitert (Zeitueberschreitung)
-	maxResp int    // hoechstens so viele Varbinds je Antwort (abgeschnittene GETBULK-Antworten)
-	onReq   func() // vor jeder Anfrage (z. B. Uhr weiterstellen)
+	m      *mib
+	isV1   bool
+	reqs   int
+	failOn string // OID-Praefix, bei dem die Anfrage scheitert (Teilfehler)
+	// failTimes: > 0 = failOn gilt nur fuer so viele Anfragen (danach antwortet der Praefix wieder)
+	failTimes int
+	emptyOn   string // OID-Praefix, bei dem GETBULK eine Antwort ohne Werte liefert (wie HP LaserJet bei fehlender Tabelle)
+	fail      bool   // jede Anfrage scheitert (Zeitueberschreitung)
+	maxResp   int    // hoechstens so viele Varbinds je Antwort (abgeschnittene GETBULK-Antworten)
+	onReq     func() // vor jeder Anfrage (z. B. Uhr weiterstellen)
 }
 
 func (f *fakeConn) v1() bool { return f.isV1 }
@@ -204,6 +206,12 @@ func (f *fakeConn) check(oids []string) error {
 	}
 	for _, o := range oids {
 		if f.failOn != "" && strings.HasPrefix(normOID(o), f.failOn) {
+			if f.failTimes > 0 {
+				f.failTimes--
+				if f.failTimes == 0 {
+					f.failOn = ""
+				}
+			}
 			return errors.New("request timeout (after 1 retries)")
 		}
 	}

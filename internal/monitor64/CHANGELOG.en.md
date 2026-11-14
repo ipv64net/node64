@@ -1,5 +1,23 @@
 # Monitor64 – Changes
 
+## 0.1.14 – 2026-11-14
+
+Bug fixes:
+
+- Redfish: HPE iLO 4 (and other BMCs that only accept paths with a trailing slash) can be queried – redirects to the same BMC are followed, afterwards Monitor64 appends the slash itself. An address with a path (e.g. `https://10.1.15.17/redfish/v1/Systems/`) is accepted; redirects to another host are never followed (#141).
+- File systems: several mounts with the source `none` (e.g. virtiofs without a name of its own) no longer collapse into one – before, one was missing and counted as vanished after three rounds. Via SSH right away, with the agent from 0.1.5 (#140).
+- SNMP (QNAP and others): if a table of a device profile does not answer in time, Monitor64 asks again in the same round with smaller replies; if it stays away, the last state applies for up to 10 minutes (without measurements, with the note "as of … min ago") instead of setting all disks and volumes to "unknown" after three intervals. If the profile's identifier is missing once at the hourly re-selection, the profile stays selected (#136).
+- FRITZ!Box, MikroTik, UniFi: an available firmware update now warns right away (new rule "Firmware update available"). Before, it went through "Security updates pending", which only warns after 24 hours – the service stayed green (forum 5134).
+- Services table: while a state rule is still waiting (e.g. "Security updates pending" after 24 h), the service shows from when it will warn.
+
+New:
+
+- Overview and problems page: problems of hosts in a maintenance window are listed at the end in a collapsed section "In maintenance"; the counter only counts the others. Real problems no longer get lost when e.g. a backup server is switched off during the day as planned (#142).
+- Linux: "Reboot required" also when a newer kernel of the same flavor than the running one is installed (Debian, Ubuntu, Proxmox, RHEL, Fedora, Raspberry Pi OS); the service names both versions. Via SSH right away, with the agent from 0.1.5 (#130).
+- Prometheus access: smartctl_exporter is recognised – one service per disk with SMART status, temperature, wear and sectors like with the agent, plus all values in the SMART dialog (#135).
+- Prometheus access: node_exporter on macOS delivers RAM and swap as regular services with history and thresholds (usage as in Activity Monitor) (#114).
+- **Agent 0.1.5 (Linux):** mounts with source `none` separately; kernel comparison for "Reboot required".
+
 ## 0.1.13 – 2026-11-13
 
 - New access **UniFi** (its own tile in the wizard) via the API of the UniFi Network Application – for UniFi OS consoles (UDM, UDR, UCG, Cloud Key, UniFi OS Server) and the self-hosted Network Server; SNMP delivers only little on UniFi.

@@ -322,6 +322,9 @@ type Updates struct {
 type Reboot struct {
 	Required bool     `json:"required"`
 	Packages []string `json:"pkgs,omitempty"`
+	// Linux: laufender Kernel und neuester installierter derselben Variante, wenn sie abweichen (Agent ab 0.1.5)
+	KernelRunning string `json:"kern_run,omitempty"`
+	KernelNewest  string `json:"kern_new,omitempty"`
 }
 
 // LocalCheck ist eine Zeile eines eigenen Skripts im Format der CheckMK-"local checks":

@@ -106,13 +106,25 @@ func SkipMount(m Mount) bool {
 	return false
 }
 
-// DedupFS behaelt je Geraet nur einen Mount (Bind-Mounts, btrfs-Subvolumes): den kuerzesten Pfad.
+// genericFSSource: Quelle, die kein Geraet bezeichnet – leer, "none", "nodev" oder "-" (z. B. virtiofs-Mounts ohne
+// eigenen Namen). Mehrere solche Mounts sind verschiedene Dateisysteme und duerfen nicht zusammenfallen (#140). Eine
+// Quelle wie "shfs" (Unraid /mnt/user und /mnt/user0) bleibt eine Kennung.
+func genericFSSource(dev string) bool {
+	switch strings.ToLower(strings.TrimSpace(dev)) {
+	case "", "none", "nodev", "-":
+		return true
+	}
+	return false
+}
+
+// DedupFS behaelt je Geraet nur einen Mount (Bind-Mounts, btrfs-Subvolumes): den kuerzesten Pfad. Mounts mit
+// generischer Quelle (genericFSSource) bleiben je Pfad einzeln.
 func DedupFS(in []m64proto.FS) []m64proto.FS {
 	idx := map[string]int{}
 	var out []m64proto.FS
 	for _, f := range in {
 		key := f.Device
-		if key == "" {
+		if genericFSSource(f.Device) {
 			key = "mount:" + f.Mount
 		}
 		if i, ok := idx[key]; ok {

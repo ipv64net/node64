@@ -319,7 +319,7 @@ func TestUnifiCollectAPIKey(t *testing.T) {
 		t.Errorf("system: %+v %q", sys.Metrics, sys.Text)
 	}
 	upd := svcByKey(t, svcs, "updates")
-	if !hasFact(upd, "updates_security") || mustMetric(t, upd, "pending").Value != 3 ||
+	if !hasFact(upd, "firmware_update") || mustMetric(t, upd, "pending").Value != 3 ||
 		upd.Text != "Update der Network Application verfügbar · Firmware-Update für 2 Geräte: AP Flur 6.7.10, Switch 16 4.0.80.10875" {
 		t.Errorf("updates: %+v %q", upd.Metrics, upd.Text)
 	}

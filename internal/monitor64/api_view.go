@@ -208,6 +208,9 @@ func (m *Module) overview(ctx context.Context) ovData {
 	}
 	sort.SliceStable(d.Problems, func(i, j int) bool {
 		a, b := d.Problems[i], d.Problems[j]
+		if a.Maint != b.Maint { // Hosts im Wartungsfenster ans Ende (#142)
+			return !a.Maint
+		}
 		if a.Acked != b.Acked {
 			return !a.Acked
 		}
@@ -620,8 +623,9 @@ type problemOut struct {
 	Host     string   `json:"host"`
 	HostGone bool     `json:"host_gone,omitempty"`
 	Name     string   `json:"name"`
-	Duration int64    `json:"duration"` // Sekunden (offen: bis jetzt)
-	Channels []string `json:"channels"` // Namen der Kanaele, an die gemeldet wurde
+	Duration int64    `json:"duration"`        // Sekunden (offen: bis jetzt)
+	Channels []string `json:"channels"`        // Namen der Kanaele, an die gemeldet wurde
+	Maint    bool     `json:"maint,omitempty"` // offen und der Host steht gerade im Wartungsfenster (#142)
 }
 
 type problemsOut struct {
@@ -696,10 +700,12 @@ func (m *Module) problems(r *http.Request) (problemsOut, error) {
 		}
 	}
 	svcNames := map[string]string{}
+	inMaint := map[string]bool{}
 	for _, v := range m.Views() {
 		for _, s := range v.Services {
 			svcNames[v.Host.UID+"|"+s.Key] = s.Name
 		}
+		inMaint[v.Host.UID] = v.Maint != nil
 	}
 	chNames := m.channelNames(ctx)
 	who, search := q.Get("who"), strings.ToLower(strings.TrimSpace(q.Get("q")))
@@ -720,6 +726,7 @@ func (m *Module) problems(r *http.Request) (problemsOut, error) {
 			end = p.Closed
 		}
 		o.Duration = int64(end.Sub(p.Opened).Seconds())
+		o.Maint = p.Closed.IsZero() && inMaint[p.HostUID]
 		for _, id := range p.Notified {
 			o.Channels = append(o.Channels, firstNonEmpty(chNames[id], id))
 		}
@@ -761,6 +768,8 @@ func (m *Module) problems(r *http.Request) (problemsOut, error) {
 		}
 		out.Problems = append(out.Problems, o)
 	}
+	// offene Probleme von Hosts im Wartungsfenster ans Ende (die Oberflaeche klappt sie ein, #142)
+	sort.SliceStable(out.Problems, func(i, j int) bool { return !out.Problems[i].Maint && out.Problems[j].Maint })
 	return out, nil
 }
 

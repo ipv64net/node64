@@ -192,7 +192,7 @@ func TestFritzboxCollectDSL(t *testing.T) {
 	}
 	now = now.Add(time.Hour)
 	svcs, _ = fb.Collect(context.Background())
-	if u := svcByKey(t, svcs, "updates"); len(u.Facts) != 1 || u.Facts[0].Code != "updates_security" || u.Text != "FRITZ!OS-Update verfügbar: 154.08.03" {
+	if u := svcByKey(t, svcs, "updates"); len(u.Facts) != 1 || u.Facts[0].Code != "firmware_update" || u.Text != "FRITZ!OS-Update verfügbar: 154.08.03" {
 		t.Errorf("updates: %+v %q", u.Facts, u.Text)
 	}
 	f.mu.Lock()

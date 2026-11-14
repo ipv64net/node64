@@ -590,7 +590,7 @@ func (f *Fritzbox) Collect(ctx context.Context) ([]model.Service, error) {
 				t := model.T("monitor64.txt.fb_update", "v", firstNonEmpty(shortText(ui["NewX_AVM-DE_Version"]), "?"))
 				s.Text = t
 				s.Metrics = []model.Metric{{Name: "pending", Value: 1}}
-				s.Facts = append(s.Facts, model.Fact{Code: "updates_security", Text: t})
+				s.Facts = append(s.Facts, model.Fact{Code: "firmware_update", Text: t})
 			} else {
 				s.Metrics = []model.Metric{{Name: "pending", Value: 0}}
 			}

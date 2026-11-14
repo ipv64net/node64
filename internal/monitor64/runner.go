@@ -79,7 +79,7 @@ var factKinds = map[string][]string{
 	"dsl":     {eval.KindDeviceCrit},
 	"routing": {eval.KindDeviceWarn},
 	"bond":    {eval.KindBondMemberDown, eval.KindBondLACP},
-	"updates": {eval.KindUpdatesSecurity},
+	"updates": {eval.KindUpdatesSecurity, eval.KindFirmwareUpdate},
 	"reboot":  {eval.KindRebootRequired},
 	"systemd": {eval.KindSystemdFailed},
 	"vm":      {eval.KindGuestDown},
@@ -112,6 +112,8 @@ func factKind(code string) string {
 		return eval.KindBondLACP
 	case "updates_security":
 		return eval.KindUpdatesSecurity
+	case "firmware_update":
+		return eval.KindFirmwareUpdate
 	case "reboot_required":
 		return eval.KindRebootRequired
 	case "systemd_failed":
@@ -178,6 +180,14 @@ func factKind(code string) string {
 	return ""
 }
 
+// PendView ist eine laufende Wartezeit einer Zustandsregel.
+type PendView struct {
+	Kind  string     `json:"kind"`
+	State eval.State `json:"state"` // Stufe, die nach der Dauer gilt
+	Since time.Time  `json:"since"`
+	At    time.Time  `json:"at"` // ab dann gilt sie
+}
+
 // MetricView ist eine bewertete Messgroesse fuer die Oberflaeche.
 type MetricView struct {
 	model.Metric
@@ -187,19 +197,22 @@ type MetricView struct {
 
 // SvcView ist ein Dienst fuer die Oberflaeche.
 type SvcView struct {
-	Key      string       `json:"key"`
-	Name     string       `json:"name"`
-	Kind     string       `json:"kind"`
-	State    eval.State   `json:"state"`
-	Text     string       `json:"text,omitempty"`
-	Cause    string       `json:"cause,omitempty"`
-	Via      string       `json:"via,omitempty"`
-	Adopted  int          `json:"adopted"`
-	Vanished bool         `json:"vanished,omitempty"`
-	ShowOnly bool         `json:"show_only,omitempty"`
-	Acked    bool         `json:"acked,omitempty"`
-	Detail   string       `json:"detail,omitempty"` // "smart": alle SMART-Werte abrufbar (smartdetail.go)
-	Metrics  []MetricView `json:"metrics,omitempty"`
+	Key      string     `json:"key"`
+	Name     string     `json:"name"`
+	Kind     string     `json:"kind"`
+	State    eval.State `json:"state"`
+	Text     string     `json:"text,omitempty"`
+	Cause    string     `json:"cause,omitempty"`
+	Via      string     `json:"via,omitempty"`
+	Adopted  int        `json:"adopted"`
+	Vanished bool       `json:"vanished,omitempty"`
+	ShowOnly bool       `json:"show_only,omitempty"`
+	Acked    bool       `json:"acked,omitempty"`
+	Detail   string     `json:"detail,omitempty"` // "smart": alle SMART-Werte abrufbar (smartdetail.go)
+	// Pending: Zustandsregeln, deren Bedingung gilt, die aber erst nach ihrer Dauer melden (z. B. Sicherheitsupdates
+	// nach 24 Std.) – damit sichtbar ist, warum der Dienst noch OK ist
+	Pending []PendView   `json:"pending,omitempty"`
+	Metrics []MetricView `json:"metrics,omitempty"`
 }
 
 // HostView ist der aktuelle Stand eines Hosts fuer die Oberflaeche.
@@ -733,6 +746,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			ms = append(ms, eval.MetricStatus{Name: k, Status: st, Notify: e.Notify()})
 			if cond && st.State != eval.OK && text != "" {
 				sv.Cause = text
+			}
+			if cond && st.State == eval.OK && (st.Pending == eval.Warn || st.Pending == eval.Crit) && !st.PendingAt.IsZero() {
+				sv.Pending = append(sv.Pending, PendView{Kind: k, State: st.Pending, Since: st.PendingSince, At: st.PendingAt})
 			}
 		}
 		// eigene Skripte: Zustand direkt aus dem Skript; ohne Daten letzter Zustand, nach 3 Intervallen Unbekannt

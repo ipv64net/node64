@@ -103,7 +103,7 @@ func nodeCPU(m *Metrics) *m64proto.CPU {
 func nodeMem(m *Metrics) *m64proto.Mem {
 	total, ok := m.Value("node_memory_MemTotal_bytes")
 	if !ok || total <= 0 {
-		return nil
+		return darwinMem(m)
 	}
 	avail, ok := m.Value("node_memory_MemAvailable_bytes")
 	if !ok { // alte Kernel ohne MemAvailable
@@ -118,6 +118,31 @@ func nodeMem(m *Metrics) *m64proto.Mem {
 	st, _ := m.Value("node_memory_SwapTotal_bytes")
 	sf, _ := m.Value("node_memory_SwapFree_bytes")
 	return &m64proto.Mem{Total: u64(total), Available: min(u64(avail), u64(total)), SwapTotal: u64(st), SwapFree: min(u64(sf), u64(st))}
+}
+
+// darwinMem: Speicher von node_exporter unter macOS (#114). Belegt wie in der Aktivitaetsanzeige: App-Speicher
+// (internal ohne purgeable), wired und komprimiert; der Rest gilt als verfuegbar. Swap: total und used.
+func darwinMem(m *Metrics) *m64proto.Mem {
+	total, ok := m.Value("node_memory_total_bytes")
+	if !ok || total <= 0 {
+		return nil
+	}
+	internal, ok1 := m.Value("node_memory_internal_bytes")
+	wired, ok2 := m.Value("node_memory_wired_bytes")
+	compressed, ok3 := m.Value("node_memory_compressed_bytes")
+	if !ok1 || !ok2 || !ok3 {
+		return nil // ohne diese Werte keine verlaessliche Belegung
+	}
+	purgeable, _ := m.Value("node_memory_purgeable_bytes")
+	used := max(internal-purgeable, 0) + wired + compressed
+	avail := max(total-used, 0)
+	out := &m64proto.Mem{Total: u64(total), Available: min(u64(avail), u64(total))}
+	if st, ok := m.Value("node_memory_swap_total_bytes"); ok && st > 0 {
+		su, _ := m.Value("node_memory_swap_used_bytes")
+		out.SwapTotal = u64(st)
+		out.SwapFree = u64(max(st-su, 0))
+	}
+	return out
 }
 
 // fileMount: Dateien, die Docker in einen Container einhaengt (node_exporter im Container saehe sonst "/etc/hosts"

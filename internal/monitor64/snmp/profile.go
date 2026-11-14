@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
 )
@@ -476,15 +477,32 @@ func (c *Collector) selectProfiles(r *round) {
 		}
 	}
 	sel := []*Profile{}
+	had := map[string]bool{}
+	for _, p := range c.profiles {
+		had[p.ID] = true
+	}
+	if c.probeMiss == nil {
+		c.probeMiss = map[string]int{}
+	}
+	retry := false
 	for _, p := range cand {
 		if p.Match.Probe != "" {
 			if _, ok := res[p.Match.Probe]; !ok {
+				// Probe ohne Wert: ein bisher gewaehltes Profil bleibt, bis das profileMisses-mal in Folge so ist
+				// (QNAP antwortet zeitweise ohne Wert – sonst fehlten Platten und Volumes eine Stunde, #136)
+				if c.probeMiss[p.ID]++; had[p.ID] && c.probeMiss[p.ID] < profileMisses {
+					sel, retry = append(sel, p), true
+				}
 				continue
 			}
+			delete(c.probeMiss, p.ID)
 		}
 		sel = append(sel, p)
 	}
 	c.profiles, c.profileOf, c.profileAt = sel, of, r.now
+	if retry {
+		c.profileOf = "" // naechste Runde neu pruefen
+	}
 }
 
 // collectProfiles wertet die Werte der gewaehlten Profile aus.
@@ -500,11 +518,37 @@ type acc struct {
 	parts []string
 }
 
+// heldPart ist der letzte vollstaendige Stand eines Teils (Skalare oder eine Tabelle) eines Profils.
+type heldPart struct {
+	at   time.Time
+	svcs []model.Service
+}
+
+// walkProfileTable fragt eine Tabelle ab und wiederholt das bei einem Aussetzer einmal mit kleineren GETBULK-Antworten
+// (QNAP beantwortet die NAS-MIB-Tabellen zeitweise nicht rechtzeitig, #136).
+func (c *Collector) walkProfileTable(r *round, cols []string) (table, error) {
+	tab, err := walkColumns(r.ctx, r.c, cols, c.cfg.MaxRep)
+	if err == nil || r.ctx.Err() != nil {
+		return tab, err
+	}
+	if dl, ok := r.ctx.Deadline(); ok && time.Until(dl) < 2*time.Second {
+		return tab, err
+	}
+	return walkColumns(r.ctx, r.c, cols, min(c.cfg.MaxRep, 5))
+}
+
 func (c *Collector) collectProfile(r *round, p *Profile) {
 	accs := map[string]*acc{}
 	var order []string
+	part := ""                        // Teil des Profils, der gerade Dienste fuellt (Schluessel fuer held)
+	partKeys := map[string][]string{} // Teil -> Dienste, die er gefuellt hat
+	failed := map[string]bool{}
+	var parts []string
 	get := func(t Target, name, index string) *acc {
 		key := fill(t.Key, name, index)
+		if pk := partKeys[part]; len(pk) == 0 || pk[len(pk)-1] != key {
+			partKeys[part] = append(pk, key)
+		}
 		a, ok := accs[key]
 		if !ok {
 			def := true
@@ -519,6 +563,8 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 	}
 	// Skalare
 	if len(p.Scalars) > 0 {
+		part = p.ID + "|s"
+		parts = append(parts, part)
 		oids := map[string]bool{}
 		var list []string
 		add := func(o string) {
@@ -538,6 +584,10 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 		res, err := getScalars(r.ctx, r.c, list)
 		if err != nil {
 			r.part.add(model.T("monitor64.txt.profile", "name", p.Name), err, p.keyPrefixes()...)
+			for _, pt := range append([]string{part}, tableParts(p)...) {
+				failed[pt] = true
+			}
+			c.useHeld(r, p, append([]string{part}, tableParts(p)...), failed, accs, &order)
 			return
 		}
 		r.at = c.now() // Messzeitpunkt der Zaehler
@@ -553,6 +603,8 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 	}
 	// Tabellen
 	for ti, t := range p.Tables {
+		part = p.ID + "|" + strconv.Itoa(ti)
+		parts = append(parts, part)
 		colSet := map[int]bool{}
 		for _, cd := range t.Columns {
 			colSet[cd.Col] = true
@@ -575,9 +627,10 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 			cols = append(cols, t.OID+"."+strconv.Itoa(n))
 		}
 		sort.Strings(cols)
-		tab, err := walkColumns(r.ctx, r.c, cols, c.cfg.MaxRep)
+		tab, err := c.walkProfileTable(r, cols)
 		if err != nil {
 			r.part.add(model.T("monitor64.txt.profile_table", "name", p.Name, "n", ti+1), err, keyPrefix(t.Key))
+			failed[part] = true
 			continue
 		}
 		r.at = c.now()
@@ -620,7 +673,65 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 	for _, k := range order {
 		a := accs[k]
 		a.s.Text = strings.Join(a.parts, " · ")
-		r.out = append(r.out, a.s)
+	}
+	// vollstaendig beantwortete Teile merken, fehlende aus dem letzten Stand ergaenzen
+	if c.held == nil {
+		c.held = map[string]heldPart{}
+	}
+	for _, pt := range parts {
+		if failed[pt] {
+			continue
+		}
+		var svcs []model.Service
+		for _, k := range partKeys[pt] {
+			if a, ok := accs[k]; ok {
+				svcs = append(svcs, a.s)
+			}
+		}
+		c.held[pt] = heldPart{at: r.now, svcs: svcs}
+	}
+	c.useHeld(r, p, parts, failed, accs, &order)
+	for _, k := range order {
+		r.out = append(r.out, accs[k].s)
+	}
+}
+
+// tableParts nennt die Teile der Tabellen eines Profils (Schluessel fuer held).
+func tableParts(p *Profile) []string {
+	out := make([]string, len(p.Tables))
+	for i := range p.Tables {
+		out[i] = p.ID + "|" + strconv.Itoa(i)
+	}
+	return out
+}
+
+// useHeld ergaenzt die Dienste fehlgeschlagener Teile aus ihrem letzten Stand, solange er hoechstens profileHold alt
+// ist: ohne Messwerte (keine alten Zahlen im Verlauf), mit Zustand und Hinweis. Dienste, die ein anderer Teil schon
+// geliefert hat, bleiben unberuehrt. Aeltere Staende verfallen.
+func (c *Collector) useHeld(r *round, p *Profile, parts []string, failed map[string]bool, accs map[string]*acc, order *[]string) {
+	for _, pt := range parts {
+		if !failed[pt] {
+			continue
+		}
+		h, ok := c.held[pt]
+		if !ok {
+			continue
+		}
+		age := r.now.Sub(h.at)
+		if age > profileHold || age < 0 {
+			delete(c.held, pt)
+			continue
+		}
+		mins := int(age / time.Minute)
+		for _, s := range h.svcs {
+			if _, have := accs[s.Key]; have {
+				continue
+			}
+			s.Metrics = nil
+			s.Text = model.Join(s.Text, model.T("monitor64.txt.snmp_held", "n", mins))
+			accs[s.Key] = &acc{s: s}
+			*order = append(*order, s.Key)
+		}
 	}
 }
 

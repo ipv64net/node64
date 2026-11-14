@@ -44,6 +44,8 @@ const (
 	staticEvery         = 10 * time.Minute // Portnamen, Sensornamen neu lesen
 	absentRetry         = 60 * time.Minute // fehlende MIB so lange nicht neu fragen
 	profileEvery        = 60 * time.Minute // Profile neu waehlen
+	profileHold         = 10 * time.Minute // Teil eines Profils ohne Antwort: so lange den letzten Stand weitergeben
+	profileMisses       = 3                // Neuwahlen in Folge ohne Wert der Probe, bis ein Profil wegfaellt
 	counterTTL          = 60 * time.Minute // Zaehlerstaende ohne Aktualisierung vergessen
 	maxPartErrors       = 5
 	maxCustom           = 100  // eigene OIDs je Zugang
@@ -133,6 +135,10 @@ type Collector struct {
 	profiles  []*Profile
 	profileAt time.Time
 	profileOf string // sysObjectID|sysDescr der Auswahl
+	// probeMiss: Profil-ID -> Neuwahlen in Folge, bei denen die Probe ohne Wert blieb (Profil bleibt bis profileMisses)
+	probeMiss map[string]int
+	// held: letzter vollstaendiger Stand je Teil eines Profils (Skalare bzw. Tabelle), fuer Aussetzer des Geraets
+	held map[string]heldPart
 }
 
 // New prueft die Konfiguration und baut den Sammler (verbindet noch nicht).

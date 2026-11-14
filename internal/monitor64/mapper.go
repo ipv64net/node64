@@ -162,7 +162,13 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		sv := Service{Key: "reboot", Name: model.T("monitor64.svc.reboot"), Kind: "reboot", Default: true, Text: model.T("monitor64.txt.no")}
 		if r.Required {
 			sv.Text = model.T("monitor64.txt.yes")
-			sv.Facts = append(sv.Facts, Fact{Code: "reboot_required", Text: hostText(strings.Join(limitList(r.Packages, 5), ", "))})
+			why := hostText(strings.Join(limitList(r.Packages, 5), ", "))
+			if r.KernelNewest != "" { // neuerer Kernel installiert (#130)
+				k := model.T("monitor64.txt.kernel_newer", "run", hostText(r.KernelRunning), "new", hostText(r.KernelNewest))
+				sv.Text = model.Join(sv.Text, k)
+				why = model.Join(why, k)
+			}
+			sv.Facts = append(sv.Facts, Fact{Code: "reboot_required", Text: why})
 		}
 		out = append(out, sv)
 	}

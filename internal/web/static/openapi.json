@@ -7375,6 +7375,32 @@
             ]
           },
           "report": {
+          "pending": {
+            "type": "array",
+            "description": "Zustandsregeln, deren Bedingung gilt, die aber erst nach ihrer Dauer melden (z. B. Sicherheitsupdates nach 24 Std.)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "description": "Regel-Art, z. B. updates.security"
+                },
+                "state": {
+                  "type": "string",
+                  "description": "Stufe, die nach der Dauer gilt (warn, crit)"
+                },
+                "since": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "ab dann gilt die Stufe"
+                }
+              }
+            }
+          },
             "type": "string",
             "enum": [
               "",
@@ -8019,6 +8045,10 @@
             "type": "string"
           },
           "key": {
+              },
+              "maint": {
+                "type": "boolean",
+                "description": "Offen und der Host steht gerade im Wartungsfenster (die Liste führt diese Probleme am Ende)"
             "type": "string"
           },
           "problem": {

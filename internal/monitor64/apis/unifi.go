@@ -936,6 +936,6 @@ func ufUpdates(si *ufSysinfo, fw []string) model.Service {
 		return s
 	}
 	s.Text = strings.Join(parts, " · ")
-	s.Facts = append(s.Facts, model.Fact{Code: "updates_security", Text: s.Text})
+	s.Facts = append(s.Facts, model.Fact{Code: "firmware_update", Text: s.Text})
 	return s
 }

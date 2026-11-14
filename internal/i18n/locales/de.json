@@ -5477,7 +5477,8 @@
       "r_resolved": "{n} als gelöst markiert",
       "r_by": "von {w}",
       "r_maint": "Wartung eingetragen: {n}",
-      "r_maint_end": "Wartung beendet: {n}"
+      "r_maint_end": "Wartung beendet: {n}",
+      "maint_problems": "Im Wartungsfenster: {n} Probleme auf {h} Hosts"
     },
     "chart": {
       "range": "Zeitraum",
@@ -5540,7 +5541,8 @@
       "delete_hist": "Verlauf jetzt löschen",
       "delete_hint": "Die Aktion wird mit deinem Namen im Audit-Log gespeichert.",
       "pending_free": "seit {m} Min. unter {v} – {s} ab {n} Min.",
-      "more_rules": "+{n} weitere"
+      "more_rules": "+{n} weitere",
+      "pending_state": "{s} ab {t} ({k})"
     },
     "acc": {
       "type": "Art",
@@ -5940,7 +5942,8 @@
       "trap_received": "SNMP-Trap empfangen (bis quittiert)",
       "guest_mem": "RAM einer VM (Sicht von Proxmox, mit Cache des Gastes)",
       "mail_queue": "Mail-Warteschlange: zurückgestellte Mails",
-      "fs_inodes": "Dateisystem: Inodes belegt"
+      "fs_inodes": "Dateisystem: Inodes belegt",
+      "firmware_update": "Firmware-Update verfügbar"
     },
     "cat": {
       "system": "System",
@@ -6012,7 +6015,7 @@
       },
       "prom": {
         "title": "Prometheus-Exporter",
-        "sub": "node_exporter, windows_exporter, eigene"
+        "sub": "node_exporter, windows_exporter, smartctl_exporter, eigene"
       },
       "pmg": {
         "title": "Proxmox Mail Gateway",
@@ -6093,7 +6096,7 @@
       "fp_accept": "Fingerabdruck bestätigen und erneut testen",
       "smart_hint": "Erlaubt nur die Aufrufe, die das Skript braucht (Platten suchen, Werte lesen ohne schlafende Platten zu wecken). Liegt smartctl anders, den Pfad anpassen (command -v smartctl).",
       "bsd_cmd": "fetch -o /tmp/install.sh https://node64.de/agent/install.sh && sh /tmp/install.sh --key \"{k}\"",
-      "hint_prom": "Adresse des Exporters, z. B. http://10.0.0.5:9100/metrics (node_exporter) oder Port 9182 (windows_exporter). Ohne Angabe: Adresse des Hosts, Port 9100.",
+      "hint_prom": "Adresse des Exporters, z. B. http://10.0.0.5:9100/metrics (node_exporter, auch unter macOS), Port 9182 (windows_exporter) oder Port 9633 (smartctl_exporter: Platten mit SMART). Ohne Angabe: Adresse des Hosts, Port 9100.",
       "hint_nut": "Adresse des upsd (Port 3493). In upsd.conf „LISTEN <IP> 3493“ setzen. Zum Lesen ist keine Anmeldung nötig; Benutzer und Passwort aus upsd.users nur, wenn gewünscht. Verschlüsselt per STARTTLS, wenn upsd ein Zertifikat hat.",
       "hint_truenas": "Unter Einstellungen → Benutzer einen Benutzer mit der Rolle „Read-Only Administrator“ anlegen und für ihn einen API-Key erzeugen; den Benutzernamen mit eintragen (ab TrueNAS 27 nötig). Nur https:// – über http:// benutzte Keys widerruft TrueNAS.",
       "hint_unraid": "Unter Einstellungen → Verwaltungszugriff → API-Keys einen Key mit der Rolle „Viewer“ anlegen (ab Unraid 7.2 eingebaut, davor Plugin „Unraid Connect“). https:// empfohlen.",
@@ -7122,7 +7125,9 @@
       "uf_update_fw": "Firmware-Update für {n} Geräte: {list}",
       "uf_starting": "die UniFi Network Application startet noch",
       "uf_wan_line_down": "Leitung ohne Verbindung: {list}",
-      "uf_wans_online": "{n} Leitungen online"
+      "uf_wans_online": "{n} Leitungen online",
+      "snmp_held": "Stand von vor {n} Min. (Gerät antwortet gerade nicht)",
+      "kernel_newer": "Kernel {run} läuft, {new} ist installiert"
     },
     "smart": {
       "title": "SMART-Werte: {n}",

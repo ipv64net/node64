@@ -191,7 +191,7 @@ func TestMikrotikCollect(t *testing.T) {
 		t.Errorf("ospf: %+v", o)
 	}
 	upd := svcByKey(t, svcs, "updates")
-	if !hasFact(upd, "updates_security") || mustMetric(t, upd, "pending").Value != 1 ||
+	if !hasFact(upd, "firmware_update") || mustMetric(t, upd, "pending").Value != 1 ||
 		upd.Text != "RouterOS-Update verfügbar: 7.16.1 (installiert 7.15.3) · RouterBOOT 7.14, 7.15.3 steht bereit" {
 		t.Errorf("updates: %+v", upd)
 	}

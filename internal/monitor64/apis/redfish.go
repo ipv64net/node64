@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/monitor64/model"
@@ -55,6 +56,10 @@ type Redfish struct {
 	wc  *webClient
 	now func() time.Time
 
+	// slash: der BMC fuehrt seine Ressourcen unter dem Pfad mit Schraegstrich am Ende und leitet die Form ohne um
+	// (HPE iLO 4, #141) – nach der ersten Weiterleitung haengt der Sammler ihn selbst an.
+	slash atomic.Bool
+
 	mu       sync.Mutex
 	storAt   time.Time
 	stor     []model.Service
@@ -69,7 +74,7 @@ type Redfish struct {
 func NewRedfish(cfg RedfishConfig) (*Redfish, error) { return newRedfish(cfg, nil) }
 
 func newRedfish(cfg RedfishConfig, roots *x509.CertPool) (*Redfish, error) {
-	t, err := parseWebAddr(cfg.Address, "https", "443", false)
+	t, err := parseWebAddr(rfBaseAddr(cfg.Address), "https", "443", false)
 	if err != nil {
 		return nil, err
 	}
@@ -163,22 +168,97 @@ func rfPath(p string) (string, bool) {
 	return strings.TrimRight(p, "/"), true
 }
 
+// rfBaseAddr: eine Adresse mit Pfad unter /redfish (wie sie im Browser steht, z. B.
+// https://10.1.15.17/redfish/v1/Systems/) gilt als Adresse des BMC – die Pfade kennt der Sammler (#141).
+func rfBaseAddr(raw string) string {
+	s := strings.TrimSpace(raw)
+	start := 0
+	if i := strings.Index(s, "://"); i >= 0 {
+		start = i + 3
+	}
+	if j := strings.Index(s[start:], "/"); j >= 0 && strings.HasPrefix(strings.ToLower(s[start+j:]), "/redfish") {
+		return s[:start+j]
+	}
+	return s
+}
+
+// rfFull: Pfad fuer die Anfrage (mit Schraegstrich, wenn der BMC ihn verlangt).
+func (r *Redfish) rfFull(p string) string {
+	if p == "/redfish/v1" || (r.slash.Load() && !strings.HasSuffix(p, "/")) {
+		return p + "/"
+	}
+	return p
+}
+
+// rfRedirect: Ziel einer Weiterleitung, wenn es auf denselben BMC unter /redfish/v1 zeigt ("" = nicht folgen; die
+// Zugangsdaten gehoeren nur der eingerichteten Adresse).
+func (r *Redfish) rfRedirect(err error, h http.Header) string {
+	var we *webError
+	if !errors.As(err, &we) || h == nil {
+		return ""
+	}
+	switch we.Status {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+	default:
+		return ""
+	}
+	base, err1 := url.Parse(r.wc.t.base)
+	loc, err2 := url.Parse(strings.TrimSpace(h.Get("Location")))
+	if err1 != nil || err2 != nil {
+		return ""
+	}
+	to := base.ResolveReference(loc)
+	port := func(u *url.URL) string {
+		if p := u.Port(); p != "" {
+			return p
+		}
+		if u.Scheme == "http" {
+			return "80"
+		}
+		return "443"
+	}
+	if !strings.EqualFold(to.Scheme, base.Scheme) || !strings.EqualFold(to.Hostname(), base.Hostname()) || port(to) != port(base) ||
+		to.RawQuery != "" || to.User != nil {
+		return ""
+	}
+	p, ok := rfPath(to.EscapedPath())
+	if !ok {
+		return ""
+	}
+	if strings.HasSuffix(to.EscapedPath(), "/") {
+		p += "/"
+	}
+	return p
+}
+
+// send stellt eine Anfrage und folgt einer Weiterleitung auf denselben BMC einmal (GET immer, sonst nur 307/308,
+// die Methode und Inhalt behalten). Zeigt sie nur auf den Pfad mit Schraegstrich, gilt das fuer alle weiteren.
+func (r *Redfish) send(ctx context.Context, method, p string, hdr http.Header, body, out any) (http.Header, error) {
+	h, err := r.wc.do(ctx, method, p, hdr, body, out)
+	to := r.rfRedirect(err, h)
+	var we *webError
+	if to == "" || to == p || (method != http.MethodGet && errors.As(err, &we) && we.Status != http.StatusTemporaryRedirect && we.Status != http.StatusPermanentRedirect) {
+		return h, err
+	}
+	if to == p+"/" {
+		r.slash.Store(true)
+	}
+	return r.wc.do(ctx, method, to, hdr, body, out)
+}
+
 // get liest einen Pfad (vom Geraet geliefert oder fest); bei abgelaufener Sitzung einmal neu anmelden.
 func (r *Redfish) get(ctx context.Context, path string, out any) error {
 	p, ok := rfPath(path)
 	if !ok {
 		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.bad_link") + " " + devText(path), Where: "GET"}
 	}
-	if p == "/redfish/v1" {
-		p += "/"
-	}
 	stale := r.tok()
-	err := r.wc.get(ctx, p, out)
+	_, err := r.send(ctx, http.MethodGet, r.rfFull(p), nil, nil, out)
 	if r.cfg.Session && stale != "" && errors.Is(err, errWebAuth) {
 		if lerr := r.login(ctx, stale); lerr != nil {
 			return lerr
 		}
-		err = r.wc.get(ctx, p, out)
+		_, err = r.send(ctx, http.MethodGet, r.rfFull(p), nil, nil, out)
 	}
 	return err
 }
@@ -202,7 +282,7 @@ func (r *Redfish) login(ctx context.Context, stale string) error {
 	}
 	body := map[string]string{"UserName": strings.TrimSpace(r.cfg.User), "Password": r.cfg.Password}
 	// ohne das abgelaufene Token (manche BMCs lehnen eine Anmeldung mit ungueltigem X-Auth-Token ab)
-	h, err := r.wc.do(ctx, http.MethodPost, "/redfish/v1/SessionService/Sessions", http.Header{"X-Auth-Token": nil}, body, nil)
+	h, err := r.send(ctx, http.MethodPost, r.rfFull("/redfish/v1/SessionService/Sessions"), http.Header{"X-Auth-Token": nil}, body, nil)
 	if err == nil {
 		tok := strings.TrimSpace(h.Get("X-Auth-Token"))
 		if tok != "" && len(tok) <= 4096 && !strings.ContainsAny(tok, "\r\n") {
@@ -232,7 +312,7 @@ func (r *Redfish) Close() {
 	r.tokMu.Unlock()
 	if has && sess != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, _ = r.wc.do(ctx, http.MethodDelete, sess, nil, nil, nil)
+		_, _ = r.send(ctx, http.MethodDelete, r.rfFull(sess), nil, nil, nil)
 		cancel()
 	}
 	r.tokMu.Lock()

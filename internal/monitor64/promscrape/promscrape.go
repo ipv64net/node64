@@ -252,7 +252,7 @@ func collectorPrefixes(kind string) map[string][]string {
 
 // detect erkennt den Exporter (build_info, sonst Namensraum der Metriken).
 func detect(m *Metrics) (kind, version string) {
-	for _, k := range []string{ExporterNode, ExporterWindows} {
+	for _, k := range []string{ExporterNode, ExporterWindows, ExporterSmartctl} {
 		if ss := m.Get(k + "_build_info"); len(ss) > 0 {
 			return k, clip(ss[0].Label("version"), 40)
 		}
@@ -262,18 +262,29 @@ func detect(m *Metrics) (kind, version string) {
 		return ExporterNode, ""
 	case m.hasPrefix("windows_"):
 		return ExporterWindows, ""
+	case m.Has("smartctl_device"):
+		return ExporterSmartctl, ""
 	}
 	return ExporterOther, ""
 }
 
 func buildReport(m *Metrics, kind string, now time.Time, io winIO) *m64proto.Report {
+	var rep *m64proto.Report
 	switch kind {
 	case ExporterNode:
-		return nodeReport(m, now)
+		rep = nodeReport(m, now)
 	case ExporterWindows:
-		return windowsReport(m, now, io)
+		rep = windowsReport(m, now, io)
+	case ExporterSmartctl:
+		rep = &m64proto.Report{V: m64proto.Version, Time: now.UnixMilli()}
+	default:
+		return nil
 	}
-	return nil
+	// SMART aus smartctl_exporter (eigener Exporter oder ueber denselben Endpunkt zusammengefasst, #135)
+	if s := smartctlSMART(m); s != nil {
+		rep.SMART = s
+	}
+	return rep
 }
 
 // Test prueft die Verbindung im Assistenten: Zertifikat (Fingerabdruck), Anmeldung, erkannter Exporter und Zahl der

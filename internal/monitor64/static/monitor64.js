@@ -619,8 +619,11 @@ function pageOverview() {
 		$('#m64-stats').innerHTML = statCard('stat-down', ST.crit, c.crit || 0, L('ov.services'), 'bi-x-octagon') + statCard('stat-warn', ST.warn, c.warn || 0, L('ov.services'), 'bi-exclamation-triangle') +
 			statCard('stat-muted', ST.unknown, c.unknown || 0, data.unreachable ? L('ov.unreachable_n', { n: data.unreachable }) : L('ov.services'), 'bi-question-circle') +
 			statCard('stat-ok', ST.ok, c.ok || 0, L('ov.totals', { h: data.hosts.length, s: total }), 'bi-check-circle');
-		$('#m64-prob-count').textContent = String(data.problems.length);
-		$('#m64-problems').innerHTML = data.problems.length ? data.problems.map(probRow).join('') : '<div class="p-3 small text-body-secondary"><i class="bi bi-check-circle text-success"></i> ' + esc(L('ov.no_problems')) + '</div>';
+		// Probleme von Hosts im Wartungsfenster eingeklappt am Ende (#142): echte Probleme gehen nicht unter
+		var real = data.problems.filter(function (p) { return !p.maint; }), inMaint = data.problems.filter(function (p) { return p.maint; });
+		$('#m64-prob-count').textContent = String(real.length);
+		$('#m64-problems').innerHTML = (real.length ? real.map(probRow).join('') : '<div class="p-3 small text-body-secondary"><i class="bi bi-check-circle text-success"></i> ' + esc(L('ov.no_problems')) + '</div>') +
+			maintGroup(inMaint, probRow, 'div');
 		$('#m64-recent').innerHTML = data.recent.length ? data.recent.map(recentRow).join('') : '<div class="p-3 small text-body-secondary">' + esc(L('ov.no_recent')) + '</div>';
 		var groups = data.groups || [];
 		if (OV.group !== null && groups.indexOf(OV.group) < 0) { OV.group = null; }
@@ -901,6 +904,10 @@ function pageHost() {
 			html = '<span class="small">' + esc(tx(s.text || '')) + '</span>';
 		}
 		if (s.cause && st !== 'ok') { html += '<div class="small text-danger-emphasis">' + esc(tx(s.cause)) + '</div>'; }
+		// Zustandsregel mit Dauer: Bedingung gilt, Meldung erst spaeter (z. B. Sicherheitsupdates nach 24 Std.)
+		(s.pending || []).forEach(function (p) {
+			if (toDate(p.at)) { html += '<div class="small text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ' + esc(L('host.pending_state', { s: stLabel(p.state), t: fmtTime(p.at), k: kindLabel(p.kind) })) + '</div>'; }
+		});
 		if (s.vanished) { html += '<div class="small text-warning-emphasis"><i class="bi bi-question-diamond"></i> ' + esc(L('host.vanished')) + '</div>'; }
 		return html;
 	}
@@ -1728,6 +1735,21 @@ function howText(p) {
 	}
 	return p.how || '';
 }
+// maintGroup: Probleme von Hosts im Wartungsfenster als eingeklappter Abschnitt (#142). Ob er offen ist, merkt sich
+// die Seite bis zum Neuladen; tag ist "div" (Liste der Uebersicht) bzw. "tr" (Tabelle der Problemseite, cols Spalten).
+var maintOpen = false;
+document.addEventListener('toggle', function (ev) { if (ev.target.matches && ev.target.matches('[data-maint-group]')) { maintOpen = ev.target.open; } }, true);
+function maintGroup(list, row, tag, cols) {
+	if (!list.length) { return ''; }
+	var hosts = {};
+	list.forEach(function (p) { hosts[p.host_uid] = true; });
+	var head = '<i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint_problems', { n: list.length, h: Object.keys(hosts).length }));
+	if (tag === 'tr') {
+		return '<tr class="pb-maint-head"><td colspan="' + cols + '" class="small text-body-secondary"><button class="btn btn-sm btn-link p-0 text-reset text-decoration-none" type="button" data-maint-toggle="1" aria-expanded="' + maintOpen + '"><i class="bi bi-chevron-' + (maintOpen ? 'down' : 'right') + '"></i> ' + head + '</button></td></tr>' +
+			(maintOpen ? list.map(row).join('') : '');
+	}
+	return '<details class="prob-maint" data-maint-group="1"' + (maintOpen ? ' open' : '') + '><summary class="small text-body-secondary px-3 py-2">' + head + '</summary>' + list.map(row).join('') + '</details>';
+}
 function pageProblems() {
 	var qs = new URLSearchParams(location.search);
 	var PB = { tab: qs.get('status') || 'open', range: qs.get('range') || '7d', who: qs.get('who') || '', q: qs.get('q') || '', open: null, list: [], people: [] };
@@ -1761,7 +1783,9 @@ function pageProblems() {
 	function render() {
 		$$('[data-tab]').forEach(function (c) { c.classList.toggle('active', c.dataset.tab === PB.tab); });
 		var html = '';
-		PB.list.forEach(function (p) {
+		var rows = PB.list.filter(function (p) { return !p.maint; }), inMaint = PB.list.filter(function (p) { return p.maint; });
+		var one = function (p) {
+			var html = '';
 			var open = !p.closed, acked = !!p.ack;
 			var badge = open ? stBadge(p.state) : '<span class="st-badge ok"><i class="bi bi-check2"></i> ' + esc(L('pb.resolved')) + '</span>';
 			var maxSt = !open ? ' <span class="small text-body-secondary text-nowrap"><span class="st-dot st-' + esc(p.worst === 'unreachable' ? 'unknown' : p.worst) + '" style="width:.5rem;height:.5rem"></span> ' + esc(L('pb.max', { s: stLabel(p.worst) })) + '</span>' : '';
@@ -1770,7 +1794,9 @@ function pageProblems() {
 			var name = p.key ? tx(p.name) : L('ov.unreachable');
 			html += '<tr data-row="' + esc(p.uid) + '" tabindex="0"><td>' + badge + '</td><td><span class="fw-semibold">' + esc(p.host) + '</span>' + (p.host_gone ? ' <span class="badge text-bg-light">' + esc(L('pb.host_gone')) + '</span>' : '') + ' · ' + esc(name) + maxSt + '</td><td class="d-none d-md-table-cell small">' + esc(fmtTime(p.opened)) + '</td><td class="d-none d-sm-table-cell small">' + esc(fmtDur(p.duration)) + '</td><td class="small">' + how + '</td><td class="d-none d-lg-table-cell small text-body-secondary">' + esc(p.channels.map(function (c) { return c === 'default' ? L('nf.default') : c; }).join(', ') || '–') + '</td></tr>';
 			if (PB.open === p.uid) { html += '<tr class="pb-detail"><td colspan="6" id="m64-pb-detail"><span class="spinner-border spinner-border-sm"></span></td></tr>'; }
-		});
+			return html;
+		};
+		html = rows.map(one).join('') + maintGroup(inMaint, one, 'tr', 6);
 		if (!PB.list.length) { html = '<tr><td colspan="6" class="text-center text-body-secondary p-4">' + esc(L('pb.none')) + '</td></tr>'; }
 		$('#m64-pb').innerHTML = html;
 		if (PB.open) { loadDetail(PB.open); }
@@ -1813,6 +1839,7 @@ function pageProblems() {
 		var t = ev.target.closest('[data-tab]');
 		if (t) { PB.tab = t.dataset.tab; PB.open = null; load(); return; }
 		if (ev.target.closest('.pb-detail')) { return; }
+		if (ev.target.closest('[data-maint-toggle]')) { maintOpen = !maintOpen; render(); return; }
 		var r = ev.target.closest('tr[data-row]');
 		if (r) { PB.open = PB.open === r.dataset.row ? null : r.dataset.row; render(); }
 	});
