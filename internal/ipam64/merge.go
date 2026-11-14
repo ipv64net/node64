@@ -32,7 +32,9 @@ type Net struct {
 	MarkFull    bool         `json:"mark_full"`
 	DNSZone     string       `json:"dns_zone,omitempty"`
 	Scan        string       `json:"scan"`
-	DHCP        bool         `json:"dhcp"` // DHCP-Netz in DNS64
+	Dynamic     bool         `json:"dynamic"`             // IPv6 vom Provider, wechselt (Wurzel)
+	DynIndex    string       `json:"dyn_index,omitempty"` // Praefix-ID unter einer dynamischen Wurzel
+	DHCP        bool         `json:"dhcp"`                // DHCP-Netz in DNS64
 	Iface       string       `json:"interface,omitempty"`
 	Router      string       `json:"router,omitempty"`
 	PoolStart   string       `json:"pool_start,omitempty"`
@@ -207,7 +209,7 @@ func (m *Module) nets(ctx context.Context) ([]Net, error) {
 		}
 		idx[p] = len(out)
 		out = append(out, Net{Prefix: p, CIDR: p.String(), UID: r.UID, Family: r.Family, Name: r.Name, Status: r.Status, Role: r.Role, VLAN: r.VLAN,
-			Tags: r.Tags, Description: r.Description, MarkFull: r.MarkFull, DNSZone: r.DNSZone, Scan: r.Scan})
+			Tags: r.Tags, Description: r.Description, MarkFull: r.MarkFull, DNSZone: r.DNSZone, Scan: r.Scan, Dynamic: r.DynSource == DynAuto, DynIndex: r.DynIndex})
 	}
 	for _, h := range m.hintList(ctx) {
 		i, ok := idx[h.Subnet]

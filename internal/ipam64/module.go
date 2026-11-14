@@ -37,7 +37,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.2.0"
+	version = "0.3.0"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -230,6 +230,9 @@ func (m *Module) loop(ctx context.Context, done chan struct{}) {
 				m.log.Info("ipam64: reconciled with dns64", "fixed", n)
 			}
 			reconciled = now
+		}
+		if _, err := m.CheckDynamic(ctx); err != nil && ctx.Err() == nil { // IPv6-Praefix des Providers gewechselt?
+			m.log.Warn("ipam64: dynamic prefix", "err", err)
 		}
 		if n := m.AutoScan(ctx); n > 0 && now.Sub(m.LastScan(ctx)) >= time.Duration(n)*time.Minute {
 			m.scanAll(ctx)

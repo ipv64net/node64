@@ -103,6 +103,7 @@ type prefixIn struct {
 	MarkFull    bool     `json:"mark_full"`
 	DNSZone     string   `json:"dns_zone"`
 	Scan        string   `json:"scan"`
+	Dynamic     *bool    `json:"dynamic"` // IPv6 vom Provider, wechselt (fehlt beim Aendern: bisheriger Wert)
 }
 
 func (m *Module) apiPrefixSave(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +115,13 @@ func (m *Module) apiPrefixSave(w http.ResponseWriter, r *http.Request) {
 		Description: in.Description, MarkFull: in.MarkFull, DNSZone: in.DNSZone, Scan: in.Scan}
 	if p.UID != "" { // Felder, die die API nicht kennt, bleiben
 		if cur, err := m.prefixByUID(r.Context(), p.UID); err == nil && cur != nil {
-			p.ScanNode, p.DynParent, p.DynIndex, p.DynSource = cur.ScanNode, cur.DynParent, cur.DynIndex, cur.DynSource
+			p.ScanNode, p.DynSource = cur.ScanNode, cur.DynSource
+		}
+	}
+	if in.Dynamic != nil {
+		p.DynSource = ""
+		if *in.Dynamic {
+			p.DynSource = DynAuto
 		}
 	}
 	out, err := m.SavePrefix(r.Context(), p, m.g.Actor(r))

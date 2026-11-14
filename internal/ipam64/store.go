@@ -302,6 +302,18 @@ func normalizePrefix(p *Prefix) error {
 	if p.ScanNode, ok = clean(p.ScanNode, 64); !ok {
 		return ErrName
 	}
+	switch p.DynSource {
+	case "":
+	case DynAuto:
+		if !pp.Addr().Is6() || !globalV6.Contains(pp.Addr()) {
+			return ErrDyn
+		}
+	default:
+		return ErrDyn
+	}
+	if p.DynIndex, ok = clean(p.DynIndex, 16); !ok || len(p.DynParent) > 64 {
+		return ErrName
+	}
 	return nil
 }
 
@@ -519,6 +531,11 @@ func (m *Module) SavePrefix(ctx context.Context, p Prefix, actor string) (Prefix
 	} else {
 		p.UID = newUID()
 	}
+	all, err := m.Prefixes(ctx)
+	if err != nil {
+		return p, err
+	}
+	dynFields(&p, all) // Praefix-ID unter einer dynamischen Wurzel
 	p.Updated, p.UpdatedBy = m.now().UTC().Truncate(time.Second), actor
 	if err := m.writePrefix(ctx, p); err != nil {
 		return p, err

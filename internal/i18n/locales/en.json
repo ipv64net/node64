@@ -1943,6 +1943,8 @@
       "mcp": "AI (MCP)"
     },
     "actions": {
+      "ipam64_setup": "IPAM64: set up from existing data",
+      "ipam64_prefix_renumber": "IPAM64: IPv6 prefix moved",
       "ipam64_handover": "IPAM64: handed over to DNS64",
       "ipam64_autoscan": "IPAM64: automatic scan set",
       "ipam64_scan": "IPAM64: network scan started",
@@ -5572,6 +5574,36 @@
     }
   },
   "ipam64": {
+    "dyn": {
+      "title": "Dynamic IPv6 prefix",
+      "check": "Check now",
+      "last": "Last changed: {from} → {to} ({time}), {p} prefixes and {a} addresses moved.",
+      "none": "No change detected yet.",
+      "stale": "These targets of other modules still point to the old prefix – please adjust them there (better by DNS name):",
+      "hint": "IPAM64 checks every 2 minutes. AAAA records in DNS64 follow at once; targets in PROXY64, Monitor64 and Healthchecks are not changed automatically."
+    },
+    "setup": {
+      "title": "Set up from existing data",
+      "button": "Set up",
+      "intro": "Suggestions from the DHCP networks and records of DNS64 and the networks of this node. Taken-over reservations and records are labelled \"IPAM64\" in DNS64 – nothing is created twice, nothing deleted. Untick what does not fit.",
+      "no_dns64": "DNS64 is not running: only prefixes of this node, no entries from DNS64.",
+      "nothing": "Nothing to take over – everything is in IPAM64 already.",
+      "prefixes": "Prefixes",
+      "addresses": "Addresses from DNS64",
+      "src_dhcp": "DHCP network in DNS64",
+      "src_local": "Network on this node",
+      "switches": "Switches",
+      "claims": "Gets labelled",
+      "exists": "extended",
+      "apply": "Take over selected",
+      "skipped": "Stays manual in DNS64",
+      "skip": {
+        "no_prefix": "lies in no prefix",
+        "mac_differs": "in IPAM64 with a different MAC",
+        "name": "name is not a simple DNS label with zone",
+        "second_name": "another name for the same address"
+      }
+    },
     "handover": {
       "title": "Hand over to DNS64",
       "text": "Removes the label \"IPAM64\" from all reservations, exclusions and records in DNS64. They stay and can be edited there again; the DNS and DHCP switches of the addresses here are turned off. Useful before turning IPAM64 off.",
@@ -5617,6 +5649,10 @@
     "take_free": "assign {ip}",
     "list_empty": "No entries.",
     "prefix": {
+      "dynamic": "IPv6 from the provider (changes)",
+      "dynamic_hint": "When the prefix changes, IPAM64 moves the prefixes in it, the addresses and their AAAA records. Detected via this node's addresses.",
+      "dynamic_badge": "dynamic",
+      "dyn_index_hint": "Prefix ID under the dynamic prefix – stays the same when it changes",
       "new": "Add prefix",
       "prefix_hint": "IPv4 from /8 or IPv6 from /16. Prefixes may be nested.",
       "role_ph": "e.g. clients, IoT, servers",
@@ -5771,6 +5807,10 @@
       "conflicts": "Conflicts"
     },
     "flash": {
+      "setup": "Taken over: {p} prefixes, {a} addresses.",
+      "setup_failed": "Not taken over: {list}",
+      "dyn_none": "No change detected.",
+      "dyn_changed": "IPv6 prefix changed: {from} → {to} – everything moved.",
       "handover": "{n} entries handed over to DNS64.",
       "prefix_saved": "Prefix saved.",
       "prefix_deleted": "Prefix deleted.",
@@ -5782,6 +5822,7 @@
       "autoscan_saved": "Automatic scan saved."
     },
     "err": {
+      "dyn": "\"Dynamic\" only works for global IPv6 prefixes (2000::/3).",
       "no_zone": "DNS is on but there is no zone – enter one on the address or the prefix.",
       "no_dns64": "DNS64 is not running.",
       "dns64": "DNS64 refuses: {text}",

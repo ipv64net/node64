@@ -59,7 +59,8 @@ type DNS64 struct {
 	DeleteRecords     func(ctx context.Context, ref string) error
 	Release           func(ctx context.Context, ref string) (int64, error)
 	Entries           func(ctx context.Context) (Owned, error)
-	ErrKey            func(err error) string // i18n-Schluessel eines Fehlers aus DNS64 ("" = keiner)
+	Unowned           func(ctx context.Context) (Owned, error) // Eintraege von Hand (Assistent; Ref leer)
+	ErrKey            func(err error) string                   // i18n-Schluessel eines Fehlers aus DNS64 ("" = keiner)
 }
 
 // SetDNS64 haengt DNS64 an (vor dem Start).

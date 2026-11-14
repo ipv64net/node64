@@ -10015,6 +10015,10 @@
               "active",
               "off"
             ]
+          },
+          "dynamic": {
+            "type": "boolean",
+            "description": "IPv6 vom Provider, wechselt (nur globale IPv6-Präfixe); beim Ändern: fehlt = bisheriger Wert"
           }
         }
       },
@@ -10205,6 +10209,13 @@
           },
           "used_pct": {
             "type": "number"
+          },
+          "dynamic": {
+            "type": "boolean"
+          },
+          "dyn_index": {
+            "type": "string",
+            "description": "Präfix-ID unter einem dynamischen Präfix"
           }
         }
       },

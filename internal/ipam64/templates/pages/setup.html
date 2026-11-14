@@ -1,0 +1,60 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-magic text-primary"></i> {{.T "ipam64.setup.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary" href="/ipam64"><i class="bi bi-arrow-left"></i> {{.T "ipam64.title"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "ipam64.setup.intro"}}</p>
+{{if not $d.DNS64}}<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> {{.T "ipam64.setup.no_dns64"}}</div>{{end}}
+{{if and (not $d.Prefixes) (not $d.Addresses)}}
+<div class="alert alert-success" id="ipam-setup-done"><i class="bi bi-check-circle"></i> {{.T "ipam64.setup.nothing"}}</div>
+{{else}}
+<form method="post" action="/ipam64/setup" id="ipam-setup-form">
+	<input type="hidden" name="_csrf" value="{{.CSRF}}">
+	{{if $d.Prefixes}}
+	<div class="card mb-3">
+		<div class="card-header"><i class="bi bi-diagram-2 text-primary"></i> {{.T "ipam64.setup.prefixes"}}</div>
+		<ul class="list-group list-group-flush small">
+			{{range $d.Prefixes}}<li class="list-group-item d-flex flex-wrap align-items-center gap-2">
+				<input class="form-check-input mt-0" type="checkbox" name="take" value="{{.Key}}" id="t-{{.Key}}" checked>
+				<label class="form-check-label d-flex flex-wrap gap-2" for="t-{{.Key}}"><span class="font-monospace fw-semibold">{{.Prefix.Prefix}}</span>{{if .Prefix.Name}}<span>{{.Prefix.Name}}</span>{{end}}
+					{{if .Prefix.VLAN}}<span class="badge text-bg-light border">VLAN {{.Prefix.VLAN}}</span>{{end}}
+					{{if .Prefix.DNSZone}}<span class="badge text-bg-light border font-monospace">{{.Prefix.DNSZone}}</span>{{end}}
+					{{if eq .Prefix.DynSource "auto"}}<span class="badge text-bg-info">{{$.T "ipam64.prefix.dynamic_badge"}}</span>{{end}}</label>
+				<span class="ms-auto text-body-secondary">{{$.T (print "ipam64.setup.src_" .Source)}}</span>
+			</li>{{end}}
+		</ul>
+	</div>
+	{{end}}
+	{{if $d.Addresses}}
+	<div class="card mb-3">
+		<div class="card-header"><i class="bi bi-geo-alt text-primary"></i> {{.T "ipam64.setup.addresses"}}</div>
+		<div class="table-responsive">
+			<table class="table table-sm align-middle mb-0 small table-stack">
+				<thead><tr><th></th><th>{{.T "ipam64.col.ip"}}</th><th>{{.T "ipam64.col.host"}}</th><th>{{.T "ipam64.setup.switches"}}</th><th>{{.T "ipam64.setup.claims"}}</th></tr></thead>
+				<tbody>
+				{{range $d.Addresses}}<tr>
+					<td><input class="form-check-input" type="checkbox" name="take" value="{{.Key}}" id="t-{{.Key}}" checked aria-label="{{.Address.Address}}"></td>
+					<td data-label="{{$.T "ipam64.col.ip"}}" class="font-monospace"><label for="t-{{.Key}}">{{.Address.Address}}</label>{{if .Exists}} <span class="badge text-bg-light border">{{$.T "ipam64.setup.exists"}}</span>{{end}}</td>
+					<td data-label="{{$.T "ipam64.col.host"}}">{{if .Address.Name}}<span class="font-monospace">{{.Address.Name}}</span>{{if .Address.DNSZone}}<span class="text-body-secondary">.{{.Address.DNSZone}}</span>{{end}}{{else}}–{{end}}</td>
+					<td data-label="{{$.T "ipam64.setup.switches"}}">{{if .Address.DNS}}<span class="badge text-bg-light border"><i class="bi bi-diagram-3"></i> DNS</span> {{end}}{{if .Address.DHCP}}<span class="badge text-bg-light border"><i class="bi bi-router"></i> DHCP</span>{{end}}</td>
+					<td data-label="{{$.T "ipam64.setup.claims"}}" class="font-monospace">{{range .Claims}}<div>{{.}}</div>{{end}}</td>
+				</tr>{{end}}
+				</tbody>
+			</table>
+		</div>
+	</div>
+	{{end}}
+	<div class="d-flex flex-wrap gap-2 mb-3">
+		<button class="btn btn-primary" type="submit" id="ipam-setup-apply"><i class="bi bi-check-lg"></i> {{.T "ipam64.setup.apply"}}</button>
+		<a class="btn btn-outline-secondary" href="/ipam64">{{.T "common.cancel"}}</a>
+	</div>
+</form>
+{{end}}
+{{if $d.Skipped}}
+<div class="card" id="ipam-setup-skipped">
+	<div class="card-header small"><i class="bi bi-info-circle text-primary"></i> {{.T "ipam64.setup.skipped"}}</div>
+	<ul class="list-group list-group-flush small">{{range $d.Skipped}}<li class="list-group-item d-flex flex-wrap gap-2"><span class="font-monospace">{{.What}}</span><span class="ms-auto text-body-secondary">{{$.T .Reason}}</span></li>{{end}}</ul>
+</div>
+{{end}}
+{{end}}

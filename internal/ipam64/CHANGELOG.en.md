@@ -1,5 +1,14 @@
 # IPAM64 – Changes
 
+## 0.3.0 – unreleased
+
+New:
+
+- "Set up from existing data": suggests prefixes from the DHCP networks of DNS64 and the node's networks and takes over fixed addresses and A/AAAA records that are manual in DNS64 – with matching switches, labelled instead of duplicated. What does not fit stays manual and is listed with the reason.
+- Dynamic IPv6 prefixes: a provider prefix can be marked "dynamic". When it changes, IPAM64 moves the prefixes in it (prefix ID stays), the addresses and their AAAA records in DNS64; detected via the node's addresses, checked every 2 minutes or on demand.
+- Overview: last IPv6 prefix change and targets in PROXY64, Monitor64 and Healthchecks still pointing to the old prefix.
+- API: field `dynamic` on prefixes.
+
 ## 0.2.0 – unreleased
 
 New:

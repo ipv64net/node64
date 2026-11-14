@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) und I3 (IPAM64 0.2.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 (IPAM64 0.1.0), I2 (DNS64 1.41.0) , I3 (IPAM64 0.2.0) und I4 (IPAM64 0.3.0) umgesetzt im Zweig `claude/zen-goldberg-805131` (auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -311,3 +311,19 @@ IPAM64 0.2.0, im selben Zweig, auf der Testnode (agentbox, Container `node64-ipa
 - **Erkenntnis für I4 (Assistent, E5):** Beim Kennzeichnen vorhandener DNS64-Einträge müssen an der IPAM-Adresse die
   Schalter DNS/DHCP passend gesetzt werden – sonst entfernt der Abgleich die Einträge wieder (IPAM64 ist führend).
   Auf der Testnode so passiert mit einer von Hand gekennzeichneten Reservierung.
+
+## Stand I4 (2026-11-14)
+
+IPAM64 0.3.0, im selben Zweig; Assistent auf der Testnode Ende-zu-Ende geprüft:
+- `ipam64/setup.go`, Seite `/ipam64/setup`: Präfixe aus DHCP-Netzen (ohne Eintrag in IPAM64) und Netzen der Node
+  (privat, ULA; global als dynamisch); Adressen aus Hand-Einträgen in DNS64 (Hook `Unowned`): je IP eine Adresse mit
+  passenden Schaltern (Reservierung → DHCP an + MAC, A/AAAA → DNS an + Name + Zone, nur abweichende Zone wird an der
+  Adresse gespeichert). Übernahme über `ApplyAddress` – DNS64 kennzeichnet die gleichen Einträge. Übersprungen mit
+  Grund: kein Präfix, andere MAC als in IPAM64, kein DNS-Label, zweiter Name für dieselbe IP.
+- `ipam64/dynv6.go`: `DynSource = "auto"` an globalen IPv6-Präfixen (sonst `ErrDyn`); Kinder bekommen `DynParent`/
+  `DynIndex` (Präfix-ID). Erkennung in der Hintergrundschleife und auf Knopfdruck: keine Adresse der Node mehr in der
+  Wurzel, aber genau eine neue Wurzel, in der die Node in einem bekannten Kind liegt → Umnummerierung von Präfixen,
+  Adressbereichen und Adressen (obere Bits ersetzt), AAAA in DNS64 neu geschrieben; letzter Wechsel in der Übersicht mit
+  Zielen anderer Module, die noch auf das alte Präfix zeigen (werden nicht selbst geändert).
+- Im Cluster nummeriert jede Node mit eigener globaler Adresse selbst um; das Ergebnis ist gleich, die Abgleiche treffen
+  sich (gleiche Werte). Nicht geprüft: echter Präfixwechsel an einem Anschluss (nur Tests mit simulierten Adressen).

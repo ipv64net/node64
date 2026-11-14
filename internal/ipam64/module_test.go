@@ -704,6 +704,15 @@ func TestPagesRender(t *testing.T) {
 	if code, body = get("/"); code != 200 || !strings.Contains(body, `href="/ipam64"`) {
 		t.Fatalf("dashboard: %d", code)
 	}
+	if code, body = get("/ipam64/setup"); code != 200 || !strings.Contains(body, `id="ipam-setup-form"`) || !strings.Contains(body, "192.168.20.0/24") || strings.Contains(body, "ipam64.") {
+		t.Fatalf("setup: %d\n%s", code, body)
+	}
+	if code, _ = post("/ipam64/setup", url.Values{"take": {"p:192.168.20.0/24"}}); code != http.StatusSeeOther {
+		t.Fatalf("setup apply: %d", code)
+	}
+	if code, body = get("/ipam64"); code != 200 || strings.Contains(body, "aus DNS64") || strings.Contains(body, "ipam64.") {
+		t.Fatalf("after setup: %d\n%s", code, body)
+	}
 	if code, body = get("/audit?area=ipam64"); code != 200 || !strings.Contains(body, "IPAM64: Präfix gespeichert") {
 		t.Fatalf("audit: %d", code)
 	}

@@ -41,6 +41,9 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /ipam64/scan", page(m.postScan))
 	mux.Handle("POST /ipam64/autoscan", page(m.postAutoScan))
 	mux.Handle("POST /ipam64/handover", page(m.postHandover))
+	mux.Handle("GET /ipam64/setup", page(m.pageSetup))
+	mux.Handle("POST /ipam64/setup", page(m.postSetup))
+	mux.Handle("POST /ipam64/dyncheck", page(m.postDynCheck))
 }
 
 const (
@@ -53,7 +56,7 @@ func errKey(err error) string {
 	for e, k := range map[error]string{ErrPrefix: "prefix", ErrSize: "size", ErrDup: "dup", ErrName: "name", ErrHost: "host", ErrStatus: "status",
 		ErrVLAN: "vlan", ErrTags: "tags", ErrRange: "range", ErrRangeNet: "range_net", ErrOverlap: "overlap", ErrIP: "ip", ErrNoNet: "no_net",
 		ErrNetAddr: "net_addr", ErrMAC: "mac", ErrTaken: "taken", ErrRole: "role", ErrNotFound: "not_found", ErrBusy: "busy",
-		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64"} {
+		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn"} {
 		if errors.Is(err, e) {
 			return "ipam64.err." + k
 		}
@@ -106,7 +109,10 @@ type overviewData struct {
 	AutoOpts  []int
 	LastScan  time.Time
 	Scan      ScanStatus
-	DNS64     bool // DNS64 laeuft (Uebergabe moeglich)
+	DNS64     bool       // DNS64 laeuft (Uebergabe moeglich)
+	Dyn       *DynChange // letzter Wechsel eines dynamischen IPv6-Praefixes
+	Stale     []string   // Ziele anderer Module, die noch auf das alte Praefix zeigen
+	HasDyn    bool       // es gibt ein dynamisches Praefix
 }
 
 func (m *Module) overview(r *http.Request) (*overviewData, error) {
@@ -133,6 +139,12 @@ func (m *Module) overview(r *http.Request) (*overviewData, error) {
 		}
 	}
 	d.VLANs = len(vlans)
+	for _, n := range snap.Nets {
+		d.HasDyn = d.HasDyn || n.Dynamic
+	}
+	if d.Dyn = m.LastDynChange(ctx); d.Dyn != nil && m.now().Sub(d.Dyn.At) < 7*24*time.Hour {
+		d.Stale = m.StaleTargets(ctx, d.Dyn.From)
+	}
 	for _, l := range m.locals() {
 		p := l.Masked()
 		if snap.Net(p.String()) == nil && (p.Addr().IsPrivate() || p.Addr().Is6()) && !slices.Contains(d.Local, p.String()) {
@@ -498,6 +510,9 @@ func (m *Module) postPrefix(w http.ResponseWriter, r *http.Request) {
 	in := Prefix{UID: r.PostFormValue("uid"), Prefix: r.PostFormValue("prefix"), Name: r.PostFormValue("name"), Status: r.PostFormValue("status"),
 		Role: r.PostFormValue("role"), VLAN: vlan, Tags: []string{r.PostFormValue("tags")}, Description: r.PostFormValue("description"),
 		MarkFull: r.PostFormValue("mark_full") == "1", DNSZone: r.PostFormValue("dns_zone"), Scan: r.PostFormValue("scan")}
+	if r.PostFormValue("dynamic") == "1" {
+		in.DynSource = DynAuto
+	}
 	var out Prefix
 	var err error
 	if !ok {
@@ -631,6 +646,53 @@ func (m *Module) postHandover(w http.ResponseWriter, r *http.Request) {
 	} else {
 		m.g.Audit(r, "ipam64.handover", Name, strconv.FormatInt(n, 10))
 		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.handover", "n", n))
+	}
+	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+func (m *Module) pageSetup(w http.ResponseWriter, r *http.Request) {
+	plan, err := m.SetupPlan(r.Context())
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.g.Render(w, r, http.StatusOK, "ipam64/setup", "ipam64.setup.title", plan)
+}
+
+func (m *Module) postSetup(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	res, err := m.ApplySetup(r.Context(), r.PostForm["take"], m.g.Actor(r), func(e error) string { return m.errText(r, e) })
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.g.Audit(r, "ipam64.setup", Name, strconv.Itoa(res.Prefixes)+" prefixes, "+strconv.Itoa(res.Addresses)+" addresses")
+	kind := "success"
+	text := m.g.T(r, "ipam64.flash.setup", "p", res.Prefixes, "a", res.Addresses)
+	if len(res.Failed) > 0 {
+		kind = "warning"
+		var parts []string
+		for _, f := range res.Failed {
+			parts = append(parts, f.What+": "+f.Reason)
+		}
+		text += " " + m.g.T(r, "ipam64.flash.setup_failed", "list", strings.Join(parts, "; "))
+	}
+	m.g.Flash(w, r, kind, text)
+	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+func (m *Module) postDynCheck(w http.ResponseWriter, r *http.Request) {
+	list, err := m.CheckDynamic(r.Context())
+	switch {
+	case err != nil:
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	case len(list) == 0:
+		m.g.Flash(w, r, "info", m.g.T(r, "ipam64.flash.dyn_none"))
+	default:
+		for _, c := range list {
+			m.g.Audit(r, "ipam64.prefix.renumber", c.From, c.To)
+		}
+		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.dyn_changed", "from", list[0].From, "to", list[0].To))
 	}
 	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
 }

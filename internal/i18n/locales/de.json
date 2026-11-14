@@ -1943,6 +1943,8 @@
       "mcp": "KI (MCP)"
     },
     "actions": {
+      "ipam64_setup": "IPAM64: aus dem Bestand eingerichtet",
+      "ipam64_prefix_renumber": "IPAM64: IPv6-Präfix nachgezogen",
       "ipam64_handover": "IPAM64: an DNS64 übergeben",
       "ipam64_autoscan": "IPAM64: Automatischer Scan eingestellt",
       "ipam64_scan": "IPAM64: Netz-Scan gestartet",
@@ -5572,6 +5574,36 @@
     }
   },
   "ipam64": {
+    "dyn": {
+      "title": "Dynamisches IPv6-Präfix",
+      "check": "Jetzt prüfen",
+      "last": "Zuletzt gewechselt: {from} → {to} ({time}), {p} Präfixe und {a} Adressen nachgezogen.",
+      "none": "Noch kein Wechsel erkannt.",
+      "stale": "Diese Ziele anderer Module zeigen noch auf das alte Präfix – bitte dort anpassen (besser per DNS-Name):",
+      "hint": "IPAM64 prüft alle 2 Minuten. AAAA-Einträge in DNS64 folgen sofort; Ziele in PROXY64, Monitor64 und Healthchecks ändert es nicht selbst."
+    },
+    "setup": {
+      "title": "Einrichten aus dem Bestand",
+      "button": "Einrichten",
+      "intro": "Vorschläge aus den DHCP-Netzen und Einträgen von DNS64 und den Netzen dieser Node. Übernommene Reservierungen und Einträge werden in DNS64 als „IPAM64“ gekennzeichnet – nichts wird doppelt angelegt, nichts gelöscht. Abwählen, was nicht passt.",
+      "no_dns64": "DNS64 läuft nicht: nur Präfixe an dieser Node, keine Einträge aus DNS64.",
+      "nothing": "Es gibt nichts zu übernehmen – alles ist schon in IPAM64.",
+      "prefixes": "Präfixe",
+      "addresses": "Adressen aus DNS64",
+      "src_dhcp": "DHCP-Netz in DNS64",
+      "src_local": "Netz an dieser Node",
+      "switches": "Schalter",
+      "claims": "Wird gekennzeichnet",
+      "exists": "ergänzt",
+      "apply": "Ausgewählte übernehmen",
+      "skipped": "Bleibt in DNS64 von Hand",
+      "skip": {
+        "no_prefix": "liegt in keinem Präfix",
+        "mac_differs": "in IPAM64 mit anderer MAC",
+        "name": "Name ist kein einfaches DNS-Label mit Zone",
+        "second_name": "weiterer Name für dieselbe Adresse"
+      }
+    },
     "handover": {
       "title": "An DNS64 übergeben",
       "text": "Nimmt das Kennzeichen „IPAM64“ von allen Reservierungen, Ausnahmen und Einträgen in DNS64. Sie bleiben bestehen und sind dort wieder frei bearbeitbar; an den Adressen hier gehen die Schalter DNS und DHCP aus. Sinnvoll, bevor IPAM64 abgeschaltet wird.",
@@ -5617,6 +5649,10 @@
     "take_free": "{ip} vergeben",
     "list_empty": "Keine Einträge.",
     "prefix": {
+      "dynamic": "IPv6 vom Provider (wechselt)",
+      "dynamic_hint": "Wechselt das Präfix, zieht IPAM64 die Präfixe darin, die Adressen und ihre AAAA-Einträge nach. Erkannt über die Adressen dieser Node.",
+      "dynamic_badge": "dynamisch",
+      "dyn_index_hint": "Präfix-ID unter dem dynamischen Präfix – bleibt beim Wechsel gleich",
       "new": "Präfix anlegen",
       "prefix_hint": "IPv4 ab /8 oder IPv6 ab /16. Präfixe dürfen ineinander liegen.",
       "role_ph": "z. B. Clients, IoT, Server",
@@ -5771,6 +5807,10 @@
       "conflicts": "Konflikte"
     },
     "flash": {
+      "setup": "Übernommen: {p} Präfixe, {a} Adressen.",
+      "setup_failed": "Nicht übernommen: {list}",
+      "dyn_none": "Kein Wechsel erkannt.",
+      "dyn_changed": "IPv6-Präfix gewechselt: {from} → {to} – alles nachgezogen.",
       "handover": "{n} Einträge an DNS64 übergeben.",
       "prefix_saved": "Präfix gespeichert.",
       "prefix_deleted": "Präfix gelöscht.",
@@ -5782,6 +5822,7 @@
       "autoscan_saved": "Automatischer Scan gespeichert."
     },
     "err": {
+      "dyn": "„Dynamisch“ geht nur für globale IPv6-Präfixe (2000::/3).",
       "no_zone": "DNS ist an, aber es gibt keine Zone – trage eine an der Adresse oder am Präfix ein.",
       "no_dns64": "DNS64 läuft nicht.",
       "dns64": "DNS64 lehnt ab: {text}",

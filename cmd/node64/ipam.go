@@ -46,6 +46,25 @@ func newIPAM(st *store.Store, log *slog.Logger, modules *module.Registry, dns *d
 			}
 			return o, err
 		},
+		Unowned: func(ctx context.Context) (ipam64.Owned, error) { // Hand-Eintraege fuer den Assistenten (ohne Docker, Platzhalter)
+			var o ipam64.Owned
+			res, err := dns.DHCPReservations(ctx)
+			if err != nil {
+				return o, err
+			}
+			for _, r := range res {
+				if r.Origin == "" {
+					o.Reservations = append(o.Reservations, ipam64.OwnedRes{MAC: r.MAC, IP: r.IP, Name: r.Name})
+				}
+			}
+			recs, err := dns.Records(ctx)
+			for _, r := range recs {
+				if r.Origin == "" && r.Enabled && !r.LocalOnly && (r.Type == "A" || r.Type == "AAAA") && !strings.HasPrefix(r.Name, "*") {
+					o.Records = append(o.Records, ipam64.OwnedRec{Name: r.Name, Type: r.Type, Value: r.Value, NoPTR: r.NoPTR})
+				}
+			}
+			return o, err
+		},
 		ErrKey: dns64.ErrKey,
 	})
 	scopes := func(ctx context.Context) []dns64.DHCPScope {

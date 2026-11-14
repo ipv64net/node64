@@ -1,5 +1,14 @@
 # IPAM64 – Änderungen
 
+## 0.3.0 – unveröffentlicht
+
+Neu:
+
+- „Einrichten aus dem Bestand“: schlägt Präfixe aus den DHCP-Netzen von DNS64 und den Netzen der Node vor und übernimmt feste Adressen und A/AAAA-Einträge, die in DNS64 von Hand stehen – mit passend gesetzten Schaltern, gekennzeichnet statt doppelt. Was nicht passt, bleibt von Hand und steht mit Grund in der Liste.
+- Dynamische IPv6-Präfixe: Ein Präfix vom Provider lässt sich als „dynamisch“ markieren. Wechselt es, zieht IPAM64 die Präfixe darin (Präfix-ID bleibt), die Adressen und ihre AAAA-Einträge in DNS64 nach; erkannt über die Adressen der Node, Prüfung alle 2 Minuten oder auf Knopfdruck.
+- Übersicht: letzter Wechsel des IPv6-Präfixes und Ziele in PROXY64, Monitor64 und Healthchecks, die noch auf das alte Präfix zeigen.
+- API: Feld `dynamic` an Präfixen.
+
 ## 0.2.0 – unveröffentlicht
 
 Neu:

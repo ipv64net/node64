@@ -2,6 +2,7 @@
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
 	<h1 class="h4 mb-0 me-auto"><i class="bi bi-grid-3x3-gap text-primary"></i> {{.T "ipam64.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/setup" id="ipam-setup"><i class="bi bi-magic"></i> {{.T "ipam64.setup.button"}}</a>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/export.csv" id="ipam-export"><i class="bi bi-download"></i> {{.T "ipam64.export"}}</a>
 	<button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#ipam-new" aria-expanded="{{if $d.FormOpen}}true{{else}}false{{end}}" aria-controls="ipam-new" id="ipam-new-btn"><i class="bi bi-plus-lg"></i> {{.T "ipam64.prefix.new"}}</button>
 </div>
@@ -50,7 +51,7 @@
 </div>
 
 {{if not $d.Nets}}
-<div class="alert alert-info" id="ipam-empty"><i class="bi bi-info-circle"></i> {{.T "ipam64.empty"}}</div>
+<div class="alert alert-info d-flex flex-wrap align-items-center gap-2" id="ipam-empty"><i class="bi bi-info-circle"></i> <span>{{.T "ipam64.empty"}}</span> <a class="btn btn-sm btn-primary ms-auto" href="/ipam64/setup"><i class="bi bi-magic"></i> {{.T "ipam64.setup.button"}}</a></div>
 {{else}}
 <div class="card" id="ipam-tree">
 	<div class="card-header d-flex align-items-center gap-2"><i class="bi bi-diagram-2 text-primary"></i> {{.T "ipam64.prefixes"}}</div>
@@ -60,7 +61,7 @@
 			<tbody>
 			{{range $d.Nets}}
 			<tr>
-				<td data-label="{{$.T "ipam64.col.prefix"}}" class="text-nowrap">{{range seq .Depth}}<span class="ipam-tree-ind">└</span>{{end}}<a class="font-monospace fw-semibold" href="/ipam64/prefix?p={{.CIDR}}">{{.CIDR}}</a>{{if not .UID}} <span class="badge text-bg-light border" title="{{$.T "ipam64.prefix.dhcp_only_hint"}}">{{$.T "ipam64.prefix.dhcp_only"}}</span>{{end}}</td>
+				<td data-label="{{$.T "ipam64.col.prefix"}}" class="text-nowrap">{{range seq .Depth}}<span class="ipam-tree-ind">└</span>{{end}}<a class="font-monospace fw-semibold" href="/ipam64/prefix?p={{.CIDR}}">{{.CIDR}}</a>{{if .Dynamic}} <span class="badge text-bg-info" title="{{$.T "ipam64.prefix.dynamic_hint"}}">{{$.T "ipam64.prefix.dynamic_badge"}}</span>{{else if .DynIndex}} <span class="badge text-bg-light border" title="{{$.T "ipam64.prefix.dyn_index_hint"}}">ID {{.DynIndex}}</span>{{end}}{{if not .UID}} <span class="badge text-bg-light border" title="{{$.T "ipam64.prefix.dhcp_only_hint"}}">{{$.T "ipam64.prefix.dhcp_only"}}</span>{{end}}</td>
 				<td data-label="{{$.T "ipam64.col.name"}}">{{.Name}}</td>
 				<td data-label="VLAN">{{if .VLAN}}<span class="badge text-bg-light border">{{.VLAN}}</span>{{end}}</td>
 				<td data-label="{{$.T "ipam64.col.status"}}"><span class="badge {{if eq .Status "container"}}text-bg-secondary{{else if eq .Status "active"}}text-bg-success{{else if eq .Status "reserved"}}text-bg-warning{{else}}text-bg-light border{{end}}">{{$.T (print "ipam64.status." .Status)}}</span></td>
@@ -74,6 +75,17 @@
 		</table>
 	</div>
 	<div class="card-footer small text-body-secondary">{{.T "ipam64.tree_hint"}}</div>
+</div>
+{{end}}
+{{if or $d.HasDyn $d.Dyn}}
+<div class="card mt-3" id="ipam-dyn">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2 small"><i class="bi bi-arrow-left-right text-primary"></i> {{.T "ipam64.dyn.title"}}
+		<form method="post" action="/ipam64/dyncheck" class="ms-auto"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "ipam64.dyn.check"}}</button></form></div>
+	<div class="card-body small">
+		{{with $d.Dyn}}<div>{{$.T "ipam64.dyn.last" "from" .From "to" .To "time" ($.Time .At) "p" .Prefixes "a" .Addresses}}</div>{{else}}<div class="text-body-secondary">{{.T "ipam64.dyn.none"}}</div>{{end}}
+		{{if $d.Stale}}<div class="mt-2 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "ipam64.dyn.stale"}}<ul class="mb-0">{{range $d.Stale}}<li class="font-monospace">{{.}}</li>{{end}}</ul></div>{{end}}
+		<div class="text-body-secondary mt-2">{{.T "ipam64.dyn.hint"}}</div>
+	</div>
 </div>
 {{end}}
 {{if $d.DNS64}}
