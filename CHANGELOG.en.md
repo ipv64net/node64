@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: Redfish with HPE iLO 4 (308 redirect) and addresses with a path (#141); separate mounts with source "none" (virtiofs) kept apart (#140); short SNMP gaps (QNAP) bridged instead of "unknown" (#136); firmware updates of FRITZ!Box, MikroTik and UniFi warn right away (forum 5134).
+- Monitor64: problems of hosts in a maintenance window collapsed at the end of the problem list (#142); "Reboot required" also when a newer kernel is installed (#130); smartctl_exporter and node_exporter on macOS (RAM/swap) in the Prometheus access (#135, #114).
+- Monitor64 agent 0.1.5: mounts with source "none" separately (#140), kernel comparison for "Reboot required" (#130).
 - Healthchecks: "Measuring nodes" shows the nodes' current names when creating a check and in the details instead of old ones (#134).
 - Healthchecks: Status pages – order entries freely (arrows or drag and drop), plus headings and dividers as entries of their own; existing pages stay as they are (#131, #102).
 - Honeypot64: New top list of requested domains/subdomains (Host/SNI) at the web trap and PROXY64 decoy, top 20 in the period (#113).
