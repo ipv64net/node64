@@ -3644,7 +3644,8 @@
     "opened_from": "Geöffnet über Environment von {name}",
     "read_only_badge": "nur lesen",
     "back": "Zurück zu {name}",
-    "login_hint": "Über Environment ist hier keine Anmeldung mit deinem Benutzer möglich (Benutzer unbekannt oder gesperrt, Abgleich aus oder Ticket abgelaufen). Bitte melde dich an."
+    "login_hint": "Über Environment ist hier keine Anmeldung mit deinem Benutzer möglich (Benutzer unbekannt oder gesperrt, Abgleich aus oder Ticket abgelaufen). Bitte melde dich an.",
+    "other_user": "Hier ist schon ein anderer Benutzer angemeldet. Die Anmeldung über Environment von {name} wurde nicht übernommen. Melde dich zuerst ab, wenn du wechseln möchtest."
   },
   "link": {
     "key_title": "Mit einem Klick verknüpfen",

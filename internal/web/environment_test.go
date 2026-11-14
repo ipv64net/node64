@@ -122,7 +122,7 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self' "+b.app.srv.URL) {
 		t.Fatalf("csp: %s", csp)
 	}
-	resp, _ = b.app.post(t, "/environment/enter", url.Values{"ticket": {tok}}) // ohne CSRF: kommt von A
+	resp = enter(t, b.app.client, b, tok, a.app.srv.URL) // ohne CSRF: kommt von A (Origin)
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
 		t.Fatalf("enter: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
@@ -141,7 +141,7 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 	}
 	// einmal verwendbar
 	b2 := newClient(t)
-	if resp := postWith(t, b2, b.app.srv.URL+"/environment/enter", url.Values{"ticket": {tok}}); resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/login?env=1" {
+	if resp := enter(t, b2, b, tok, a.app.srv.URL); resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/login?env=1" {
 		t.Fatalf("ticket reused: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	entries, _ := b.app.store.AuditList(ctx, 50, 0)
@@ -171,7 +171,7 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 	if tok == "" {
 		t.Fatal("no ticket for read-only user")
 	}
-	b.app.post(t, "/environment/enter", url.Values{"ticket": {tok}})
+	enter(t, b.app.client, b, tok, a.app.srv.URL)
 	_, body = b.app.get(t, "/settings")
 	if !strings.Contains(body, "nur lesen") {
 		t.Fatal("read-only badge missing")
@@ -221,12 +221,92 @@ func newClient(t *testing.T) *http.Client {
 	return &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-func postWith(t *testing.T, c *http.Client, u string, form url.Values) *http.Response {
+// enter schickt ein Ticket an /environment/enter von B, wie der Browser von der Seite mit Ursprung origin ("" = ohne
+// Origin und Referer).
+func enter(t *testing.T, c *http.Client, b *envNode, tok, origin string) *http.Response {
 	t.Helper()
-	resp, err := c.PostForm(u, form)
+	req, _ := http.NewRequest(http.MethodPost, b.app.srv.URL+envEnterPath, strings.NewReader(url.Values{"ticket": {tok}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
 	return resp
+}
+
+// Login-CSRF: Ein Ticket gilt nur, wenn das Formular von der oeffnenden Node kommt (Origin, ersatzweise Referer), und
+// ersetzt keine bestehende Anmeldung eines anderen Benutzers.
+func TestEnvironmentEnterOrigin(t *testing.T) {
+	ctx := context.Background()
+	a, b := newEnvNode(t, "node-a", "Node A"), newEnvNode(t, "node-b", "Node B")
+	a.other, b.other = b, a
+	me := loginAs(t, a.app, "admin", "sehr geheimes passwort")
+	if _, err := b.app.store.CreateUserWith(ctx, store.NewUser{UID: me.UID, Username: "dennis", PasswordHash: "x", Lang: "de", Timezone: "UTC"}); err != nil {
+		t.Fatal(err)
+	}
+	ticket := func() string {
+		t.Helper()
+		_, _, tok := openB(t, a, b)
+		if tok == "" {
+			t.Fatal("no ticket")
+		}
+		return tok
+	}
+	denied := func(resp *http.Response) bool { return resp.Header.Get("Location") == "/login?env=1" }
+
+	// von einer fremden Seite: abgelehnt, das Ticket ist danach verbraucht
+	tok := ticket()
+	if resp := enter(t, newClient(t), b, tok, "https://evil.example"); !denied(resp) {
+		t.Fatalf("foreign origin: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if resp := enter(t, newClient(t), b, tok, a.app.srv.URL); !denied(resp) {
+		t.Fatal("ticket usable after foreign attempt")
+	}
+	// ohne Origin und Referer: abgelehnt
+	if resp := enter(t, newClient(t), b, ticket(), ""); !denied(resp) {
+		t.Fatal("no origin accepted")
+	}
+	// Origin "null", Referer mit dem Ursprung von A: angenommen
+	req, _ := http.NewRequest(http.MethodPost, b.app.srv.URL+envEnterPath, strings.NewReader(url.Values{"ticket": {ticket()}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "null")
+	req.Header.Set("Referer", a.app.srv.URL+"/")
+	resp, err := newClient(t).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.Header.Get("Location") != "/" {
+		t.Fatalf("referer fallback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	// Seite zum Oeffnen schickt nur den Ursprung als Referer (nicht no-referrer, sonst Origin "null")
+	resp, _, _ = openB(t, a, b)
+	if p := resp.Header.Get("Referrer-Policy"); p != "origin" {
+		t.Fatalf("referrer policy: %q", p)
+	}
+
+	// auf B ist schon ein anderer Benutzer angemeldet: bleibt angemeldet, Hinweis, Audit
+	loginAs(t, b.app, "anna", "auch ein geheimes passwort")
+	if resp := enter(t, b.app.client, b, ticket(), a.app.srv.URL); resp.Header.Get("Location") != "/" {
+		t.Fatalf("other user: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	_, body := b.app.get(t, "/")
+	if strings.Contains(body, `id="env-from"`) || !strings.Contains(body, "schon ein anderer Benutzer angemeldet") {
+		t.Fatal("session of other user replaced or hint missing")
+	}
+	if _, body = b.app.get(t, "/settings"); !strings.Contains(body, "anna") {
+		t.Fatal("anna no longer signed in")
+	}
+	entries, _ := b.app.store.AuditList(ctx, 50, 0)
+	ok := false
+	for _, e := range entries {
+		ok = ok || e.Action == "login.environment_failed" && e.Actor == "anna" && strings.Contains(e.Details, "other user")
+	}
+	if !ok {
+		t.Fatal("audit for other user missing")
+	}
 }

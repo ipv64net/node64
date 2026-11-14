@@ -94,7 +94,7 @@ func (s *Server) environmentOpen(w http.ResponseWriter, r *http.Request) {
 	// das Formular geht an die andere Node: nur fuer diese Antwort dorthin erlauben
 	h := w.Header()
 	h.Set("Content-Security-Policy", strings.Replace(h.Get("Content-Security-Policy"), "form-action 'self'", "form-action 'self' "+origin, 1))
-	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("Referrer-Policy", "origin") // nur der Ursprung: /environment/enter prueft ihn (bei no-referrer kaeme Origin "null")
 	v := s.view(r, "environment.title")
 	v.Data = d
 	s.render(w, r, http.StatusOK, "environment_open", v)
@@ -115,6 +115,12 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 		deny("-", "invalid, used or expired ticket")
 		return
 	}
+	// Login-CSRF: das Formular muss von der oeffnenden Node kommen (Ursprung wie der Rueckweg im Ticket), sonst koennte
+	// eine fremde Seite ein eigenes Ticket unterschieben und den Browser mit fremdem Benutzer anmelden
+	if !sameHost(sourceOrigin(r), t.Back) {
+		deny("-", "ticket not sent from "+t.FromName)
+		return
+	}
 	u, err := s.Store.UserByUID(ctx, t.UID)
 	if err != nil {
 		s.fail(w, r, err)
@@ -122,6 +128,15 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 	}
 	if u == nil || u.Disabled {
 		deny("-", "user unknown or locked (from "+t.FromName+")")
+		return
+	}
+	// eine bestehende Anmeldung eines anderen Benutzers nicht stillschweigend ersetzen
+	if cur := currentUser(r); cur != nil && cur.ID != u.ID {
+		s.log.Warn("environment ticket rejected", "reason", "other user signed in", "ip", ip)
+		s.auditEntry(ctx, store.AuditEntry{Actor: cur.Username, Action: "login.environment_failed", Target: t.FromName,
+			Details: "other user signed in (ticket for " + u.Username + ")", IP: ip})
+		s.flash(w, r, "warning", s.tr(r, "environment.other_user", "name", t.FromName))
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	role := environment.MinRole(t.Role, s.Store.EffectiveRole(ctx, u))
@@ -143,6 +158,22 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.environment", Target: t.FromName, Details: "role " + role, IP: ip})
 	s.log.Info("login via environment", "user", u.Username, "from", t.FromName, "role", role, "ip", ip)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// sourceOrigin: Ursprung der Seite, die das Formular geschickt hat (Origin, ersatzweise Referer; "" = unbekannt).
+func sourceOrigin(r *http.Request) string {
+	if o := r.Header.Get("Origin"); o != "" && o != "null" {
+		return o
+	}
+	return r.Header.Get("Referer")
+}
+
+// sameHost: gleicher Host samt Port. Das Schema zaehlt nicht, weil die oeffnende Node hinter einem Proxy mit TLS ihren
+// Rueckweg mit http:// bildet, der Browser aber https:// schickt.
+func sameHost(a, b string) bool {
+	pa, err1 := url.Parse(a)
+	pb, err2 := url.Parse(b)
+	return err1 == nil && err2 == nil && pa.Host != "" && strings.EqualFold(pa.Host, pb.Host)
 }
 
 // envCap begrenzt die Rolle einer Sitzung, die ueber Environment entstanden ist (env_sessions.max_role); die

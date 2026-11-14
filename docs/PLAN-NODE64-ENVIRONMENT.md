@@ -61,6 +61,11 @@ Regeln:
 - **2FA:** gilt als erledigt, weil die Anmeldung auf A schon damit erfolgt ist. Verlangt B „2FA für alle“ und hat
   der Benutzer keine, greift B's normale Einrichtung.
 - Gesperrter Benutzer auf B, unbekannte `uid`, Ticket abgelaufen → B's Anmeldeseite mit kurzem Hinweis.
+- **Kein Login-CSRF:** B löst ein Ticket nur ein, wenn das Formular von A kommt (Host aus `Origin`, ersatzweise
+  `Referer`, gleich dem Host der Rücksprung-Adresse im Ticket; die Seite in Schritt 4 setzt dafür
+  `Referrer-Policy: origin`). Ist auf B schon ein anderer Benutzer angemeldet, bleibt diese Sitzung, B zeigt einen
+  Hinweis (Abmelden zum Wechseln) und vermerkt `login.environment_failed`. Hinzugefügte Nodes (E2) brauchen dafür
+  ebenfalls eine passende Rücksprung-Adresse.
 - **Rückweg:** B merkt sich in der Sitzung „gekommen von A“ und zeigt oben einen kleinen Hinweis
   „Geöffnet über Environment von *A*“ mit Link zurück. Damit ist immer klar, auf welcher Node man gerade arbeitet.
 - **Browser-Adresse:** standardmäßig die Adresse der Node. Je Eintrag optional eine eigene Adresse für den Browser
