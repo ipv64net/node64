@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: Redfish with HPE iLO 4 also via a DNS name (#141).
+
 ## 1.6.0 – 2026-11-14
 
 - Monitor64: Redfish with HPE iLO 4 (308 redirect) and addresses with a path (#141); separate mounts with source "none" (virtiofs) kept apart (#140); short SNMP gaps (QNAP) bridged instead of "unknown" (#136); firmware updates of FRITZ!Box, MikroTik and UniFi warn right away (forum 5134).

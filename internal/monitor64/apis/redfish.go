@@ -191,8 +191,10 @@ func (r *Redfish) rfFull(p string) string {
 }
 
 // rfRedirect: Ziel einer Weiterleitung, wenn es auf denselben BMC unter /redfish/v1 zeigt ("" = nicht folgen; die
-// Zugangsdaten gehoeren nur der eingerichteten Adresse).
-func (r *Redfish) rfRedirect(err error, h http.Header) string {
+// Zugangsdaten gehoeren nur der eingerichteten Adresse). Haengt sie an den angefragten Pfad (from) nur den
+// Schraegstrich an, zaehlt der Host darin nicht: iLO 4 nennt dort immer seine IP, auch wenn er per DNS-Name
+// angesprochen wird (#141). Gefragt wird ohnehin nur die eingerichtete Adresse.
+func (r *Redfish) rfRedirect(err error, h http.Header, from string) string {
 	var we *webError
 	if !errors.As(err, &we) || h == nil {
 		return ""
@@ -217,8 +219,13 @@ func (r *Redfish) rfRedirect(err error, h http.Header) string {
 		}
 		return "443"
 	}
-	if !strings.EqualFold(to.Scheme, base.Scheme) || !strings.EqualFold(to.Hostname(), base.Hostname()) || port(to) != port(base) ||
-		to.RawQuery != "" || to.User != nil {
+	if to.RawQuery != "" || to.User != nil {
+		return ""
+	}
+	if !strings.HasSuffix(from, "/") && to.EscapedPath() == from+"/" {
+		return from + "/"
+	}
+	if !strings.EqualFold(to.Scheme, base.Scheme) || !strings.EqualFold(to.Hostname(), base.Hostname()) || port(to) != port(base) {
 		return ""
 	}
 	p, ok := rfPath(to.EscapedPath())
@@ -235,7 +242,7 @@ func (r *Redfish) rfRedirect(err error, h http.Header) string {
 // die Methode und Inhalt behalten). Zeigt sie nur auf den Pfad mit Schraegstrich, gilt das fuer alle weiteren.
 func (r *Redfish) send(ctx context.Context, method, p string, hdr http.Header, body, out any) (http.Header, error) {
 	h, err := r.wc.do(ctx, method, p, hdr, body, out)
-	to := r.rfRedirect(err, h)
+	to := r.rfRedirect(err, h, p)
 	var we *webError
 	if to == "" || to == p || (method != http.MethodGet && errors.As(err, &we) && we.Status != http.StatusTemporaryRedirect && we.Status != http.StatusPermanentRedirect) {
 		return h, err

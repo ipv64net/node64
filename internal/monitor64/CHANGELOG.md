@@ -1,5 +1,11 @@
 # Monitor64 – Änderungen
 
+## 0.1.15 – 2026-11-14
+
+Fehlerbehebungen:
+
+- Redfish: HPE iLO 4 lässt sich auch über einen DNS-Namen abfragen. iLO 4 nennt in der Weiterleitung auf den Pfad mit Schrägstrich immer seine IP; ergänzt eine Weiterleitung nur den Schrägstrich, fragt Monitor64 jetzt den Pfad mit Schrägstrich bei der eingetragenen Adresse ab. Zu einem anderen Host geht weiterhin keine Anfrage (#141).
+
 ## 0.1.14 – 2026-11-14
 
 Fehlerbehebungen:

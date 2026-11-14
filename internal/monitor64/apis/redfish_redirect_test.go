@@ -16,6 +16,7 @@ type ilo4 struct {
 	mu        sync.Mutex
 	redirects int
 	foreign   string // Weiterleitung auf einen anderen Host (fuer den Test, dass ihr nicht gefolgt wird)
+	self      string // Host in der Weiterleitung statt des angefragten (iLO 4 nennt immer seine IP)
 }
 
 func (b *ilo4) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +30,11 @@ func (b *ilo4) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b.mu.Lock()
 		b.redirects++
 		b.mu.Unlock()
-		w.Header().Set("Location", "https://"+r.Host+p+"/")
+		host := r.Host
+		if b.self != "" {
+			host = b.self
+		}
+		w.Header().Set("Location", "https://"+host+p+"/")
 		w.WriteHeader(http.StatusPermanentRedirect)
 		return
 	}
@@ -100,12 +105,35 @@ func TestRedfishILO4Redirect(t *testing.T) {
 // Einer Weiterleitung auf einen anderen Host folgt der Sammler nicht (die Zugangsdaten gehoeren nur dem BMC).
 func TestRedfishForeignRedirect(t *testing.T) {
 	b, _, cfg := ilo4Fake(t)
-	b.foreign = "https://evil.example/redfish/v1/Chassis/"
+	b.foreign = "https://evil.example/redfish/v1/Chassis/1/"
 	r, _ := NewRedfish(cfg)
 	defer r.Close()
 	_, err := r.Collect(context.Background())
 	if err == nil || !strings.Contains(deErr(err), "HTTP 308") {
 		t.Fatalf("fremde Weiterleitung: %v", deErr(err))
+	}
+}
+
+// #141 (Rueckmeldung mit echtem iLO 4): Per DNS-Name angesprochen nennt der BMC in der Weiterleitung seine IP.
+// Haengt sie nur den Schraegstrich an, fragt der Sammler den Pfad mit Schraegstrich bei der eingerichteten Adresse.
+func TestRedfishILO4RedirectOwnIP(t *testing.T) {
+	b, a, cfg := ilo4Fake(t)
+	b.self = "192.0.2.17"
+	r, err := NewRedfish(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if res := deRes(r.Test(context.Background())); !res.OK {
+		t.Fatalf("Test hinter iLO 4 per Name: %+v", res)
+	}
+	svcs, err := r.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect hinter iLO 4 per Name: %v", deErr(err))
+	}
+	checkRedfish(t, svcs)
+	if a.noAuth != 0 {
+		t.Errorf("%d Anfragen ohne Anmeldung", a.noAuth)
 	}
 }
 

@@ -1,5 +1,11 @@
 # Monitor64 – Changes
 
+## 0.1.15 – 2026-11-14
+
+Bug fixes:
+
+- Redfish: HPE iLO 4 can also be queried via a DNS name. iLO 4 always puts its IP into the redirect to the path with a trailing slash; if a redirect only adds the slash, Monitor64 now requests the path with the slash from the configured address. Still no request goes to another host (#141).
+
 ## 0.1.14 – 2026-11-14
 
 Bug fixes:
