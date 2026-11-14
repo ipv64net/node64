@@ -63,7 +63,7 @@
 						</form>
 						{{else}}<p class="text-body-secondary mb-2">{{$.T "useradmin.not_local"}}</p>{{end}}
 						<div class="d-flex flex-wrap gap-2">
-							{{if .TOTPSecret}}<form method="post" action="/settings/users/{{.ID}}/2fa-reset" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-confirm="{{$.T "useradmin.twofa_reset_confirm" "name" .Username}}"><i class="bi bi-shield-x"></i> {{$.T "useradmin.twofa_reset"}}</button></form>{{end}}
+							{{if or .TOTPSecret .Passkeys}}<form method="post" action="/settings/users/{{.ID}}/2fa-reset" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-confirm="{{$.T "useradmin.twofa_reset_confirm" "name" .Username}}"><i class="bi bi-shield-x"></i> {{$.T "useradmin.twofa_reset"}}</button></form>{{end}}
 							<form method="post" action="/settings/users/{{.ID}}/sessions-end" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right"></i> {{$.T "useradmin.sessions_end"}}</button></form>
 							{{if not .Self}}<form method="post" action="/settings/users/{{.ID}}/delete" class="m-0 ms-auto"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "sso.user_delete_confirm" "name" .Username}}"><i class="bi bi-trash"></i> {{$.T "common.delete"}}</button></form>{{end}}
 						</div>

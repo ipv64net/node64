@@ -32179,7 +32179,7 @@
         "tags": [
           "Benutzerverwaltung"
         ],
-        "summary": "App-2FA eines Benutzers abschalten (Geheimnis und Wiederherstellungscodes); seine Sitzungen enden",
+        "summary": "App-2FA (Geheimnis und Wiederherstellungscodes) und Passkeys eines Benutzers auf dieser Node entfernen; seine Sitzungen enden",
         "responses": {
           "204": {
             "description": "zurückgesetzt"

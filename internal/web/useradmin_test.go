@@ -99,9 +99,17 @@ func TestUserAdminUI(t *testing.T) {
 		t.Fatal("password not set")
 	}
 	_ = a.store.SetUserTOTP(ctx, erika.ID, "JBSWY3DPEHPK3PXP", "")
+	_ = a.store.AddPasskey(ctx, store.Passkey{UserID: erika.ID, Name: "Stick", RPID: "localhost", CredentialID: "c1", Data: "{}"})
+	_ = a.store.AddPasskey(ctx, store.Passkey{UserID: admin.ID, Name: "Admin", RPID: "localhost", CredentialID: "c2", Data: "{}"})
 	a.post(t, "/settings/users/"+itoa(erika.ID)+"/2fa-reset", url.Values{"_csrf": {csrf}})
 	if erika, _ = a.store.UserByID(ctx, erika.ID); erika.TOTPSecret != "" {
 		t.Fatal("2fa not reset")
+	}
+	if pks, _ := a.store.Passkeys(ctx, erika.ID, ""); len(pks) != 0 {
+		t.Fatalf("2fa reset must remove passkeys: %d", len(pks))
+	}
+	if pks, _ := a.store.Passkeys(ctx, admin.ID, ""); len(pks) != 1 {
+		t.Fatal("passkeys of other users must stay")
 	}
 	a.post(t, "/settings/users/"+itoa(erika.ID)+"/sessions-end", url.Values{"_csrf": {csrf}})
 	a.post(t, "/settings/users/"+itoa(erika.ID)+"/delete", url.Values{"_csrf": {csrf}})

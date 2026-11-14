@@ -152,7 +152,7 @@ func (s *Server) needs2FA(ctx context.Context, u *store.User) bool {
 func (s *Server) gate(w http.ResponseWriter, r *http.Request) bool {
 	u := currentUser(r)
 	if u == nil || currentSession(r) == nil || viaAPIKey(r) {
-		return true // API-Keys, Forward-Auth und MCP: keine Sitzung, keine Seite zum Nachholen
+		return true // API-Keys, Forward-Auth und MCP: keine Sitzung, keine Seite zum Nachholen (Forward-Auth: Anmeldung und 2FA beim vorgeschalteten Dienst, in der Oberflaeche so beschrieben)
 	}
 	var to, msg string
 	switch {

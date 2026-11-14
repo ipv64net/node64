@@ -1,9 +1,12 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"testing"
+
+	"github.com/ipv64net/node64/internal/authcfg"
 )
 
 // Forward-Auth gilt nur eingeschaltet, nur von eingetragenen Proxy-Adressen und nur fuer bekannte lokale Benutzer.
@@ -53,6 +56,16 @@ func TestForwardAuth(t *testing.T) {
 	if c := asProxy("nobody"); c != http.StatusSeeOther {
 		t.Fatalf("unknown user must not get in: %d", c)
 	}
+	// Anmeldung und 2FA erledigt der Proxy: Passwort-Pflicht und 2FA-Pflicht gelten fuer Forward-Auth nicht
+	ctx := context.Background()
+	admin, _ := a.store.UserByName(ctx, "admin")
+	_ = a.store.SetUserMustChange(ctx, admin.ID, true)
+	_ = authcfg.SetTwoFARequired(ctx, a.store, true)
+	if c := asProxy("admin"); c != http.StatusOK {
+		t.Fatalf("forward auth is exempt from must-change and 2FA requirement: %d", c)
+	}
+	_ = a.store.SetUserMustChange(ctx, admin.ID, false)
+	_ = authcfg.SetTwoFARequired(ctx, a.store, false)
 	if c := save("", "127.0.0.1"); c != http.StatusSeeOther || asProxy("admin") != http.StatusSeeOther {
 		t.Fatal("switched off: header must be ignored again")
 	}

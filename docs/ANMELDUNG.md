@@ -22,11 +22,13 @@ die AD/LDAP- bzw. SSO-Gruppen-Einstellungen auch per API ändern (`/api/users`, 
 - Ein **API-Key** hat die Rolle seines Benutzers (der Key eines Nur-lesen-Benutzers ist nur lesend). Gesperrte Benutzer
   können sich nicht anmelden; ihre Sitzungen und API-Keys gelten nicht mehr.
 - Administratoren legen Benutzer an (mit Passwort oder Einmal-Passwort „beim ersten Anmelden setzen“), ändern Rolle,
-  Gruppen und E-Mail, sperren, setzen Passwort und 2FA zurück und beenden Sitzungen. Sperren oder eine geänderte Rolle
+  Gruppen und E-Mail, sperren, setzen Passwort und 2FA zurück und beenden Sitzungen. „2FA zurücksetzen“ entfernt App-2FA
+  und die Passkeys des Benutzers auf dieser Node. Sperren oder eine geänderte Rolle
   beenden die Sitzungen sofort.
 - **Gruppen** haben einen Namen und eine Rolle und ordnen optional AD/LDAP-Gruppen (DN oder Name) und SSO-Gruppen zu.
 - **„2FA für alle Pflicht“** (Reiter Anmeldung): lokale und AD/LDAP-Benutzer ohne App-2FA und ohne Passkey kommen nach
-  der Anmeldung nur noch zur 2FA-Einrichtung. SSO-Benutzer sind ausgenommen (2FA beim Anbieter).
+  der Anmeldung nur noch zur 2FA-Einrichtung. SSO-Benutzer sind ausgenommen (2FA beim Anbieter), ebenso Anmeldungen über
+  Forward-Auth (siehe dort).
 
 ## AD/LDAP
 
@@ -97,6 +99,9 @@ Benutzer im Kopf `Remote-User`.
   Authelia/Authentik-Forward-Auth der Fall.
 - Ist die Node auch direkt (ohne Proxy) erreichbar, schadet das nicht: Direkte Anfragen kommen nicht von der
   Proxy-Adresse.
+- Anmeldung und 2FA erledigt der vorgeschaltete Dienst; Node64 sieht dabei weder Passwort noch zweiten Faktor. Die
+  2FA-Pflicht und „Passwort beim ersten Anmelden setzen“ gelten für Forward-Auth deshalb nicht (2FA in Authelia bzw.
+  Authentik einschalten). Bei der Anmeldung mit Passwort direkt an der Node greifen beide weiter.
 
 ## Passkeys
 

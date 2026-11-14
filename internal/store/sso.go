@@ -155,6 +155,16 @@ func (s *Store) UpdatePasskey(ctx context.Context, credentialID, data string) er
 	return err
 }
 
+// DeleteUserPasskeys loescht alle Passkeys eines Benutzers (2FA zuruecksetzen); liefert die Anzahl.
+func (s *Store) DeleteUserPasskeys(ctx context.Context, userID int64) (int, error) {
+	res, err := s.w.ExecContext(ctx, `DELETE FROM passkeys WHERE user_id = ?`, userID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // DeletePasskey loescht einen Passkey des Benutzers; false = gab es nicht.
 func (s *Store) DeletePasskey(ctx context.Context, userID, id int64) (bool, error) {
 	res, err := s.w.ExecContext(ctx, `DELETE FROM passkeys WHERE id = ? AND user_id = ?`, id, userID)

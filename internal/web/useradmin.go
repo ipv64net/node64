@@ -213,14 +213,19 @@ func (s *Server) uaSetPassword(r *http.Request, u *store.User, pw string, mustCh
 	return otp, nil
 }
 
-// ua2FAReset schaltet die App-2FA eines Benutzers ab (Geheimnis und Wiederherstellungscodes) und beendet seine
-// Sitzungen; mit 2FA-Pflicht richtet er sie beim naechsten Anmelden neu ein.
+// ua2FAReset schaltet die App-2FA eines Benutzers ab (Geheimnis und Wiederherstellungscodes), loescht seine Passkeys
+// auf dieser Node (die bleiben ohnehin je Node) und beendet seine Sitzungen; mit 2FA-Pflicht richtet er sie beim
+// naechsten Anmelden neu ein.
 func (s *Server) ua2FAReset(r *http.Request, u *store.User) error {
 	if err := s.Store.SetUserTOTP(r.Context(), u.ID, "", ""); err != nil {
 		return err
 	}
+	n, err := s.Store.DeleteUserPasskeys(r.Context(), u.ID)
+	if err != nil {
+		return err
+	}
 	_ = s.Store.DeleteUserSessions(r.Context(), u.ID, sessionID(r))
-	s.audit(r, "user.2fa_reset", u.Username, "")
+	s.audit(r, "user.2fa_reset", u.Username, "passkeys="+strconv.Itoa(n))
 	return nil
 }
 
