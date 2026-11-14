@@ -144,3 +144,36 @@ func keysOf(l []Service) []string {
 	}
 	return k
 }
+
+// macOS (#114): Hilfsvolumes und fluechtige Mounts werden angeboten, aber nicht vorausgewaehlt; Datenvolume, / und
+// externe Laufwerke schon.
+func TestMapFSMacAux(t *testing.T) {
+	fs := func(mount string) m64proto.FS {
+		return m64proto.FS{Mount: mount, Type: "apfs", Total: 500 << 30, Used: 200 << 30, Avail: 300 << 30}
+	}
+	want := map[string]bool{
+		"/": true, "/System/Volumes/Data": true, "/Volumes/Backup": true, "/Volumes/USB Stick": true,
+		"/System/Volumes/VM": false, "/System/Volumes/Preboot": false, "/System/Volumes/Update": false,
+		"/System/Volumes/xarts": false, "/System/Volumes/iSCPreboot": false, "/System/Volumes/Hardware": false,
+		"/System/Volumes/Recovery": false, "/System/Volumes/Update/mnt1": false,
+		"/Library/Developer/CoreSimulator/Volumes/iOS_23A343":                           false,
+		"/Volumes/.timemachine/1A2B3C4D/2026-11-01-120000.backup":                       false,
+		"/Volumes/com.apple.TimeMachine.localsnapshots/Backups.backupdb/Mac/2026-11-01": false,
+		"/private/var/folders/xy/abc/T/AppTranslocation/1234":                           false,
+	}
+	var in []m64proto.FS
+	for m := range want {
+		in = append(in, fs(m))
+	}
+	out := MapReport(nil, &m64proto.Report{Time: 1, FS: in})
+	for m, def := range want {
+		s := svcBy(out, "fs:"+m)
+		if s == nil {
+			t.Errorf("%s fehlt", m)
+			continue
+		}
+		if s.Default != def {
+			t.Errorf("%s: Default %t, erwartet %t", m, s.Default, def)
+		}
+	}
+}

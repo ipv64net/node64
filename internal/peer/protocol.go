@@ -325,6 +325,8 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 		return ErrCode
 	case status == http.StatusConflict && e.Error == ErrNoHTTPS.Error():
 		return ErrNoHTTPS
+	case status == http.StatusBadRequest && e.Error == ErrSelf.Error(): // gleiche Kennung (auch: kopierte Node)
+		return ErrSelf
 	case status != http.StatusOK:
 		return fmt.Errorf("HTTP %d %s", status, e.Error)
 	}

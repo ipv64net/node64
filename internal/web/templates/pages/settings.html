@@ -253,7 +253,7 @@
 					<div class="col-12 form-text mt-0">{{$.T "settings.upd.hint"}}{{if $u.Dev}} {{$.T "settings.upd.dev"}}{{end}}</div>
 				</form>
 				{{with $u.Latest}}{{if .ApplyError}}<div class="small text-danger mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "settings.upd.apply_failed" "error" .ApplyError}}</div>{{end}}{{if .Error}}<div class="small text-danger mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "settings.upd.check_failed" "error" .Error}}</div>
-				{{else if .Newer}}<div class="alert alert-info py-2 d-flex flex-wrap align-items-center gap-2"><span class="me-auto">{{$.T "settings.update_available" "version" .Version}}{{with .URL}} <a href="{{.}}" target="_blank" rel="noopener">{{$.T "settings.upd.notes"}}</a>{{end}}</span>
+				{{else if .Newer}}<div class="alert alert-info py-2 d-flex flex-wrap align-items-center gap-2"><span class="me-auto">{{$.T "settings.update_available" "version" .Version}}{{with .URL}} <a href="{{.}}" target="_blank" rel="noopener">{{$.T "settings.upd.notes"}}</a>{{end}} <a class="small" href="https://github.com/ipv64net/node64/releases/tag/v{{.Version}}" target="_blank" rel="noopener">{{$.T "settings.upd.changelog"}}</a></span>
 					{{if $u.KeysOK}}<form method="post" action="/settings/updates/apply" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-primary btn-sm" type="submit" data-confirm="{{$.T "settings.upd.apply_confirm" "version" .Version}}"><i class="bi bi-cloud-download"></i> {{$.T "settings.upd.apply"}}</button></form>{{end}}</div>
 				{{else}}<div class="text-body-secondary mb-2">{{$.T "settings.update_none" "version" .Version}} <span class="small">({{$.Time .CheckedAt}})</span></div>{{end}}{{end}}
 				<div class="d-flex flex-wrap gap-2">

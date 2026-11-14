@@ -45,9 +45,15 @@ func TestCleanAddressIPv6(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "[2001:db8::1", "2001:db8::1]:22", "[nas]:22", "[2001:db8::1]:0", "[2001:db8::1]:x", "[2001:db8::1]22",
-		"nas:99999", "nas:ssh", ":22", "a:b:c", "2001:db8::zz", "nas%eth0", "10.0.0.5 ; rm", "[10.0.0.5]:22"} {
+		"nas:99999", "nas:ssh", ":22", "a:b:c", "2001:db8::zz", "nas%eth0", "10.0.0.5 ; rm", "[10.0.0.5]:22",
+		"10.0.0.2.16", "10.0.0.2.16:22", "300.1.1.1", "10.0.5"} { // Forum 5175: Tippfehler in einer IPv4-Adresse
 		if got, ok := cleanAddress(bad); ok {
 			t.Errorf("cleanAddress(%q) angenommen als %q", bad, got)
+		}
+	}
+	for _, good := range []string{"10.0.0.5:22", "pbs01", "1und1.example", "host-10.lan"} {
+		if _, ok := cleanAddress(good); !ok {
+			t.Errorf("cleanAddress(%q) abgelehnt", good)
 		}
 	}
 }

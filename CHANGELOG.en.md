@@ -5,6 +5,11 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - Monitor64: Redfish with HPE iLO 4 also via a DNS name (#141).
+- Monitor64: FRITZ!Box access without fingerprint – no longer fails after a FRITZ!OS update (new certificate) (forum 5134).
+- Monitor64: macOS helper volumes, Time Machine and temporary mounts no longer preselected in the Prometheus access; long mount paths wrap (#114).
+- Monitor64: a host address like "10.0.0.2.16" (typo) is rejected instead of being accepted as a host name (forum 5175).
+- Cluster: joining a copied node (cloned VM, copied data folder) names the cause instead of "HTTP 400 cannot pair with itself" (forum 5174).
+- Settings: "Changelog" link to the GitHub release next to an offered Node64 update.
 
 ## 1.6.0 – 2026-11-14
 

@@ -151,7 +151,8 @@ tr.clickable { cursor: pointer; }
 .svc-table tr.vanished td:first-child { opacity: 1; }
 .new-svc { border-left: 3px solid var(--bs-primary); }
 .new-svc .form-check { margin-bottom: .15rem; }
-.m64-svc-name { overflow-wrap: break-word; hyphens: auto; min-width: 7rem; }
+.m64-svc-name { overflow-wrap: anywhere; hyphens: auto; min-width: 7rem; } /* lange Mountpfade (macOS, #114) umbrechen statt ueberragen */
+#m64 .form-check-label { overflow-wrap: anywhere; } /* Diensterkennung: lange Namen bleiben in ihrer Spalte */
 #m64 .stat-sub { white-space: normal; } /* "4 Hosts · 93 Dienste" nicht abschneiden */
 @media (max-width: 575.98px) {
 	.svc-table th:first-child { width: 4.75rem !important; }

@@ -5,6 +5,11 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Monitor64: Redfish mit HPE iLO 4 auch über einen DNS-Namen (#141).
+- Monitor64: FRITZ!Box-Zugang ohne Fingerabdruck – fällt nach einem FRITZ!OS-Update (neues Zertifikat) nicht mehr aus (Forum 5134).
+- Monitor64: macOS-Hilfsvolumes, Time-Machine- und temporäre Mounts im Prometheus-Zugang nicht mehr vorausgewählt; lange Mountpfade brechen um (#114).
+- Monitor64: Host-Adresse wie „10.0.0.2.16“ (Tippfehler) wird abgelehnt statt als Hostname angenommen (Forum 5175).
+- Cluster: Beitritt einer kopierten Node (geklonte VM, kopierter Datenordner) nennt die Ursache statt „HTTP 400 cannot pair with itself“ (Forum 5174).
+- Einstellungen: Link „Changelog“ zum GitHub-Release beim angebotenen Node64-Update.
 
 ## 1.6.0 – 2026-11-14
 

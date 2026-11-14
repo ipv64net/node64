@@ -226,10 +226,31 @@ func mapCPU(prev, cur *m64proto.CPU) (Service, bool) {
 	return s, true
 }
 
+// macAuxMount: Hilfsvolumes und fluechtige Mounts von macOS (#114) - Systemvolumes unter /System/Volumes (VM,
+// Preboot, Update, xarts, iSCPreboot, Hardware, Recovery ...), Simulator-Volumes, Time-Machine-Snapshots und
+// -Sicherungen, temporaere Mounts unter /private/var/folders. Alle APFS-Volumes eines Containers melden dieselbe
+// Groesse und Belegung; sie werden angeboten, aber nicht vorausgewaehlt. Das Datenvolume (/System/Volumes/Data bzw.
+// /) und externe Laufwerke unter /Volumes/<Name> bleiben vorausgewaehlt.
+func macAuxMount(mount string) bool {
+	switch {
+	case mount == "/System/Volumes/Data":
+		return false
+	case strings.HasPrefix(mount, "/System/Volumes/"), strings.HasPrefix(mount, "/Library/Developer/CoreSimulator/"),
+		strings.HasPrefix(mount, "/private/var/folders/"),
+		mount == "/private/var/vm", strings.HasPrefix(mount, "/Volumes/.timemachine/"),
+		strings.Contains(mount, "com.apple.TimeMachine."):
+		return true
+	}
+	return false
+}
+
 func mapFS(f m64proto.FS) Service {
 	s := Service{Key: "fs:" + f.Mount, Name: model.T("monitor64.svc.fs", "name", f.Mount), Kind: "fs", Default: true}
 	// ZFS-Datasets von Gaesten (Proxmox subvol-/vm-) nicht von selbst anbieten – die Gaeste sind eigene Dienste
 	if f.Type == "zfs" && (strings.Contains(f.Mount, "/subvol-") || strings.Contains(f.Mount, "/vm-") || strings.Contains(f.Mount, "/basevol-")) {
+		s.Default = false
+	}
+	if macAuxMount(f.Mount) {
 		s.Default = false
 	}
 	if len(f.Mount) == 2 && f.Mount[1] == ':' { // Windows-Laufwerk

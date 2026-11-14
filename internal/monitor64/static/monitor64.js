@@ -68,10 +68,12 @@ var DEVSPEC = {
 	redfish: { url: 'https://{a}', user: true, extra: ['session'] },
 	pmg: { url: 'https://{a}:8006', user: true, extra: [] },
 	mailcow: { url: 'https://{a}', user: false, extra: [] },
-	fritzbox: { url: 'https://{a}:49443', user: true, extra: [] },
+	fritzbox: { url: 'https://{a}:49443', user: true, extra: [], nopin: true }, // ohne Pin: neues Zertifikat bei jedem FRITZ!OS-Update (Forum 5134)
 	mikrotik: { url: 'https://{a}', user: true, extra: [] },
 	unifi: { url: 'https://{a}', user: true, extra: ['site'] }
 };
+// devPin: Art mit Fingerabdruck (Pin) im Formular.
+function devPin(t) { return DEVAPI.indexOf(t) >= 0 && !DEVSPEC[t].nopin; }
 // urlHost: Host-Teil einer URL aus der Adresse eines Hosts - ein Port der Adresse entfaellt, IPv6 kommt in Klammern
 // ("nas:2222" -> "nas", "2001:db8::1" und "[2001:db8::1]:22" -> "[2001:db8::1]").
 function urlHost(a) {
@@ -961,7 +963,7 @@ function pageHost() {
 		if (c.url) { p.push(c.url); }
 		if (c.token_id) { p.push(c.token_id); }
 		if (c.node) { p.push(L('new.node_short', { n: c.node })); }
-		if (c.pin) { p.push(L('acc.pinned')); }
+		if (c.pin && !(DEVSPEC[a.type] && DEVSPEC[a.type].nopin)) { p.push(L('acc.pinned')); }
 		if (c.smart) { p.push('SMART'); }
 		if (a.secret_set) { p.push(L('acc.secret_set')); }
 		return p.join(' · ');
@@ -1431,7 +1433,7 @@ function pageHost() {
 			'<div class="col-md-6" data-af="pbs"><label class="form-label" for="m64-af-bmax">' + esc(L('acc.backup_max_age')) + '</label><input class="form-control" id="m64-af-bmax" type="number" min="1" max="8760" placeholder="26" value="' + esc(c.backup_max_age_h || '') + '"><div class="form-text">' + esc(L('acc.backup_max_age_hint')) + '</div></div>' +
 			devFields(c, 'af') +
 			'<div class="col-12" data-af="snmp"><div class="row g-3">' + snmpFields('af', function (x) { return snmpVal(c, x); }, !!(a && a.secret_set && a.type === 'snmp')) + '</div></div>' +
-			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
+			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.filter(devPin).join(' ') + '"><label class="form-label" for="m64-af-pin">' + esc(L('new.pin')) + '</label><input class="form-control" id="m64-af-pin" maxlength="128" value="' + esc(c.pin || '') + '"></div>' +
 			'<div class="col-12" data-af="ssh pve pbs ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-secret">' + esc(L('acc.secret')) + '</label><input class="form-control" id="m64-af-secret" type="password" autocomplete="new-password" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '') + '">' +
 			'<div class="form-text" id="m64-af-shint">' + esc(L('acc.secret_hint')) + '</div></div>' +
 			'<div class="col-12" data-af="docker"><label class="form-label" for="m64-af-dsecret">' + esc(L('acc.docker_secret')) + '</label><textarea class="form-control font-monospace small" id="m64-af-dsecret" rows="4" spellcheck="false" autocomplete="off" placeholder="' + esc(a && a.secret_set ? L('acc.secret_keep') : '-----BEGIN …') + '"></textarea>' +
@@ -1460,7 +1462,7 @@ function pageHost() {
 			var m = devCfg(t, function (id) { var x = $('#m64-af-' + id, body); return x ? (x.type === 'checkbox' ? x.checked : x.value.trim()) : ''; });
 			if (m === null) { throw new Error(L('acc.metrics_bad')); }
 			cfg.url = $('#m64-af-url', body).value.trim();
-			cfg.pin = $('#m64-af-pin', body).value.trim();
+			if (devPin(t)) { cfg.pin = $('#m64-af-pin', body).value.trim(); }
 			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
 		}
 		var secret = t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value;
@@ -1547,7 +1549,7 @@ function pageHost() {
 		if (t === 'pbs' && c.backup_max_age_h) { o.backup_max_age_h = c.backup_max_age_h; }
 		if (DEVAPI.indexOf(t) >= 0) {
 			o.url = c.url || '';
-			o.pin = c.pin || '';
+			if (devPin(t)) { o.pin = c.pin || ''; }
 			var m = devCfg(t, function (id) { return id === 'metrics' ? (c.metrics ? JSON.stringify(c.metrics) : '') : id === 'session' ? !!c.session : (c[id] || ''); }) || {};
 			Object.keys(m).forEach(function (x) { o[x] = m[x]; });
 		}
@@ -2366,7 +2368,7 @@ function pageNew() {
 			var m = devCfg(t, function (id) { return id === 'user' ? WZ.duser : WZ[id]; });
 			if (m === null) { throw new Error(L('acc.metrics_bad')); }
 			cfg.url = WZ.url;
-			cfg.pin = WZ.pin;
+			if (devPin(t)) { cfg.pin = WZ.pin; }
 			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
 			out.secret = WZ.dsecret;
 		}
@@ -2434,14 +2436,14 @@ function pageNew() {
 					'<div class="small text-body-secondary mt-1"><i class="bi bi-info-circle"></i> ' + esc(L('new.api_hint')) + '</div></div>' +
 					'<div class="col-12"><details' + (WZ.pin || WZ.node || WZ.bmax ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' + (k.access === 'pve' ? '<div class="col-md-6">' + field('node', L('new.node'), WZ.node, ' data-w="node" maxlength="64"') + '</div>' : '<div class="col-md-6">' + field('bmax', L('acc.backup_max_age'), WZ.bmax, ' data-w="bmax" type="number" min="1" max="8760" placeholder="26"') + '<div class="form-text">' + esc(L('acc.backup_max_age_hint')) + '</div></div>') + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
 			} else if (DEVAPI.indexOf(k.access) >= 0) {
-				var ta = k.access, open = WZ.pin || WZ.ups || WZ.tls || WZ.api || WZ.session || WZ.metrics || WZ.site;
+				var ta = k.access, open = (devPin(ta) && WZ.pin) || WZ.ups || WZ.tls || WZ.api || WZ.session || WZ.metrics || WZ.site;
 				html += '<div class="col-12">' + field('url', 'URL', WZ.url, ' data-w="url" maxlength="512" placeholder="' + esc(devURL(ta, WZ.address)) + '"') + '</div>' +
 					(DEVSPEC[ta].user ? '<div class="col-md-6">' + field('duser', L('acc.user'), WZ.duser, ' data-w="duser" maxlength="32"') + '</div>' : '') +
 					'<div class="col-md-6">' + field('dsec', L('acc.secret'), WZ.dsecret, ' data-w="dsecret" type="password" autocomplete="new-password"') + '</div>' +
 					'<div class="col-12 small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(devHint(ta)) + '<div class="mt-1">' + esc(devSecretHint(ta)) + '</div></div>' +
 					(devCmd(ta) ? '<div class="col-12"><div class="form-label d-flex align-items-center">' + esc(L('new.dev_cmd')) + '<button class="btn btn-sm btn-link ms-auto p-0" type="button" data-copy-target="#m64-w-cmd"><i class="bi bi-clipboard"></i> ' + esc(L('copy')) + '</button></div><div class="cmd" id="m64-w-cmd">' + esc(devCmd(ta)) + '</div></div>' : '') +
-					'<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' +
-					devFields(WZ, 'w', ta) + '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div></div></details></div>';
+					(DEVSPEC[ta].extra.length || devPin(ta) ? '<div class="col-12"><details' + (open ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('advanced')) + '</summary><div class="pt-2 row g-2">' +
+					devFields(WZ, 'w', ta) + (devPin(ta) ? '<div class="col-md-6">' + field('pin', L('new.pin'), WZ.pin, ' data-w="pin" maxlength="128"') + '</div>' : '') + '</div></details></div>' : '');
 			} else if (k.access === 'snmp') {
 				html += '<div class="col-12 small text-body-secondary"><i class="bi bi-info-circle"></i> ' + esc(L('new.hint_snmp')) + '</div>' +
 					snmpFields('w', function (x) { return WZ['s_' + x]; }, false);

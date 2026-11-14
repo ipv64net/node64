@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -33,6 +32,10 @@ import (
 //
 // Stuendlich UserInterface:GetInfo (Update verfuegbar). Die meisten Lese-Aktionen verlangen das Recht
 // "FRITZ!Box Einstellungen"; ohne es (UPnP-Fehler 606) fehlt nur der jeweilige Teil.
+//
+// Zertifikat: keine Pruefung und kein Pin (Forum 5134). Die FRITZ!Box erzeugt ihr selbstsigniertes Zertifikat bei
+// jedem FRITZ!OS-Update neu; ein gemerkter Fingerabdruck passte danach nicht mehr und der Zugang fiele aus. Das
+// Kennwort geht dank HTTP-Digest ohnehin nie ueber die Leitung; ein frueher gespeicherter Pin wird ignoriert.
 
 const (
 	fbMaxBody     = 1 << 20
@@ -53,7 +56,6 @@ type FritzboxConfig struct {
 	Address  string        // https://fritz.box:49443
 	User     string        // FRITZ!Box-Benutzer
 	Password string        // Kennwort (Geheimnis, nie ausgeben)
-	Pin      string        // SHA-256 des Zertifikats (hex); leer = System-CA
 	Timeout  time.Duration // ganze Runde (0 = DefaultTimeout)
 }
 
@@ -82,10 +84,8 @@ type Fritzbox struct {
 	upd     *model.Service
 }
 
-// NewFritzbox baut den Sammler (prueft Adresse, Benutzer und Pin; fragt noch nichts ab).
-func NewFritzbox(cfg FritzboxConfig) (*Fritzbox, error) { return newFritzbox(cfg, nil) }
-
-func newFritzbox(cfg FritzboxConfig, roots *x509.CertPool) (*Fritzbox, error) {
+// NewFritzbox baut den Sammler (prueft Adresse und Benutzer; fragt noch nichts ab).
+func NewFritzbox(cfg FritzboxConfig) (*Fritzbox, error) {
 	t, err := parseWebAddr(cfg.Address, "https", "49443", false)
 	if err != nil {
 		return nil, err
@@ -96,11 +96,7 @@ func newFritzbox(cfg FritzboxConfig, roots *x509.CertPool) (*Fritzbox, error) {
 	if cfg.Password == "" {
 		return nil, errors.New(model.T("monitor64.txt.pmg_pw_missing"))
 	}
-	wc, err := newWebClient(t, cfg.Pin, roots)
-	if err != nil {
-		return nil, err
-	}
-	return &Fritzbox{cfg: cfg, wc: wc, now: time.Now}, nil
+	return &Fritzbox{cfg: cfg, wc: newWebClientUnverified(t), now: time.Now}, nil
 }
 
 func (f *Fritzbox) timeout() time.Duration {
@@ -475,14 +471,11 @@ func parseFBResponse(b []byte) (map[string]string, *fbFault, error) {
 // ---------------------------------------------------------------------------------------------------------
 // Test und Runde
 
-// Test prueft die Verbindung im Assistenten (Zertifikat, TR-064 eingeschaltet, Anmeldung, Rechte).
+// Test prueft die Verbindung im Assistenten (TR-064 eingeschaltet, Anmeldung, Rechte; das Zertifikat nicht).
 func (f *Fritzbox) Test(ctx context.Context) TestResult {
 	ctx, cancel := context.WithTimeout(ctx, f.timeout())
 	defer cancel()
-	res, proceed := probeCert(ctx, f.wc.t, f.wc.pin, f.wc.roots)
-	if !proceed {
-		return res
-	}
+	var res TestResult
 	d, err := f.description(ctx)
 	if err != nil {
 		res.Error = scrub(f.hint(err).Error(), f.secrets()...)
@@ -497,14 +490,9 @@ func (f *Fritzbox) Test(ctx context.Context) TestResult {
 	res.OK = true
 	res.Version, res.Node = d.Version, d.Model
 	res.Summary = model.T("monitor64.txt.fb_summary", "m", firstNonEmpty(d.Model, "FRITZ!Box"), "a", fbAccess(link["NewWANAccessType"]))
-	var warn []string
-	if res.Warning != "" {
-		warn = append(warn, res.Warning)
-	}
 	if _, err := f.soap(ctx, fbSvcDeviceInfo, "GetInfo", nil); errors.Is(err, errWebPerm) {
-		warn = append(warn, model.T("monitor64.txt.fb_hint_perm"))
+		res.Warning = model.T("monitor64.txt.fb_hint_perm")
 	}
-	res.Warning = strings.Join(warn, "; ")
 	return res
 }
 

@@ -5,6 +5,10 @@
 Bug fixes:
 
 - Redfish: HPE iLO 4 can also be queried via a DNS name. iLO 4 always puts its IP into the redirect to the path with a trailing slash; if a redirect only adds the slash, Monitor64 now requests the path with the slash from the configured address. Still no request goes to another host (#141).
+- FRITZ!Box: the access no longer checks the FRITZ!Box certificate and no longer remembers a fingerprint. The FRITZ!Box creates a new self-signed certificate with every FRITZ!OS update; the remembered fingerprint no longer matched and the access failed. Wizard and access dialog no longer ask for a fingerprint, a previously stored one is ignored. Thanks to digest authentication the password still never crosses the wire (forum 5134).
+- Prometheus (macOS): macOS helper volumes (/System/Volumes/VM, Preboot, Update, xarts, iSCPreboot, Hardware, Recovery …), simulator volumes, Time Machine snapshots and backups and temporary mounts under /private/var/folders are still offered but no longer preselected – all volumes of an APFS container report the same usage and warned several times. The data volume, / and external drives under /Volumes stay preselected. Services already adopted stay until removed (#114).
+- Host address: an address made only of digits and dots must be a valid IPv4 address. A typo like "10.0.0.2.16" used to count as a host name and only showed up with SSH access, because API accesses (e.g. PBS) use their own URL (forum 5175).
+- Interface: long mount paths wrap in the service table and in service discovery instead of running into the neighbouring column or over the edge (#114).
 
 ## 0.1.14 – 2026-11-14
 

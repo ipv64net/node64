@@ -5,6 +5,10 @@
 Fehlerbehebungen:
 
 - Redfish: HPE iLO 4 lässt sich auch über einen DNS-Namen abfragen. iLO 4 nennt in der Weiterleitung auf den Pfad mit Schrägstrich immer seine IP; ergänzt eine Weiterleitung nur den Schrägstrich, fragt Monitor64 jetzt den Pfad mit Schrägstrich bei der eingetragenen Adresse ab. Zu einem anderen Host geht weiterhin keine Anfrage (#141).
+- FRITZ!Box: Der Zugang prüft das Zertifikat der FRITZ!Box nicht mehr und merkt sich keinen Fingerabdruck. Die FRITZ!Box erzeugt ihr selbst signiertes Zertifikat bei jedem FRITZ!OS-Update neu; der gemerkte Fingerabdruck passte danach nicht mehr und der Zugang fiel aus. Assistent und Zugangsdialog fragen keinen Fingerabdruck mehr ab, ein früher gespeicherter wird ignoriert. Das Kennwort geht dank Digest-Anmeldung weiterhin nie über die Leitung (Forum 5134).
+- Prometheus (macOS): Hilfsvolumes von macOS (/System/Volumes/VM, Preboot, Update, xarts, iSCPreboot, Hardware, Recovery …), Simulator-Volumes, Time-Machine-Snapshots und -Sicherungen sowie temporäre Mounts unter /private/var/folders werden weiter angeboten, aber nicht mehr vorausgewählt – alle Volumes eines APFS-Containers melden dieselbe Belegung und warnten mehrfach. Das Datenvolume, / und externe Laufwerke unter /Volumes bleiben vorausgewählt. Bereits übernommene Dienste bleiben, bis man sie entfernt (#114).
+- Host-Adresse: Eine Adresse nur aus Ziffern und Punkten muss eine gültige IPv4-Adresse sein. Ein Tippfehler wie „10.0.0.2.16“ galt bisher als Hostname und fiel erst beim SSH-Zugang auf, weil API-Zugänge (z. B. PBS) ihre eigene URL nutzen (Forum 5175).
+- Oberfläche: Lange Mountpfade brechen in der Diensttabelle und in der Diensterkennung um, statt in die Nachbarspalte bzw. über den Rand zu ragen (#114).
 
 ## 0.1.14 – 2026-11-14
 

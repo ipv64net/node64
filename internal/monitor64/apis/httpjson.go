@@ -212,6 +212,16 @@ func newWebClient(t webTarget, pin string, roots *x509.CertPool) (*webClient, er
 	return c, nil
 }
 
+// newWebClientUnverified baut den Client ohne jede Pruefung des Zertifikats (kein Pin, keine CA). Nur fuer Geraete,
+// deren selbstsigniertes Zertifikat sich laufend aendert und deren Anmeldung das Kennwort nicht uebertraegt
+// (FRITZ!Box: HTTP-Digest, neues Zertifikat bei jedem FRITZ!OS-Update).
+func newWebClientUnverified(t webTarget) *webClient {
+	c := &webClient{t: t, reqTO: webReqTimeout}
+	tc := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: t.host, InsecureSkipVerify: true} //nolint:gosec // bewusst, siehe oben
+	c.hc = HTTPClient(tc, webReqTimeout, 4, false)
+	return c
+}
+
 // HTTPClient baut den Client der Zugaenge, die einzelne Geraete per HTTP(S) abfragen (JSON-APIs hier, Prometheus in
 // promscrape): kein Proxy (Geraete stehen im LAN), keine Weiterleitungen (die Zugangsdaten gehoeren nur an die
 // eingerichtete Adresse), Zeitlimits fuer Verbindungsaufbau, TLS und Antwortkopf. tc ist die TLS-Einstellung (z. B.

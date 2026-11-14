@@ -168,12 +168,20 @@ func cleanAddress(s string) (string, bool) {
 	if strings.ContainsAny(s, "[]") {
 		return "", false
 	}
+	// nur Ziffern und Punkte: muss eine IPv4-Adresse sein (Tippfehler wie "10.0.0.2.16" galten sonst als Hostname)
+	ip4 := func(h string) bool {
+		if strings.Trim(h, "0123456789.") != "" {
+			return true
+		}
+		a, err := netip.ParseAddr(h)
+		return err == nil && a.Is4()
+	}
 	switch strings.Count(s, ":") {
 	case 0:
-		return s, !strings.Contains(s, "%")
+		return s, !strings.Contains(s, "%") && ip4(s)
 	case 1:
 		h, p, _ := strings.Cut(s, ":")
-		return s, h != "" && port(p) && !strings.Contains(s, "%")
+		return s, h != "" && port(p) && !strings.Contains(s, "%") && ip4(h)
 	}
 	a, err := netip.ParseAddr(s)
 	return s, err == nil && a.Is6()
@@ -267,6 +275,9 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 		}
 	}
 	c.User, c.URL, c.TokenID, c.Node, c.Pin = strings.TrimSpace(c.User), strings.TrimSpace(c.URL), strings.TrimSpace(c.TokenID), strings.TrimSpace(c.Node), strings.TrimSpace(c.Pin)
+	if typ == "fritzbox" { // FRITZ!Box ohne Pin: neues Zertifikat bei jedem FRITZ!OS-Update (Forum 5134)
+		c.Pin = ""
+	}
 	switch {
 	case c.Port < 0 || c.Port > 65535:
 		return nil, errBad("port")
@@ -677,7 +688,7 @@ func (m *Module) apiAccessUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ziel (Art, URL, Pin) geaendert und kein neues Geheimnis: das gespeicherte ginge sonst bei der naechsten Abfrage
 	// an das neue Ziel (wie beim Test: "das gespeicherte geht nur an das gespeicherte Ziel")
-	if keep && hadSecret && a.Type != "snmp" && (a.Type != oldType || targetChanged(oldCfg, a.Config)) {
+	if keep && hadSecret && a.Type != "snmp" && (a.Type != oldType || targetChanged(a.Type, oldCfg, a.Config)) {
 		m.fail(w, r, errBad("secret_again"))
 		return
 	}
@@ -995,18 +1006,22 @@ func (m *Module) testStored(ctx context.Context, h *Host, a *Access, in accessIn
 		return testResult{}, err
 	}
 	stored := a.Secret != "" && !in.ClearSecret && (keep || a.Type == "snmp") // SNMP: Teil-Geheimnis gemischt
-	if stored && t.Secret != "" && targetChanged(a.Config, t.Config) {
+	if stored && t.Secret != "" && targetChanged(a.Type, a.Config, t.Config) {
 		return testResult{Services: []serviceIn{}, Error: i18nText("monitor64.err.test_save_first")}, nil
 	}
 	return m.testAccess(ctx, h, t), nil
 }
 
 // targetChanged: Ziel eines Zugangs (URL, Pin) geaendert - dorthin geht das gespeicherte Geheimnis nicht. Adresse
-// und Port des Hosts aendert der Zugang nicht (bei SSH und SNMP bleibt es derselbe Host).
-func targetChanged(old, cur json.RawMessage) bool {
+// und Port des Hosts aendert der Zugang nicht (bei SSH und SNMP bleibt es derselbe Host). FRITZ!Box: ohne Pin, ein
+// frueher gespeicherter zaehlt nicht.
+func targetChanged(typ string, old, cur json.RawMessage) bool {
 	var o, c accessConfig
 	_ = json.Unmarshal(old, &o)
 	_ = json.Unmarshal(cur, &c)
+	if typ == "fritzbox" {
+		o.Pin, c.Pin = "", ""
+	}
 	return o.URL != c.URL || o.Pin != c.Pin
 }
 

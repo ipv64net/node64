@@ -109,6 +109,12 @@ func TestGroupPairing(t *testing.T) {
 	if c2, _ := a.m.PairingCode(); c2 != code {
 		t.Fatal("a rejected node must not use up the code")
 	}
+	// Kopie von A samt Datenordner (gleiche Kennung, Forum 5174): eigener Fehler statt "HTTP 400 ..."
+	clone := newNode(t, "node-a", "A-Kopie", 522)
+	newFake(clone)
+	if err := clone.m.Join(ctx, a.srv.URL, code, clone.srv.URL); !errors.Is(err, ErrSelf) {
+		t.Fatalf("clone: %v", err)
+	}
 	// B tritt bei
 	if err := b.m.Join(ctx, a.srv.URL, code, b.srv.URL); err != nil {
 		t.Fatal(err)

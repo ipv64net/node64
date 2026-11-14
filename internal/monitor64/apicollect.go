@@ -174,7 +174,7 @@ func newDeviceAPI(typ string, h *Host, cfg accessConfig, secret string) (deviceA
 		if addr == "" {
 			addr = "https://" + apiHostPort(h.Address, 49443)
 		}
-		c, err := apis.NewFritzbox(apis.FritzboxConfig{Address: addr, User: cfg.User, Password: secret, Pin: cfg.Pin})
+		c, err := apis.NewFritzbox(apis.FritzboxConfig{Address: addr, User: cfg.User, Password: secret}) // ohne Pin (Forum 5134)
 		if err != nil {
 			return nil, nil, err
 		}

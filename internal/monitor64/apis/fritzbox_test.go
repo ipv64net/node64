@@ -2,13 +2,27 @@ package apis
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"math/big"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ipv64net/node64/internal/proxmox"
 )
 
 // fakeFritz stellt TR-064 einer FRITZ!Box nach (Dienste, Aktionen und Felder aus den Dokumenten "TR-064 Support"):
@@ -119,8 +133,8 @@ func (f *fakeFritz) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func fritzFor(t *testing.T, f *fakeFritz, pass string) *Fritzbox {
 	t.Helper()
-	addr, pin := tlsServer(t, f)
-	fb, err := NewFritzbox(FritzboxConfig{Address: addr, User: " monitor64 ", Password: pass, Pin: pin})
+	addr, _ := tlsServer(t, f)
+	fb, err := NewFritzbox(FritzboxConfig{Address: addr, User: " monitor64 ", Password: pass})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,22 +299,70 @@ func TestFritzboxTest(t *testing.T) {
 	if res.OK || !strings.Contains(res.Error, "Zugriff für Anwendungen zulassen") {
 		t.Errorf("ohne TR-064: %+v", res)
 	}
-	// ohne Pin: erst das Zertifikat bestaetigen, keine Anfrage mit Anmeldung
+	// Zertifikat ohne Bestaetigung (Forum 5134): kein Fingerabdruck, nichts zu bestaetigen
 	f.mu.Lock()
-	f.noDesc, f.rejected = false, 0
+	f.noDesc = false
 	f.mu.Unlock()
-	addr, pin := tlsServer(t, f)
-	np, err := NewFritzbox(FritzboxConfig{Address: addr, User: "monitor64", Password: f.pass})
+	res = fritzFor(t, f, f.pass).Test(context.Background())
+	if !res.OK || res.NeedConfirm || res.CertChanged || res.Fingerprint != "" {
+		t.Errorf("ohne Pin: %+v", res)
+	}
+}
+
+// Nach einem FRITZ!OS-Update hat die FRITZ!Box ein neues selbstsigniertes Zertifikat: der Zugang laeuft weiter
+// (Forum 5134, kein Pin bei der FRITZ!Box).
+func TestFritzboxCertChanges(t *testing.T) {
+	f := newFakeFritz()
+	srv := httptest.NewUnstartedServer(f)
+	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
+	srv.StartTLS()
+	defer srv.Close()
+	fb, err := NewFritzbox(FritzboxConfig{Address: srv.URL, User: "monitor64", Password: f.pass})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer np.Close()
-	r := np.Test(context.Background())
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if r.OK || !r.NeedConfirm || r.Fingerprint != pin || f.rejected != 0 {
-		t.Errorf("ohne Pin: %+v, Anfragen %d", r, f.rejected)
+	defer fb.Close()
+	if _, err := fb.Collect(context.Background()); err != nil {
+		t.Fatal(deErr(err))
 	}
+	old := proxmox.CertFingerprint(srv.Certificate().Raw)
+	// neues Zertifikat an derselben Adresse
+	cert, err := tls.X509KeyPair(fbTestCert(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.TLS.Certificates = []tls.Certificate{cert}
+	srv.CloseClientConnections()
+	fb.Close()
+	if got := proxmox.CertFingerprint(cert.Certificate[0]); got == old {
+		t.Fatal("Zertifikat nicht gewechselt")
+	}
+	if _, err := fb.Collect(context.Background()); err != nil {
+		t.Errorf("nach neuem Zertifikat: %v", deErr(err))
+	}
+	if r := fb.Test(context.Background()); !r.OK || r.CertChanged || r.NeedConfirm {
+		t.Errorf("Test nach neuem Zertifikat: %+v", r)
+	}
+}
+
+// fbTestCert erzeugt ein selbstsigniertes Zertifikat (PEM) wie das einer FRITZ!Box.
+func fbTestCert(t *testing.T) ([]byte, []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "fritz.box"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kb})
 }
 
 // Die FRITZ!Box verwirft die Aufforderung (z. B. nach einem Neustart): einmal neu anfordern, dann geht es weiter.
