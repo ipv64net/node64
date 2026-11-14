@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). In Arbeit: I1.**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). I1 umgesetzt (IPAM64 0.1.0, Zweig `claude/zen-goldberg-805131`, auf 1.7.0), noch nicht in `main`; Ziel 1.8.0.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -77,7 +77,7 @@ Lese-Funktionen für Leases und DHCP-Namen sind privat.
 | `merge.go` (Quellen zusammenführen, Rang, Zuordnung über Namen, Konflikte, Belegung) | **übernehmen, erweitern** auf IPv6, neue Quellen, Konfliktdämpfung |
 | `store.go` (Prüfung/Normalisierung, Überschneidung) | **übernehmen**, Datenmodell v2 (unten) |
 | `scan.go` (UDP-Sweep ohne Rechte) | **übernehmen, härten**: private Netze, /22, asynchron, je Node |
-| `neigh*.go` | **ersetzen** durch `dns64/groups` (kann IPv6) |
+| `neigh*.go` | **übernommen und um IPv6 erweitert** (`AF_UNSPEC`, 16-Byte-Adressen, ohne Link-Local); `dns64/groups` liefert kein Alter der Sichtung, darum nicht ersetzt |
 | `cmd/node64/ipam.go` (Verdrahtung) | **übernehmen**, um Schreibwege erweitern |
 | `DHCPLeases()` in `dns64/netdevices.go`, `ProxyTargets()` in `cdn64/hosts.go` | **übernehmen** (in die neue DNS64-Schnittstelle) |
 | `ui.go`, `overview.html`, Adresskarte, CSS, CSV-Export (`csvSafe`) | **Grundlage**, Oberfläche nach der Vorschau neu gliedern |
@@ -132,12 +132,12 @@ durch (die DNS64-Zeilen kommen über den DNS64-Abgleich). Ein Abgleich-Job (alle
   `dyn_parent` (uid des Provider-Präfixes) + `dyn_index` (Präfix-ID, z. B. `10`), `dyn_source` (Schnittstelle oder
   DynDNS), `created`/`updated`/`updated_by`. Die Hierarchie wird aus den Präfixen berechnet, nicht gespeichert.
   Vorgesehen, aber in v1 ohne Oberfläche: `space` (Namensraum für überlappende Netze, Standard leer).
-- **`ipam_ranges`**: `uid`, `prefix_uid`, `start`, `end`, `kind` (fixed/reserved), `name`, `description`. DHCP-Pools
+- **`ipam_ranges`**: `uid`, `start`, `end`, `kind` (fixed/reserved), `name`, `description`. DHCP-Pools
   sind keine Zeilen hier, sondern kommen aus DNS64.
-- **`ipam_addresses`**: `uid`, `prefix_uid`, `address` (IPv4 oder IPv6; bei dynamischem Präfix zusätzlich `iid`, die
+- **`ipam_addresses`**: `uid`, `address` (IPv4 oder IPv6; bei dynamischem Präfix zusätzlich `iid`, die
   Interface-ID), `status` (active/reserved/deprecated), `role` (VIP, Anycast, Gateway …), `name`, `dns` (an/aus),
   `dns_zone`, `ptr`, `mac`, `dhcp` (Reservierung an/aus), `description`, `tags`, `created`/`updated`/`updated_by`.
-  Eindeutig: (`space`, `address`). Index auf `mac`, `name`, `prefix_uid`.
+  Eindeutig: `address`. Index auf `mac`, `name`. Umgesetzt in I1: Das Präfix einer Adresse bzw. eines Bereichs wird berechnet (kleinstes umfassendes Präfix), nicht gespeichert – so bleibt nichts hängen, wenn Präfixe sich ändern. `space` und `iid` kommen erst mit ihrer Stufe (eigene Migration).
 - **`ipam_seen`** (je Node, nicht im Cluster): `ip`, `mac`, `iface`, `source` (neigh/scan/lease), `first`, `last`;
   30 Tage. Index auf `last`.
 - VLANs sind in v1 ein Feld am Präfix; die VLAN-Liste entsteht daraus.
@@ -252,3 +252,21 @@ E3 kein DHCPv6 jetzt; E4 Herstellerliste ins Image; E5 Assistent kennzeichnet de
 - **E5 Assistent:** bestehende DNS64-Reservierungen und A/AAAA-Einträge beim Einrichten **kennzeichnen** (IPAM64 wird
   Besitzer, Empfehlung) oder nur anzeigen und einzeln übernehmen?
 - Wer sich bei UlrichSchwarz meldet (nicht diese Sitzung).
+
+## Stand I1 (2026-11-14)
+
+Umgesetzt im Zweig `claude/zen-goldberg-805131` (auf `main` mit 1.7.0), Modul `internal/ipam64` 0.1.0:
+- Datenmodell v2 (Präfixe, Adressbereiche, feste Adressen, Sichtungen; IPv4 und IPv6), Prüfung der Eingaben, Migration.
+- Zusammenführung mit Präfix-Baum, Auslastung (Container: Anteil der Kinder), 15 s Zwischenspeicher; Quellen wie im
+  Community-Zweig plus AAAA-Einträge und Nachbartabelle IPv6.
+- Freie Adressen (ohne DHCP-Pool, ohne Bereiche zum Freihalten, ohne IPv6-Subnet-Router-Anycast), Vergabe am Stück über
+  die API.
+- Scan gehärtet: nur private IPv4-Netze bis /22, an denen die Node hängt, im Hintergrund, je Präfix abschaltbar.
+- Cluster (`ipam64/ipamcluster`, Bereiche prefixes/ranges/addresses, Doppel per kleinerer uid), Export/Import.
+- Oberfläche: Übersicht (Baum, Vorschläge aus DHCP-Netzen und Schnittstellen), Präfix (Raster, Liste mit Lücken,
+  Adressbereiche), Adresse; CSV; Dashboard-Karte; API `/api/ipam64/…` samt OpenAPI; i18n DE/EN; Audit-Bereich.
+- In DNS64/PROXY64 nur lesende Ergänzungen (`DHCPLeases`, `ProxyTargets`).
+- Tests: Store, Zusammenführung (IPv4/IPv6), freie Adressen, Scan-Grenzen, Netlink-Parser, Cluster, Export, Seiten und
+  API über den Webserver.
+- Offen für I2/I3: Schreiben nach DNS64 (Reservierung, A/AAAA/PTR mit Kennzeichen), Ausnahmen im Pool, DNS- und
+  DHCP-Schalter an der Adresse. MCP-Routen stehen bis I6 als Ausnahme im MCP-Test.

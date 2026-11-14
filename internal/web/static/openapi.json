@@ -59,6 +59,10 @@
     {
       "name": "Benutzerverwaltung",
       "description": "Benutzer, Gruppen und Anmeldung dieser Node (nur Administrator): AD/LDAP-Anbindung und SSO-Anlage über Gruppen. Nur lokal für Node64."
+    },
+    {
+      "name": "IPAM64",
+      "description": "IP-Adressverwaltung für IPv4 und IPv6 (Modul IPAM64): Präfixe mit Hierarchie, Adressbereiche und feste Adressen, zusammengeführt mit DHCP und lokalem DNS von DNS64, Monitor64, Healthchecks, PROXY64 und der Nachbartabelle. Ist das Modul aus: 404. Rolle „Nur lesen“: Änderungen 403. Körper werden streng gelesen (unbekanntes Feld: 400). Fehler als `{\"error\": \"<Text>\"}`. Jede Änderung steht im Audit-Log (Bereich IPAM64) und wird im Cluster abgeglichen."
     }
   ],
   "security": [
@@ -9942,6 +9946,554 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "IPAM64Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "IPAM64PrefixInput": {
+        "type": "object",
+        "required": [
+          "prefix"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "description": "IPv4 ab /8 oder IPv6 ab /16, z. B. 192.168.1.0/24"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "container",
+              "reserved",
+              "deprecated"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "vlan": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4094
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "mark_full": {
+            "type": "boolean",
+            "description": "gilt als voll belegt"
+          },
+          "dns_zone": {
+            "type": "string"
+          },
+          "scan": {
+            "type": "string",
+            "enum": [
+              "passive",
+              "active",
+              "off"
+            ]
+          }
+        }
+      },
+      "IPAM64Prefix": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "family": {
+            "type": "integer",
+            "enum": [
+              4,
+              6
+            ]
+          },
+          "scan_node": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "IPv4 ab /8 oder IPv6 ab /16, z. B. 192.168.1.0/24"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "container",
+              "reserved",
+              "deprecated"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "vlan": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4094
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "mark_full": {
+            "type": "boolean",
+            "description": "gilt als voll belegt"
+          },
+          "dns_zone": {
+            "type": "string"
+          },
+          "scan": {
+            "type": "string",
+            "enum": [
+              "passive",
+              "active",
+              "off"
+            ]
+          }
+        }
+      },
+      "IPAM64Net": {
+        "type": "object",
+        "description": "Präfix mit Belegung (aus IPAM64 und/oder DHCP-Netz aus DNS64; ohne uid: nur DNS64).",
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "description": "IPv4 ab /8 oder IPv6 ab /16, z. B. 192.168.1.0/24"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "container",
+              "reserved",
+              "deprecated"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "vlan": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4094
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "mark_full": {
+            "type": "boolean",
+            "description": "gilt als voll belegt"
+          },
+          "dns_zone": {
+            "type": "string"
+          },
+          "scan": {
+            "type": "string",
+            "enum": [
+              "passive",
+              "active",
+              "off"
+            ]
+          },
+          "uid": {
+            "type": "string"
+          },
+          "family": {
+            "type": "integer"
+          },
+          "dhcp": {
+            "type": "boolean"
+          },
+          "interface": {
+            "type": "string"
+          },
+          "router": {
+            "type": "string"
+          },
+          "pool_start": {
+            "type": "string"
+          },
+          "pool_end": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "children": {
+            "type": "integer"
+          },
+          "attached": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "integer",
+            "description": "nutzbare Adressen (IPv4)"
+          },
+          "used": {
+            "type": "integer"
+          },
+          "free": {
+            "type": "integer"
+          },
+          "pool_free": {
+            "type": "integer"
+          },
+          "conflicts": {
+            "type": "integer"
+          },
+          "used_pct": {
+            "type": "number"
+          }
+        }
+      },
+      "IPAM64RangeInput": {
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "reserved"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "IPAM64Range": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "reserved"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "IPAM64AddressInput": {
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "reserved",
+              "deprecated"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "",
+              "gateway",
+              "dns",
+              "vip",
+              "anycast"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Rechnername (ein DNS-Label)"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10
+          }
+        }
+      },
+      "IPAM64Address": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "dns": {
+            "type": "boolean"
+          },
+          "dns_zone": {
+            "type": "string"
+          },
+          "ptr": {
+            "type": "boolean"
+          },
+          "dhcp": {
+            "type": "boolean"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "reserved",
+              "deprecated"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "",
+              "gateway",
+              "dns",
+              "vip",
+              "anycast"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Rechnername (ein DNS-Label)"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10
+          }
+        }
+      },
+      "IPAM64Entry": {
+        "type": "object",
+        "description": "Belegte Adresse, zusammengeführt aus allen Quellen.",
+        "properties": {
+          "prefix": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "macs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "static",
+              "fixed",
+              "dhcp",
+              "conflict"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ipam",
+                "node",
+                "dhcp",
+                "dns",
+                "healthchecks",
+                "monitor64",
+                "proxy",
+                "scan"
+              ]
+            }
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "online",
+              "offline",
+              "unknown",
+              "conflict"
+            ]
+          },
+          "uid": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "IPAM64Scan": {
+        "type": "object",
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "started": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "found": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
           }
         }
       }
@@ -33166,6 +33718,860 @@
               }
             },
             "description": "required fehlt"
+          }
+        }
+      }
+    },
+    "/ipam64/prefixes": {
+      "get": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Präfixe mit Belegung",
+        "description": "Alle Präfixe als Baum (IPv4 vor IPv6, Eltern vor Kindern) mit Belegung; DHCP-Netze aus DNS64 erscheinen auch ohne Eintrag in IPAM64.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "prefixes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IPAM64Net"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Präfix anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IPAM64PrefixInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Prefix"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/prefixes/{uid}": {
+      "put": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Präfix ändern",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IPAM64PrefixInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Prefix"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Präfix löschen",
+        "description": "Adressen und Adressbereiche darin bleiben.",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/ranges": {
+      "get": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Adressbereiche",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ranges": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IPAM64Range"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Adressbereich anlegen",
+        "description": "Muss ganz in einem Präfix liegen und darf andere nicht überschneiden.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IPAM64RangeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Range"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/ranges/{uid}": {
+      "put": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Adressbereich ändern",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IPAM64RangeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Range"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Adressbereich löschen",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/addresses": {
+      "get": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Belegte Adressen",
+        "description": "Zusammengeführt aus allen Quellen, seitenweise.",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "nur dieses Präfix"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Suche in IP, Name, MAC, Beschreibung"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1000,
+              "maximum": 5000
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "addresses": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IPAM64Entry"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Feste Adresse eintragen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IPAM64AddressInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Address"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/addresses/{uid}": {
+      "put": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Feste Adresse ändern",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IPAM64AddressInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Address"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Feste Adresse entfernen",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Entfernt"
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/available": {
+      "get": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Freie Adressen",
+        "description": "Nicht belegt, nicht Netz-/Broadcast-Adresse, nicht im DHCP-Adressbereich und nicht in Bereichen zum Freihalten; gibt es Adressbereiche für feste Adressen, nur dort.",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "uid eines Adressbereichs"
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Nächste freie Adresse vergeben",
+        "description": "Sucht und trägt am Stück ein (keine Doppelvergabe bei gleichzeitigen Anfragen).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prefix"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "range": {
+                    "type": "string",
+                    "description": "uid eines Adressbereichs (optional)"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "reserved",
+                      "deprecated"
+                    ]
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "gateway",
+                      "dns",
+                      "vip",
+                      "anycast"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Rechnername (ein DNS-Label)"
+                  },
+                  "mac": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vergeben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Address"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipam64/scan": {
+      "get": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Stand des Netz-Scans",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Scan"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IPAM64"
+        ],
+        "summary": "Netz-Scan starten",
+        "description": "Im Hintergrund; nur private IPv4-Netze bis /22, die IPAM64 kennt und an denen die Node eine Adresse hat. Ein Scan zur Zeit (409).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prefix"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "prefix": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Gestartet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Scan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IPAM64Error"
+                }
+              }
+            }
           }
         }
       }

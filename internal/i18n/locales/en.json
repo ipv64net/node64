@@ -66,6 +66,7 @@
     }
   },
   "nav": {
+    "ipam64": "IPAM64",
     "group_overview": "Overview",
     "group_modules": "Modules",
     "group_system": "System",
@@ -1927,6 +1928,7 @@
     "origin": "From where",
     "load_more": "Load older",
     "area": {
+      "ipam64": "IPAM64",
       "all": "All",
       "login": "Sign-in",
       "settings": "Settings",
@@ -1941,6 +1943,14 @@
       "mcp": "AI (MCP)"
     },
     "actions": {
+      "ipam64_autoscan": "IPAM64: automatic scan set",
+      "ipam64_scan": "IPAM64: network scan started",
+      "ipam64_address_delete": "IPAM64: address removed",
+      "ipam64_address_save": "IPAM64: address saved",
+      "ipam64_range_delete": "IPAM64: range deleted",
+      "ipam64_range_save": "IPAM64: range saved",
+      "ipam64_prefix_delete": "IPAM64: prefix deleted",
+      "ipam64_prefix_save": "IPAM64: prefix saved",
       "login_environment": "Signed in via Environment",
       "login_environment_failed": "Sign-in via Environment rejected",
       "environment_open": "Node opened via Environment",
@@ -3495,6 +3505,7 @@
     "public": "no auth"
   },
   "cluster": {
+    "ipam64_hint": "Sightings from the neighbour table and the network scan stay per node.",
     "title": "Cluster",
     "intro": "Several nodes sync settings and entries directly, also across networks. You choose per module and area what is synced.",
     "tls_hint": "The connection is always encrypted; a self-signed certificate is enough.",
@@ -3543,6 +3554,7 @@
     "users_chosen": "User chosen, the other nodes take it over.",
     "users_unknown": "This version is no longer up for choice.",
     "mod": {
+      "ipam64": "IPAM64",
       "healthchecks": "Healthchecks",
       "notifications": "Notifications",
       "certs": "Certificates",
@@ -3554,6 +3566,9 @@
       "monitor64": "Monitor64"
     },
     "item": {
+      "ipam64_addresses": "Fixed addresses",
+      "ipam64_ranges": "Ranges",
+      "ipam64_prefixes": "Prefixes",
       "checks": "Checks",
       "environment_login": "Sign-in – \"Open\" in Environment signs the user in (needs user accounts in sync)",
       "environment_nodes": "Added nodes – nodes outside the cluster (with access key)",
@@ -5317,6 +5332,11 @@
     }
   },
   "modinfo": {
+    "ipam64": {
+      "desc": "Plans prefixes and fixed addresses for IPv4 and IPv6 and shows what is really in use on your network – merged from DHCP, local DNS, Monitor64, PROXY64 and the neighbour table.",
+      "h1": "Prefix tree, address grid and free addresses",
+      "h2": "Synced in the cluster, conflicts at a glance"
+    },
     "healthchecks": {
       "desc": "Monitors websites, servers and services locally in your home network and optionally online from ipv64 – with notifications on outages and recovery.",
       "h1": "HTTP, keyword, JSON, DNS, ping, TCP, certificates, push, Docker and Proxmox VE",
@@ -5540,6 +5560,209 @@
       "left_local": "Sonar64: left locally, but ipv64.net was not reachable ({error}). ipv64.net signs off the node after 30 days without reports.",
       "rejoined": "Sonar64: registered again – the node signs up at ipv64 with a new node.",
       "saved": "Sonar64: saved."
+    }
+  },
+  "ipam64": {
+    "title": "IPAM64",
+    "intro": "Prefixes and fixed addresses for IPv4 and IPv6 in one place – together with what DHCP, local DNS, Monitor64, Healthchecks, PROXY64 and the neighbour table know about your network.",
+    "export": "CSV",
+    "edit": "Edit",
+    "empty": "No prefixes yet. Add one or take a suggestion – DHCP networks from DNS64 show up here on their own.",
+    "prefixes": "Prefixes",
+    "tree_hint": "The hierarchy follows from the prefixes. Each address belongs to the smallest prefix it lies in.",
+    "more": "Advanced",
+    "used_n": "{n} used",
+    "used_of": "{n} of {size} used",
+    "pool_free": "{n} free in the DHCP range",
+    "next_free": "Next free",
+    "parent": "Lies in",
+    "router": "Gateway",
+    "pool": "DHCP range",
+    "attached": "This node has an address in this network",
+    "not_attached": "This node has no address in this network",
+    "children": "Contained prefixes",
+    "blocks": "Sections",
+    "search": "IP, name, MAC",
+    "unknown": "unknown",
+    "free_block": "{n} free:",
+    "free_pool": "in the DHCP range, assigned by DNS64",
+    "take_free": "assign {ip}",
+    "list_empty": "No entries.",
+    "prefix": {
+      "new": "Add prefix",
+      "prefix_hint": "IPv4 from /8 or IPv6 from /16. Prefixes may be nested.",
+      "role_ph": "e.g. clients, IoT, servers",
+      "mark_full": "Treat as fully used (e.g. guest network)",
+      "delete": "Delete prefix",
+      "delete_confirm": "Delete prefix? Addresses and ranges in it are kept.",
+      "dhcp_only": "from DNS64",
+      "dhcp_only_hint": "DHCP network from DNS64, not yet in IPAM64. Take it over to maintain name, VLAN, status and tags."
+    },
+    "suggest": {
+      "title": "Suggestions",
+      "dhcp": "DHCP network in DNS64",
+      "local": "Network on this node",
+      "take": "Take over into IPAM64",
+      "hint": "Taking over opens the form pre-filled; nothing is created until you save."
+    },
+    "kpi": {
+      "prefixes": "Prefixes",
+      "families": "{v4} × IPv4 · {v6} × IPv6",
+      "used": "Addresses used",
+      "vlans": "{n} VLANs",
+      "conflicts": "Conflicts",
+      "conflicts_sub": "two MAC addresses on one IP",
+      "scan": "Last scan"
+    },
+    "scan": {
+      "running": "Scan running …",
+      "auto": "Automatic scan",
+      "auto_off": "Automatic: off",
+      "auto_every": "every {n} min",
+      "button": "Scan network",
+      "hint": "Touches every address once and then reads the neighbour table. Only private IPv4 networks up to /22 that this node is attached to."
+    },
+    "col": {
+      "prefix": "Prefix",
+      "name": "Name",
+      "status": "Status",
+      "dhcp": "DHCP (DNS64)",
+      "zone": "DNS zone",
+      "usage": "Utilisation",
+      "role": "Role",
+      "scan": "Scan",
+      "tags": "Tags",
+      "description": "Description",
+      "ip": "Address",
+      "state": "State",
+      "mac": "MAC",
+      "sources": "Known from",
+      "seen": "Last seen",
+      "kind": "Kind",
+      "host": "Host name"
+    },
+    "status": {
+      "container": "Container",
+      "active": "Active",
+      "reserved": "Reserved",
+      "deprecated": "Deprecated"
+    },
+    "scanmode": {
+      "passive": "Neighbour table (passive)",
+      "active": "Network scan (active)",
+      "off": "Off"
+    },
+    "view": {
+      "grid": "Grid",
+      "list": "List",
+      "ranges": "Ranges"
+    },
+    "cell": {
+      "static": "Fixed",
+      "fixed": "DHCP reservation",
+      "dhcp": "DHCP lease",
+      "conflict": "Conflict",
+      "pool": "free in the DHCP range",
+      "reserved": "reserved",
+      "free": "free",
+      "na": "not assignable"
+    },
+    "filter": {
+      "all": "All"
+    },
+    "kind": {
+      "static": "Fixed",
+      "fixed": "DHCP reservation",
+      "dhcp": "DHCP lease",
+      "conflict": "Conflict"
+    },
+    "state": {
+      "online": "online",
+      "offline": "offline",
+      "unknown": "not seen",
+      "conflict": "conflict"
+    },
+    "src": {
+      "ipam": "IPAM64",
+      "node": "this node",
+      "dhcp": "DHCP",
+      "dns": "Local DNS",
+      "healthchecks": "Healthchecks",
+      "monitor64": "Monitor64",
+      "proxy": "PROXY64",
+      "scan": "Neighbour table"
+    },
+    "range": {
+      "pool": "DHCP pool (DNS64)",
+      "fixed": "Fixed addresses",
+      "reserved": "Keep free",
+      "delete_confirm": "Delete range?",
+      "none": "No ranges.",
+      "hint": "“Next free” searches ranges for fixed addresses, otherwise the whole prefix – never the DHCP range and never ranges to keep free.",
+      "new": "Add range",
+      "start": "From",
+      "end": "To"
+    },
+    "addr": {
+      "new": "new",
+      "in_ipam": "in IPAM64",
+      "title": "Address",
+      "host_hint": "Only a–z, 0–9 and hyphen (one DNS label).",
+      "delete": "Remove from IPAM64",
+      "delete_confirm": "Remove address from IPAM64? What DHCP and DNS64 know about it stays.",
+      "known": "What the node knows about this address",
+      "unseen": "No source knows this address – it is free.",
+      "pool_hint": "The DHCP range of this network is {from} – {to}."
+    },
+    "role": {
+      "gateway": "Gateway",
+      "dns": "DNS server",
+      "vip": "Virtual IP (VIP)",
+      "anycast": "Anycast"
+    },
+    "note": {
+      "self": "this node",
+      "router": "Router (gateway)",
+      "conflict": "Conflict – several MAC addresses"
+    },
+    "card": {
+      "prefixes": "Prefixes",
+      "used": "Addresses used",
+      "conflicts": "Conflicts"
+    },
+    "flash": {
+      "prefix_saved": "Prefix saved.",
+      "prefix_deleted": "Prefix deleted.",
+      "range_saved": "Range saved.",
+      "range_deleted": "Range deleted.",
+      "address_saved": "Address saved.",
+      "address_deleted": "Address removed from IPAM64.",
+      "scan_started": "Network scan running in the background – reload the page to see the result.",
+      "autoscan_saved": "Automatic scan saved."
+    },
+    "err": {
+      "prefix": "Please enter a valid prefix (e.g. 192.168.1.0/24 or fd00:10::/64).",
+      "size": "The prefix is too large (IPv4 from /8, IPv6 from /16).",
+      "dup": "This prefix already exists.",
+      "name": "Name or description too long or with invalid characters.",
+      "host": "Invalid host name or zone: only a–z, 0–9 and hyphen.",
+      "status": "Invalid status.",
+      "vlan": "VLAN must be between 0 and 4094.",
+      "tags": "Tags: at most 10, each up to 32 characters of letters, digits, . _ -",
+      "range": "Invalid range (start and end of the same family, start before end).",
+      "range_net": "The range must lie completely within one prefix.",
+      "overlap": "The range overlaps another one.",
+      "ip": "Please enter a valid IP address.",
+      "no_net": "The address lies in no prefix – add one first.",
+      "net_addr": "Network and broadcast addresses cannot be assigned.",
+      "mac": "Invalid MAC address.",
+      "taken": "This address is already in IPAM64.",
+      "role": "Invalid role.",
+      "not_found": "Not found.",
+      "busy": "A scan is already running.",
+      "not_attached": "This node is not directly attached to this network – no scan possible.",
+      "no_scan": "Network scan is not allowed for this prefix (only private IPv4 networks up to /22, scan not off).",
+      "internal": "Internal error – details in the log."
     }
   },
   "monitor64": {

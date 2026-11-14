@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- IPAM64 (neu, Modul, Standard aus): IP-Adressverwaltung für IPv4 und IPv6 – Präfixe mit Hierarchie, Status, VLAN und Tags, feste Adressen und Adressbereiche, zusammengeführt mit DHCP und lokalem DNS von DNS64, Monitor64, Healthchecks, PROXY64 und der Nachbartabelle; Raster, Liste mit freien Blöcken, „Nächste freie Adresse“, begrenzter Netz-Scan, Abgleich im Cluster, API `/api/ipam64`. Grundlage ist ein Entwurf aus der Community (UlrichSchwarz).
+
 ## 1.7.0 – 2026-11-14
 
 - Benutzerverwaltung (neu, Einstellungen → Benutzerverwaltung): mehrere lokale Benutzer mit den Rollen „Administrator“ und „Nur lesen“, Gruppen mit Rolle, Sperren, Passwort setzen oder beim ersten Anmelden setzen lassen, 2FA zurücksetzen, Sitzungen beenden; Schalter „2FA für alle Pflicht“. Der letzte lokale Administrator bleibt immer. Die frühere Seite „Anmeldung“ (SSO, Forward-Auth) ist jetzt ein Reiter dort; eigene Passkeys und SSO-Verknüpfungen stehen unter Einstellungen → Allgemein.

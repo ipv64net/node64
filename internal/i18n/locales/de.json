@@ -66,6 +66,7 @@
     }
   },
   "nav": {
+    "ipam64": "IPAM64",
     "group_overview": "Übersicht",
     "group_modules": "Module",
     "group_system": "System",
@@ -1927,6 +1928,7 @@
     "origin": "Von wo",
     "load_more": "Ältere laden",
     "area": {
+      "ipam64": "IPAM64",
       "all": "Alle",
       "login": "Anmeldung",
       "settings": "Einstellungen",
@@ -1941,6 +1943,14 @@
       "mcp": "KI (MCP)"
     },
     "actions": {
+      "ipam64_autoscan": "IPAM64: Automatischer Scan eingestellt",
+      "ipam64_scan": "IPAM64: Netz-Scan gestartet",
+      "ipam64_address_delete": "IPAM64: Adresse entfernt",
+      "ipam64_address_save": "IPAM64: Adresse gespeichert",
+      "ipam64_range_delete": "IPAM64: Adressbereich gelöscht",
+      "ipam64_range_save": "IPAM64: Adressbereich gespeichert",
+      "ipam64_prefix_delete": "IPAM64: Präfix gelöscht",
+      "ipam64_prefix_save": "IPAM64: Präfix gespeichert",
       "login_environment": "Über Environment angemeldet",
       "login_environment_failed": "Anmeldung über Environment abgelehnt",
       "environment_open": "Node über Environment geöffnet",
@@ -3495,6 +3505,7 @@
     "public": "ohne Anmeldung"
   },
   "cluster": {
+    "ipam64_hint": "Sichtungen aus der Nachbartabelle und der Netz-Scan bleiben je Node.",
     "title": "Cluster",
     "intro": "Mehrere Nodes gleichen Einstellungen und Einträge direkt ab, auch in verschiedenen Netzen. Was abgeglichen wird, schaltest du je Modul und Bereich ein.",
     "tls_hint": "Die Verbindung ist immer verschlüsselt; ein selbst signiertes Zertifikat genügt.",
@@ -3543,6 +3554,7 @@
     "users_chosen": "Benutzer gewählt, die anderen Nodes übernehmen ihn.",
     "users_unknown": "Diese Version steht nicht mehr zur Wahl.",
     "mod": {
+      "ipam64": "IPAM64",
       "healthchecks": "Healthchecks",
       "notifications": "Benachrichtigungen",
       "certs": "Zertifikate",
@@ -3554,6 +3566,9 @@
       "monitor64": "Monitor64"
     },
     "item": {
+      "ipam64_addresses": "Feste Adressen",
+      "ipam64_ranges": "Adressbereiche",
+      "ipam64_prefixes": "Präfixe",
       "checks": "Checks",
       "environment_login": "Anmeldung – „Öffnen“ in Environment meldet den Benutzer an (braucht den Abgleich der Benutzerkonten)",
       "environment_nodes": "Hinzugefügte Nodes – Nodes außerhalb des Clusters (mit Zugangsschlüssel)",
@@ -5317,6 +5332,11 @@
     }
   },
   "modinfo": {
+    "ipam64": {
+      "desc": "Plant Präfixe und feste Adressen für IPv4 und IPv6 und zeigt, was im Netz wirklich belegt ist – zusammengeführt aus DHCP, lokalem DNS, Monitor64, PROXY64 und der Nachbartabelle.",
+      "h1": "Präfix-Baum, Adressraster und freie Adressen",
+      "h2": "Im Cluster abgeglichen, Konflikte auf einen Blick"
+    },
     "healthchecks": {
       "desc": "Überwacht Webseiten, Server und Dienste lokal im Heimnetz und auf Wunsch zusätzlich online von ipv64 aus – mit Benachrichtigung bei Störung und Entwarnung.",
       "h1": "HTTP, Keyword, JSON, DNS, Ping, TCP, Zertifikate, Push, Docker und Proxmox VE",
@@ -5540,6 +5560,209 @@
       "left_local": "Sonar64: lokal ausgetreten, aber ipv64.net war nicht erreichbar ({error}). ipv64.net meldet den Knoten nach 30 Tagen ohne Meldung selbst ab.",
       "rejoined": "Sonar64: neu angemeldet – die Node meldet sich mit einem neuen Knoten bei ipv64 an.",
       "saved": "Sonar64: gespeichert."
+    }
+  },
+  "ipam64": {
+    "title": "IPAM64",
+    "intro": "Präfixe und feste Adressen für IPv4 und IPv6 an einer Stelle – zusammen mit dem, was DHCP, lokaler DNS, Monitor64, Healthchecks, PROXY64 und die Nachbartabelle über dein Netz wissen.",
+    "export": "CSV",
+    "edit": "Bearbeiten",
+    "empty": "Noch keine Präfixe. Lege eins an oder übernimm einen Vorschlag – DHCP-Netze aus DNS64 erscheinen hier von selbst.",
+    "prefixes": "Präfixe",
+    "tree_hint": "Die Hierarchie ergibt sich aus den Präfixen. Jede Adresse gehört zum kleinsten Präfix, in dem sie liegt.",
+    "more": "Erweitert",
+    "used_n": "{n} belegt",
+    "used_of": "{n} von {size} belegt",
+    "pool_free": "{n} frei im DHCP-Adressbereich",
+    "next_free": "Nächste freie",
+    "parent": "Liegt in",
+    "router": "Gateway",
+    "pool": "DHCP-Adressbereich",
+    "attached": "Diese Node hat eine Adresse in diesem Netz",
+    "not_attached": "Diese Node hat keine Adresse in diesem Netz",
+    "children": "Enthaltene Präfixe",
+    "blocks": "Abschnitte",
+    "search": "IP, Name, MAC",
+    "unknown": "unbekannt",
+    "free_block": "{n} frei:",
+    "free_pool": "im DHCP-Adressbereich, vergibt DNS64",
+    "take_free": "{ip} vergeben",
+    "list_empty": "Keine Einträge.",
+    "prefix": {
+      "new": "Präfix anlegen",
+      "prefix_hint": "IPv4 ab /8 oder IPv6 ab /16. Präfixe dürfen ineinander liegen.",
+      "role_ph": "z. B. Clients, IoT, Server",
+      "mark_full": "Gilt als voll belegt (z. B. Gastnetz)",
+      "delete": "Präfix löschen",
+      "delete_confirm": "Präfix löschen? Adressen und Adressbereiche darin bleiben erhalten.",
+      "dhcp_only": "aus DNS64",
+      "dhcp_only_hint": "DHCP-Netz aus DNS64, noch nicht in IPAM64. Übernimm es, um Name, VLAN, Status und Tags zu pflegen."
+    },
+    "suggest": {
+      "title": "Vorschläge",
+      "dhcp": "DHCP-Netz in DNS64",
+      "local": "Netz an dieser Node",
+      "take": "In IPAM64 übernehmen",
+      "hint": "Übernehmen öffnet das Formular vorbelegt; nichts wird ohne Speichern angelegt."
+    },
+    "kpi": {
+      "prefixes": "Präfixe",
+      "families": "{v4} × IPv4 · {v6} × IPv6",
+      "used": "Adressen belegt",
+      "vlans": "{n} VLANs",
+      "conflicts": "Konflikte",
+      "conflicts_sub": "zwei MAC-Adressen an einer IP",
+      "scan": "Letzter Scan"
+    },
+    "scan": {
+      "running": "Scan läuft …",
+      "auto": "Automatischer Scan",
+      "auto_off": "Automatisch: aus",
+      "auto_every": "alle {n} Min.",
+      "button": "Netz scannen",
+      "hint": "Spricht jede Adresse einmal kurz an und liest danach die Nachbartabelle. Nur private IPv4-Netze bis /22, an denen diese Node hängt."
+    },
+    "col": {
+      "prefix": "Präfix",
+      "name": "Name",
+      "status": "Status",
+      "dhcp": "DHCP (DNS64)",
+      "zone": "DNS-Zone",
+      "usage": "Auslastung",
+      "role": "Rolle",
+      "scan": "Scan",
+      "tags": "Tags",
+      "description": "Beschreibung",
+      "ip": "Adresse",
+      "state": "Zustand",
+      "mac": "MAC",
+      "sources": "Bekannt aus",
+      "seen": "Zuletzt gesehen",
+      "kind": "Art",
+      "host": "Rechnername"
+    },
+    "status": {
+      "container": "Container",
+      "active": "Aktiv",
+      "reserved": "Reserviert",
+      "deprecated": "Veraltet"
+    },
+    "scanmode": {
+      "passive": "Nachbartabelle (passiv)",
+      "active": "Netz-Scan (aktiv)",
+      "off": "Aus"
+    },
+    "view": {
+      "grid": "Raster",
+      "list": "Liste",
+      "ranges": "Adressbereiche"
+    },
+    "cell": {
+      "static": "Fest",
+      "fixed": "DHCP-Reservierung",
+      "dhcp": "DHCP-Lease",
+      "conflict": "Konflikt",
+      "pool": "frei im DHCP-Adressbereich",
+      "reserved": "reserviert",
+      "free": "frei",
+      "na": "nicht vergebbar"
+    },
+    "filter": {
+      "all": "Alle"
+    },
+    "kind": {
+      "static": "Fest",
+      "fixed": "DHCP-Reservierung",
+      "dhcp": "DHCP-Lease",
+      "conflict": "Konflikt"
+    },
+    "state": {
+      "online": "online",
+      "offline": "offline",
+      "unknown": "nicht gesehen",
+      "conflict": "Konflikt"
+    },
+    "src": {
+      "ipam": "IPAM64",
+      "node": "diese Node",
+      "dhcp": "DHCP",
+      "dns": "Lokaler DNS",
+      "healthchecks": "Healthchecks",
+      "monitor64": "Monitor64",
+      "proxy": "PROXY64",
+      "scan": "Nachbartabelle"
+    },
+    "range": {
+      "pool": "DHCP-Pool (DNS64)",
+      "fixed": "Feste Adressen",
+      "reserved": "Frei halten",
+      "delete_confirm": "Adressbereich löschen?",
+      "none": "Keine Adressbereiche.",
+      "hint": "„Nächste freie“ sucht in Adressbereichen für feste Adressen, sonst im ganzen Präfix – nie im DHCP-Adressbereich und nie in Bereichen zum Freihalten.",
+      "new": "Adressbereich anlegen",
+      "start": "Von",
+      "end": "Bis"
+    },
+    "addr": {
+      "new": "neu",
+      "in_ipam": "in IPAM64",
+      "title": "Adresse",
+      "host_hint": "Nur a–z, 0–9 und Bindestrich (ein DNS-Label).",
+      "delete": "Aus IPAM64 entfernen",
+      "delete_confirm": "Adresse aus IPAM64 entfernen? Was DHCP und DNS64 über sie wissen, bleibt.",
+      "known": "Was die Node über die Adresse weiß",
+      "unseen": "Keine Quelle kennt diese Adresse – sie ist frei.",
+      "pool_hint": "Der DHCP-Adressbereich dieses Netzes ist {from} – {to}."
+    },
+    "role": {
+      "gateway": "Gateway",
+      "dns": "DNS-Server",
+      "vip": "Virtuelle IP (VIP)",
+      "anycast": "Anycast"
+    },
+    "note": {
+      "self": "diese Node",
+      "router": "Router (Gateway)",
+      "conflict": "Konflikt – mehrere MAC-Adressen"
+    },
+    "card": {
+      "prefixes": "Präfixe",
+      "used": "Adressen belegt",
+      "conflicts": "Konflikte"
+    },
+    "flash": {
+      "prefix_saved": "Präfix gespeichert.",
+      "prefix_deleted": "Präfix gelöscht.",
+      "range_saved": "Adressbereich gespeichert.",
+      "range_deleted": "Adressbereich gelöscht.",
+      "address_saved": "Adresse gespeichert.",
+      "address_deleted": "Adresse aus IPAM64 entfernt.",
+      "scan_started": "Netz-Scan läuft im Hintergrund – die Seite zeigt das Ergebnis nach dem Neuladen.",
+      "autoscan_saved": "Automatischer Scan gespeichert."
+    },
+    "err": {
+      "prefix": "Bitte ein gültiges Präfix angeben (z. B. 192.168.1.0/24 oder fd00:10::/64).",
+      "size": "Das Präfix ist zu groß (IPv4 ab /8, IPv6 ab /16).",
+      "dup": "Dieses Präfix gibt es schon.",
+      "name": "Name oder Beschreibung zu lang bzw. mit unerlaubten Zeichen.",
+      "host": "Rechnername bzw. Zone ungültig: nur a–z, 0–9 und Bindestrich.",
+      "status": "Ungültiger Status.",
+      "vlan": "VLAN muss zwischen 0 und 4094 liegen.",
+      "tags": "Tags: höchstens 10, je bis 32 Zeichen aus Buchstaben, Ziffern, . _ -",
+      "range": "Ungültiger Adressbereich (Anfang und Ende gleiche Familie, Anfang vor Ende).",
+      "range_net": "Der Adressbereich muss ganz in einem Präfix liegen.",
+      "overlap": "Der Adressbereich überschneidet einen anderen.",
+      "ip": "Bitte eine gültige IP-Adresse angeben.",
+      "no_net": "Die Adresse liegt in keinem Präfix – lege zuerst eins an.",
+      "net_addr": "Netz- und Broadcast-Adresse lassen sich nicht vergeben.",
+      "mac": "Ungültige MAC-Adresse.",
+      "taken": "Diese Adresse steht schon in IPAM64.",
+      "role": "Ungültige Rolle.",
+      "not_found": "Nicht gefunden.",
+      "busy": "Es läuft schon ein Scan.",
+      "not_attached": "Diese Node hängt nicht direkt an diesem Netz – kein Scan möglich.",
+      "no_scan": "Für dieses Präfix ist kein Netz-Scan erlaubt (nur private IPv4-Netze bis /22, Scan nicht aus).",
+      "internal": "Interner Fehler – Details im Log."
     }
   },
   "monitor64": {

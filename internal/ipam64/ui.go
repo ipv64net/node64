@@ -1,0 +1,647 @@
+package ipam64
+
+import (
+	"embed"
+	"encoding/csv"
+	"errors"
+	"io/fs"
+	"net/http"
+	"net/netip"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ipv64net/node64/internal/module"
+)
+
+//go:embed templates
+var templateFS embed.FS
+
+// Templates liefert die Seiten des Moduls (module.Templater).
+func (m *Module) Templates() fs.FS {
+	sub, _ := fs.Sub(templateFS, "templates")
+	return sub
+}
+
+func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
+	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
+	mux.Handle("GET /ipam64", page(m.pageOverview))
+	mux.Handle("GET /ipam64/prefix", page(m.pagePrefix))
+	mux.Handle("GET /ipam64/address", page(m.pageAddress))
+	mux.Handle("GET /ipam64/export.csv", page(m.pageExport))
+	mux.Handle("POST /ipam64/prefix", page(m.postPrefix))
+	mux.Handle("POST /ipam64/prefix/delete", page(m.postPrefixDelete))
+	mux.Handle("POST /ipam64/range", page(m.postRange))
+	mux.Handle("POST /ipam64/range/delete", page(m.postRangeDelete))
+	mux.Handle("POST /ipam64/address", page(m.postAddress))
+	mux.Handle("POST /ipam64/address/delete", page(m.postAddressDelete))
+	mux.Handle("POST /ipam64/scan", page(m.postScan))
+	mux.Handle("POST /ipam64/autoscan", page(m.postAutoScan))
+}
+
+const (
+	mapRow   = 32  // Kaestchen je Zeile im Raster
+	listPage = 250 // Zeilen je Seite der Liste
+)
+
+// errKey liefert den i18n-Schluessel zu einem Fehler der Eingaben ("" = unbekannt).
+func errKey(err error) string {
+	for e, k := range map[error]string{ErrPrefix: "prefix", ErrSize: "size", ErrDup: "dup", ErrName: "name", ErrHost: "host", ErrStatus: "status",
+		ErrVLAN: "vlan", ErrTags: "tags", ErrRange: "range", ErrRangeNet: "range_net", ErrOverlap: "overlap", ErrIP: "ip", ErrNoNet: "no_net",
+		ErrNetAddr: "net_addr", ErrMAC: "mac", ErrTaken: "taken", ErrRole: "role", ErrNotFound: "not_found", ErrBusy: "busy",
+		ErrNotAttached: "not_attached", ErrNoScan: "no_scan"} {
+		if errors.Is(err, e) {
+			return "ipam64.err." + k
+		}
+	}
+	return ""
+}
+
+func (m *Module) errText(r *http.Request, err error) string {
+	if k := errKey(err); k != "" {
+		return m.g.T(r, k)
+	}
+	m.log.Error("ipam64: request failed", "err", err)
+	return m.g.T(r, "ipam64.err.internal")
+}
+
+func (m *Module) fail(w http.ResponseWriter, r *http.Request, err error) {
+	m.log.Error("ipam64: page", "err", err)
+	http.Error(w, "internal error", http.StatusInternalServerError)
+}
+
+func prefixURL(cidr string, kv ...string) string {
+	q := url.Values{"p": {cidr}}
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i+1] != "" {
+			q.Set(kv[i], kv[i+1])
+		}
+	}
+	return "/ipam64/prefix?" + q.Encode()
+}
+
+func addressURL(ip string) string { return "/ipam64/address?" + url.Values{"ip": {ip}}.Encode() }
+
+// ---- Uebersicht ----
+
+type overviewData struct {
+	Nets      []Net
+	Used      int
+	Conflicts int
+	V4, V6    int
+	VLANs     int
+	Suggest   []Net    // DHCP-Netze aus DNS64, die noch nicht in IPAM64 stehen
+	Local     []string // Netze an den Schnittstellen der Node, die IPAM64 nicht kennt
+	Form      Prefix
+	FormOpen  bool
+	Err       string
+	AutoScan  int
+	AutoOpts  []int
+	LastScan  time.Time
+	Scan      ScanStatus
+}
+
+func (m *Module) overview(r *http.Request) (*overviewData, error) {
+	ctx := r.Context()
+	snap, err := m.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d := &overviewData{Nets: snap.Nets, AutoScan: m.AutoScan(ctx), AutoOpts: AutoScans, LastScan: m.LastScan(ctx), Scan: m.Scanning(),
+		Form: Prefix{Status: StatusActive, Scan: ScanPassive}}
+	vlans := map[int]bool{}
+	for _, n := range snap.Nets {
+		d.Used, d.Conflicts = d.Used+n.Used, d.Conflicts+n.Conflicts
+		if n.IsV4() {
+			d.V4++
+		} else {
+			d.V6++
+		}
+		if n.VLAN > 0 {
+			vlans[n.VLAN] = true
+		}
+		if n.UID == "" {
+			d.Suggest = append(d.Suggest, n)
+		}
+	}
+	d.VLANs = len(vlans)
+	for _, l := range m.locals() {
+		p := l.Masked()
+		if snap.Net(p.String()) == nil && (p.Addr().IsPrivate() || p.Addr().Is6()) && !slices.Contains(d.Local, p.String()) {
+			d.Local = append(d.Local, p.String())
+		}
+	}
+	return d, nil
+}
+
+func (m *Module) renderOverview(w http.ResponseWriter, r *http.Request, status int, patch func(*overviewData)) {
+	d, err := m.overview(r)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if patch != nil {
+		patch(d)
+	}
+	m.g.Render(w, r, status, "ipam64/overview", "ipam64.title", d)
+}
+
+func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
+	m.renderOverview(w, r, http.StatusOK, func(d *overviewData) {
+		if p := r.URL.Query().Get("new"); p != "" { // Vorschlag uebernehmen: Formular vorbelegt
+			d.FormOpen, d.Form.Prefix, d.Form.Name = true, p, r.URL.Query().Get("name")
+		}
+	})
+}
+
+// ---- Praefix ----
+
+// Cell ist ein Kaestchen im Raster.
+type Cell struct {
+	IP    string
+	Last  string // letzte Stelle(n) als Beschriftung
+	Class string // dhcp | fixed | static | conflict | pool | reserved | free | na
+	Name  string
+}
+
+type prefixData struct {
+	Net       *Net
+	Prefix    *Prefix // Eintrag in IPAM64 (nil = nur DHCP-Netz)
+	View      string  // grid | list | ranges
+	Entries   []Entry
+	Rows      []listRow
+	Total     int
+	Page      int
+	Pages     int
+	Counts    map[string]int
+	Filter    string
+	Query     string
+	Grid      [][]Cell
+	Blocks    []string // Abschnitte des Rasters (/22, /23)
+	Block     int
+	Ranges    []Range
+	Children  []Net
+	Next      string // naechste freie Adresse
+	ScanOK    bool   // Scan erlaubt
+	Scan      ScanStatus
+	RangeForm Range
+	Err       string
+	ErrForm   string // prefix | range
+}
+
+// listRow ist eine Zeile der Liste: belegte Adresse oder Luecke.
+type listRow struct {
+	E    *Entry
+	Free *FreeBlock
+}
+
+// URL baut den Link der Seite mit geaenderten Parametern.
+func (d *prefixData) URL(kv ...string) string {
+	q := []string{"view", d.View, "kind", d.Filter, "q", d.Query}
+	if d.Block > 0 {
+		q = append(q, "block", strconv.Itoa(d.Block))
+	}
+	for i := 0; i+1 < len(kv); i += 2 {
+		found := false
+		for j := 0; j+1 < len(q); j += 2 {
+			if q[j] == kv[i] {
+				q[j+1], found = kv[i+1], true
+			}
+		}
+		if !found {
+			q = append(q, kv[i], kv[i+1])
+		}
+	}
+	return prefixURL(d.Net.CIDR, q...)
+}
+
+func matches(e Entry, q string) bool {
+	if q == "" {
+		return true
+	}
+	for _, v := range []string{e.IP, e.Name, e.Note, e.MAC, e.Description} {
+		if strings.Contains(strings.ToLower(v), q) {
+			return true
+		}
+	}
+	return false
+}
+
+// gridable: Raster fuer IPv4 bis /22 (in Abschnitten zu 256 Adressen).
+func gridable(n *Net) bool { return n.IsV4() && n.Prefix.Bits() >= 22 && !n.Container() }
+
+func addrAt(p netip.Prefix, i int) netip.Addr {
+	v := u32(p.Masked().Addr()) + uint32(i)
+	return netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)})
+}
+
+func (s *Snapshot) grid(n *Net, block int) [][]Cell {
+	by := map[netip.Addr]*Entry{}
+	list := s.entries[n.Prefix]
+	for i := range list {
+		by[list[i].ip] = &list[i]
+	}
+	var reserved [][2]netip.Addr
+	for _, r := range s.RangesIn(n.Prefix) {
+		if r.Kind == RangeReserved {
+			reserved = append(reserved, [2]netip.Addr{netip.MustParseAddr(r.Start), netip.MustParseAddr(r.End)})
+		}
+	}
+	total := 1 << (32 - n.Prefix.Bits())
+	last := lastAddr(n.Prefix)
+	var rows [][]Cell
+	for i := block * 256; i < min(total, block*256+256); i++ {
+		ip := addrAt(n.Prefix, i)
+		b := ip.As4()
+		c := Cell{IP: ip.String(), Last: strconv.Itoa(int(b[3])), Class: "free"}
+		switch e := by[ip]; {
+		case n.Prefix.Bits() <= 30 && (ip == n.Prefix.Addr() || ip == last):
+			c.Class = "na"
+		case e != nil:
+			c.Class, c.Name = e.Kind, e.Name
+		case s.NetOf(ip) != n:
+			c.Class = "na" // in einem Kind-Praefix
+		case n.inPool(ip):
+			c.Class = "pool"
+		default:
+			for _, r := range reserved {
+				if !ip.Less(r[0]) && !r[1].Less(ip) {
+					c.Class = "reserved"
+				}
+			}
+		}
+		if (i-block*256)%mapRow == 0 {
+			rows = append(rows, nil)
+		}
+		rows[len(rows)-1] = append(rows[len(rows)-1], c)
+	}
+	return rows
+}
+
+func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
+	ctx := r.Context()
+	snap, err := m.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	q := r.URL.Query()
+	n := snap.Net(q.Get("p"))
+	if n == nil {
+		return nil, ErrNotFound
+	}
+	d := &prefixData{Net: n, Counts: map[string]int{}, Query: strings.TrimSpace(q.Get("q")), Scan: m.Scanning(), Ranges: snap.RangesIn(n.Prefix)}
+	if n.UID != "" {
+		if d.Prefix, err = m.prefixByUID(ctx, n.UID); err != nil {
+			return nil, err
+		}
+	}
+	for _, c := range snap.Nets {
+		if c.Parent == n.CIDR {
+			d.Children = append(d.Children, c)
+		}
+	}
+	d.ScanOK = m.checkScan(ctx, n.Prefix) == nil
+	if free, _ := snap.free(n, "", 1); len(free) > 0 {
+		d.Next = free[0].String()
+	}
+	switch v := q.Get("view"); {
+	case v == "list" || v == "ranges":
+		d.View = v
+	case gridable(n):
+		d.View = "grid"
+	default:
+		d.View = "list"
+	}
+	if d.View == "grid" && !gridable(n) {
+		d.View = "list"
+	}
+	all := snap.Entries(n.Prefix)
+	d.Total = len(all)
+	for _, e := range all {
+		d.Counts[e.Kind]++
+	}
+	switch f := q.Get("kind"); f {
+	case KindDHCP, KindFixed, KindStatic, KindConflict:
+		d.Filter = f
+	}
+	lq := strings.ToLower(d.Query)
+	for i := range all {
+		if (d.Filter == "" || all[i].Kind == d.Filter) && matches(all[i], lq) {
+			d.Entries = append(d.Entries, all[i])
+		}
+	}
+	if d.View == "grid" {
+		blocks := max(1, (1<<(32-n.Prefix.Bits()))/256)
+		if b, _ := strconv.Atoi(q.Get("block")); b > 0 && b < blocks {
+			d.Block = b
+		}
+		if blocks > 1 {
+			for i := range blocks {
+				a := addrAt(n.Prefix, i*256).As4()
+				d.Blocks = append(d.Blocks, strconv.Itoa(int(a[0]))+"."+strconv.Itoa(int(a[1]))+"."+strconv.Itoa(int(a[2]))+".x")
+			}
+		}
+		d.Grid = snap.grid(n, d.Block)
+	}
+	if d.View == "list" {
+		var rows []listRow
+		if d.Filter == "" && d.Query == "" { // Luecken nur in der vollstaendigen Liste
+			free := snap.FreeBlocks(n)
+			fi := 0
+			for i := range d.Entries {
+				for fi < len(free) && free[fi].First.Less(d.Entries[i].ip) {
+					rows = append(rows, listRow{Free: &free[fi]})
+					fi++
+				}
+				rows = append(rows, listRow{E: &d.Entries[i]})
+			}
+			for ; fi < len(free); fi++ {
+				rows = append(rows, listRow{Free: &free[fi]})
+			}
+		} else {
+			for i := range d.Entries {
+				rows = append(rows, listRow{E: &d.Entries[i]})
+			}
+		}
+		d.Pages = max(1, (len(rows)+listPage-1)/listPage)
+		d.Page, _ = strconv.Atoi(q.Get("page"))
+		d.Page = min(max(d.Page, 1), d.Pages)
+		d.Rows = rows[min((d.Page-1)*listPage, len(rows)):min(d.Page*listPage, len(rows))]
+	}
+	return d, nil
+}
+
+func (m *Module) renderPrefix(w http.ResponseWriter, r *http.Request, status int, patch func(*prefixData)) {
+	d, err := m.prefixPage(r)
+	if errors.Is(err, ErrNotFound) {
+		m.g.Flash(w, r, "warning", m.g.T(r, "ipam64.err.not_found"))
+		http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if patch != nil {
+		patch(d)
+	}
+	m.g.Render(w, r, status, "ipam64/prefix", "ipam64.title", d)
+}
+
+func (m *Module) pagePrefix(w http.ResponseWriter, r *http.Request) {
+	m.renderPrefix(w, r, http.StatusOK, nil)
+}
+
+// ---- Adresse ----
+
+type addressData struct {
+	Form   Address
+	New    bool
+	Entry  *Entry // was die Quellen ueber die Adresse wissen (nil = frei)
+	Net    *Net
+	Err    string
+	Roles  []string
+	Prefix string // Ruecksprung
+}
+
+func (m *Module) addressPage(r *http.Request, ip string) (*addressData, error) {
+	ctx := r.Context()
+	a, err := ParseAddr(ip)
+	if err != nil {
+		return nil, ErrIP
+	}
+	snap, err := m.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d := &addressData{Net: snap.NetOf(a), Entry: snap.Entry(a), Roles: addrRoles}
+	if d.Net == nil {
+		return nil, ErrNoNet
+	}
+	d.Prefix = d.Net.CIDR
+	cur, err := m.addressWhere(ctx, `address = ?`, a.String())
+	if err != nil {
+		return nil, err
+	}
+	if cur != nil {
+		d.Form = *cur
+	} else {
+		d.New = true
+		d.Form = Address{Address: a.String(), Status: StatusActive, PTR: true}
+		if e := d.Entry; e != nil { // bekannte Adresse uebernehmen: Name und MAC vorbelegen
+			d.Form.MAC = e.MAC
+			if hostRe.MatchString(strings.ToLower(e.Name)) {
+				d.Form.Name = strings.ToLower(e.Name)
+			}
+		}
+	}
+	return d, nil
+}
+
+func (m *Module) pageAddress(w http.ResponseWriter, r *http.Request) {
+	d, err := m.addressPage(r, r.URL.Query().Get("ip"))
+	if err != nil {
+		if errKey(err) == "" {
+			m.fail(w, r, err)
+			return
+		}
+		m.g.Flash(w, r, "warning", m.errText(r, err))
+		http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+		return
+	}
+	m.g.Render(w, r, http.StatusOK, "ipam64/address", "ipam64.title", d)
+}
+
+// ---- Formulare ----
+
+func formInt(r *http.Request, key string) (int, bool) {
+	v := strings.TrimSpace(r.PostFormValue(key))
+	if v == "" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(v)
+	return n, err == nil
+}
+
+func (m *Module) postPrefix(w http.ResponseWriter, r *http.Request) {
+	vlan, ok := formInt(r, "vlan")
+	in := Prefix{UID: r.PostFormValue("uid"), Prefix: r.PostFormValue("prefix"), Name: r.PostFormValue("name"), Status: r.PostFormValue("status"),
+		Role: r.PostFormValue("role"), VLAN: vlan, Tags: []string{r.PostFormValue("tags")}, Description: r.PostFormValue("description"),
+		MarkFull: r.PostFormValue("mark_full") == "1", DNSZone: r.PostFormValue("dns_zone"), Scan: r.PostFormValue("scan")}
+	var out Prefix
+	var err error
+	if !ok {
+		err = ErrVLAN
+	} else {
+		out, err = m.SavePrefix(r.Context(), in, m.g.Actor(r))
+	}
+	if err != nil {
+		text := m.errText(r, err)
+		if in.UID == "" { // neu: auf der Uebersicht mit offenem Formular
+			m.renderOverview(w, r, http.StatusUnprocessableEntity, func(d *overviewData) { d.Form, d.FormOpen, d.Err = in, true, text })
+			return
+		}
+		m.g.Flash(w, r, "danger", text)
+		http.Redirect(w, r, prefixURL(r.PostFormValue("back")), http.StatusSeeOther)
+		return
+	}
+	m.g.Audit(r, "ipam64.prefix.save", out.Prefix, out.Name)
+	m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.prefix_saved"))
+	http.Redirect(w, r, prefixURL(out.Prefix), http.StatusSeeOther)
+}
+
+func (m *Module) postPrefixDelete(w http.ResponseWriter, r *http.Request) {
+	p, err := m.DeletePrefix(r.Context(), r.PostFormValue("uid"))
+	if err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+		http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+		return
+	}
+	m.g.Audit(r, "ipam64.prefix.delete", p.Prefix, p.Name)
+	m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.prefix_deleted"))
+	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+func (m *Module) postRange(w http.ResponseWriter, r *http.Request) {
+	in := Range{UID: r.PostFormValue("uid"), Start: r.PostFormValue("start"), End: r.PostFormValue("end"), Kind: r.PostFormValue("kind"),
+		Name: r.PostFormValue("name"), Description: r.PostFormValue("description")}
+	back := r.PostFormValue("back")
+	out, err := m.SaveRange(r.Context(), in, m.g.Actor(r))
+	if err != nil {
+		text := m.errText(r, err)
+		r.URL.RawQuery = url.Values{"p": {back}, "view": {"ranges"}}.Encode()
+		m.renderPrefix(w, r, http.StatusUnprocessableEntity, func(d *prefixData) { d.RangeForm, d.Err, d.ErrForm = in, text, "range" })
+		return
+	}
+	m.g.Audit(r, "ipam64.range.save", out.Start+"-"+out.End, out.Name)
+	m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.range_saved"))
+	http.Redirect(w, r, prefixURL(back, "view", "ranges"), http.StatusSeeOther)
+}
+
+func (m *Module) postRangeDelete(w http.ResponseWriter, r *http.Request) {
+	back := r.PostFormValue("back")
+	if rg, err := m.DeleteRange(r.Context(), r.PostFormValue("uid")); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.range.delete", rg.Start+"-"+rg.End, rg.Name)
+		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.range_deleted"))
+	}
+	http.Redirect(w, r, prefixURL(back, "view", "ranges"), http.StatusSeeOther)
+}
+
+func (m *Module) postAddress(w http.ResponseWriter, r *http.Request) {
+	in := Address{UID: r.PostFormValue("uid"), Address: r.PostFormValue("address"), Status: r.PostFormValue("status"), Role: r.PostFormValue("role"),
+		Name: r.PostFormValue("name"), MAC: r.PostFormValue("mac"), Description: r.PostFormValue("description"), Tags: []string{r.PostFormValue("tags")},
+		PTR: true}
+	if in.UID != "" { // Felder der Stufe I3 (DNS, DHCP) bleiben, wie sie sind
+		if cur, err := m.addressWhere(r.Context(), `uid = ?`, in.UID); err == nil && cur != nil {
+			in.DNS, in.DNSZone, in.PTR, in.DHCP = cur.DNS, cur.DNSZone, cur.PTR, cur.DHCP
+		}
+	}
+	out, err := m.SaveAddress(r.Context(), in, m.g.Actor(r))
+	if err != nil {
+		text := m.errText(r, err)
+		d, perr := m.addressPage(r, in.Address)
+		if perr != nil {
+			m.g.Flash(w, r, "danger", text)
+			http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+			return
+		}
+		d.Form, d.Err, d.New = in, text, in.UID == ""
+		m.g.Render(w, r, http.StatusUnprocessableEntity, "ipam64/address", "ipam64.title", d)
+		return
+	}
+	m.g.Audit(r, "ipam64.address.save", out.Address, out.Name)
+	m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.address_saved"))
+	if snap, err := m.Snapshot(r.Context()); err == nil {
+		if n := snap.NetOf(netip.MustParseAddr(out.Address)); n != nil {
+			http.Redirect(w, r, prefixURL(n.CIDR, "view", r.PostFormValue("view")), http.StatusSeeOther)
+			return
+		}
+	}
+	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+func (m *Module) postAddressDelete(w http.ResponseWriter, r *http.Request) {
+	back := r.PostFormValue("back")
+	if a, err := m.DeleteAddress(r.Context(), r.PostFormValue("uid")); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.address.delete", a.Address, a.Name)
+		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.address_deleted"))
+	}
+	if back == "" {
+		http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, prefixURL(back), http.StatusSeeOther)
+}
+
+func (m *Module) postScan(w http.ResponseWriter, r *http.Request) {
+	p := r.PostFormValue("prefix")
+	if err := m.StartScan(r.Context(), p); err != nil {
+		m.g.Flash(w, r, "warning", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.scan", p, "")
+		m.g.Flash(w, r, "info", m.g.T(r, "ipam64.flash.scan_started"))
+	}
+	http.Redirect(w, r, prefixURL(p), http.StatusSeeOther)
+}
+
+func (m *Module) postAutoScan(w http.ResponseWriter, r *http.Request) {
+	n, _ := strconv.Atoi(r.PostFormValue("minutes"))
+	if err := m.SetAutoScan(r.Context(), n); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+	} else {
+		m.g.Audit(r, "ipam64.autoscan", Name, strconv.Itoa(n))
+		m.g.Flash(w, r, "success", m.g.T(r, "ipam64.flash.autoscan_saved"))
+	}
+	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+// ---- CSV ----
+
+// csvSafe entschaerft Werte, die eine Tabellenkalkulation als Formel lesen wuerde (aus dem Entwurf von UlrichSchwarz).
+func csvSafe(s string) string {
+	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+		return "'" + s
+	}
+	return s
+}
+
+// pageExport liefert die Belegung als CSV: das gewaehlte Praefix (p=) bzw. alle.
+func (m *Module) pageExport(w http.ResponseWriter, r *http.Request) {
+	snap, err := m.Snapshot(r.Context())
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="ipam64.csv"`)
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"prefix", "ip", "name", "note", "mac", "kind", "status", "role", "tags", "sources", "last_seen", "state"})
+	only := snap.Net(r.URL.Query().Get("p"))
+	for _, n := range snap.Nets {
+		if only != nil && n.Prefix != only.Prefix {
+			continue
+		}
+		for _, e := range snap.Entries(n.Prefix) {
+			seen := ""
+			if !e.Seen.IsZero() {
+				seen = e.Seen.UTC().Format(time.RFC3339)
+			}
+			name, note := e.Name, e.Note
+			if name == "" && e.NameKey != "" {
+				name = m.g.T(r, e.NameKey)
+			}
+			if note == "" && e.NoteKey != "" {
+				note = m.g.T(r, e.NoteKey)
+			}
+			_ = cw.Write([]string{n.CIDR, e.IP, csvSafe(name), csvSafe(note), e.MAC, e.Kind, e.Status, e.Role, strings.Join(e.Tags, " "),
+				strings.Join(e.Sources, " "), seen, e.State})
+		}
+	}
+	cw.Flush()
+}

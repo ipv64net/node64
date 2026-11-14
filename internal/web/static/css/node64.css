@@ -307,3 +307,25 @@ th.th-sort:hover .th-sort-icon { opacity: .7; }
 	opacity: .6;
 	font-style: italic;
 }
+/* IPAM64: Praefix-Baum, Raster und Arten (Farben aus den Diagrammfarben bzw. Bootstrap, beide Designs) */
+.ipam-tree-ind { display: inline-block; width: 1.1rem; color: var(--bs-border-color); }
+.ipam-bar { display: flex; height: .45rem; min-width: 6rem; border-radius: 99px; overflow: hidden; background: var(--bs-secondary-bg); }
+.ipam-bar > span { display: block; height: 100%; background: var(--n64-chart-1); }
+.ipam-bar > span.ipam-bar-warn { background: var(--bs-warning); }
+.ipam-bar > span.ipam-bar-full { background: var(--bs-danger); }
+.ipam-grid { display: flex; flex-direction: column; gap: 3px; max-width: 64rem; }
+.ipam-row { display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 3px; }
+.ipam-cell { display: inline-block; width: .8rem; height: .8rem; border-radius: 3px; border: 1px solid var(--bs-border-color); vertical-align: -1px; }
+.ipam-row .ipam-cell { display: flex; align-items: center; justify-content: center; width: auto; height: auto; aspect-ratio: 1; font: 600 .6rem/1 var(--bs-font-monospace);
+	color: var(--bs-secondary-color); text-decoration: none; overflow: hidden; }
+a.ipam-cell:hover, a.ipam-cell:focus-visible { outline: 2px solid var(--bs-body-color); outline-offset: 1px; }
+.ipam-dhcp { background: var(--n64-chart-1); border-color: var(--n64-chart-1); }
+.ipam-fixed { background: var(--n64-chart-4); border-color: var(--n64-chart-4); }
+.ipam-static { background: var(--n64-chart-3); border-color: var(--n64-chart-3); }
+.ipam-row .ipam-dhcp, .ipam-row .ipam-fixed, .ipam-row .ipam-static, .ipam-row .ipam-conflict { color: #fff; }
+.ipam-conflict { background: var(--bs-danger); border-color: var(--bs-danger); }
+.ipam-pool { background: rgba(var(--n64-chart-1-rgb), .14); border-color: transparent; }
+.ipam-reserved { background: var(--bs-warning-bg-subtle); border-color: var(--bs-warning-border-subtle); }
+.ipam-na { background: var(--bs-tertiary-bg); border-color: transparent; opacity: .55; }
+.ipam-free-row td { color: var(--bs-secondary-color); font-size: .85rem; border-style: dashed; }
+@media (max-width: 767.98px) { .ipam-row { grid-template-columns: repeat(16, minmax(0, 1fr)); } .ipam-row .ipam-cell { font-size: .55rem; } }

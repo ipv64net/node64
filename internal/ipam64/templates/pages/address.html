@@ -1,0 +1,73 @@
+{{define "content"}}
+{{$d := .Data}}{{$f := $d.Form}}{{$e := $d.Entry}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-pencil-square text-primary"></i> <span class="font-monospace">{{$f.Address}}</span>{{if $f.Name}} <span class="fw-normal text-body-secondary">{{$f.Name}}</span>{{end}}</h1>
+	{{if $d.New}}<span class="badge text-bg-light border">{{.T "ipam64.addr.new"}}</span>{{else}}<span class="badge text-bg-success">{{.T "ipam64.addr.in_ipam"}}</span>{{end}}
+	{{if $e}}<span class="badge text-bg-light border"><span class="ipam-cell ipam-{{$e.Kind}}"></span> {{.T (print "ipam64.kind." $e.Kind)}}</span>{{end}}
+	<a class="ms-auto btn btn-sm btn-outline-secondary" href="/ipam64/prefix?p={{$d.Prefix}}"><i class="bi bi-arrow-left"></i> <span class="font-monospace">{{$d.Prefix}}</span></a>
+</div>
+
+{{if and $e (eq $e.Kind "conflict")}}<div class="alert alert-danger small" id="ipam-conflict"><i class="bi bi-exclamation-octagon"></i> {{.T "ipam64.note.conflict"}}: <span class="font-monospace">{{join $e.MACs ", "}}</span></div>{{end}}
+
+<div class="row g-3">
+	<div class="col-xl-7">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-geo-alt text-primary"></i> {{.T "ipam64.addr.title"}}</div>
+			<div class="card-body">
+				{{if $d.Err}}<div class="alert alert-danger py-2 small" id="ipam-form-error">{{$d.Err}}</div>{{end}}
+				<form method="post" action="/ipam64/address" class="row g-2" autocomplete="off">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<input type="hidden" name="uid" value="{{$f.UID}}">
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-ip">{{.T "ipam64.col.ip"}}</label>
+						<input class="form-control form-control-sm font-monospace" id="ipam-a-ip" name="address" value="{{$f.Address}}" required maxlength="45"{{if not $d.New}} readonly{{end}}></div>
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-status">{{.T "ipam64.col.status"}}</label>
+						<select class="form-select form-select-sm" id="ipam-a-status" name="status">
+							{{range (split "active reserved deprecated")}}<option value="{{.}}"{{if eq . $f.Status}} selected{{end}}>{{$.T (print "ipam64.status." .)}}</option>{{end}}
+						</select></div>
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-name">{{.T "ipam64.col.host"}}</label>
+						<input class="form-control form-control-sm font-monospace" id="ipam-a-name" name="name" value="{{$f.Name}}" maxlength="63" pattern="[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?" placeholder="nas">
+						<div class="form-text">{{.T "ipam64.addr.host_hint"}}</div></div>
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-role">{{.T "ipam64.col.role"}}</label>
+						<select class="form-select form-select-sm" id="ipam-a-role" name="role">
+							{{range $d.Roles}}<option value="{{.}}"{{if eq . $f.Role}} selected{{end}}>{{if .}}{{$.T (print "ipam64.role." .)}}{{else}}–{{end}}</option>{{end}}
+						</select></div>
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-mac">{{.T "ipam64.col.mac"}}</label>
+						<input class="form-control form-control-sm font-monospace" id="ipam-a-mac" name="mac" value="{{$f.MAC}}" placeholder="aa:bb:cc:dd:ee:ff" maxlength="17"></div>
+					<div class="col-md-6"><label class="form-label small" for="ipam-a-tags">{{.T "ipam64.col.tags"}}</label>
+						<input class="form-control form-control-sm" id="ipam-a-tags" name="tags" value="{{join $f.Tags " "}}" maxlength="330"></div>
+					<div class="col-12"><label class="form-label small" for="ipam-a-desc">{{.T "ipam64.col.description"}}</label>
+						<input class="form-control form-control-sm" id="ipam-a-desc" name="description" value="{{$f.Description}}" maxlength="200"></div>
+					<div class="col-12 d-flex flex-wrap gap-2">
+						<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
+						<a class="btn btn-sm btn-outline-secondary" href="/ipam64/prefix?p={{$d.Prefix}}">{{.T "common.cancel"}}</a>
+					</div>
+				</form>
+				{{if not $d.New}}
+				<form method="post" action="/ipam64/address/delete" class="mt-2">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="uid" value="{{$f.UID}}"><input type="hidden" name="back" value="{{$d.Prefix}}">
+					<button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{.T "ipam64.addr.delete_confirm"}}"><i class="bi bi-trash"></i> {{.T "ipam64.addr.delete"}}</button>
+				</form>
+				{{end}}
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-5 d-flex flex-column gap-3">
+		<div class="card" id="ipam-known">
+			<div class="card-header"><i class="bi bi-eye text-primary"></i> {{.T "ipam64.addr.known"}}</div>
+			{{if $e}}
+			<ul class="list-group list-group-flush small">
+				<li class="list-group-item d-flex justify-content-between gap-2"><span>{{.T "ipam64.col.state"}}</span><span>{{.T (print "ipam64.state." $e.State)}}{{if not $e.Seen.IsZero}} · {{.Ago $e.Seen}}{{end}}</span></li>
+				{{if or $e.MAC $e.MACs}}<li class="list-group-item d-flex justify-content-between gap-2"><span>{{.T "ipam64.col.mac"}}</span><span class="font-monospace">{{if $e.MACs}}{{join $e.MACs ", "}}{{else}}{{$e.MAC}}{{end}}</span></li>{{end}}
+				{{if $e.Name}}<li class="list-group-item d-flex justify-content-between gap-2"><span>{{.T "ipam64.col.name"}}</span><span>{{$e.Name}}</span></li>{{end}}
+				<li class="list-group-item"><div class="mb-1">{{.T "ipam64.col.sources"}}</div>{{range $e.Sources}}<span class="badge text-bg-light border me-1">{{$.T (print "ipam64.src." .)}}</span>{{end}}</li>
+			</ul>
+			{{else}}
+			<div class="card-body small text-body-secondary">{{.T "ipam64.addr.unseen"}}</div>
+			{{end}}
+		</div>
+		{{if $d.Net}}{{if $d.Net.DHCP}}
+		<div class="card small"><div class="card-body d-flex gap-2"><i class="bi bi-router text-primary"></i><div>{{if $d.Net.PoolStart}}{{.T "ipam64.addr.pool_hint" "from" $d.Net.PoolStart "to" $d.Net.PoolEnd}}{{end}} <a href="/dns64/dhcp">{{.T "nav.dhcp"}}</a></div></div></div>
+		{{end}}{{end}}
+	</div>
+</div>
+{{end}}

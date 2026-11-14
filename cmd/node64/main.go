@@ -47,6 +47,7 @@ import (
 	"github.com/ipv64net/node64/internal/healthchecks/hccluster"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/ipam64/ipamcluster"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
@@ -328,6 +329,10 @@ func run() error {
 		}
 		return m64Module
 	})
+	// IPAM64 (standardmaessig aus): Praefixe und feste Adressen, fuehrt die Adressen der Module zusammen (ipam.go);
+	// Cluster: Anmeldung unten beim peer-Manager
+	ipamModule := newIPAM(st, logger.Slog(), modules, dnsModule, hcModule, m64Module, cdnModule)
+	modules.Register(ipamModule)
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
 	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version), Modules: modules,
 		UnlinkAPI: func(ctx context.Context, nodeID string, keep bool) error { // hubs nicht erreichbar: ueber die API v2 trennen
@@ -431,6 +436,7 @@ func run() error {
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
 	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
 	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster
+	ipamcluster.Register(peerMgr, ipamModule)                                                                                  // IPAM64 ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

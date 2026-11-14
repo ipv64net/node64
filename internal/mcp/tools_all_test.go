@@ -307,6 +307,11 @@ func (r *recBackend) Get(ctx context.Context, id Identity, path string, q url.Va
 
 // notCovered: GET-Routen der API, die MCP bewusst nicht liest (mit Grund).
 var notCovered = map[string]string{
+	"/api/ipam64/prefixes":           "IPAM64: MCP-Werkzeug folgt mit Stufe I6 (docs/PLAN-NODE64-IPAM64.md)",
+	"/api/ipam64/ranges":             "IPAM64: MCP-Werkzeug folgt mit Stufe I6 (docs/PLAN-NODE64-IPAM64.md)",
+	"/api/ipam64/addresses":          "IPAM64: MCP-Werkzeug folgt mit Stufe I6 (docs/PLAN-NODE64-IPAM64.md)",
+	"/api/ipam64/available":          "IPAM64: MCP-Werkzeug folgt mit Stufe I6 (docs/PLAN-NODE64-IPAM64.md)",
+	"/api/ipam64/scan":               "IPAM64: MCP-Werkzeug folgt mit Stufe I6 (docs/PLAN-NODE64-IPAM64.md)",
 	"/api/backup":                    "Backup – nie ueber MCP",
 	"/api/keys":                      "API-Keys – nie ueber MCP",
 	"/api/users":                     "Benutzer – nie ueber MCP",
