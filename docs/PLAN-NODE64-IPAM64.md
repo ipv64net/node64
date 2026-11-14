@@ -1,6 +1,6 @@
 # Plan: IPAM64 (IP-Adressverwaltung)
 
-Stand 2026-11-14, **Plan v2, noch nichts gebaut. Wartet auf Dennis' Freigabe der Entscheidungen E1–E5 (unten).**
+Stand 2026-11-14, **Plan v2, von Dennis freigegeben (E1–E5 wie empfohlen, 2026-11-14). In Arbeit: I1.**
 
 Anlass: Das Community-Mitglied UlrichSchwarz hat ein Modul IPAM64 gebaut (Repo `UlrichSchwarz/node64-redesign`, Zweig
 `claude/inspiring-hamilton-dpu6g9`, Basis 1.5.9). Vorbild ist der IP-Teil von Netbox, ohne Räume, Racks und
@@ -238,7 +238,10 @@ Jede Stufe endet mit Tests, `gofmt`, Review, eigenen Commits, Modul-Changelogs u
 | **I6 Abrunden** | CSV-Import, Dashboard-Karte, Prometheus, MCP, OpenAPI vollständig, README und Doku (Hinweis an die Sitzung „Node64 Webseite“) | IPAM64 0.5.0 |
 | **I7 Praxistest** | agentbox im Host-Netz und Cluster mit Testnode: echtes Netz, DHCP-Failover, Präfixwechsel simuliert, 20.000 Adressen, Rolle „Nur lesen“, beide Designs | – |
 
-## Offene Entscheidungen für Dennis
+## Entscheidungen E1–E5 (freigegeben wie empfohlen, Dennis 2026-11-14)
+
+Gilt jeweils die Empfehlung: E1 IPAM64 schreibt gekennzeichnet durch; E2 nach dem Tag 1.7.0 (I1–I3 für 1.8.0);
+E3 kein DHCPv6 jetzt; E4 Herstellerliste ins Image; E5 Assistent kennzeichnet den Bestand.
 
 - **E1 Weg nach DHCP/DNS:** IPAM64 schreibt gekennzeichnet in DNS64 (Empfehlung) oder DNS64 fragt live nach.
 - **E2 Release:** IPAM64 kommt **nach** dem Tag 1.7.0 (Empfehlung: 1.7.0 nicht aufhalten; I1–I3 für 1.8.0) oder
