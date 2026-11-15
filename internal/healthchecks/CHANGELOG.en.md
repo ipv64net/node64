@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 3.2.4 – 2026-11-15
+
+### Changed
+- Online checks: the message "private or reserved address" no longer names the resolved IP.
+- ipv64.net servers: stricter checks of the data nodes report (events only for own checks, times within the retention); Telegram error texts no longer contain the bot token (with the update of the ipv64 servers).
+
 ## 3.2.3 – 2026-11-15
 
 ### Fixed

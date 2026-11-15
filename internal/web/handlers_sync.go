@@ -67,6 +67,9 @@ type conflictRow struct {
 func (s *Server) linkPage(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "link.title")
 	d := linkData{State: s.Sync.State(), Available: s.Linker != nil}
+	if !v.Admin {
+		d.State.PendingCode = ""
+	}
 	if s.HC != nil {
 		if list, err := s.HC.Conflicts(r.Context()); err == nil {
 			for _, c := range list {
@@ -145,6 +148,9 @@ func (s *Server) linkStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) linkStatusJSON(r *http.Request) map[string]any {
 	st := s.Sync.State()
 	out := map[string]any{"linked": st.Linked, "connected": st.Connected, "code": st.PendingCode, "hub": st.Hub, "error": st.LastError, "requesting": st.Requesting}
+	if !s.isAdmin(r) {
+		out["code"] = "" // Code nur fuer Administratoren (sonst bindet "Nur lesen" die Node an ein eigenes Konto)
+	}
 	if !st.Linked && st.PendingCode != "" && s.Linker != nil {
 		linked, err := s.Linker.LinkPoll(r.Context())
 		if err != nil {

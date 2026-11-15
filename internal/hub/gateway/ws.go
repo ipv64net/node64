@@ -406,7 +406,7 @@ func (c *conn) handle(m wire.Msg) {
 			Batch []wire.Delivery `json:"batch"`
 		}
 		if err := json.Unmarshal(m.Data, &in); err == nil {
-			_ = g.st.IngestDeliveries(ctx, n, in.Batch)
+			_ = g.st.IngestDeliveries(ctx, n, in.Batch[:min(len(in.Batch), maxDeliveries)])
 		}
 		c.ack(m.ID, wire.Ack{})
 	case "push":
@@ -418,7 +418,7 @@ func (c *conn) handle(m wire.Msg) {
 			From  string `json:"from"`
 			Time  string `json:"time"`
 		}
-		if json.Unmarshal(m.Data, &in) == nil && in.Token != "" && g.limiter.allow("push:"+in.Token, 60, time.Minute) {
+		if json.Unmarshal(m.Data, &in) == nil && validToken(in.Token) && g.limiter.allow("push:"+in.Token, 60, time.Minute) {
 			if t, err := time.Parse(time.RFC3339Nano, in.Time); err == nil && time.Since(t) > 2*time.Minute {
 				break // lag zu lange in der Warteschlange der Node: wuerde einen Ausfall verdecken
 			}
@@ -480,7 +480,7 @@ func (c *conn) handle(m wire.Msg) {
 		var in struct {
 			Token string `json:"token"`
 		}
-		if json.Unmarshal(m.Data, &in) == nil && in.Token != "" && g.limiter.allow("run:"+in.Token, 10, time.Minute) {
+		if json.Unmarshal(m.Data, &in) == nil && validToken(in.Token) && g.limiter.allow("run:"+in.Token, 10, time.Minute) {
 			if err := g.st.RunCheckOn(ctx, n.UserID, in.Token, n.ID); err != nil {
 				g.log.Warn("run check failed", "node", n.ID, "err", err)
 			}

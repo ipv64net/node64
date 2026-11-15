@@ -84,7 +84,7 @@ command -v sha256sum >/dev/null 2>&1 || die "sha256sum is missing"
 if command -v curl >/dev/null 2>&1; then
 	fetch() { curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$2" "$1"; }
 elif command -v wget >/dev/null 2>&1; then
-	fetch() { wget -q -O "$2" "$1"; }
+	fetch() { wget -q --https-only -O "$2" "$1"; }
 else
 	fetch() { die "curl or wget is required"; }
 fi

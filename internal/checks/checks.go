@@ -250,7 +250,7 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 	if r.DenyPrivate {
 		for _, ip := range ips {
 			if !PublicIP(ip) {
-				return []Result{{Status: Down, Reason: ReasonInvalid, Message: ErrPrivateAddress.Error() + " (" + ip.String() + ")", Time: now, Details: map[string]any{"host": host}}}
+				return []Result{{Status: Down, Reason: ReasonInvalid, Message: ErrPrivateAddress.Error(), Time: now, Details: map[string]any{"host": host}}}
 			}
 		}
 	}

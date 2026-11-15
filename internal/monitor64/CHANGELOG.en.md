@@ -1,5 +1,11 @@
 # Monitor64 – Changes
 
+## 0.1.20 – 2026-11-15
+
+Security:
+
+- **Agent 0.1.8:** a node key restricted to addresses (`from=` in the `keys` file) keeps its restriction on a key change; new lines without `from=` get the restriction of the requesting key, lines with a different restriction are refused. Before, a manually set `from=` was silently lost on a key change. If you use `from=` together with cluster keys, add the addresses of the other nodes to `from=`.
+
 ## 0.1.19 – 2026-11-15
 
 Security (code review):

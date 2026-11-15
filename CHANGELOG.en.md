@@ -4,6 +4,10 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Security: "Read only" no longer sees the code for linking to ipv64.net (page and API); the self-update accepts only manifests of the "Stable" channel in that channel.
+- Monitor64 agent 0.1.8 (security): a key restricted to addresses (`from=`) keeps its restriction on a key change – if you use `from=` with cluster keys, add the addresses of the other nodes.
+- Health checks: the message "private or reserved address" no longer names the resolved IP; stricter checks of node data on the ipv64 servers (with their update).
+
 ## 1.7.2 – 2026-11-15
 
 - Environment (security): a session opened via Environment can no longer create or change credentials (API and MCP keys, passkeys, 2FA, SSO link, password) – they used to apply without the limits of the session; if duties are open on the target node (new password, 2FA), you land on its sign-in page. If the target node does not know the address of the opening node (e.g. access through another name, added nodes), the sign-in must be confirmed there once. The "Environment → Sign-in" switch also applies on the target node. Revoked access keys no longer count as a failed attempt on every page view and no longer slow down other keys; the status of added nodes is kept briefly instead of being fetched on every view.

@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 3.2.4 – 2026-11-15
+
+### Geändert
+- Online-Checks: Die Meldung „private oder reservierte Adresse“ nennt die aufgelöste IP nicht mehr.
+- ipv64.net-Server: strengere Prüfung der Daten, die Nodes melden (Ereignisse nur für eigene Checks, Zeitpunkte innerhalb der Aufbewahrung); Fehlertexte von Telegram enthalten den Bot-Token nicht mehr (mit dem Update der ipv64-Server).
+
 ## 3.2.3 – 2026-11-15
 
 ### Behoben

@@ -1,5 +1,11 @@
 # Monitor64 – Änderungen
 
+## 0.1.20 – 2026-11-15
+
+Sicherheit:
+
+- **Agent 0.1.8:** Ein auf Adressen beschränkter Node-Schlüssel (`from=` in der Datei `keys`) behält seine Einschränkung beim Schlüsselwechsel; neue Zeilen ohne `from=` bekommen die Einschränkung des anfragenden Schlüssels, Zeilen mit anderer Einschränkung lehnt der Agent ab. Vorher ging ein von Hand gesetztes `from=` beim Wechsel still verloren. Wer `from=` nutzt und Cluster-Schlüssel verwendet, trägt die Adressen der anderen Nodes in `from=` ein.
+
 ## 0.1.19 – 2026-11-15
 
 Sicherheit (Code-Review):

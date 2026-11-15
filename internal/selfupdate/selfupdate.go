@@ -486,7 +486,16 @@ func (u *Updater) Check(ctx context.Context, channel string) (*Manifest, error) 
 	if err != nil {
 		return nil, err
 	}
-	return Verify(raw, sig, Keys())
+	m, err := Verify(raw, sig, Keys())
+	if err != nil {
+		return nil, err
+	}
+	// Ein signiertes Release-Candidate-Manifest unter stable/ darf stabile Nodes nicht aktualisieren (preview nimmt
+	// auch stabile Versionen an: sie liegen dort ebenfalls).
+	if channel == "stable" && m.Channel != "stable" {
+		return nil, fmt.Errorf("manifest for channel %q served as stable", m.Channel)
+	}
+	return m, nil
 }
 
 // Newer: ob das Manifest eine neuere Version als die laufende anbietet.

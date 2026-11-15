@@ -210,7 +210,8 @@ func publicError(t notify.Type, err error) string {
 		return ""
 	}
 	if fixedTarget[t] {
-		return err.Error()
+		// Ziel fest, aber die URL kann ein Geheimnis tragen (Telegram: /bot<Token>/ in url.Error)
+		return notify.RedactSecrets(err.Error())
 	}
 	var dns *net.DNSError
 	var op *net.OpError

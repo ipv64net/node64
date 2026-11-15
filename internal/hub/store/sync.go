@@ -1110,6 +1110,22 @@ func (s *Store) IngestStates(ctx context.Context, n *Node, items []wire.State) e
 		return nil
 	}
 	source := "node:" + n.ID
+	// je Token nur der letzte Eintrag (sonst je Doppel eine Neubewertung)
+	if len(items) > 1 {
+		last := make(map[string]int, len(items))
+		for i, it := range items {
+			last[it.Token] = i
+		}
+		if len(last) < len(items) {
+			uniq := make([]wire.State, 0, len(last))
+			for i, it := range items {
+				if last[it.Token] == i {
+					uniq = append(uniq, it)
+				}
+			}
+			items = uniq
+		}
+	}
 	// eine Abfrage fuer alle: Besitzer, Gesamtzustand und bisheriger Zustand dieser Messstelle
 	type prev struct {
 		overall, nodes, owner, execution string
@@ -1191,7 +1207,25 @@ func (s *Store) IngestStates(ctx context.Context, n *Node, items []wire.State) e
 // IngestEvents speichert Statuswechsel der Node (still; Alarme kommen aus dem Gesamtzustand).
 func (s *Store) IngestEvents(ctx context.Context, n *Node, events []wire.Event) (*wire.Ack, error) {
 	ack := &wire.Ack{}
+	toks := make([]string, 0, len(events))
 	for _, e := range events {
+		toks = append(toks, e.Token)
+	}
+	own, err := s.ownedTokens(ctx, n.UserID, toks)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	for _, e := range events {
+		// fremde Checks (Token eines anderen Accounts) und Zeitpunkte ausserhalb der Aufbewahrung verwerfen, aber
+		// bestaetigen: sonst landen Eintraege in fremden Detailseiten bzw. in der Zukunft datierte nie im Aufraeumen
+		if !own[e.Token] || e.Time.Before(now.AddDate(-1, 0, 0)) {
+			ack.Accepted = append(ack.Accepted, e.EventID)
+			continue
+		}
+		if e.Time.After(now.Add(5 * time.Minute)) {
+			e.Time = now
+		}
 		res, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_events (event_id, token, userid, source, kind, time, from_state, to_state, reason, message, duration_sec, flaps, flags, incident_id)
 			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
 			e.EventID, e.Token, n.UserID, "node:"+n.ID, truncate(e.Kind, 20), ft(e.Time), nullStr(e.From), nullStr(e.To), nullStr(truncate(e.Reason, 64)), truncate(e.Message, 500), e.DurationSec, e.Flaps, e.Flags|FlagSilent)
@@ -1209,7 +1243,15 @@ func (s *Store) IngestEvents(ctx context.Context, n *Node, events []wire.Event) 
 
 // IngestDeliveries protokolliert Zustellungen der Node-Kanaele.
 func (s *Store) IngestDeliveries(ctx context.Context, n *Node, list []wire.Delivery) error {
+	now := time.Now().UTC()
 	for _, d := range list {
+		// Zustellprotokoll 90 Tage (Datenschutzerklaerung): nichts davor, nichts in der Zukunft
+		if d.Time.Before(now.AddDate(0, 0, -90)) {
+			continue
+		}
+		if d.Time.After(now.Add(5 * time.Minute)) {
+			d.Time = now
+		}
 		_, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_deliveries (event_id, channel_id, userid, node_id, time, kind, ok, error) VALUES (?,?,?,?,?,?,?,?)`,
 			d.EventID, d.ChannelID, n.UserID, n.ID, ft(d.Time), truncate(d.Kind, 20), b2i(d.OK), truncate(d.Error, 500))
 		if err != nil {

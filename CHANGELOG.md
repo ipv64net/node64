@@ -4,6 +4,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Sicherheit: „Nur lesen“ sieht den Code zur ipv64.net-Verknüpfung nicht mehr (Seite und API); das Selbst-Update nimmt im Kanal „Stabil“ nur noch Manifeste dieses Kanals an.
+- Monitor64-Agent 0.1.8 (Sicherheit): Ein auf Adressen beschränkter Schlüssel (`from=`) behält seine Einschränkung beim Schlüsselwechsel – wer `from=` mit Cluster-Schlüsseln nutzt, trägt die Adressen der anderen Nodes ein.
+- Healthchecks: Die Meldung „private oder reservierte Adresse“ nennt die aufgelöste IP nicht mehr; strengere Prüfung der Node-Daten auf den ipv64-Servern (mit deren Update).
+
 ## 1.7.2 – 2026-11-15
 
 - Environment (Sicherheit): In einer über Environment geöffneten Sitzung lassen sich keine Zugangsdaten mehr anlegen oder ändern (API- und MCP-Keys, Passkeys, 2FA, SSO-Verknüpfung, Passwort) – sie galten danach ohne die Begrenzung der Sitzung; stehen auf der Ziel-Node noch Pflichten aus (neues Passwort, 2FA), geht es zur Anmeldeseite. Kennt die Ziel-Node die Adresse der öffnenden Node nicht (z. B. Zugriff über einen anderen Namen, hinzugefügte Nodes), muss die Anmeldung dort einmal bestätigt werden. Der Schalter „Environment → Anmeldung“ gilt auch auf der Ziel-Node. Widerrufene Zugangsschlüssel zählen nicht mehr bei jedem Seitenaufruf als Fehlversuch und bremsen keine anderen Schlüssel; der Status hinzugefügter Nodes wird kurz gemerkt statt bei jedem Aufruf neu abgefragt.

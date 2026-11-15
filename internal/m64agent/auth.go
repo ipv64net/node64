@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -272,6 +273,50 @@ func (s *keyStore) lookup(pub ssh.PublicKey) *keyEntry {
 	for _, e := range s.current() {
 		if bytes.Equal(e.wire, wire) {
 			return &e
+		}
+	}
+	return nil
+}
+
+// restrictKeys bindet eine neue Schluesselliste an die from=-Muster des anfragenden Schluessels: sonst koennte ein
+// auf Adressen beschraenkter Schluessel seine Einschraenkung mit "keys" selbst aufheben (und ein Schluesselwechsel
+// verloere ein von Hand gesetztes from= still). Zeilen ohne from= bekommen die Muster des Anfragenden, Zeilen mit
+// anderen Mustern werden abgelehnt. Ohne Einschraenkung bleibt die Liste unveraendert.
+func restrictKeys(data []byte, from []string) ([]byte, error) {
+	if len(from) == 0 {
+		return data, nil
+	}
+	opt := `from="` + strings.Join(from, ",") + `"`
+	var out bytes.Buffer
+	for i, raw := range bytes.Split(data, []byte("\n")) {
+		line := bytes.TrimSpace(raw)
+		if len(line) > 0 && line[0] != '#' {
+			e, err := parseKeyLine(line)
+			if err != nil {
+				return nil, fmt.Errorf("line %d: %w", i+1, err)
+			}
+			switch {
+			case e.from == nil:
+				if _, _, opts, _, _ := ssh.ParseAuthorizedKey(line); len(opts) > 0 {
+					out.WriteString(opt + ",")
+				} else {
+					out.WriteString(opt + " ")
+				}
+			case !slices.Equal(e.from, from):
+				return nil, fmt.Errorf("line %d: from= must match the restriction of the requesting key", i+1)
+			}
+		}
+		out.Write(line)
+		out.WriteByte('\n')
+	}
+	return out.Bytes(), nil
+}
+
+// fromFor liefert die from=-Muster des Schluessels mit diesem Fingerabdruck (nil = keine Einschraenkung).
+func (s *keyStore) fromFor(fp string) []string {
+	for _, k := range s.current() {
+		if Fingerprint(k.key) == fp {
+			return k.from
 		}
 	}
 	return nil

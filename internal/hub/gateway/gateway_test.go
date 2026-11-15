@@ -10,9 +10,11 @@ import (
 	"net"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/hub/store"
 	"github.com/ipv64net/node64/internal/notify"
@@ -157,5 +159,33 @@ func TestBumpRevNext(t *testing.T) {
 	}
 	if c.bumpRevNext(11) != 11 || c.bumpRevNext(11) != 11 {
 		t.Fatal("next revision must be taken once")
+	}
+}
+
+// Sicherheits-Review HC-1/HC-4: Tokenlaenge, harte Grenze des Limiters, kein Bot-Token in Fehlertexten.
+func TestLimiterBoundsAndRedact(t *testing.T) {
+	if validToken("") || validToken(strings.Repeat("a", 19)) || validToken(strings.Repeat("a", 51)) || !validToken(strings.Repeat("a", 32)) {
+		t.Fatal("validToken")
+	}
+	l := newIPLimiter()
+	for i := 0; i < limiterMax; i++ {
+		l.m[fmt.Sprint("k", i)] = &bucket{reset: time.Now().Add(time.Hour)}
+	}
+	if l.allow("neu", 10, time.Minute) {
+		t.Fatal("neuer Schluessel ueber der Grenze angenommen")
+	}
+	if !l.allow("k1", 10, time.Minute) {
+		t.Fatal("bekannter Schluessel abgewiesen")
+	}
+	for k := range l.m {
+		l.m[k].reset = time.Now().Add(-time.Second)
+	}
+	l.swept = time.Time{}
+	if !l.allow("neu", 10, time.Minute) || len(l.m) > 2 {
+		t.Fatalf("abgelaufene Schluessel nicht entfernt: %d", len(l.m))
+	}
+	err := &url.Error{Op: "Post", URL: "https://api.telegram.org/bot123456:ABCdefGHIjklMNOpqr/sendMessage", Err: errors.New("i/o timeout")}
+	if s := publicError(notify.TypeTelegram, err); strings.Contains(s, "ABCdef") {
+		t.Fatalf("Token im Fehlertext: %s", s)
 	}
 }

@@ -545,7 +545,7 @@ func (g *Gateway) httpProposeCheck(w http.ResponseWriter, r *http.Request) {
 func (g *Gateway) push(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	w.Header().Set("Content-Type", "text/plain")
-	if len(token) < 20 || len(token) > 50 || !g.limiter.allow("push:"+token, 60, time.Minute) {
+	if !validToken(token) || !g.limiter.allow("push:"+token, 60, time.Minute) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		fmt.Fprint(w, "Max. 60 per minute")
 		return
@@ -575,14 +575,29 @@ func (g *Gateway) push(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Ratenbegrenzung
 
 type ipLimiter struct {
-	mu sync.Mutex
-	m  map[string]*bucket
+	mu    sync.Mutex
+	m     map[string]*bucket
+	swept time.Time
 }
 
 type bucket struct {
 	count int
 	reset time.Time
 }
+
+// validToken: Laenge eines Check-Tokens (wie health.php). Laengere Werte wuerden sonst als Schluessel im Limiter
+// und als Datenbank-Parameter Speicher binden (eine Node kann bis 1 MB je Nachricht schicken).
+func validToken(t string) bool { return len(t) >= 20 && len(t) <= 50 }
+
+// maxDeliveries: Zustellungen je Nachricht einer Node (wie Ereignisse).
+const maxDeliveries = 500
+
+// Grenzen des Limiters: abgelaufene Eintraege werden ab limiterSweep Schluesseln hoechstens einmal je Sekunde
+// entfernt; ueber limiterMax werden neue Schluessel abgewiesen statt den Speicher weiter zu fuellen.
+const (
+	limiterSweep = 100000
+	limiterMax   = 500000
+)
 
 func newIPLimiter() *ipLimiter { return &ipLimiter{m: map[string]*bucket{}} }
 
@@ -592,16 +607,20 @@ func (l *ipLimiter) allow(key string, limit int, window time.Duration) bool {
 	defer l.mu.Unlock()
 	now := time.Now()
 	b, ok := l.m[key]
+	if !ok && len(l.m) >= limiterSweep && now.Sub(l.swept) >= time.Second {
+		l.swept = now
+		for k, x := range l.m {
+			if now.After(x.reset) {
+				delete(l.m, k)
+			}
+		}
+	}
+	if !ok && len(l.m) >= limiterMax {
+		return false
+	}
 	if !ok || now.After(b.reset) {
 		b = &bucket{reset: now.Add(window)}
 		l.m[key] = b
-		if len(l.m) > 100000 {
-			for k, x := range l.m {
-				if now.After(x.reset) {
-					delete(l.m, k)
-				}
-			}
-		}
 	}
 	b.count++
 	return b.count <= limit

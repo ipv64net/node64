@@ -68,8 +68,12 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // ---------------------------------------------------------------- Healthchecks-Sync
 
-func (s *Server) linkJSON(ctx context.Context) map[string]any {
+func (s *Server) linkJSON(r *http.Request) map[string]any {
+	ctx := r.Context()
 	st := s.Sync.State()
+	if !s.isAdmin(r) {
+		st.PendingCode = "" // mit dem Code koennte "Nur lesen" die Node an ein eigenes ipv64-Konto binden
+	}
 	out := map[string]any{"linked": st.Linked, "connected": st.Connected, "account_id": st.AccountID, "plan": st.Plan,
 		"node_name": st.NodeName, "location": st.Location, "remote_mgmt": st.RemoteMgmt, "hub": st.Hub, "last_sync_at": st.LastSyncAt,
 		"connected_at": st.ConnectedAt, "linked_at": st.LinkedAt, "outbox": st.Outbox, "conflicts": st.Conflicts, "last_error": st.LastError,
@@ -84,7 +88,7 @@ func (s *Server) apiLinkGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "sync not available")
 		return
 	}
-	writeJSON(w, 200, s.linkJSON(r.Context()))
+	writeJSON(w, 200, s.linkJSON(r))
 }
 
 // apiLinkStart holt einen Code beim hub (wie /link/start); der Code wird im Portal von ipv64.net eingegeben, danach
@@ -157,9 +161,9 @@ func (s *Server) apiLinkAPIKey(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeErr(w, http.StatusBadGateway, err.Error())
 	case linked:
-		writeJSON(w, 200, s.linkJSON(r.Context()))
+		writeJSON(w, 200, s.linkJSON(r))
 	default:
-		writeJSON(w, http.StatusAccepted, s.linkJSON(r.Context())) // Token kommt im Hintergrund
+		writeJSON(w, http.StatusAccepted, s.linkJSON(r)) // Token kommt im Hintergrund
 	}
 }
 

@@ -254,6 +254,9 @@ func (s *Server) doKeys(ctx context.Context, ch ssh.Channel, remote, fp string) 
 		}
 	}
 	if err == nil {
+		data, err = restrictKeys(data, s.keys.fromFor(fp))
+	}
+	if err == nil {
 		err = WriteKeysFile(s.cfg.KeysFile, data)
 		s.keys.invalidate()
 		// Verbindungen mit entfernten Schluesseln schliessen - kurz nach der Antwort, damit sie die anfragende

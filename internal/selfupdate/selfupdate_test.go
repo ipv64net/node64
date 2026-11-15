@@ -307,3 +307,33 @@ func TestMigrateChannel(t *testing.T) {
 		t.Fatal("default channel")
 	}
 }
+
+// Sicherheits-Review WE-2: ein signiertes Release-Candidate-Manifest unter stable/ wird nicht angenommen.
+func TestCheckChannel(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	old := PublicKeys
+	PublicKeys = base64.StdEncoding.EncodeToString(pub)
+	t.Cleanup(func() { PublicKeys = old })
+	manifests := map[string][]byte{}
+	mux := http.NewServeMux()
+	for _, c := range []string{"stable", "preview"} {
+		mux.HandleFunc("/"+c+"/manifest.json", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(manifests[c]) })
+		mux.HandleFunc("/"+c+"/manifest.json.sig", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(Sign(manifests[c], priv)) })
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	set := func(served, ch string) {
+		manifests[served], _ = json.Marshal(Manifest{Version: "9.0.0", Channel: ch, Files: map[string]File{Arch(): {URL: srv.URL + "/x", Size: 1, SHA256: strings.Repeat("0", 64)}}})
+	}
+	t.Setenv("NODE64_UPDATE_URL", srv.URL)
+	u := New(t.TempDir(), "1.0.0")
+	for _, c := range []struct {
+		served, ch string
+		ok         bool
+	}{{"stable", "stable", true}, {"stable", "preview", false}, {"preview", "preview", true}, {"preview", "stable", true}} {
+		set(c.served, c.ch)
+		if _, err := u.Check(context.Background(), c.served); (err == nil) != c.ok {
+			t.Errorf("Kanal %s mit Manifest %s: err %v", c.served, c.ch, err)
+		}
+	}
+}

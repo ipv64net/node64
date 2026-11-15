@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -314,5 +315,36 @@ func TestParseKeysFrom(t *testing.T) {
 	keys, err := parseKeys([]byte(`from="!bad.example" `+k+"\n"+k2+"\n"), false)
 	if err == nil || len(keys) != 1 || !bytes.Equal(keys[0].wire, p2.Marshal()) {
 		t.Fatalf("lenient: %d keys, err %v", len(keys), err)
+	}
+}
+
+// Sicherheits-Review AG-1: ein Schluessel mit from= hebt seine Einschraenkung mit "keys" nicht auf.
+func TestRestrictKeys(t *testing.T) {
+	a, _ := testKeyLine(t)
+	b, _ := testKeyLine(t)
+	from := []string{"192.168.1.0/24", "!192.168.1.5"}
+	if out, err := restrictKeys([]byte(a+"\n"), nil); err != nil || string(out) != a+"\n" {
+		t.Fatalf("ohne Einschraenkung: %q %v", out, err)
+	}
+	out, err := restrictKeys([]byte("# Kommentar\n"+a+"\nno-pty "+b+"\n"), from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := parseKeys(out, true)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("%q: %v", out, err)
+	}
+	for _, k := range keys {
+		if !slices.Equal(k.from, from) {
+			t.Errorf("from = %v in %q", k.from, out)
+		}
+	}
+	for _, in := range []string{`from="*" ` + a, `from="192.168.1.0/24" ` + a, `from="10.0.0.0/8",no-pty ` + b} {
+		if _, err := restrictKeys([]byte(in), from); err == nil {
+			t.Errorf("%q angenommen", in)
+		}
+	}
+	if _, err := restrictKeys([]byte(`from="192.168.1.0/24,!192.168.1.5" `+a), from); err != nil {
+		t.Errorf("gleiche Einschraenkung abgelehnt: %v", err)
 	}
 }
