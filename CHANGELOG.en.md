@@ -8,6 +8,7 @@ Short summary of what changes per version. Details per module are in the node un
 - Security: "Read only" no longer sees the code for linking to ipv64.net (page and API); the self-update accepts only manifests of the "Stable" channel in that channel.
 - Monitor64 agent 0.1.8 (security): a key restricted to addresses (`from=`) keeps its restriction on a key change – if you use `from=` with cluster keys, add the addresses of the other nodes.
 - Health checks: the message "private or reserved address" no longer names the resolved IP; stricter checks of node data on the ipv64 servers (with their update).
+- DNS64 (security): names from Docker labels only with a local suffix, in local zones or under allowed suffixes (new setting "More suffixes" – add your own domain there); CSV export of own records protected against formulas; unencrypted upstreams only accept matching answers; blocklists together at most 4 million rules.
 
 ## 1.7.2 – 2026-11-15
 

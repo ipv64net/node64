@@ -158,3 +158,18 @@ func TestRecordImportLarge(t *testing.T) {
 		t.Fatal("imported record not answered")
 	}
 }
+
+// CSV-Export mit Formelschutz: Werte und Kommentare mit = + - @ am Anfang bekommen ein Hochkomma, der Import nimmt es
+// wieder ab (Review DN-4).
+func TestRecordCSVFormula(t *testing.T) {
+	list := []Record{{Name: "txt.home.lan", Type: "TXT", Value: "=HYPERLINK(\"http://x\")", TTL: 60, Comment: "@evil"},
+		{Name: "spf.home.lan", Type: "TXT", Value: "v=spf1 -all", Comment: "'normal"}}
+	body, _, _ := exportRecords(list, "csv")
+	if s := string(body); !strings.Contains(s, "'=HYPERLINK") || !strings.Contains(s, ",'@evil") || strings.Contains(s, "'v=spf1") {
+		t.Fatalf("csv export:\n%s", s)
+	}
+	again, _, bad := parseRecords(string(body))
+	if bad != 0 || len(again) != 2 || again[0].Value != list[0].Value || again[0].Comment != "@evil" || again[1].Comment != "'normal" {
+		t.Fatalf("round trip: %+v (bad %d)", again, bad)
+	}
+}

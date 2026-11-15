@@ -75,34 +75,35 @@ type listSetting struct {
 
 // config ist der vollstaendige Stand der Einstellungen.
 type config struct {
-	Port      int               `json:"port"`
-	Bind      string            `json:"bind"`
-	Router    string            `json:"router"`
-	Retention int               `json:"retention_days"`
-	UpMode    string            `json:"upstream_mode"`
-	UpCount   int               `json:"upstream_count"` // fastest: 1..6 gleichzeitig
-	Upstreams []upstreamSetting `json:"upstreams"`
-	Lists     []listSetting     `json:"lists"`
-	AllowLst  []listSetting     `json:"allow_lists"` // Freigabe-Listen (Domains, die keine Blockliste sperrt)
-	ListHours int               `json:"list_hours"`
-	BlockMode string            `json:"block_mode"`
-	CacheSize int               `json:"cache_size"`
-	Anonymize string            `json:"anonymize"`
-	AllowNets []string          `json:"allow_nets"`
-	Canary    bool              `json:"firefox_canary"` // Firefox nutzt DNS64 statt seines eigenen DoH
-	MDNS      bool              `json:"mdns"`           // mDNS-Bruecke: .local und Geraetenamen aus dem eigenen Netz
-	Docker    bool              `json:"docker"`         // Eintraege aus Docker-Labels node64.dns.* (docker.go, je Node)
-	DockerIP  string            `json:"docker_ip"`      // Adressen fuer Docker-Eintraege ohne Label node64.dns.ip ("" = LAN-Adresse)
-	DoH       bool              `json:"doh"`
-	DoT       bool              `json:"dot"`
-	DoQ       bool              `json:"doq"`
-	DoHPort   int               `json:"doh_port"`
-	DoTPort   int               `json:"dot_port"`
-	Names     []string          `json:"names"`
-	CertMode  string            `json:"cert_mode"`
-	CertID    int64             `json:"cert_id,omitempty"` // central: Zertifikat der Verwaltung
-	NotifyUp  bool              `json:"notify_upstream"`
-	NotifyLst bool              `json:"notify_lists"`
+	Port          int               `json:"port"`
+	Bind          string            `json:"bind"`
+	Router        string            `json:"router"`
+	Retention     int               `json:"retention_days"`
+	UpMode        string            `json:"upstream_mode"`
+	UpCount       int               `json:"upstream_count"` // fastest: 1..6 gleichzeitig
+	Upstreams     []upstreamSetting `json:"upstreams"`
+	Lists         []listSetting     `json:"lists"`
+	AllowLst      []listSetting     `json:"allow_lists"` // Freigabe-Listen (Domains, die keine Blockliste sperrt)
+	ListHours     int               `json:"list_hours"`
+	BlockMode     string            `json:"block_mode"`
+	CacheSize     int               `json:"cache_size"`
+	Anonymize     string            `json:"anonymize"`
+	AllowNets     []string          `json:"allow_nets"`
+	Canary        bool              `json:"firefox_canary"` // Firefox nutzt DNS64 statt seines eigenen DoH
+	MDNS          bool              `json:"mdns"`           // mDNS-Bruecke: .local und Geraetenamen aus dem eigenen Netz
+	Docker        bool              `json:"docker"`         // Eintraege aus Docker-Labels node64.dns.* (docker.go, je Node)
+	DockerIP      string            `json:"docker_ip"`      // Adressen fuer Docker-Eintraege ohne Label node64.dns.ip ("" = LAN-Adresse)
+	DockerDomains string            `json:"docker_domains"` // weitere erlaubte Endungen fuer Namen aus Docker-Labels (Komma)
+	DoH           bool              `json:"doh"`
+	DoT           bool              `json:"dot"`
+	DoQ           bool              `json:"doq"`
+	DoHPort       int               `json:"doh_port"`
+	DoTPort       int               `json:"dot_port"`
+	Names         []string          `json:"names"`
+	CertMode      string            `json:"cert_mode"`
+	CertID        int64             `json:"cert_id,omitempty"` // central: Zertifikat der Verwaltung
+	NotifyUp      bool              `json:"notify_upstream"`
+	NotifyLst     bool              `json:"notify_lists"`
 	// Let's Encrypt (cert_mode acme)
 	ACMEDomain  string `json:"acme_domain"`
 	ACMEPrefix  string `json:"acme_prefix"`
@@ -130,35 +131,36 @@ func oneOf(v, def string, allowed ...string) string {
 // loadConfig liest die Einstellungen mit Standardwerten.
 func (m *Module) loadConfig(ctx context.Context) config {
 	c := config{
-		Port:        m.port(ctx),
-		Bind:        m.core.SettingOr(ctx, setBind, ""),
-		Router:      m.core.SettingOr(ctx, setRouter, ""),
-		Retention:   m.retention(ctx),
-		UpMode:      oneOf(m.core.SettingOr(ctx, setUpMode, ""), upstream.ModeFastest, upstream.ModeFastest, upstream.ModeParallel, upstream.ModeOrdered),
-		UpCount:     m.intSetting(ctx, setUpCount, upstream.DefaultTop, 1, upstream.MaxTop),
-		ListHours:   m.intSetting(ctx, setListHours, 24, 1, 168),
-		BlockMode:   oneOf(m.core.SettingOr(ctx, setBlockMode, ""), blockZero, blockZero, blockNX),
-		CacheSize:   m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
-		Anonymize:   oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
-		AllowNets:   splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
-		Canary:      m.core.SettingOr(ctx, setCanary, "1") == "1",
-		MDNS:        m.core.SettingOr(ctx, setMDNS, "") == "1",
-		Docker:      m.core.SettingOr(ctx, setDocker, "") == "1",
-		DockerIP:    m.core.SettingOr(ctx, setDockerIP, ""),
-		DoH:         m.core.SettingOr(ctx, setDoH, "0") == "1",
-		DoT:         m.core.SettingOr(ctx, setDoT, "0") == "1",
-		DoQ:         m.core.SettingOr(ctx, setDoQ, "0") == "1",
-		DoHPort:     m.intSetting(ctx, setDoHPort, 443, 1, 65535),
-		DoTPort:     m.intSetting(ctx, setDoTPort, 853, 1, 65535),
-		Names:       splitLines(m.core.SettingOr(ctx, setNames, "")),
-		CertMode:    oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64, certACME, certCentral),
-		CertID:      int64(m.intSetting(ctx, setCertID, 0, 0, 1<<31-1)),
-		NotifyUp:    m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1",
-		NotifyLst:   m.core.SettingOr(ctx, setNotifyLists, "1") == "1",
-		ACMEDomain:  m.core.SettingOr(ctx, setACMEDom, ""),
-		ACMEPrefix:  m.core.SettingOr(ctx, setACMEPre, ""),
-		ACMEEmail:   m.core.SettingOr(ctx, setACMEMail, ""),
-		ACMEStaging: m.core.SettingOr(ctx, setACMEStage, "0") == "1",
+		Port:          m.port(ctx),
+		Bind:          m.core.SettingOr(ctx, setBind, ""),
+		Router:        m.core.SettingOr(ctx, setRouter, ""),
+		Retention:     m.retention(ctx),
+		UpMode:        oneOf(m.core.SettingOr(ctx, setUpMode, ""), upstream.ModeFastest, upstream.ModeFastest, upstream.ModeParallel, upstream.ModeOrdered),
+		UpCount:       m.intSetting(ctx, setUpCount, upstream.DefaultTop, 1, upstream.MaxTop),
+		ListHours:     m.intSetting(ctx, setListHours, 24, 1, 168),
+		BlockMode:     oneOf(m.core.SettingOr(ctx, setBlockMode, ""), blockZero, blockZero, blockNX),
+		CacheSize:     m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
+		Anonymize:     oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
+		AllowNets:     splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
+		Canary:        m.core.SettingOr(ctx, setCanary, "1") == "1",
+		MDNS:          m.core.SettingOr(ctx, setMDNS, "") == "1",
+		Docker:        m.core.SettingOr(ctx, setDocker, "") == "1",
+		DockerIP:      m.core.SettingOr(ctx, setDockerIP, ""),
+		DockerDomains: m.core.SettingOr(ctx, setDockerDomains, ""),
+		DoH:           m.core.SettingOr(ctx, setDoH, "0") == "1",
+		DoT:           m.core.SettingOr(ctx, setDoT, "0") == "1",
+		DoQ:           m.core.SettingOr(ctx, setDoQ, "0") == "1",
+		DoHPort:       m.intSetting(ctx, setDoHPort, 443, 1, 65535),
+		DoTPort:       m.intSetting(ctx, setDoTPort, 853, 1, 65535),
+		Names:         splitLines(m.core.SettingOr(ctx, setNames, "")),
+		CertMode:      oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64, certACME, certCentral),
+		CertID:        int64(m.intSetting(ctx, setCertID, 0, 0, 1<<31-1)),
+		NotifyUp:      m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1",
+		NotifyLst:     m.core.SettingOr(ctx, setNotifyLists, "1") == "1",
+		ACMEDomain:    m.core.SettingOr(ctx, setACMEDom, ""),
+		ACMEPrefix:    m.core.SettingOr(ctx, setACMEPre, ""),
+		ACMEEmail:     m.core.SettingOr(ctx, setACMEMail, ""),
+		ACMEStaging:   m.core.SettingOr(ctx, setACMEStage, "0") == "1",
 	}
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setUpstreams, "")), &c.Upstreams)
 	c.Upstreams = mergeUpstreams(c.Upstreams)
@@ -300,7 +302,7 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setPort:     strconv.Itoa(c.Port), setBind: c.Bind, setRouter: c.Router, setRetention: strconv.Itoa(c.Retention),
 		setUpMode: c.UpMode, setUpCount: strconv.Itoa(c.UpCount), setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
-		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary), setMDNS: b2s(c.MDNS), setDocker: b2s(c.Docker), setDockerIP: c.DockerIP,
+		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary), setMDNS: b2s(c.MDNS), setDocker: b2s(c.Docker), setDockerIP: c.DockerIP, setDockerDomains: c.DockerDomains,
 		setDoH: b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
 		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setCertID: strconv.FormatInt(c.CertID, 10), setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
 		setACMEDom: c.ACMEDomain, setACMEPre: c.ACMEPrefix, setACMEMail: c.ACMEEmail, setACMEStage: b2s(c.ACMEStaging),
@@ -331,6 +333,14 @@ func (c *config) validate() error {
 	c.DockerIP = strings.Join(dockerSplit(c.DockerIP), ", ")
 	if !validDockerIP(c.DockerIP) {
 		return errCfg("err_docker_ip")
+	}
+	doms := dockerSplit(c.DockerDomains)
+	for i, d := range doms {
+		doms[i] = hostName(d)
+	}
+	c.DockerDomains = strings.Join(doms, ", ")
+	if !validDockerDomains(c.DockerDomains) {
+		return errCfg("err_docker_domains")
 	}
 	c.Bind = strings.Trim(strings.TrimSpace(c.Bind), "[]")
 	if c.Bind != "" && net.ParseIP(c.Bind) == nil {

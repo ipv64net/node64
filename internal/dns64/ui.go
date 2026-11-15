@@ -201,7 +201,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"block", "block_title", "block_confirm", "blocked_toast", "unblock_confirm", "unblocked_toast", "own_blocked", "no_own_blocks", "reason_own", "reason_search",
 	"no_releases", "ready", "online", "disturbed", "avg", "fastest", "requests", "errors", "last_error", "router_auto", "router_config", "router_none", "mdns_on", "mdns_silent",
 	"of", "failed", "just_now", "min_ago", "hours_ago", "days_ago", "per_hour", "pct_all", "pct_cache", "loaded", "no_data", "empty_chart",
-	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "list_ip", "flush_confirm", "flushed", "error", "active", "loading",
+	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "list_ip", "list_limit", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_nodata", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
 	"reason_group", "reason_cat", "reason_svc", "reason_list", "lookup_title", "lookup_free", "lookup_nogroup", "lookup_own", "lookup_allowed", "lookup_list",
@@ -266,7 +266,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.AllowNets = splitLines(r.PostFormValue("allow_nets"))
 	c.Canary = r.PostFormValue("firefox_canary") != ""
 	c.MDNS = r.PostFormValue("mdns") != ""
-	c.Docker, c.DockerIP = r.PostFormValue("docker") != "", r.PostFormValue("docker_ip")
+	c.Docker, c.DockerIP, c.DockerDomains = r.PostFormValue("docker") != "", r.PostFormValue("docker_ip"), r.PostFormValue("docker_domains")
 	m.apply(w, r, "/dns64/settings", c, "dns64.settings", "")
 }
 

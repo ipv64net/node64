@@ -53,6 +53,8 @@
 							<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="docker" name="docker" value="1"{{if $d.Cfg.Docker}} checked{{end}}><label class="form-check-label" for="docker">{{.T "dns64.settings.docker"}}</label>{{.Doc "dns64#docker"}}</div>
 							<div class="form-text mt-0">{{.T "dns64.settings.docker_hint"}}</div>
 							<div class="input-group input-group-sm mt-1" style="max-width:30rem"><span class="input-group-text">{{.T "dns64.settings.docker_ip"}}</span><input type="text" class="form-control font-monospace" id="docker_ip" name="docker_ip" value="{{$d.Cfg.DockerIP}}" placeholder="{{.T "dns64.settings.docker_ip_auto"}}"></div>
+							<div class="input-group input-group-sm mt-1" style="max-width:30rem"><span class="input-group-text">{{.T "dns64.settings.docker_domains"}}</span><input type="text" class="form-control font-monospace" id="docker_domains" name="docker_domains" value="{{$d.Cfg.DockerDomains}}" placeholder="{{.T "dns64.settings.docker_domains_auto"}}"></div>
+							<div class="form-text mt-0">{{.T "dns64.settings.docker_domains_hint"}}</div>
 							{{if $d.Docker.Enabled}}<div class="small mt-1" id="dns64-docker">
 								{{if $d.Docker.Error}}<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{$d.Docker.Error}}</span>
 								{{else if not $d.Docker.Connected}}<span class="text-body-secondary">{{.T "dns64.settings.docker_waiting"}}</span>

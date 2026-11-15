@@ -1,6 +1,14 @@
 # Änderungen – DNS64
 
-## 1.41.0 – unveröffentlicht
+## 1.41.1 – unveröffentlicht
+
+### Sicherheit
+- Docker-Labels: Namen nur noch mit lokaler Endung (.lan, .home.arpa, .internal …), in einer lokalen Zone oder unter einer Endung, die in den Einstellungen unter „Weitere Endungen“ freigegeben ist (neu, je Node, z. B. die eigene Domain). Andere Namen zeigt die Einstellungsseite mit Hinweis; schon angelegte Einträge dafür verschwinden, bis die Domain freigegeben ist.
+- CSV-Export der eigenen Einträge mit Formelschutz für Tabellenprogramme; der Import nimmt den Schutz wieder ab.
+- Unverschlüsselte Upstreams (dns://) nehmen nur noch Antworten an, die zur gestellten Frage passen.
+- Blocklisten: höchstens 4 Millionen Regeln über alle Listen zusammen, damit kleine Geräte nicht den Speicher verlieren; betroffene Listen zeigen „Nicht vollständig geladen“.
+
+## 1.41.0 – 2026-11-15
 
 ### Neu
 - Zusammenarbeit mit IPAM64: Feste Adressen, Ausnahmen im DHCP-Adressbereich und A/AAAA-Einträge aus IPAM64 tragen das Kennzeichen „IPAM64“ mit Link dorthin. Solange IPAM64 läuft, lassen sie sich hier nicht ändern (Oberfläche und API); ohne IPAM64 normal. DHCP und DNS arbeiten unverändert aus den eigenen Tabellen – auch auf der Reserve-Node und auf Nodes ohne IPAM64.

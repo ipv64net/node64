@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
@@ -26,10 +27,15 @@ import (
 // Liste dockerDNSRemoveWait lang, verschwinden seine Eintraege; aendert sich nur die Adresse, sofort. Fehler beim Lesen
 // loeschen nie etwas, Schalter aus: die Eintraege bleiben. Eigen sind nur Eintraege mit Herkunft docker, die noch nur
 // auf dieser Node gelten (Kommentar egal); Namen mit anderen Eintraegen fasst der Abgleich nicht an.
+// Namen nur mit lokaler Endung (.lan, .home.arpa ...), in einer lokalen Zone oder unter einer freigegebenen Endung
+// (dns64.docker_domains): eigene Eintraege gehen vor den Blocklisten - sonst koennte ein fremdes Image per Label einen
+// beliebigen oeffentlichen Namen im ganzen Heimnetz umbiegen.
 
 const (
 	setDocker   = "dns64.docker"    // 1 = Docker-Labels node64.dns.* auswerten (je Node)
 	setDockerIP = "dns64.docker_ip" // Adressen fuer Labels ohne node64.dns.ip (je Node, Komma; leer = LAN-Adresse der Node)
+	// weitere erlaubte Endungen fuer Namen aus Labels (je Node, Komma), z. B. die eigene Domain
+	setDockerDomains = "dns64.docker_domains"
 
 	dockerLabelName = "node64.dns.name" // Namen, Komma
 	dockerLabelIP   = "node64.dns.ip"   // Adressen (Komma) oder "container" = Adressen des Containers (Macvlan/IPvlan)
@@ -47,11 +53,12 @@ var (
 
 // Fehler eines Containers (Schluessel unter dns64.docker.err_).
 const (
-	dockerErrNoIP   = "no_ip"    // keine Adresse (Label node64.dns.ip setzen oder Adresse in den Einstellungen)
-	dockerErrBadIP  = "bad_ip"   // Label node64.dns.ip ungueltig
-	dockerErrBadNm  = "bad_name" // Name ungueltig
-	dockerErrTaken  = "taken"    // Name hat schon einen anderen eigenen Eintrag bzw. gehoert einem anderen Container
-	dockerErrFailed = "failed"   // Eintrag liess sich nicht anlegen
+	dockerErrNoIP    = "no_ip"    // keine Adresse (Label node64.dns.ip setzen oder Adresse in den Einstellungen)
+	dockerErrBadIP   = "bad_ip"   // Label node64.dns.ip ungueltig
+	dockerErrBadNm   = "bad_name" // Name ungueltig
+	dockerErrForeign = "foreign"  // Name ohne lokale bzw. freigegebene Endung
+	dockerErrTaken   = "taken"    // Name hat schon einen anderen eigenen Eintrag bzw. gehoert einem anderen Container
+	dockerErrFailed  = "failed"   // Eintrag liess sich nicht anlegen
 )
 
 // DockerDNSEntry ist ein Container mit node64.dns.*-Labels (Seite und API).
@@ -267,8 +274,9 @@ func virtualIface(name string) bool {
 	return false
 }
 
-// dockerWants: gewuenschte Eintraege je Container (erster Container gewinnt einen Namen) und die Ansicht.
-func dockerWants(list []dockerC, defaults []netip.Addr) ([]dockerWant, []DockerDNSEntry) {
+// dockerWants: gewuenschte Eintraege je Container (erster Container gewinnt einen Namen) und die Ansicht. allowed
+// prueft die Endung eines Namens (dockerNameAllowed).
+func dockerWants(list []dockerC, defaults []netip.Addr, allowed func(string) bool) ([]dockerWant, []DockerDNSEntry) {
 	var wants []dockerWant
 	var view []DockerDNSEntry
 	owner := map[string]string{} // Name -> Container
@@ -301,6 +309,10 @@ func dockerWants(list []dockerC, defaults []netip.Addr) ([]dockerWant, []DockerD
 			n = hostName(n)
 			if !validName(n) || strings.HasPrefix(n, "*") {
 				e.Problem, e.ProblemName = dockerErrBadNm, n
+				continue
+			}
+			if !allowed(n) {
+				e.Problem, e.ProblemName = dockerErrForeign, n
 				continue
 			}
 			if o, ok := owner[n]; ok && o != e.Container {
@@ -356,7 +368,7 @@ func (m *Module) dockerSync(ctx context.Context) {
 	if len(defaults) == 0 {
 		defaults = lanAddrs()
 	}
-	wants, view := dockerWants(list, defaults)
+	wants, view := dockerWants(list, defaults, m.dockerNameAllowed(ctx))
 	if err := m.dockerApply(ctx, wants, view); err != nil {
 		m.log.Warn("dns64 docker: sync failed", "err", err)
 	}
@@ -516,6 +528,38 @@ func (m *Module) dockerApply(ctx context.Context, wants []dockerWant, view []Doc
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// dockerNameAllowed: Namen mit lokaler Endung, in einer lokalen Zone oder unter einer Endung aus dns64.docker_domains.
+func (m *Module) dockerNameAllowed(ctx context.Context) func(string) bool {
+	domains := dockerSplit(m.core.SettingOr(ctx, setDockerDomains, ""))
+	zt := m.zns.Load()
+	return func(n string) bool {
+		if dnsserver.IsLocalName(n) {
+			return true
+		}
+		if zt != nil {
+			if _, ok := zt.zoneFor(n); ok {
+				return true
+			}
+		}
+		for _, d := range domains {
+			if d = hostName(d); n == d || strings.HasSuffix(n, "."+d) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// validDockerDomains: Einstellung "erlaubte Endungen" (leer oder Namen ohne *, Komma).
+func validDockerDomains(s string) bool {
+	for _, d := range dockerSplit(s) {
+		if d = hostName(d); !validName(d) || strings.HasPrefix(d, "*") {
+			return false
+		}
+	}
+	return true
 }
 
 // validDockerIP: Einstellung "Adressen fuer Docker-Eintraege" (leer oder Adressen, Komma).

@@ -315,3 +315,71 @@ func TestDockerSettingIP(t *testing.T) {
 		}
 	}
 }
+
+// Namen aus Labels nur mit lokaler Endung, in einer lokalen Zone oder unter einer freigegebenen Endung - ein fremdes
+// Image darf per Label keinen oeffentlichen Namen umbiegen (Review DN-2).
+func TestDockerDNSForeignNames(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	fd := &fakeDocker{}
+	srv := httptest.NewServer(fd)
+	defer srv.Close()
+	oldHost := dockerDNSHost
+	dockerDNSHost = func() string { return srv.URL }
+	defer func() { dockerDNSHost = oldHost }()
+	_ = m.core.SetSetting(ctx, setDocker, "1")
+	_ = m.core.SetSetting(ctx, setDockerIP, "192.168.1.5")
+	if _, err := m.AddZone(ctx, Zone{Name: "corp.example"}); err != nil {
+		t.Fatal(err)
+	}
+	fd.set([]map[string]any{
+		container("evil", map[string]string{dockerLabelName: "login.bank.de"}, ""),
+		container("own", map[string]string{dockerLabelName: "cloud.example.com, cloud.lan"}, ""),
+		container("zone", map[string]string{dockerLabelName: "wiki.corp.example"}, ""),
+		container("single", map[string]string{dockerLabelName: "drucker"}, ""),
+	}, false)
+	m.dockerSync(ctx)
+	names := func() map[string]bool {
+		recs, err := m.Records(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]bool{}
+		for _, r := range recs {
+			out[r.Name] = true
+		}
+		return out
+	}
+	problems := func() map[string]string {
+		out := map[string]string{}
+		for _, c := range m.DockerDNS(ctx).Containers {
+			out[c.Container] = c.Problem + " " + c.ProblemName
+		}
+		return out
+	}
+	if n := names(); n["login.bank.de"] || n["cloud.example.com"] || !n["cloud.lan"] || !n["wiki.corp.example"] || !n["drucker"] {
+		t.Fatalf("records: %v", n)
+	}
+	if p := problems(); p["evil"] != "foreign login.bank.de" || p["own"] != "foreign cloud.example.com" || p["zone"] != " " {
+		t.Fatalf("problems: %v", p)
+	}
+	// eigene Domain freigeben
+	c := m.loadConfig(ctx)
+	c.DockerDomains = " Example.COM. ,lab.test"
+	if err := m.saveConfig(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if c := m.loadConfig(ctx); c.DockerDomains != "example.com, lab.test" {
+		t.Fatalf("stored: %q", c.DockerDomains)
+	}
+	m.dockerSync(ctx)
+	if n := names(); !n["cloud.example.com"] || n["login.bank.de"] {
+		t.Fatalf("after allow: %v", n)
+	}
+	for _, bad := range []string{"*.example.com", "-bad.example"} {
+		c.DockerDomains = bad
+		if err := m.saveConfig(ctx, c); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+}

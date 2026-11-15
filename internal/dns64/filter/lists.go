@@ -125,6 +125,9 @@ type ListStatus struct {
 // sperrt Namen; solche Listen gehoeren in PROXY64 (Blocklisten) bzw. die Firewall.
 const HintIPList = "ip_list"
 
+// HintRuleLimit: die Gesamtgrenze aller Listen (maxRules) ist erreicht, von dieser Liste fehlen Regeln.
+const HintRuleLimit = "rule_limit"
+
 // Manager downloads the blocklists, keeps them cached on disk and publishes
 // a fresh Matcher after every update without interrupting DNS traffic.
 type Manager struct {
@@ -460,6 +463,10 @@ func (m *Manager) rebuild() {
 		}
 		if _, err := f.Seek(0, io.SeekStart); err == nil && ipList(f) {
 			hints[i] = HintIPList
+		}
+		if n := mt.Limited(i); n > 0 {
+			hints[i] = HintRuleLimit
+			m.log.Warn("blocklist rule limit reached", "list", m.lists[i].Name, "missing", n, "max", maxRules)
 		}
 		f.Close()
 	}

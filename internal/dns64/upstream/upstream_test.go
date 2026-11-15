@@ -255,3 +255,38 @@ func TestPlainUsesOwnID(t *testing.T) {
 		t.Fatal("upstream got the client id 0")
 	}
 }
+
+// dns:// nimmt nur Antworten auf die gestellte Frage (Name, Typ, Klasse), Gross/Klein egal (Review DN-5).
+func TestPlainChecksQuestion(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &dns.Server{PacketConn: pc, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		m := new(dns.Msg)
+		m.SetReply(r)
+		switch r.Question[0].Name {
+		case "other.example.":
+			m.Question[0].Name = "bank.example."
+		case "type.example.":
+			m.Question[0].Qtype = dns.TypeAAAA
+		case "none.example.":
+			m.Question = nil
+		case "case.example.":
+			m.Question[0].Name = "CaSe.ExAmPlE."
+		}
+		_ = w.WriteMsg(m)
+	})}
+	go func() { _ = srv.ActivateAndServe() }()
+	defer srv.Shutdown()
+	host, port, _ := net.SplitHostPort(pc.LocalAddr().String())
+	p := newPlain(host, port)
+	for name, ok := range map[string]bool{"good.example.": true, "case.example.": true, "other.example.": false, "type.example.": false, "none.example.": false} {
+		req := new(dns.Msg)
+		req.SetQuestion(name, dns.TypeA)
+		_, err := p.exchange(context.Background(), req)
+		if (err == nil) != ok {
+			t.Errorf("%s: err %v", name, err)
+		}
+	}
+}

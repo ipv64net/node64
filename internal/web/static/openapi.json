@@ -1062,6 +1062,11 @@
             "type": "string",
             "description": "Adressen fuer Docker-Eintraege ohne Label node64.dns.ip (IPv4/IPv6, Komma); leer = LAN-Adresse der Node (im Docker-Bridge-Netz unbekannt)",
             "example": "192.168.1.5, fd00::5"
+          },
+          "docker_domains": {
+            "type": "string",
+            "description": "Weitere erlaubte Endungen fuer Namen aus Docker-Labels (Komma), z. B. die eigene Domain; ohne Eintrag nur lokale Endungen (.lan, .home.arpa ...) und lokale Zonen",
+            "example": "example.com"
           }
         }
       },

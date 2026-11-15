@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/module"
 )
 
 // Eigene Eintraege bearbeiten, importieren und exportieren. Import erkennt das Format selbst: JSON (Liste wie
@@ -103,7 +105,7 @@ func parseCSV(text string) (list []Record, skipped, bad int) {
 			bad++
 			continue
 		}
-		r := Record{Name: row[0], Type: row[1], Value: row[2]}
+		r := Record{Name: csvPlain(row[0]), Type: row[1], Value: csvPlain(row[2])}
 		if len(row) > 3 && strings.TrimSpace(row[3]) != "" {
 			if r.TTL, err = strconv.Atoi(strings.TrimSpace(row[3])); err != nil {
 				bad++
@@ -111,11 +113,19 @@ func parseCSV(text string) (list []Record, skipped, bad int) {
 			}
 		}
 		if len(row) > 4 {
-			r.Comment = row[4]
+			r.Comment = csvPlain(row[4])
 		}
 		list = append(list, r)
 	}
 	return list, skipped, bad
+}
+
+// csvPlain nimmt das Hochkomma des Formelschutzes (module.CSVCell) wieder ab, damit ein Export unveraendert zurueckkommt.
+func csvPlain(s string) string {
+	if len(s) > 1 && s[0] == '\'' && module.CSVCell(s[1:]) != s[1:] {
+		return s[1:]
+	}
+	return s
 }
 
 // ImportRecords legt die Eintraege eines Imports an; vorhandene (gleicher Name, Typ, Wert) bleiben.
@@ -190,7 +200,8 @@ func exportRecords(list []Record, format string) ([]byte, string, string) {
 		cw := csv.NewWriter(&b)
 		_ = cw.Write([]string{"name", "type", "value", "ttl", "comment"})
 		for _, r := range list {
-			_ = cw.Write([]string{r.Name, r.Type, r.Value, strconv.Itoa(r.TTL), r.Comment})
+			// Formelschutz (Werte und Kommentare kommen auch per TSIG-Update); parseCSV nimmt das Hochkomma wieder ab
+			_ = cw.Write([]string{module.CSVCell(r.Name), r.Type, module.CSVCell(r.Value), strconv.Itoa(r.TTL), module.CSVCell(r.Comment)})
 		}
 		cw.Flush()
 		return b.Bytes(), "text/csv; charset=utf-8", "csv"

@@ -1,6 +1,14 @@
 # Changes – DNS64
 
-## 1.41.0 – unreleased
+## 1.41.1 – unreleased
+
+### Security
+- Docker labels: names only with a local suffix (.lan, .home.arpa, .internal …), in a local zone or under a suffix allowed in the settings under "More suffixes" (new, per node, e.g. your own domain). Other names are shown with a hint on the settings page; records already created for them disappear until the domain is allowed.
+- CSV export of own records protected against spreadsheet formulas; the import removes the protection again.
+- Unencrypted upstreams (dns://) only accept answers that match the question asked.
+- Blocklists: at most 4 million rules across all lists together, so small devices do not run out of memory; affected lists show "Not fully loaded".
+
+## 1.41.0 – 2026-11-15
 
 ### New
 - Works with IPAM64: fixed addresses, exclusions in the DHCP range and A/AAAA records from IPAM64 carry the label "IPAM64" with a link there. While IPAM64 runs they cannot be changed here (UI and API); without IPAM64 as usual. DHCP and DNS keep working from their own tables – also on the reserve node and on nodes without IPAM64.

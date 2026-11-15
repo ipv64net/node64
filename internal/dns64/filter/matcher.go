@@ -22,7 +22,12 @@ type Matcher struct {
 	allowExact map[uint64]struct{}
 	names      []string
 	skipped    []int // je Liste: Zeilen mit Inhalt ohne DNS-Regel (nicht erkannt)
+	limited    []int // je Liste: Regeln, die wegen maxRules nicht mehr geladen wurden
 }
+
+// maxRules: so viele Regeln (alle Listen zusammen, mit Ausnahmen) haelt ein Matcher hoechstens - sonst reichten
+// 64 Listen zu je 64 MB fuer einen Speicherueberlauf auf kleinen Geraeten (Variable fuer Tests).
+var maxRules = 4_000_000
 
 // MaxLists is the number of lists one matcher can tell apart (bits of the mask).
 const MaxLists = 64
@@ -51,6 +56,21 @@ func (m *Matcher) skip(idx int) {
 		m.skipped = append(m.skipped, make([]int, idx+1-len(m.skipped))...)
 	}
 	m.skipped[idx]++
+}
+
+func (m *Matcher) limit(idx int) {
+	if len(m.limited) <= idx {
+		m.limited = append(m.limited, make([]int, idx+1-len(m.limited))...)
+	}
+	m.limited[idx]++
+}
+
+// Limited: Regeln der Liste idx, die wegen der Gesamtgrenze (maxRules) fehlen.
+func (m *Matcher) Limited(idx int) int {
+	if m == nil || idx >= len(m.limited) {
+		return 0
+	}
+	return m.limited[idx]
 }
 
 // Skipped: Zeilen der Liste idx, die keine DNS-Regel ergaben (ohne Kommentare und Leerzeilen).
@@ -89,6 +109,10 @@ func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 			}
 		}
 		h := m.hash(domain)
+		if m.full() && !m.has(kind, h) {
+			m.limit(idx)
+			continue
+		}
 		switch kind {
 		case ruleExact:
 			if m.exact[h] == 0 {
@@ -107,6 +131,27 @@ func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 		}
 	}
 	return added, sc.Err()
+}
+
+// full: Gesamtgrenze erreicht (neue Regeln werden nicht mehr geladen, vorhandene bekommen weiter ihr Listen-Bit).
+func (m *Matcher) full() bool {
+	return len(m.exact)+len(m.wild)+len(m.allow)+len(m.allowExact) >= maxRules
+}
+
+// has: die Regel steht schon im Matcher (kostet keinen weiteren Platz).
+func (m *Matcher) has(kind ruleKind, h uint64) bool {
+	var ok bool
+	switch kind {
+	case ruleExact:
+		_, ok = m.exact[h]
+	case ruleWildcard:
+		_, ok = m.wild[h]
+	case ruleAllow:
+		_, ok = m.allow[h]
+	case ruleAllowExact:
+		_, ok = m.allowExact[h]
+	}
+	return ok
 }
 
 // Size returns the number of blocking rules.

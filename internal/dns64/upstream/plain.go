@@ -2,7 +2,9 @@ package upstream
 
 import (
 	"context"
+	"errors"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -34,10 +36,31 @@ func (p *plain) exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, error) {
 		c = &dns.Client{Net: "tcp", Timeout: plainTimeout, Dialer: &net.Dialer{Timeout: 2 * time.Second}}
 		resp, _, err = c.ExchangeContext(ctx, q, p.addr)
 	}
+	if err == nil && !sameQuestion(q, resp) {
+		// unverschluesselt: nur die passende Antwort (Name, Typ, Klasse) - sonst landete eine untergeschobene Antwort
+		// fuer einen anderen Namen im Cache
+		return nil, errQuestion
+	}
 	if err == nil {
 		resp.Id = req.Id
 	}
 	return resp, err
+}
+
+var errQuestion = errors.New("plain: answer for another question")
+
+// sameQuestion: die Antwort nennt genau die Frage der Anfrage (Gross/Klein egal, wie 0x20).
+func sameQuestion(q, resp *dns.Msg) bool {
+	if len(q.Question) != len(resp.Question) {
+		return false
+	}
+	for i, a := range q.Question {
+		b := resp.Question[i]
+		if a.Qtype != b.Qtype || a.Qclass != b.Qclass || !strings.EqualFold(a.Name, b.Name) {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *plain) close() {}
