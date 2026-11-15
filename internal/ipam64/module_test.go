@@ -37,6 +37,7 @@ type fakeNet struct {
 	tab    map[netip.Addr]Neighbor
 	swept  []netip.Prefix
 	locals []netip.Prefix
+	ifs    map[string]string // Adresse der Node -> Schnittstelle (fehlt: eth0)
 }
 
 func modTest(t *testing.T) (*Module, *fakeNet, string) {
@@ -58,7 +59,17 @@ func modTest(t *testing.T) (*Module, *fakeNet, string) {
 	m := New(core, log)
 	f := &fakeNet{tab: map[netip.Addr]Neighbor{}, locals: []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24"), netip.MustParsePrefix("fd00:10::2/64")}}
 	m.neigh = func() (map[netip.Addr]Neighbor, error) { return f.tab, nil }
-	m.locals = func() []netip.Prefix { return f.locals }
+	m.locals = func() []local {
+		var out []local
+		for _, p := range f.locals {
+			name := "eth0"
+			if n, ok := f.ifs[p.String()]; ok {
+				name = n
+			}
+			out = append(out, local{p, name})
+		}
+		return out
+	}
 	m.sweep = func(_ context.Context, p netip.Prefix) { f.swept = append(f.swept, p) }
 	m.wait = 0
 	t.Cleanup(func() { _ = m.Stop(context.Background()) })
@@ -186,7 +197,7 @@ func TestSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	// fremde MAC an der festen Adresse .20 schon seit 10 Minuten (Daempfung: erst ab 5 Minuten ein Konflikt)
-	if err := m.saveSeen(ctx, map[netip.Addr]string{ip("192.168.1.20"): "02:64:03:00:00:ff"}, now.Add(-10*time.Minute)); err != nil {
+	if err := m.saveSeen(ctx, []seenRow{{IP: ip("192.168.1.20"), MAC: "02:64:03:00:00:ff", Last: now.Add(-10 * time.Minute)}}); err != nil {
 		t.Fatal(err)
 	}
 	f.tab = map[netip.Addr]Neighbor{
@@ -644,7 +655,7 @@ func TestPagesRender(t *testing.T) {
 	if code, _ = post("/ipam64/range", url.Values{"back": {"192.168.1.0/24"}, "start": {"192.168.1.200"}, "end": {"192.168.1.210"}, "kind": {"reserved"}, "name": {"Test"}}); code != http.StatusSeeOther {
 		t.Fatalf("range: %d", code)
 	}
-	if err := m.saveSeen(context.Background(), map[netip.Addr]string{ip("192.168.1.40"): "02:64:03:00:00:ff"}, time.Now().Add(-10*time.Minute)); err != nil {
+	if err := m.saveSeen(context.Background(), []seenRow{{IP: ip("192.168.1.40"), MAC: "02:64:03:00:00:ff", Last: time.Now().Add(-10 * time.Minute)}}); err != nil {
 		t.Fatal(err)
 	}
 	f.tab = map[netip.Addr]Neighbor{ip("192.168.1.1"): {MAC: "02:64:03:00:00:01", Age: time.Second}, ip("192.168.1.40"): {MAC: "02:64:03:00:00:ff", Age: time.Second}}

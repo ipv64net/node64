@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 // IPAM64 im Cluster (verbunden ueber ipam64/ipamcluster, damit das Modul nicht vom Cluster abhaengt). Drei Bereiche,
@@ -13,7 +14,9 @@ import (
 //
 // Gleiches Praefix bzw. gleiche Adresse unter zwei uids (auf zwei Nodes gleichzeitig angelegt): Es gilt die kleinere
 // uid. Kommt sie von aussen, ersetzt sie den Eintrag hier (die eigene uid geht als geloescht hinaus); ist die eigene
-// kleiner, wird der fremde Eintrag nicht uebernommen - die andere Node ersetzt ihren, sobald sie unseren bekommt.
+// kleiner, wird der fremde Eintrag nicht uebernommen - die andere Node ersetzt ihren, sobald sie unseren bekommt. Eine
+// verdraengte eigene Adresse ist ein Fund (Konflikt "double", 24 Stunden, mit Benachrichtigung): "naechste freie
+// Adresse vergeben" ist nur je Node am Stueck, zwei Nodes koennen dieselbe Adresse gleichzeitig vergeben.
 //
 // Uebernommene Eintraege schreiben nichts nach DNS64 durch (Stufe I3): die Eintraege dort kommen ueber den Abgleich
 // von DNS64 (Plan E1).
@@ -33,6 +36,42 @@ var errClusterItem = errors.New("ipam64 cluster: unknown area or entry")
 type ClusterHooks struct {
 	// Change meldet eine eigene Aenderung (ctx traegt bei Uebernahmen die Herkunft).
 	Change func(ctx context.Context, item, id string, deleted bool)
+	// ForeignDNS64 meldet, ob eine Node die Eintraege von DNS64 mit dieser abgleicht, nicht aber die Adressen von
+	// IPAM64: dann kommen gekennzeichnete Eintraege, deren Adressen diese Node nicht kennt (keine Waisen).
+	ForeignDNS64 func(ctx context.Context) bool
+}
+
+// doubleKeep: so lange bleibt eine verdraengte Adresse als Fund stehen.
+const doubleKeep = 24 * time.Hour
+
+// double ist eine eigene Adresse, die eine andere Node gleichzeitig vergeben hat (ihre uid gewann).
+type double struct {
+	IP, Name string
+	At       time.Time
+}
+
+// noteDouble merkt eine verdraengte eigene Adresse (Fund "double").
+func (m *Module) noteDouble(ip, name string) {
+	m.log.Warn("ipam64: address assigned on two nodes at the same time, own entry replaced", "address", ip, "name", name)
+	m.recMu.Lock()
+	defer m.recMu.Unlock()
+	m.doubles = append(m.doubles, double{IP: ip, Name: name, At: m.now()})
+}
+
+// doubleFindings liefert die verdraengten eigenen Adressen der letzten doubleKeep.
+func (m *Module) doubleFindings() []Finding {
+	m.recMu.Lock()
+	defer m.recMu.Unlock()
+	var out []Finding
+	keep := m.doubles[:0]
+	for _, d := range m.doubles {
+		if m.now().Sub(d.At) < doubleKeep {
+			keep = append(keep, d)
+			out = append(out, Finding{Kind: "double", Severity: "conflict", IP: d.IP, Name: d.Name})
+		}
+	}
+	m.doubles = keep
+	return out
 }
 
 // SetCluster haengt den Cluster an (vor Start).
@@ -185,8 +224,15 @@ func (m *Module) clusterDouble(ctx context.Context, item, table, col, value, id 
 	if other < id {
 		return true, nil
 	}
+	var lost *Address
+	if item == ClusterItemAddresses {
+		lost, _ = m.addressWhere(ctx, `uid = ?`, other)
+	}
 	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM `+table+` WHERE uid = ?`, other); err != nil {
 		return false, err
+	}
+	if lost != nil {
+		m.noteDouble(lost.Address, lost.Name)
 	}
 	if m.cluster.Change != nil {
 		m.cluster.Change(ctx, item, other, true)

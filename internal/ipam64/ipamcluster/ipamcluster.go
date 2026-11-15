@@ -5,6 +5,7 @@ package ipamcluster
 import (
 	"context"
 
+	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/ipam64"
 	"github.com/ipv64net/node64/internal/peer"
 )
@@ -27,5 +28,23 @@ func Register(pm *peer.Manager, m *ipam64.Module) {
 		Change: func(ctx context.Context, item, id string, deleted bool) {
 			pm.ClusterChange(ctx, ipam64.ClusterModuleID, item, id, deleted)
 		},
+		ForeignDNS64: func(ctx context.Context) bool { return foreignDNS64(ctx, pm) },
 	})
+}
+
+// foreignDNS64: eine Node gleicht Eintraege, Reservierungen oder Netze (Ausnahmen) von DNS64 mit dieser ab, aber nicht
+// die Adressen von IPAM64 - ihre gekennzeichneten Eintraege kommen hier an, ohne dass IPAM64 die Adressen kennt.
+func foreignDNS64(ctx context.Context, pm *peer.Manager) bool {
+	ipam := map[string]bool{}
+	for _, x := range pm.AreaMembers(ctx, ipam64.ClusterModuleID, ipam64.ClusterItemAddresses) {
+		ipam[x.NodeID] = true
+	}
+	for _, item := range []string{dns64.ItemRecords, dns64.ItemDHCPRes, dns64.ItemDHCPScopes} {
+		for _, x := range pm.AreaMembers(ctx, dns64.ClusterModuleID, item) {
+			if !ipam[x.NodeID] {
+				return true
+			}
+		}
+	}
+	return false
 }

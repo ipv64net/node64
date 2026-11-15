@@ -19,6 +19,7 @@
 - Blocklists: plain IP addresses no longer count as a domain entry. How many lines of a list gave no DNS rule (e.g. browser rules) is shown as a hint on the number of entries (API `skipped`).
 - Docker bridge network: a Docker network attached later no longer counts as a query from outside in the "port published" check.
 - DHCP in a cluster: the reserve node checks the primary node in the background instead of in the packet path – during failover the DHCP server no longer stalls up to one second per primary node and packet.
+- IPAM64: addresses are checked completely before writing; a manual entry taken over by IPAM64 is released instead of deleted on an error. Import, setup assistant and sync read DHCP networks and own addresses once per batch instead of per reservation.
 
 ## 1.40.1 – 2026-11-14
 

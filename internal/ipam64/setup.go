@@ -208,6 +208,9 @@ func (m *Module) ApplySetup(ctx context.Context, keys []string, actor string, er
 			return res, err
 		}
 	}
+	if vctx, err := m.withView(ctx); err == nil { // Praefixe stehen fest: einmal lesen statt je Adresse
+		ctx = vctx
+	}
 	_ = m.batch(ctx, func(ctx context.Context) error {
 		for _, sa := range plan.Addresses {
 			if !slices.Contains(keys, sa.Key) {

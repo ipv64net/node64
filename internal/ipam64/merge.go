@@ -51,8 +51,9 @@ type Net struct {
 	Conflicts   int          `json:"conflicts"`
 	Pct         float64      `json:"used_pct"` // Container: Anteil der Kinder-Praefixe, sonst Anteil belegter Adressen
 
-	start, end netip.Addr
-	cover      float64 // Anteil, den die direkten Kinder abdecken
+	start, end netip.Addr // DHCP-Adressbereich, im Kind-Praefix eines DHCP-Netzes dessen Teil im Kind
+	zone       string     // geltende Zone: eigene bzw. die des naechsten Eltern-Praefixes/DHCP-Netzes mit Zone
+	cover      float64    // Anteil, den die direkten Kinder abdecken
 }
 
 // Label ist der Name bzw. ersatzweise das Praefix.
@@ -197,7 +198,9 @@ func hostCount(p netip.Prefix) int64 {
 	return n
 }
 
-// nets fuehrt die Praefixe aus IPAM64 und die DHCP-Netze aus DNS64 zusammen (ohne Belegung) und baut den Baum.
+// nets fuehrt die Praefixe aus IPAM64 und die DHCP-Netze aus DNS64 zusammen (ohne Belegung) und baut den Baum. Ein
+// Kind-Praefix in einem DHCP-Netz erbt dessen Adressbereich (soweit er im Kind liegt) und die Zone, falls es keine
+// eigene hat: Ausnahmen, freie Adressen und Zaehler gelten auch dort.
 func (m *Module) nets(ctx context.Context) ([]Net, error) {
 	rows, err := m.Prefixes(ctx)
 	if err != nil {
@@ -238,26 +241,43 @@ func (m *Module) nets(ctx context.Context) ([]Net, error) {
 		}
 		return a.Prefix.Bits() - b.Prefix.Bits()
 	})
-	var stack []int // Indizes der offenen Eltern
+	locs := m.locals() // einmal, nicht je Praefix
+	var stack []int    // Indizes der offenen Eltern
 	for i := range out {
 		n := &out[i]
 		for len(stack) > 0 && !out[stack[len(stack)-1]].Prefix.Contains(n.Prefix.Addr()) {
 			stack = stack[:len(stack)-1]
 		}
+		n.start, _ = netip.ParseAddr(n.PoolStart)
+		n.end, _ = netip.ParseAddr(n.PoolEnd)
+		n.zone = n.DNSZone
 		if len(stack) > 0 {
 			par := &out[stack[len(stack)-1]]
 			n.Parent, n.Depth = par.CIDR, len(stack)
 			par.Children++
 			par.cover += math.Exp2(float64(par.Prefix.Bits() - n.Prefix.Bits()))
+			if !n.start.IsValid() && par.start.IsValid() { // Pool des umgebenden DHCP-Netzes, auf das Kind zugeschnitten
+				lo, hi := par.start, par.end
+				if f := n.Prefix.Masked().Addr(); lo.Less(f) {
+					lo = f
+				}
+				if l := lastAddr(n.Prefix); l.Less(hi) {
+					hi = l
+				}
+				if !hi.Less(lo) {
+					n.start, n.end = lo, hi
+				}
+			}
+			if n.zone == "" {
+				n.zone = par.zone
+			}
 		}
 		stack = append(stack, i)
 		if n.VLAN == 0 {
 			n.VLAN = vlanOf(n.Iface)
 		}
-		n.start, _ = netip.ParseAddr(n.PoolStart)
-		n.end, _ = netip.ParseAddr(n.PoolEnd)
 		n.Size = hostCount(n.Prefix)
-		n.Attached = m.attached(n.Prefix)
+		n.Attached = attachedIn(locs, n.Prefix)
 		if n.Tags == nil {
 			n.Tags = []string{}
 		}
@@ -455,10 +475,27 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 			a.recent = append(a.recent, s)
 		}
 	}
-	names := map[string]*acc{} // Name -> Adresse, auch der erste Teil eines vollen Namens (nas.home.lan -> nas)
-	for _, a := range all {
+	// Name -> Adresse, auch der erste Teil eines vollen Namens (nas.home.lan -> nas). Nach Adresse sortiert, die erste
+	// gewinnt (IPv4 vor IPv6): ein Ziel mit Namen haengt so immer an derselben Adresse.
+	ips := make([]netip.Addr, 0, len(all))
+	for ip := range all {
+		ips = append(ips, ip)
+	}
+	slices.SortFunc(ips, netip.Addr.Compare)
+	names := map[string]*acc{}
+	for _, ip := range ips {
+		a := all[ip]
+		full := make([]string, 0, len(a.names))
 		for n := range a.names {
-			names[n] = a
+			full = append(full, n)
+		}
+		slices.Sort(full)
+		for _, n := range full {
+			if names[n] == nil {
+				names[n] = a
+			}
+		}
+		for _, n := range full {
 			if short, _, ok := strings.Cut(n, "."); ok && names[short] == nil {
 				names[short] = a
 			}
@@ -549,15 +586,17 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 const conflictMin = 5 * time.Minute
 
 // conflict bewertet die Hinweise einer Adresse (Daempfung gegen Fehlalarme):
-//   - dup: zwei MAC-Adressen, deren Sichtungen sich zeitlich ueberschneiden (abwechselnd erreichbar). Ein Geraetetausch
-//     (die alte MAC verschwindet, bevor die neue auftaucht) und ein DHCP-Wechsel sind kein Konflikt.
+//   - dup: zwei MAC-Adressen, deren Sichtungen sich laenger als conflictMin ueberschneiden (abwechselnd erreichbar).
+//     Ein Geraetetausch (die alte MAC verschwindet, bevor die neue auftaucht) und ein DHCP-Wechsel sind kein Konflikt,
+//     auch wenn sich die Zeitraeume beruehren oder die erste Sichtung der neuen MAC aus dem Alter des Eintrags in der
+//     Nachbartabelle etwas zurueckdatiert ist.
 //   - mac: eine MAC, die nicht zur Zuweisung (IPAM64, Reservierung, Lease) passt, seit mindestens conflictMin.
 //   - lease: feste Adresse in IPAM64 ohne Reservierung, aber der DHCP-Server hat sie an eine andere MAC vergeben.
 func (a *acc) conflict() string {
 	for i := range a.recent {
 		for j := i + 1; j < len(a.recent); j++ {
 			x, y := a.recent[i], a.recent[j]
-			if x.MAC != y.MAC && !x.Last.Before(y.First) && !y.Last.Before(x.First) {
+			if x.MAC != y.MAC && minTime(x.Last, y.Last).Sub(maxTime(x.First, y.First)) > conflictMin {
 				return "dup"
 			}
 		}
@@ -575,6 +614,20 @@ func (a *acc) conflict() string {
 	return ""
 }
 
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
 func u32(a netip.Addr) uint32 {
 	b := a.As4()
 	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
@@ -588,11 +641,27 @@ func poolSize(a, b netip.Addr) int {
 }
 
 // netView liefert nur die Praefixe ohne Belegung (fuer den Schreibweg nach DNS64 und den Abgleich): so wird nicht bei
-// jeder gespeicherten Adresse alles neu zusammengefuehrt (Import Tausender Zeilen).
+// jeder gespeicherten Adresse alles neu zusammengefuehrt (Import Tausender Zeilen). Im Stapel (withView) gilt der dort
+// gemerkte Stand.
 func (m *Module) netView(ctx context.Context) (*Snapshot, error) {
+	if s, ok := ctx.Value(viewKey{}).(*Snapshot); ok {
+		return s, nil
+	}
 	nets, err := m.nets(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &Snapshot{Nets: nets, entries: map[netip.Prefix][]Entry{}, At: m.now()}, nil
+}
+
+type viewKey struct{}
+
+// withView merkt die Praefixe fuer einen Stapel (Import, Assistent): netView und containing lesen sie dann nicht fuer
+// jede Adresse neu. Nur fuer Stapel, in denen keine Praefixe mehr geaendert werden.
+func (m *Module) withView(ctx context.Context) (context.Context, error) {
+	s, err := m.netView(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	return context.WithValue(ctx, viewKey{}, s), nil
 }

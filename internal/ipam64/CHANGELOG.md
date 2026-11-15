@@ -1,5 +1,22 @@
 # IPAM64 – Änderungen
 
+## 0.6.1 – unveröffentlicht
+
+Behoben (Code-Review):
+
+- Kind-Präfixe in einem DHCP-Netz übernehmen dessen Adressbereich und Zone: Adressen im Pool bekommen ihre Ausnahme, „Nächste freie Adresse“ vergibt keine Pool-Adressen mehr, und reservierte Bereiche des Eltern-Präfixes gelten auch im Kind. Adressbereiche eines Kind-Präfixes verhindern nicht mehr, dass das Eltern-Präfix freie Adressen findet.
+- DNS64 prüft eine Adresse jetzt vor dem Schreiben ganz; scheitert sie trotzdem, wird ein dabei übernommener Eintrag von Hand freigegeben statt gelöscht (auch bei Import und Assistent).
+- „An DNS64 übergeben“ gilt im ganzen Cluster: Die anderen Nodes geben ihre Einträge ebenfalls frei, statt sie zu löschen. Übergebene Adressen bekommen keine Ausnahme im Pool mehr (keine Fehlermeldung alle 10 Minuten); schaltet man DNS oder DHCP wieder ein, verwaltet IPAM64 die Adresse wieder.
+- Abgleich mit DNS64: Gleicht eine andere Node DNS64 ab, aber nicht die Adressen von IPAM64, löscht er deren Einträge nicht mehr (kein Hin und Her). Verwaiste Einträge, die eine Adresse braucht (dieselbe Adresse auf zwei Nodes vergeben), ersetzt er im selben Lauf – ohne Lücke und ohne Fehler.
+- Dieselbe Adresse auf zwei Nodes gleichzeitig vergeben: Die verdrängte eigene Adresse erscheint 24 Stunden als Konflikt unter „Scan & Konflikte“ und wird gemeldet. „Nächste freie Adresse“ vergibt nur je Node am Stück; im Cluster daher auf einer Node vergeben.
+- IPv6 vom Provider: Als neue Adresse zählen nur Adressen auf der Schnittstelle, auf der die Node im Präfix lag – eine globale Adresse von WireGuard, Docker oder einem zweiten Anschluss führt nicht mehr zu falschem oder ausbleibendem Umnummerieren (auch bei Präfixen ohne Kinder). Umnummeriert wird am Stück; scheitert es, bleibt der alte Stand.
+- Konflikt „doppelte Adresse“ erst, wenn sich die Sichtungen zweier MAC-Adressen über 5 Minuten überschneiden – ein Gerätetausch ist kein Konflikt mehr.
+- CSV-Import: Eine kaputte Zeile ist ein Fehler dieser Zeile; der Rest wird weiter gelesen.
+- Ziele mit Namen (Healthchecks, PROXY64) hängen immer an derselben Adresse (IPv4 vor IPv6).
+- Übersicht: Die Auswahl „Automatischer Scan“ speichert wieder beim Ändern; der automatische Scan zeigt kein „invalid Prefix“ mehr. Dashboard-Karte: Belegung nur aus IPv4-Präfixen, nie über 100 %.
+- CSV-Export: alle Zellen gegen Formeln in Tabellenprogrammen geschützt.
+- Schneller: Sichtungen in einer Transaktion je Runde und nur bei Änderungen, Adressen der Node einmal je Lauf, Präfixe beim Import einmal statt je Adresse, Abgleich ohne quadratischen Aufwand.
+
 ## 0.6.0 – unveröffentlicht
 
 Neu:

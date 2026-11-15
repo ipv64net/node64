@@ -71,7 +71,7 @@
 			{{if $d.Effects}}<ul class="list-group list-group-flush small">
 				{{range $d.Effects}}<li class="list-group-item d-flex flex-wrap gap-2 align-items-center"><i class="bi {{if eq .Kind "record"}}bi-diagram-3{{else if eq .Kind "exclude"}}bi-slash-circle{{else}}bi-pin-angle{{end}} text-primary"></i><span>{{$.T (print "ipam64.fx." .Kind)}}</span><span class="font-monospace">{{.Text}}</span>
 					<span class="ms-auto badge {{if eq .State "ok"}}text-bg-success{{else if eq .State "missing"}}text-bg-warning{{else}}text-bg-light border{{end}}">{{$.T (print "ipam64.fx.state_" .State)}}</span></li>{{end}}
-			</ul>{{else}}<div class="card-body small text-body-secondary">{{.T "ipam64.fx.none"}}</div>{{end}}
+			</ul>{{else}}<div class="card-body small text-body-secondary">{{if $d.Form.Released}}{{.T "ipam64.fx.released"}}{{else}}{{.T "ipam64.fx.none"}}{{end}}</div>{{end}}
 			{{if $d.ZoneErr}}<div class="card-footer small text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "ipam64.err.no_zone"}}</div>{{end}}
 			<div class="card-footer small text-body-secondary">{{.T "ipam64.fx.hint"}}</div>
 		</div>

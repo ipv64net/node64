@@ -3272,6 +3272,7 @@
       "ipam64_conflict_dup": "Duplicate address {ip}: two devices answer ({macs}).",
       "ipam64_conflict_mac": "Foreign device on the fixed address {ip} ({macs}).",
       "ipam64_conflict_lease": "The DHCP server assigned the fixed address {ip} ({macs}).",
+      "ipam64_conflict_double": "The address {ip} was assigned on two nodes at the same time; the own entry {name} was replaced by the one of the other node.",
       "ipam64_new_device": "New device on the network: {ip} ({mac}) {vendor}",
       "dyndns_addr_failed": "Public {family} address not determined {count} times in a row.",
       "dyndns_limit_reached": "ipv64: daily update limit reached.",
@@ -5626,7 +5627,9 @@
       "stale": "{ip} not seen for a long time",
       "stale_hint": "DNS record points to an address without device",
       "foreign": "Foreign DHCP server {ip} in {prefix}",
-      "foreign_hint": "from DNS64 – switch it off"
+      "foreign_hint": "from DNS64 – switch it off",
+      "double": "Address {ip} assigned on two nodes",
+      "double_hint": "assigned at the same time – the entry of the other node applies, check it"
     },
     "conflicts": {
       "title": "Scan & conflicts",
@@ -5682,7 +5685,7 @@
     },
     "handover": {
       "title": "Hand over to DNS64",
-      "text": "Removes the label \"IPAM64\" from all reservations, exclusions and records in DNS64. They stay and can be edited there again; the DNS and DHCP switches of the addresses here are turned off. Useful before turning IPAM64 off.",
+      "text": "Removes the label \"IPAM64\" from all reservations, exclusions and records in DNS64. They stay and can be edited there again; the DNS and DHCP switches of the addresses here are turned off. The other nodes in the cluster release their entries as well. Useful before turning IPAM64 off.",
       "confirm": "Hand over all entries from IPAM64 to DNS64?",
       "button": "Hand over"
     },
@@ -5697,6 +5700,7 @@
       "state_off": "DNS64 off",
       "state_planned": "new",
       "none": "Nothing – neither DNS nor DHCP is on.",
+      "released": "Nothing – the entries were handed over to DNS64. Turn on DNS or DHCP to let IPAM64 manage them again.",
       "hint": "Labelled entries can only be changed here. Reconciliation runs every 10 minutes."
     },
     "title": "IPAM64",
@@ -5924,6 +5928,7 @@
     },
     "err": {
       "import": "The file is empty, too large or has no column ip or prefix.",
+      "csv_line": "The line cannot be read (e.g. a quote in the middle of a field).",
       "dyn": "\"Dynamic\" only works for global IPv6 prefixes (2000::/3).",
       "no_zone": "DNS is on but there is no zone – enter one on the address or the prefix.",
       "no_dns64": "DNS64 is not running.",

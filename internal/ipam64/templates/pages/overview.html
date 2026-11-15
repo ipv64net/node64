@@ -44,7 +44,7 @@
 		<form method="post" action="/ipam64/autoscan" class="d-flex align-items-center gap-1 mt-1">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
 			<label class="visually-hidden" for="ipam-autoscan">{{.T "ipam64.scan.auto"}}</label>
-			<select class="form-select form-select-sm w-auto" id="ipam-autoscan" name="minutes" onchange="this.form.requestSubmit()">
+			<select class="form-select form-select-sm w-auto" id="ipam-autoscan" name="minutes" data-autosubmit>
 				{{range $d.AutoOpts}}<option value="{{.}}"{{if eq . $d.AutoScan}} selected{{end}}>{{if eq . 0}}{{$.T "ipam64.scan.auto_off"}}{{else}}{{$.T "ipam64.scan.auto_every" "n" .}}{{end}}</option>{{end}}
 			</select>
 			<noscript><button class="btn btn-sm btn-outline-secondary" type="submit">{{.T "common.save"}}</button></noscript>

@@ -38,7 +38,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.6.0"
+	version = "0.6.1"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -114,7 +114,7 @@ type Module struct {
 	sources []source                                  // Reihenfolge = Rang der Namen
 	hints   func(ctx context.Context) []NetHint       // DHCP-Netze (nil = keine)
 	neigh   func() (map[netip.Addr]Neighbor, error)   // Nachbartabelle des Hosts
-	locals  func() []netip.Prefix                     // Adressen der Node mit Netz
+	locals  func() []local                            // Adressen der Node mit Netz und Schnittstelle
 	sweep   func(ctx context.Context, p netip.Prefix) // spricht alle Adressen eines Netzes an (Tests ersetzen es)
 	now     func() time.Time
 	wait    time.Duration // nach dem Ansprechen auf Antworten warten
@@ -124,12 +124,15 @@ type Module struct {
 
 	recMu    sync.Mutex
 	orphans  map[string]bool // verwaiste Eintraege in DNS64 aus dem letzten Abgleich
+	doubles  []double        // eigene Adressen, die eine andere Node gleichzeitig vergeben hat (cluster.go)
 	notified map[string]bool // gemeldete Konflikte und Geraete (conflicts.go)
 	notifier func(notify.Alert)
 	foreign  func(ctx context.Context) []ForeignDHCP
 	started  time.Time // Start des Moduls (neue Geraete erst nach newDevGrace melden)
 
 	scan   scanState // laufender bzw. letzter Netz-Scan
+	seenMu sync.Mutex
+	seenAt map[seenKey]int64 // zuletzt geschriebene Sichtung je IP und MAC (nur Aenderungen schreiben)
 	snapMu sync.Mutex
 	snap   *Snapshot
 	snapAt time.Time
@@ -142,7 +145,7 @@ type Module struct {
 
 // New erzeugt das Modul.
 func New(core *store.Store, log *slog.Logger) *Module {
-	return &Module{core: core, log: log.With("module", Name), neigh: neighbors, locals: localPrefixes, sweep: sweepUDP, now: time.Now, wait: scanWait}
+	return &Module{core: core, log: log.With("module", Name), neigh: neighbors, locals: localAddrs, sweep: sweepUDP, now: time.Now, wait: scanWait}
 }
 
 // SetSource haengt eine Quelle an (vor dem Start; die Reihenfolge bestimmt, wessen Name gewinnt). f liefert nil,
@@ -286,26 +289,48 @@ func (m *Module) LastScan(ctx context.Context) time.Time {
 	return time.Unix(n, 0)
 }
 
-// localPrefixes liefert die Adressen der Node mit ihrem Netz (IPv4 und IPv6 ohne Loopback und Link-Local).
-func localPrefixes() []netip.Prefix {
-	addrs, err := net.InterfaceAddrs()
+// local ist eine Adresse der Node mit ihrem Netz und der Schnittstelle.
+type local struct {
+	netip.Prefix
+	Iface string
+}
+
+// localAddrs liefert die Adressen der Node mit Netz und Schnittstelle (IPv4 und IPv6 ohne Loopback und Link-Local).
+func localAddrs() []local {
+	ifs, err := net.Interfaces()
 	if err != nil {
 		return nil
 	}
-	var out []netip.Prefix
-	for _, a := range addrs {
-		n, ok := a.(*net.IPNet)
-		if !ok {
+	var out []local
+	for _, i := range ifs {
+		addrs, err := i.Addrs()
+		if err != nil {
 			continue
 		}
-		ip, ok := netip.AddrFromSlice(n.IP)
-		ones, _ := n.Mask.Size()
-		if ip = ip.Unmap(); !ok || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-			continue
+		for _, a := range addrs {
+			n, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip, ok := netip.AddrFromSlice(n.IP)
+			ones, _ := n.Mask.Size()
+			if ip = ip.Unmap(); !ok || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+			out = append(out, local{netip.PrefixFrom(ip, ones), i.Name})
 		}
-		out = append(out, netip.PrefixFrom(ip, ones))
 	}
 	return out
+}
+
+// attachedIn meldet, ob eine der Adressen locs im Netz liegt.
+func attachedIn(locs []local, p netip.Prefix) bool {
+	for _, l := range locs {
+		if p.Contains(l.Addr()) {
+			return true
+		}
+	}
+	return false
 }
 
 // invalidate verwirft die zwischengespeicherte Zusammenfuehrung (nach eigenen Aenderungen).

@@ -10375,6 +10375,11 @@
           "uid": {
             "type": "string"
           },
+          "released": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "An DNS64 übergeben: IPAM64 schreibt für die Adresse nichts mehr nach DNS64, bis dns oder dhcp wieder eingeschaltet wird (fehlt = nein)."
+          },
           "dns": {
             "type": "boolean"
           },
@@ -10568,6 +10573,7 @@
               "dup",
               "mac",
               "lease",
+              "double",
               "pool",
               "stale",
               "foreign"
@@ -34429,7 +34435,7 @@
           "IPAM64"
         ],
         "summary": "Freie Adressen",
-        "description": "Nicht belegt, nicht Netz-/Broadcast-Adresse, nicht im DHCP-Adressbereich und nicht in Bereichen zum Freihalten; gibt es Adressbereiche für feste Adressen, nur dort.",
+        "description": "Nicht belegt, nicht Netz-/Broadcast-Adresse, nicht im DHCP-Adressbereich (auch dem des umgebenden DHCP-Netzes) und nicht in Bereichen zum Freihalten (auch aus dem Eltern-Präfix); gibt es im Präfix selbst Adressbereiche für feste Adressen, nur dort.",
         "parameters": [
           {
             "name": "prefix",
@@ -34496,7 +34502,7 @@
           "IPAM64"
         ],
         "summary": "Nächste freie Adresse vergeben",
-        "description": "Sucht und trägt am Stück ein (keine Doppelvergabe bei gleichzeitigen Anfragen).",
+        "description": "Sucht und trägt am Stück ein – je Node: gleichzeitige Anfragen an dieselbe Node bekommen verschiedene Adressen. Im Cluster nur auf einer Node vergeben: vergeben zwei Nodes gleichzeitig dieselbe Adresse, gilt der Eintrag mit der kleineren uid, und die verdrängte Node zeigt 24 Stunden einen Konflikt `double` (GET /api/ipam64/conflicts) samt Benachrichtigung.",
         "requestBody": {
           "required": true,
           "content": {

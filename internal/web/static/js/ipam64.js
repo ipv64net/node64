@@ -48,7 +48,9 @@
 	}
 
 	// Sprung von aussen (#ip-...): Zeile und Feld markieren
-	if (location.hash.indexOf("#ip-") === 0) { select(decodeURIComponent(location.hash.slice(4))); }
+	if (location.hash.indexOf("#ip-") === 0) {
+		try { select(decodeURIComponent(location.hash.slice(4))); } catch (err) { /* kaputte Sprungmarke: nichts markieren */ }
+	}
 
 	// Suche beim Tippen: nur die Zeilen dieser Seite (Luecken ausblenden), Treffer im Raster hervorheben
 	var q = document.getElementById("ipam-q");

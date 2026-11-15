@@ -9,62 +9,170 @@ import (
 	"time"
 )
 
-// fakeDNS64 bildet die Bruecke in DNS64 nach (je Bezug eine Reservierung, eine Ausnahme, Eintraege).
+// fakeDNS64 bildet die Bruecke in DNS64 nach (je Bezug eine Reservierung, eine Ausnahme, Eintraege) samt Eintraegen
+// von Hand: gleiche werden uebernommen (gekennzeichnet), andere mit derselben IP/MAC bzw. demselben Namen und Wert sind
+// ein Fehler ("dup"); Release gibt frei (Eintraege werden "von Hand").
 type fakeDNS64 struct {
 	mu       sync.Mutex
 	res      map[string]OwnedRes
 	excl     map[string]OwnedExcl
 	recs     map[string][]OwnedRec
+	handRes  map[string]OwnedRes // MAC -> Reservierung von Hand
+	handExcl map[string]bool     // IP
+	handRecs map[string]bool     // "name|wert"
 	failRes  error
 	released int
+	noCheck  bool // ohne Vorpruefung (Check nil)
 }
 
+type fakeCheckKey struct{}
+
+func checking(ctx context.Context) bool { v, _ := ctx.Value(fakeCheckKey{}).(bool); return v }
+
 func newFake() *fakeDNS64 {
-	return &fakeDNS64{res: map[string]OwnedRes{}, excl: map[string]OwnedExcl{}, recs: map[string][]OwnedRec{}}
+	return &fakeDNS64{res: map[string]OwnedRes{}, excl: map[string]OwnedExcl{}, recs: map[string][]OwnedRec{}, handRes: map[string]OwnedRes{},
+		handExcl: map[string]bool{}, handRecs: map[string]bool{}}
+}
+
+var errFakeDup = errors.New("dup")
+
+func (f *fakeDNS64) release(ref string) int {
+	n := 0
+	for k, r := range f.res {
+		if ref == "" || k == ref {
+			r.Ref = ""
+			f.handRes[r.MAC] = r
+			delete(f.res, k)
+			n++
+		}
+	}
+	for k, x := range f.excl {
+		if ref == "" || k == ref {
+			f.handExcl[x.IP] = true
+			delete(f.excl, k)
+			n++
+		}
+	}
+	for k, l := range f.recs {
+		if ref == "" || k == ref {
+			for _, r := range l {
+				f.handRecs[r.Name+"|"+r.Value] = true
+			}
+			delete(f.recs, k)
+			n += len(l)
+		}
+	}
+	return n
 }
 
 func (f *fakeDNS64) hooks() DNS64 {
-	return DNS64{
+	d := DNS64{
 		Running: func() bool { return true },
-		PutReservation: func(_ context.Context, ref, mac, ip, name string) error {
+		PutReservation: func(ctx context.Context, ref, mac, ip, name string) error {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if f.failRes != nil {
 				return f.failRes
 			}
+			for k, r := range f.res {
+				if k != ref && (r.MAC == mac || r.IP == ip) {
+					return errFakeDup
+				}
+			}
+			for _, r := range f.handRes {
+				if (r.MAC == mac) != (r.IP == ip) {
+					return errFakeDup
+				}
+			}
+			if checking(ctx) {
+				return nil
+			}
+			delete(f.handRes, mac)
 			delete(f.excl, ref)
 			f.res[ref] = OwnedRes{ref, mac, ip, name}
 			return nil
 		},
-		DeleteReservation: func(_ context.Context, ref string) error { f.mu.Lock(); delete(f.res, ref); f.mu.Unlock(); return nil },
-		PutExclude: func(_ context.Context, ref, ip, _ string) error {
+		DeleteReservation: func(ctx context.Context, ref string) error {
+			if !checking(ctx) {
+				f.mu.Lock()
+				delete(f.res, ref)
+				f.mu.Unlock()
+			}
+			return nil
+		},
+		PutExclude: func(ctx context.Context, ref, ip, _ string) error {
 			f.mu.Lock()
 			defer f.mu.Unlock()
+			for k, r := range f.res {
+				if k != ref && r.IP == ip {
+					return errFakeDup
+				}
+			}
+			for _, r := range f.handRes {
+				if r.IP == ip {
+					return errFakeDup
+				}
+			}
+			if checking(ctx) {
+				return nil
+			}
+			delete(f.handExcl, ip)
 			delete(f.res, ref)
 			f.excl[ref] = OwnedExcl{ref, ip}
 			return nil
 		},
-		DeleteExclude: func(_ context.Context, ref string) error { f.mu.Lock(); delete(f.excl, ref); f.mu.Unlock(); return nil },
-		PutRecords: func(_ context.Context, ref, name string, addrs []netip.Addr, ptr bool) error {
+		DeleteExclude: func(ctx context.Context, ref string) error {
+			if !checking(ctx) {
+				f.mu.Lock()
+				delete(f.excl, ref)
+				f.mu.Unlock()
+			}
+			return nil
+		},
+		PutRecords: func(ctx context.Context, ref, name string, addrs []netip.Addr, ptr bool) (bool, error) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			var list []OwnedRec
+			claimed := false
 			for _, a := range addrs {
+				for k, l := range f.recs {
+					for _, r := range l {
+						if k != ref && r.Name == name && r.Value == a.String() {
+							return false, errFakeDup
+						}
+					}
+				}
+				claimed = claimed || f.handRecs[name+"|"+a.String()]
+				if !checking(ctx) {
+					delete(f.handRecs, name+"|"+a.String())
+				}
 				typ := "A"
 				if a.Is6() {
 					typ = "AAAA"
 				}
 				list = append(list, OwnedRec{ref, name, typ, a.String(), !ptr})
 			}
-			f.recs[ref] = list
+			if !checking(ctx) {
+				f.recs[ref] = list
+			}
+			return claimed, nil
+		},
+		DeleteRecords: func(ctx context.Context, ref string) error {
+			if !checking(ctx) {
+				f.mu.Lock()
+				delete(f.recs, ref)
+				f.mu.Unlock()
+			}
 			return nil
 		},
-		DeleteRecords: func(_ context.Context, ref string) error { f.mu.Lock(); delete(f.recs, ref); f.mu.Unlock(); return nil },
-		Release: func(_ context.Context, _ string) (int64, error) {
+		Release: func(ctx context.Context, ref string) (int64, error) {
+			if checking(ctx) {
+				return 0, nil
+			}
 			f.mu.Lock()
 			defer f.mu.Unlock()
-			n := len(f.res) + len(f.excl) + len(f.recs)
-			f.res, f.excl, f.recs, f.released = map[string]OwnedRes{}, map[string]OwnedExcl{}, map[string][]OwnedRec{}, n
+			n := f.release(ref)
+			f.released += n
 			return int64(n), nil
 		},
 		Entries: func(context.Context) (Owned, error) {
@@ -89,6 +197,10 @@ func (f *fakeDNS64) hooks() DNS64 {
 			return ""
 		},
 	}
+	if !f.noCheck {
+		d.Check = func(ctx context.Context) context.Context { return context.WithValue(ctx, fakeCheckKey{}, true) }
+	}
+	return d
 }
 
 func TestDNS64Link(t *testing.T) {

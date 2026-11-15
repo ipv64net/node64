@@ -63,7 +63,7 @@ func errKey(err error) string {
 	for e, k := range map[error]string{ErrPrefix: "prefix", ErrSize: "size", ErrDup: "dup", ErrName: "name", ErrHost: "host", ErrStatus: "status",
 		ErrVLAN: "vlan", ErrTags: "tags", ErrRange: "range", ErrRangeNet: "range_net", ErrOverlap: "overlap", ErrIP: "ip", ErrNoNet: "no_net",
 		ErrNetAddr: "net_addr", ErrMAC: "mac", ErrTaken: "taken", ErrRole: "role", ErrNotFound: "not_found", ErrBusy: "busy",
-		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn", ErrImport: "import"} {
+		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn", ErrImport: "import", ErrCSVLine: "csv_line"} {
 		if errors.Is(err, e) {
 			return "ipam64.err." + k
 		}
@@ -96,8 +96,6 @@ func prefixURL(cidr string, kv ...string) string {
 	}
 	return "/ipam64/prefix?" + q.Encode()
 }
-
-func addressURL(ip string) string { return "/ipam64/address?" + url.Values{"ip": {ip}}.Encode() }
 
 // ---- Uebersicht ----
 
@@ -206,7 +204,6 @@ type prefixData struct {
 	Net       *Net
 	Prefix    *Prefix // Eintrag in IPAM64 (nil = nur DHCP-Netz)
 	View      string  // addresses (Raster und Liste) | ranges
-	Entries   []Entry
 	Rows      []listRow
 	Total     int
 	Page      int
@@ -459,16 +456,7 @@ func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
 			}
 			lo, hi = addrAt(n.Prefix, d.Block*256), addrAt(n.Prefix, d.Block*256+255)
 		}
-		d.Grid = snap.grid(n, d.Block)
-		if d.Marking {
-			for i := range d.Grid {
-				for j := range d.Grid[i] {
-					if e := snap.Entry(netip.MustParseAddr(d.Grid[i][j].IP)); e != nil && hit(e) {
-						d.Grid[i][j].Match = true
-					}
-				}
-			}
-		}
+		d.Grid = snap.grid(n, d.Block) // Treffer markiert die Schleife ueber die Liste unten (das Raster liegt im Ausschnitt)
 	default:
 		d.MapBits = mapBits(n)
 		var h func(*Entry) bool
@@ -485,13 +473,25 @@ func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
 		}
 	}
 	in := func(ip netip.Addr) bool { return !lo.IsValid() || (!ip.Less(lo) && !hi.Less(ip)) }
+	var hits []Entry // Eintraege der Liste (Filter und Suche)
 	for i := range all {
 		if !in(all[i].ip) {
 			continue
 		}
 		d.Counts[all[i].Kind]++
 		if hit(&all[i]) {
-			d.Entries = append(d.Entries, all[i])
+			hits = append(hits, all[i])
+		}
+	}
+	if d.Marking && d.Grid != nil {
+		matched := make(map[string]bool, len(hits))
+		for _, e := range hits {
+			matched[e.IP] = true
+		}
+		for i := range d.Grid {
+			for j := range d.Grid[i] {
+				d.Grid[i][j].Match = matched[d.Grid[i][j].IP]
+			}
 		}
 	}
 	if d.View == "addresses" {
@@ -515,19 +515,19 @@ func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
 				free = append(free, b)
 			}
 			fi := 0
-			for i := range d.Entries {
-				for fi < len(free) && free[fi].First.Less(d.Entries[i].ip) {
+			for i := range hits {
+				for fi < len(free) && free[fi].First.Less(hits[i].ip) {
 					rows = append(rows, listRow{Free: &free[fi]})
 					fi++
 				}
-				rows = append(rows, listRow{E: &d.Entries[i]})
+				rows = append(rows, listRow{E: &hits[i]})
 			}
 			for ; fi < len(free); fi++ {
 				rows = append(rows, listRow{Free: &free[fi]})
 			}
 		} else {
-			for i := range d.Entries {
-				rows = append(rows, listRow{E: &d.Entries[i]})
+			for i := range hits {
+				rows = append(rows, listRow{E: &hits[i]})
 			}
 		}
 		d.Pages = max(1, (len(rows)+listPage-1)/listPage)
@@ -974,12 +974,21 @@ func (m *Module) effectText(ctx context.Context, a Address) string {
 
 // ---- CSV ----
 
-// csvSafe entschaerft Werte, die eine Tabellenkalkulation als Formel lesen wuerde (aus dem Entwurf von UlrichSchwarz).
+// csvSafe entschaerft Werte, die eine Tabellenkalkulation als Formel lesen wuerde (aus dem Entwurf von UlrichSchwarz;
+// gleiche Regel wie csvCell in Monitor64). Gilt fuer jede Zelle des Exports.
 func csvSafe(s string) string {
 	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
 		return "'" + s
 	}
 	return s
+}
+
+// csvRow schuetzt alle Zellen einer Zeile.
+func csvRow(cells ...string) []string {
+	for i := range cells {
+		cells[i] = csvSafe(cells[i])
+	}
+	return cells
 }
 
 // pageExport liefert die Belegung als CSV: das gewaehlte Praefix (p=) bzw. alle.
@@ -1010,8 +1019,8 @@ func (m *Module) pageExport(w http.ResponseWriter, r *http.Request) {
 			if note == "" && e.NoteKey != "" {
 				note = m.g.T(r, e.NoteKey)
 			}
-			_ = cw.Write([]string{n.CIDR, e.IP, csvSafe(name), csvSafe(note), e.MAC, e.Kind, e.Status, e.Role, strings.Join(e.Tags, " "),
-				strings.Join(e.Sources, " "), seen, e.State})
+			_ = cw.Write(csvRow(n.CIDR, e.IP, name, note, e.MAC, e.Kind, e.Status, e.Role, strings.Join(e.Tags, " "),
+				strings.Join(e.Sources, " "), seen, e.State))
 		}
 	}
 	cw.Flush()

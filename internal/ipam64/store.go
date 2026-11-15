@@ -148,6 +148,9 @@ type Address struct {
 	Tags        []string  `json:"tags"`
 	Updated     time.Time `json:"updated"`
 	UpdatedBy   string    `json:"updated_by"`
+	// Released: an DNS64 uebergeben (Uebergabe, auch ueber den Cluster): IPAM64 schreibt nichts mehr nach DNS64, bis DNS
+	// oder DHCP wieder eingeschaltet wird.
+	Released bool `json:"released,omitempty"`
 }
 
 // seenRow ist eine Sichtung aus der Nachbartabelle.
@@ -457,14 +460,14 @@ func (m *Module) rangeByUID(ctx context.Context, uid string) (*Range, error) {
 	return &r, err
 }
 
-const addrCols = `uid, address, status, role, name, dns, dns_zone, ptr, mac, dhcp, description, tags, updated, updated_by`
+const addrCols = `uid, address, status, role, name, dns, dns_zone, ptr, mac, dhcp, description, tags, updated, updated_by, released`
 
 func scanAddress(s scanner) (Address, error) {
 	var a Address
-	var dns, ptr, dhcp, ts int64
+	var dns, ptr, dhcp, ts, rel int64
 	var tags string
-	err := s.Scan(&a.UID, &a.Address, &a.Status, &a.Role, &a.Name, &dns, &a.DNSZone, &ptr, &a.MAC, &dhcp, &a.Description, &tags, &ts, &a.UpdatedBy)
-	a.DNS, a.PTR, a.DHCP, a.Tags, a.Updated = dns != 0, ptr != 0, dhcp != 0, tagsOf(tags), time.Unix(ts, 0).UTC()
+	err := s.Scan(&a.UID, &a.Address, &a.Status, &a.Role, &a.Name, &dns, &a.DNSZone, &ptr, &a.MAC, &dhcp, &a.Description, &tags, &ts, &a.UpdatedBy, &rel)
+	a.DNS, a.PTR, a.DHCP, a.Tags, a.Updated, a.Released = dns != 0, ptr != 0, dhcp != 0, tagsOf(tags), time.Unix(ts, 0).UTC(), rel != 0
 	return a, err
 }
 
@@ -544,8 +547,17 @@ func (m *Module) SavePrefix(ctx context.Context, p Prefix, actor string) (Prefix
 	return p, nil
 }
 
+// execer schreibt in die Datenbank (Writer oder Transaktion).
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
 func (m *Module) writePrefix(ctx context.Context, p Prefix) error {
-	_, err := m.core.Writer().ExecContext(ctx, `INSERT INTO ipam_prefixes (`+prefixCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	return writePrefixOn(ctx, m.core.Writer(), p)
+}
+
+func writePrefixOn(ctx context.Context, ex execer, p Prefix) error {
+	_, err := ex.ExecContext(ctx, `INSERT INTO ipam_prefixes (`+prefixCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT (uid) DO UPDATE SET prefix = excluded.prefix, family = excluded.family, name = excluded.name, status = excluded.status,
 			role = excluded.role, vlan = excluded.vlan, tags = excluded.tags, description = excluded.description, mark_full = excluded.mark_full,
 			dns_zone = excluded.dns_zone, scan = excluded.scan, scan_node = excluded.scan_node, dyn_parent = excluded.dyn_parent,
@@ -623,7 +635,11 @@ func (m *Module) SaveRange(ctx context.Context, r Range, actor string) (Range, e
 }
 
 func (m *Module) writeRange(ctx context.Context, r Range) error {
-	_, err := m.core.Writer().ExecContext(ctx, `INSERT INTO ipam_ranges (`+rangeCols+`) VALUES (?,?,?,?,?,?,?,?)
+	return writeRangeOn(ctx, m.core.Writer(), r)
+}
+
+func writeRangeOn(ctx context.Context, ex execer, r Range) error {
+	_, err := ex.ExecContext(ctx, `INSERT INTO ipam_ranges (`+rangeCols+`) VALUES (?,?,?,?,?,?,?,?)
 		ON CONFLICT (uid) DO UPDATE SET start_addr = excluded.start_addr, end_addr = excluded.end_addr, kind = excluded.kind, name = excluded.name,
 			description = excluded.description, updated = excluded.updated, updated_by = excluded.updated_by`,
 		r.UID, r.Start, r.End, r.Kind, r.Name, r.Description, r.Updated.Unix(), r.UpdatedBy)
@@ -668,13 +684,18 @@ func (m *Module) SaveAddress(ctx context.Context, a Address, actor string) (Addr
 		return a, ErrTaken
 	}
 	if a.UID != "" {
-		if old, err := m.addressWhere(ctx, `uid = ?`, a.UID); err != nil {
+		old, err := m.addressWhere(ctx, `uid = ?`, a.UID)
+		if err != nil {
 			return a, err
 		} else if old == nil {
 			return a, ErrNotFound
 		}
+		a.Released = old.Released
 	} else {
 		a.UID = newUID()
+	}
+	if a.DNS || a.DHCP { // DNS oder DHCP eingeschaltet: IPAM64 verwaltet die Adresse (wieder)
+		a.Released = false
 	}
 	a.Updated, a.UpdatedBy = m.now().UTC().Truncate(time.Second), actor
 	if err := m.writeAddress(ctx, a); err != nil {
@@ -685,12 +706,17 @@ func (m *Module) SaveAddress(ctx context.Context, a Address, actor string) (Addr
 }
 
 func (m *Module) writeAddress(ctx context.Context, a Address) error {
-	_, err := m.core.Writer().ExecContext(ctx, `INSERT INTO ipam_addresses (`+addrCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	return writeAddressOn(ctx, m.core.Writer(), a)
+}
+
+func writeAddressOn(ctx context.Context, ex execer, a Address) error {
+	_, err := ex.ExecContext(ctx, `INSERT INTO ipam_addresses (`+addrCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT (uid) DO UPDATE SET address = excluded.address, status = excluded.status, role = excluded.role, name = excluded.name,
 			dns = excluded.dns, dns_zone = excluded.dns_zone, ptr = excluded.ptr, mac = excluded.mac, dhcp = excluded.dhcp,
-			description = excluded.description, tags = excluded.tags, updated = excluded.updated, updated_by = excluded.updated_by`,
+			description = excluded.description, tags = excluded.tags, updated = excluded.updated, updated_by = excluded.updated_by,
+			released = excluded.released`,
 		a.UID, a.Address, a.Status, a.Role, a.Name, boolInt(a.DNS), a.DNSZone, boolInt(a.PTR), a.MAC, boolInt(a.DHCP), a.Description, tagsText(a.Tags),
-		a.Updated.Unix(), a.UpdatedBy)
+		a.Updated.Unix(), a.UpdatedBy, boolInt(a.Released))
 	return err
 }
 
@@ -721,8 +747,14 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// containing liefert das kleinste Praefix bzw. DHCP-Netz, in dem ip liegt.
+// containing liefert das kleinste Praefix bzw. DHCP-Netz, in dem ip liegt (im Stapel aus den gemerkten Praefixen).
 func (m *Module) containing(ctx context.Context, ip netip.Addr) (netip.Prefix, bool) {
+	if s, ok := ctx.Value(viewKey{}).(*Snapshot); ok {
+		if n := s.NetOf(ip); n != nil {
+			return n.Prefix, true
+		}
+		return netip.Prefix{}, false
+	}
 	var best netip.Prefix
 	list, _ := m.Prefixes(ctx)
 	for _, p := range list {
@@ -740,9 +772,26 @@ func (m *Module) containing(ctx context.Context, ip netip.Addr) (netip.Prefix, b
 
 // ---- Sichtungen ----
 
-// saveSeen merkt Sichtungen (IP -> MAC) zum Zeitpunkt now.
-func (m *Module) saveSeen(ctx context.Context, seen map[netip.Addr]string, now time.Time) error {
-	if len(seen) == 0 {
+type seenKey struct {
+	ip  netip.Addr
+	mac string
+}
+
+// saveSeen merkt Sichtungen (IP, MAC, Zeitpunkt Last) in einer Transaktion. Geschrieben wird nur, was neuer ist als
+// die zuletzt geschriebene Sichtung (die meisten Eintraege der Nachbartabelle aendern sich zwischen zwei Runden nicht).
+func (m *Module) saveSeen(ctx context.Context, list []seenRow) error {
+	m.seenMu.Lock()
+	defer m.seenMu.Unlock()
+	if m.seenAt == nil {
+		m.seenAt = map[seenKey]int64{}
+	}
+	var todo []seenRow
+	for _, s := range list {
+		if s.Last.Unix() > m.seenAt[seenKey{s.IP, s.MAC}] {
+			todo = append(todo, s)
+		}
+	}
+	if len(todo) == 0 {
 		return nil
 	}
 	tx, err := m.core.Writer().BeginTx(ctx, nil)
@@ -750,13 +799,20 @@ func (m *Module) saveSeen(ctx context.Context, seen map[netip.Addr]string, now t
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for ip, mac := range seen {
+	for _, s := range todo {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO ipam_seen (ip, mac, first_seen, last_seen) VALUES (?, ?, ?, ?)
-			ON CONFLICT (ip, mac) DO UPDATE SET last_seen = MAX(last_seen, excluded.last_seen)`, ip.String(), mac, now.Unix(), now.Unix()); err != nil {
+			ON CONFLICT (ip, mac) DO UPDATE SET last_seen = excluded.last_seen WHERE excluded.last_seen > ipam_seen.last_seen`,
+			s.IP.String(), s.MAC, s.Last.Unix(), s.Last.Unix()); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, s := range todo {
+		m.seenAt[seenKey{s.IP, s.MAC}] = s.Last.Unix()
+	}
+	return nil
 }
 
 func (m *Module) seenRows(ctx context.Context) ([]seenRow, error) {

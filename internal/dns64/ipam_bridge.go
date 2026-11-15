@@ -168,7 +168,7 @@ func (m *Module) IPAMEntries(ctx context.Context) (IPAMState, error) {
 
 // dhcpScopeFor liefert das DHCP-Netz, in dem ip liegt (das kleinste; errCfg err_dhcp_scope = keins).
 func (m *Module) dhcpScopeFor(ctx context.Context, ip netip.Addr) (DHCPScope, error) {
-	scopes, err := m.DHCPScopes(ctx)
+	scopes, err := m.ipamScopes(ctx)
 	if err != nil {
 		return DHCPScope{}, err
 	}
@@ -207,7 +207,60 @@ func (m *Module) ipamRecordsChanged(ctx context.Context) error {
 
 type ipamBatchKey struct{}
 
-type ipamBatch struct{ records, dhcp bool }
+// ipamBatch: was am Ende neu aufzubauen ist, dazu je Stapel einmal gelesen: DHCP-Netze und Adressen dieser Node.
+type ipamBatch struct {
+	records, dhcp bool
+	scopes        []DHCPScope
+	scopesRead    bool
+	locals        map[netip.Addr]bool
+}
+
+// ipamScopes liefert die DHCP-Netze (im Stapel einmal gelesen).
+func (m *Module) ipamScopes(ctx context.Context) ([]DHCPScope, error) {
+	b, ok := ctx.Value(ipamBatchKey{}).(*ipamBatch)
+	if !ok {
+		return m.DHCPScopes(ctx)
+	}
+	if !b.scopesRead {
+		list, err := m.DHCPScopes(ctx)
+		if err != nil {
+			return nil, err
+		}
+		b.scopes, b.scopesRead = list, true
+	}
+	return b.scopes, nil
+}
+
+// ipamLocalAddr: Adresse dieser Node (wie dhcpLocalAddr; im Stapel nur einmal die Schnittstellen lesen).
+func ipamLocalAddr(ctx context.Context, ip netip.Addr) bool {
+	b, ok := ctx.Value(ipamBatchKey{}).(*ipamBatch)
+	if !ok {
+		return dhcpLocalAddr(ip)
+	}
+	if b.locals == nil {
+		b.locals = map[netip.Addr]bool{}
+		for _, i := range dhcpInterfaces() {
+			for _, a := range i.Addrs {
+				b.locals[a.Addr()] = true
+			}
+		}
+	}
+	return b.locals[ip]
+}
+
+type ipamCheckKey struct{}
+
+// IPAMCheck liefert einen Kontext, in dem die Aufrufe von IPAM64 (Put/Delete/Release) nur pruefen und nichts schreiben:
+// IPAM64 prueft so vor dem Schreiben, ob DNS64 die ganze Adresse annimmt (sonst muesste es halb Geschriebenes
+// zuruecknehmen).
+func IPAMCheck(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ipamCheckKey{}, true)
+}
+
+func ipamChecking(ctx context.Context) bool {
+	v, _ := ctx.Value(ipamCheckKey{}).(bool)
+	return v
+}
 
 // IPAMBatch fuehrt fn als Stapel aus: DHCP-Server und Momentaufnahme der Eintraege werden einmal am Ende neu aufgebaut
 // und an den Cluster gemeldet statt je Eintrag (CSV-Import, Assistent, Umnummerieren, Abgleich mit tausenden
@@ -242,8 +295,11 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 		return err
 	}
 	r := DHCPReservation{ScopeID: sc.ID, MAC: mac, IP: a.Unmap().String(), Name: name}
-	if err := m.normalizeDHCPReservation(ctx, &r, true); err != nil {
+	if err := m.normalizeDHCPReservation(ctx, &r, false); err != nil {
 		return err
+	}
+	if ipamLocalAddr(ctx, a.Unmap()) {
+		return errCfg("err_dhcp_res_ip")
 	}
 	tx, err := m.core.Writer().BeginTx(ctx, nil)
 	if err != nil {
@@ -272,6 +328,9 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 		}
 	}
 	rows.Close()
+	if ipamChecking(ctx) {
+		return nil
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM dns64_dhcp_reservations WHERE origin = ? AND ref = ?`, OriginIPAM, ref); err != nil {
 		return err
 	}
@@ -299,6 +358,9 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 
 // DeleteIPAMReservation loescht die DHCP-Reservierung einer Adresse aus IPAM64 (keine = kein Fehler).
 func (m *Module) DeleteIPAMReservation(ctx context.Context, ref string) error {
+	if ipamChecking(ctx) {
+		return nil
+	}
 	res, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_dhcp_reservations WHERE origin = ? AND ref = ?`, OriginIPAM, ref)
 	if err != nil {
 		return err
@@ -311,7 +373,8 @@ func (m *Module) DeleteIPAMReservation(ctx context.Context, ref string) error {
 
 // PutIPAMExclude nimmt eine Adresse aus IPAM64 aus der Vergabe des DHCP-Servers (Ausnahme im Adressbereich), z. B.
 // ein fest eingestelltes Geraet im Pool. Eine Reservierung derselben Adresse aus IPAM64 faellt weg; eine andere
-// Reservierung dieser IP ist ein Fehler.
+// Reservierung dieser IP ist ein Fehler. Eine gleiche Ausnahme von Hand wird gekennzeichnet (wie Reservierungen und
+// Eintraege); fuer an DNS64 uebergebene Adressen fragt IPAM64 gar nicht mehr an.
 func (m *Module) PutIPAMExclude(ctx context.Context, ref, ip, comment string) error {
 	a, err := netip.ParseAddr(strings.TrimSpace(ip))
 	if err != nil || ref == "" {
@@ -342,6 +405,9 @@ func (m *Module) PutIPAMExclude(ctx context.Context, ref, ip, comment string) er
 	if n > 0 {
 		return errCfg("err_dhcp_res_dup")
 	}
+	if ipamChecking(ctx) {
+		return nil
+	}
 	for _, q := range []string{`DELETE FROM dns64_dhcp_reservations WHERE origin = ? AND ref = ?`, `DELETE FROM dns64_dhcp_excludes WHERE origin = ? AND ref = ?`} {
 		if _, err := tx.ExecContext(ctx, q, OriginIPAM, ref); err != nil {
 			return err
@@ -360,6 +426,9 @@ func (m *Module) PutIPAMExclude(ctx context.Context, ref, ip, comment string) er
 
 // DeleteIPAMExclude loescht die Ausnahme einer Adresse aus IPAM64 (keine = kein Fehler).
 func (m *Module) DeleteIPAMExclude(ctx context.Context, ref string) error {
+	if ipamChecking(ctx) {
+		return nil
+	}
 	res, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_dhcp_excludes WHERE origin = ? AND ref = ?`, OriginIPAM, ref)
 	if err != nil {
 		return err
@@ -373,10 +442,11 @@ func (m *Module) DeleteIPAMExclude(ctx context.Context, ref string) error {
 // PutIPAMRecords setzt die A/AAAA-Eintraege einer Adresse aus IPAM64: name (voller Name) mit genau diesen Adressen;
 // ptr = Rueckwaertssuche aus den Eintraegen. Was IPAM64 fuer ref vorher hatte und nicht mehr gilt, faellt weg. Ein
 // gleicher Eintrag von Hand wird gekennzeichnet statt doppelt angelegt; gehoert er einer anderen Adresse aus IPAM64
-// oder steht ein CNAME auf dem Namen, ist das ein Fehler.
-func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []netip.Addr, ptr bool) error {
+// oder steht ein CNAME auf dem Namen, ist das ein Fehler. claimed: ein Eintrag von Hand wurde uebernommen (scheitert
+// danach der Rest der Adresse, gibt IPAM64 ihn mit ReleaseIPAM frei, statt ihn zu loeschen).
+func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []netip.Addr, ptr bool) (claimed bool, err error) {
 	if ref == "" || len(addrs) == 0 {
-		return errCfg("err_ipam_input")
+		return false, errCfg("err_ipam_input")
 	}
 	var want []Record
 	for _, a := range addrs {
@@ -385,13 +455,13 @@ func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []n
 			r.Type = "AAAA"
 		}
 		if err := normalizeRecord(&r); err != nil {
-			return err
+			return false, err
 		}
 		want = append(want, r)
 	}
 	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, type, value, origin, ref FROM dns64_records WHERE name = ?`, want[0].Name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	type row struct {
 		id                       int64
@@ -402,7 +472,7 @@ func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []n
 		var x row
 		if err := rows.Scan(&x.id, &x.typ, &x.value, &x.origin, &x.oref); err != nil {
 			rows.Close()
-			return err
+			return false, err
 		}
 		have = append(have, x)
 	}
@@ -412,22 +482,25 @@ func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []n
 		for _, h := range have {
 			switch {
 			case h.typ == "CNAME":
-				return errCfg("err_cname")
+				return false, errCfg("err_cname")
 			case h.typ != w.Type || h.value != w.Value || (h.origin == OriginIPAM && h.oref == ref):
 			case h.origin == "":
 				claim[h.id] = true
 			default:
-				return errCfg("err_dup")
+				return false, errCfg("err_dup")
 			}
 		}
 	}
+	if ipamChecking(ctx) {
+		return len(claim) > 0, nil
+	}
 	tx, err := m.core.Writer().BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM dns64_records WHERE origin = ? AND ref = ?`, OriginIPAM, ref); err != nil {
-		return err
+		return false, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, w := range want {
@@ -437,7 +510,7 @@ func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []n
 				if h.id == id && h.typ == w.Type && h.value == w.Value {
 					if _, err := tx.ExecContext(ctx, `UPDATE dns64_records SET origin = ?, ref = ?, no_ptr = ?, local_only = 0, enabled = 1 WHERE id = ?`,
 						OriginIPAM, ref, w.NoPTR, id); err != nil {
-						return err
+						return false, err
 					}
 					done = true
 				}
@@ -449,19 +522,22 @@ func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []n
 		if _, err := tx.ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, local_only, dynamic, enabled, created_at, origin, ref)
 			VALUES (?,?,?,?,?,?,0,0,1,?,?,?)`, w.Name, w.Type, w.Value, w.TTL, "", w.NoPTR, now, OriginIPAM, ref); err != nil {
 			if isUnique(err) {
-				return errCfg("err_dup")
+				return false, errCfg("err_dup")
 			}
-			return err
+			return false, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return false, err
 	}
-	return m.ipamRecordsChanged(ctx)
+	return len(claim) > 0, m.ipamRecordsChanged(ctx)
 }
 
 // DeleteIPAMRecords loescht die A/AAAA-Eintraege einer Adresse aus IPAM64 (keine = kein Fehler).
 func (m *Module) DeleteIPAMRecords(ctx context.Context, ref string) error {
+	if ipamChecking(ctx) {
+		return nil
+	}
 	res, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_records WHERE origin = ? AND ref = ?`, OriginIPAM, ref)
 	if err != nil {
 		return err
@@ -475,6 +551,9 @@ func (m *Module) DeleteIPAMRecords(ctx context.Context, ref string) error {
 // ReleaseIPAM nimmt das Kennzeichen von den Eintraegen aus IPAM64 (ref "" = alle): sie bleiben und sind hier wieder
 // normal bearbeitbar (Uebergabe an DNS64, z. B. beim Abschalten von IPAM64). Liefert die Zahl der Eintraege.
 func (m *Module) ReleaseIPAM(ctx context.Context, ref string) (int64, error) {
+	if ipamChecking(ctx) {
+		return 0, nil
+	}
 	where, args := `origin = ?`, []any{OriginIPAM}
 	if ref != "" {
 		where, args = where+` AND ref = ?`, append(args, ref)

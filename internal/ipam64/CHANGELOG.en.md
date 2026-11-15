@@ -1,5 +1,22 @@
 # IPAM64 – Changes
 
+## 0.6.1 – unreleased
+
+Fixed (code review):
+
+- Child prefixes inside a DHCP network take over its range and zone: addresses in the pool get their exclusion, "next free address" no longer hands out pool addresses, and reserved ranges of the parent prefix apply in the child too. Ranges of a child prefix no longer keep the parent prefix from finding free addresses.
+- DNS64 now checks an address completely before writing; if it still fails, a manual entry taken over on the way is released instead of deleted (also for import and setup assistant).
+- "Hand over to DNS64" applies to the whole cluster: the other nodes release their entries as well instead of deleting them. Handed-over addresses no longer get a pool exclusion (no error every 10 minutes); turning DNS or DHCP on again lets IPAM64 manage the address again.
+- Sync with DNS64: if another node syncs DNS64 but not the IPAM64 addresses, its entries are no longer deleted (no back and forth). Orphaned entries an address needs (same address assigned on two nodes) are replaced in the same run – without a gap and without errors.
+- Same address assigned on two nodes at the same time: the displaced own address shows up as a conflict under "Scan & conflicts" for 24 hours and is notified. "Next free address" is atomic per node only; in a cluster assign on one node.
+- IPv6 from the provider: only addresses on the interface the node had in the prefix count as the new address – a global address of WireGuard, Docker or a second uplink no longer causes wrong or missing renumbering (also for prefixes without children). Renumbering is all or nothing; if it fails, the old state stays.
+- Conflict "duplicate address" only when the sightings of two MAC addresses overlap for more than 5 minutes – a device swap is no longer a conflict.
+- CSV import: a broken line is an error of that line; the rest is still read.
+- Targets with names (Healthchecks, PROXY64) always attach to the same address (IPv4 before IPv6).
+- Overview: the "automatic scan" selection saves on change again; the automatic scan no longer shows "invalid Prefix". Dashboard card: usage only from IPv4 prefixes, never above 100 %.
+- CSV export: all cells protected against formulas in spreadsheet programs.
+- Faster: sightings in one transaction per round and only when changed, node addresses once per run, prefixes read once per import instead of per address, sync without quadratic effort.
+
 ## 0.6.0 – unreleased
 
 New:

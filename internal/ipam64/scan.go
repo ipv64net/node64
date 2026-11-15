@@ -85,14 +85,7 @@ func sweepUDP(ctx context.Context, p netip.Prefix) {
 }
 
 // attached meldet, ob die Node eine Adresse im Netz hat.
-func (m *Module) attached(p netip.Prefix) bool {
-	for _, l := range m.locals() {
-		if p.Contains(l.Addr()) {
-			return true
-		}
-	}
-	return false
-}
+func (m *Module) attached(p netip.Prefix) bool { return attachedIn(m.locals(), p) }
 
 // known liefert die Praefixe, die IPAM64 kennt (eigene und DHCP-Netze), mit ihrer Scan-Einstellung.
 func (m *Module) known(ctx context.Context) map[netip.Prefix]string {
@@ -125,7 +118,7 @@ func (m *Module) collect(ctx context.Context, only *netip.Prefix, fresh time.Dur
 	known := m.known(ctx)
 	now := m.now()
 	found := 0
-	byTime := map[int64]map[netip.Addr]string{} // Sichtungen mit gleichem Zeitpunkt zusammen schreiben
+	var seen []seenRow
 	for ip, n := range tab {
 		in := false
 		for p, scan := range known {
@@ -137,18 +130,12 @@ func (m *Module) collect(ctx context.Context, only *netip.Prefix, fresh time.Dur
 		if only != nil && only.Contains(ip) && n.Age <= fresh {
 			found++
 		}
-		ts := now.Add(-n.Age).Unix()
-		if byTime[ts] == nil {
-			byTime[ts] = map[netip.Addr]string{}
-		}
-		byTime[ts][ip] = n.MAC
+		seen = append(seen, seenRow{IP: ip, MAC: n.MAC, Last: time.Unix(now.Add(-n.Age).Unix(), 0)})
 	}
-	for ts, set := range byTime {
-		if err := m.saveSeen(ctx, set, time.Unix(ts, 0)); err != nil {
-			return found, err
-		}
+	if err := m.saveSeen(ctx, seen); err != nil { // eine Transaktion je Runde, nur Aenderungen
+		return found, err
 	}
-	if len(byTime) > 0 {
+	if len(seen) > 0 {
 		m.invalidate()
 	}
 	return found, nil
@@ -205,7 +192,10 @@ func (m *Module) beginScan(p netip.Prefix) bool {
 	if m.scan.st.Running {
 		return false
 	}
-	m.scan.st = ScanStatus{Running: true, Prefix: p.String(), Started: m.now()}
+	m.scan.st = ScanStatus{Running: true, Started: m.now()}
+	if p.IsValid() { // automatischer Scan: kein einzelnes Praefix
+		m.scan.st.Prefix = p.String()
+	}
 	return true
 }
 
@@ -247,8 +237,9 @@ func (m *Module) scanAll(ctx context.Context) {
 	}
 	total := 0
 	var first error
+	locs := m.locals() // einmal je Lauf, nicht je Praefix
 	for p, scan := range m.known(ctx) {
-		if scan != ScanActive || !scanAllowed(p) || !m.attached(p) || ctx.Err() != nil {
+		if scan != ScanActive || !scanAllowed(p) || !attachedIn(locs, p) || ctx.Err() != nil {
 			continue
 		}
 		n, err := m.scanOne(ctx, p)

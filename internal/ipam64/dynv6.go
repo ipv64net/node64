@@ -17,9 +17,12 @@ import (
 // und Adressen bekommen den neuen oberen Teil, die AAAA-Eintraege in DNS64 folgen (gleicher Bezug). Der letzte Wechsel
 // steht in der Uebersicht, samt Zielen anderer Module (PROXY64, Monitor64, Healthchecks), die noch auf das alte Praefix
 // zeigen - die passt IPAM64 nicht selbst an (Hinweis, Empfehlung: Ziele per DNS-Name).
-// Anker: Jede Node merkt sich (lokal, nicht im Cluster), in welchem Wert einer Wurzel sie zuletzt lag. Umnummeriert
-// wird nur, wenn die Node selbst im aktuellen Wert lag. Kam der Wechsel ueber den Cluster und hat die Node noch eine
-// Adresse im alten Praefix, nummeriert sie so nicht zurueck (kein Hin und Her zwischen den Nodes).
+// Anker: Jede Node merkt sich (lokal, nicht im Cluster), in welchem Wert einer Wurzel sie zuletzt lag und auf welcher
+// Schnittstelle. Umnummeriert wird nur, wenn die Node selbst im aktuellen Wert lag. Kam der Wechsel ueber den Cluster
+// und hat die Node noch eine Adresse im alten Praefix, nummeriert sie so nicht zurueck (kein Hin und Her zwischen den
+// Nodes). Als neue Adresse zaehlen nur Adressen auf der Schnittstelle des Ankers: eine globale Adresse von WireGuard,
+// Docker oder einem zweiten Anschluss fuehrt weder zu "mehrdeutig" noch zu einem falschen Wechsel.
+// Umnummeriert wird in einer Transaktion und mit eigenem Kontext (bricht die Anfrage ab, bleibt kein halber Stand).
 
 // DynAuto: Praefix wechselt mit dem Provider, Quelle sind die Adressen der Node.
 const DynAuto = "auto"
@@ -39,6 +42,23 @@ type DynChange struct {
 	At        time.Time `json:"at"`
 	Prefixes  int       `json:"prefixes"`
 	Addresses int       `json:"addresses"`
+}
+
+// dynAnchor: Wert der Wurzel, in dem die Node zuletzt lag, und die Schnittstelle dazu.
+type dynAnchor struct {
+	Value string `json:"value"`
+	Iface string `json:"iface,omitempty"`
+}
+
+// UnmarshalJSON liest auch die alte Form (nur der Wert als Text).
+func (a *dynAnchor) UnmarshalJSON(b []byte) error {
+	var s string
+	if json.Unmarshal(b, &s) == nil {
+		*a = dynAnchor{Value: s}
+		return nil
+	}
+	type plain dynAnchor
+	return json.Unmarshal(b, (*plain)(a))
 }
 
 // replaceTop setzt die oberen Bits von a (bis bits) aus to.
@@ -119,16 +139,16 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 			known = append(known, pp)
 		}
 	}
-	var locals []netip.Addr // globale IPv6-Adressen der Node
+	var locals []local // globale IPv6-Adressen der Node
 	for _, l := range m.locals() {
 		if a := l.Addr(); a.Is6() && globalV6.Contains(a) {
-			locals = append(locals, a)
+			locals = append(locals, l)
 		}
 	}
-	anchor := map[string]string{}
+	anchor := map[string]dynAnchor{}
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setDynAnchor, "{}")), &anchor)
 	dirty := false
-	setAnchor := func(uid, v string) {
+	setAnchor := func(uid string, v dynAnchor) {
 		if anchor[uid] != v {
 			anchor[uid], dirty = v, true
 		}
@@ -146,14 +166,17 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 		if err != nil || r.DynSource != DynAuto {
 			continue
 		}
-		in := false
-		for _, a := range locals {
-			in = in || root.Contains(a)
+		in, iface := false, ""
+		for _, l := range locals {
+			if root.Contains(l.Addr()) && !in {
+				in, iface = true, l.Iface
+			}
 		}
 		if in {
-			setAnchor(r.UID, root.String())
+			setAnchor(r.UID, dynAnchor{root.String(), iface})
 		}
-		if in || len(locals) == 0 || anchor[r.UID] != root.String() {
+		anc := anchor[r.UID]
+		if in || len(locals) == 0 || anc.Value != root.String() {
 			continue
 		}
 		var children []netip.Prefix // Kinder bis /64: legen fest, wo die Node darin liegen muss
@@ -163,7 +186,11 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 			}
 		}
 		cands := map[netip.Prefix]bool{}
-		for _, a := range locals {
+		for _, l := range locals {
+			if anc.Iface != "" && l.Iface != anc.Iface { // nur die Schnittstelle, auf der die Node in der Wurzel lag
+				continue
+			}
+			a := l.Addr()
 			free := true
 			for _, k := range known {
 				free = free && !k.Contains(a)
@@ -189,21 +216,39 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 			if err != nil {
 				return out, err
 			}
-			setAnchor(r.UID, nr.String())
+			setAnchor(r.UID, dynAnchor{nr.String(), anc.Iface})
 			out = append(out, c)
 		}
 	}
 	return out, nil
 }
 
-// renumber verschiebt alles unter oldRoot nach newRoot (gleiche Laenge) und schreibt die Eintraege nach DNS64.
+// renumber verschiebt alles unter oldRoot nach newRoot (gleiche Laenge) in einer Transaktion und schreibt danach die
+// Eintraege nach DNS64. Eigener Kontext: eine abgebrochene Anfrage ("Jetzt pruefen") laesst keinen halben Stand.
 func (m *Module) renumber(ctx context.Context, oldRoot, newRoot netip.Prefix) (DynChange, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+	defer cancel()
 	c := DynChange{From: oldRoot.String(), To: newRoot.String(), At: m.now().UTC().Truncate(time.Second)}
 	now, by := c.At, "dynamic"
 	prefixes, err := m.Prefixes(ctx)
 	if err != nil {
 		return c, err
 	}
+	ranges, err := m.Ranges(ctx)
+	if err != nil {
+		return c, err
+	}
+	addrs, err := m.Addresses(ctx)
+	if err != nil {
+		return c, err
+	}
+	tx, err := m.core.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return c, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	type change struct{ item, uid string }
+	var changes []change
 	for _, p := range prefixes {
 		pp, err := netip.ParsePrefix(p.Prefix)
 		if err != nil || !oldRoot.Contains(pp.Addr()) || pp.Bits() < oldRoot.Bits() {
@@ -211,15 +256,11 @@ func (m *Module) renumber(ctx context.Context, oldRoot, newRoot netip.Prefix) (D
 		}
 		p.Prefix = netip.PrefixFrom(replaceTop(pp.Addr(), newRoot), pp.Bits()).String()
 		p.Updated, p.UpdatedBy = now, by
-		if err := m.writePrefix(ctx, p); err != nil {
+		if err := writePrefixOn(ctx, tx, p); err != nil {
 			return c, err
 		}
-		m.changed(ctx, ClusterItemPrefixes, p.UID, false)
+		changes = append(changes, change{ClusterItemPrefixes, p.UID})
 		c.Prefixes++
-	}
-	ranges, err := m.Ranges(ctx)
-	if err != nil {
-		return c, err
 	}
 	for _, r := range ranges {
 		a, err1 := netip.ParseAddr(r.Start)
@@ -228,14 +269,10 @@ func (m *Module) renumber(ctx context.Context, oldRoot, newRoot netip.Prefix) (D
 			continue
 		}
 		r.Start, r.End, r.Updated, r.UpdatedBy = replaceTop(a, newRoot).String(), replaceTop(b, newRoot).String(), now, by
-		if err := m.writeRange(ctx, r); err != nil {
+		if err := writeRangeOn(ctx, tx, r); err != nil {
 			return c, err
 		}
-		m.changed(ctx, ClusterItemRanges, r.UID, false)
-	}
-	addrs, err := m.Addresses(ctx)
-	if err != nil {
-		return c, err
+		changes = append(changes, change{ClusterItemRanges, r.UID})
 	}
 	var moved []Address
 	for _, a := range addrs {
@@ -244,17 +281,23 @@ func (m *Module) renumber(ctx context.Context, oldRoot, newRoot netip.Prefix) (D
 			continue
 		}
 		a.Address, a.Updated, a.UpdatedBy = replaceTop(ip, newRoot).String(), now, by
-		if err := m.writeAddress(ctx, a); err != nil {
+		if err := writeAddressOn(ctx, tx, a); err != nil {
 			return c, err
 		}
-		m.changed(ctx, ClusterItemAddresses, a.UID, false)
+		changes = append(changes, change{ClusterItemAddresses, a.UID})
 		moved = append(moved, a)
 		c.Addresses++
+	}
+	if err := tx.Commit(); err != nil {
+		return c, err
+	}
+	for _, ch := range changes {
+		m.changed(ctx, ch.item, ch.uid, false)
 	}
 	if snap, err := m.netView(ctx); err == nil {
 		_ = m.batch(ctx, func(ctx context.Context) error {
 			for _, a := range moved {
-				if err := m.write(ctx, snap, a); err != nil {
+				if _, err := m.write(ctx, snap, a); err != nil {
 					m.log.Warn("ipam64: dynamic prefix dns64", "address", a.Address, "err", err)
 				}
 			}

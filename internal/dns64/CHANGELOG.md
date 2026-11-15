@@ -19,6 +19,7 @@
 - Blocklisten: Reine IP-Adressen zählen nicht mehr als Domain-Eintrag. Wie viele Zeilen einer Liste keine DNS-Regel ergaben (z. B. Browser-Regeln), zeigt ein Hinweis an der Zahl der Einträge (API `skipped`).
 - Docker-Bridge-Netz: Ein nachträglich angehängtes Docker-Netz zählt bei der Prüfung „Port veröffentlicht“ nicht mehr als Anfrage von außen.
 - DHCP im Cluster: Die Reserve-Node prüft die Haupt-Node im Hintergrund statt im Paketpfad – beim Failover hält der DHCP-Server nicht mehr bis zu einer Sekunde je Haupt-Node und Paket an.
+- IPAM64: Adressen werden vor dem Schreiben ganz geprüft; ein von IPAM64 übernommener Eintrag von Hand wird bei einem Fehler freigegeben statt gelöscht. Import, Assistent und Abgleich lesen DHCP-Netze und eigene Adressen einmal je Stapel statt je Reservierung.
 
 ## 1.40.1 – 2026-11-14
 

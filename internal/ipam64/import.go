@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"errors"
+	"io"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -17,7 +18,8 @@ import (
 //     ergibt Rechnername und Zone.
 //   - sonst Praefixe mit Spalte prefix: name, status, vlan, role, description, tags, dns_zone, scan, dynamic.
 // Erst eine Vorschau mit Pruefung je Zeile, dann das Uebernehmen der gueltigen Zeilen (Adressen ueber ApplyAddress,
-// also samt DNS64).
+// also samt DNS64). Eine kaputte Zeile (z. B. Anfuehrungszeichen mitten im Feld) ist ein Fehler dieser Zeile, der Rest
+// wird weiter gelesen.
 
 const (
 	maxImportBytes = 2 << 20
@@ -26,6 +28,9 @@ const (
 
 // ErrImport: Datei leer, zu gross oder ohne passende Spalten.
 var ErrImport = errors.New("ipam64: invalid import file")
+
+// ErrCSVLine: Zeile der CSV-Datei laesst sich nicht lesen.
+var ErrCSVLine = errors.New("ipam64: invalid csv line")
 
 // ImportRow ist eine Zeile der Vorschau.
 type ImportRow struct {
@@ -92,14 +97,27 @@ func (m *Module) ParseImport(ctx context.Context, data []byte) ([]ImportRow, err
 	}
 	var rows []ImportRow
 	var newPrefixes []netip.Prefix
-	for line := 2; ; line++ {
+	for {
 		rec, err := r.Read()
-		if err != nil {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if len(rows) >= maxImportRows {
 			return nil, ErrImport
 		}
+		if err != nil {
+			var pe *csv.ParseError
+			if !errors.As(err, &pe) {
+				return nil, ErrImport
+			}
+			kind := "address"
+			if !hasAddr {
+				kind = "prefix"
+			}
+			rows = append(rows, ImportRow{Line: pe.StartLine, Kind: kind, Err: ErrCSVLine})
+			continue
+		}
+		line, _ := r.FieldPos(0) // Zeile in der Datei (Felder mit Zeilenumbruch zaehlen mit)
 		get := func(k string) string {
 			if i, ok := col[k]; ok && i < len(rec) {
 				return strings.TrimSpace(rec[i])
@@ -224,6 +242,9 @@ func (m *Module) ApplyImport(ctx context.Context, rows []ImportRow, actor string
 			continue
 		}
 		n++
+	}
+	if vctx, err := m.withView(ctx); err == nil { // Praefixe stehen fest: einmal lesen statt je Adresse
+		ctx = vctx
 	}
 	_ = m.batch(ctx, func(ctx context.Context) error {
 		for _, r := range rows {

@@ -99,7 +99,7 @@ func TestIPAMBridgeRecords(t *testing.T) {
 	m, _ := testModule(t)
 	ctx := context.Background()
 	v4, v6 := netip.MustParseAddr("192.168.50.20"), netip.MustParseAddr("fd00:10::20")
-	if err := m.PutIPAMRecords(ctx, "u1", "NAS.home.lan.", []netip.Addr{v4, v6}, true); err != nil {
+	if _, err := m.PutIPAMRecords(ctx, "u1", "NAS.home.lan.", []netip.Addr{v4, v6}, true); err != nil {
 		t.Fatal(err)
 	}
 	if rrs, ok := m.Lookup("nas.home.lan", dns.TypeAAAA); !ok || len(rrs) != 1 {
@@ -110,7 +110,7 @@ func TestIPAMBridgeRecords(t *testing.T) {
 		t.Fatalf("ptr: %v %v", rrs, ok)
 	}
 	// nur noch IPv4, ohne PTR: AAAA faellt weg
-	if err := m.PutIPAMRecords(ctx, "u1", "nas.home.lan", []netip.Addr{v4}, false); err != nil {
+	if _, err := m.PutIPAMRecords(ctx, "u1", "nas.home.lan", []netip.Addr{v4}, false); err != nil {
 		t.Fatal(err)
 	}
 	if rrs, _ := m.Lookup("nas.home.lan", dns.TypeAAAA); len(rrs) != 0 {
@@ -123,16 +123,16 @@ func TestIPAMBridgeRecords(t *testing.T) {
 	if _, err := m.AddRecord(ctx, Record{Name: "pi.home.lan", Type: "A", Value: "192.168.50.3"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.PutIPAMRecords(ctx, "u2", "pi.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.3")}, true); err != nil {
+	if _, err := m.PutIPAMRecords(ctx, "u2", "pi.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.3")}, true); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
 	if _, err := m.AddRecord(ctx, Record{Name: "web.home.lan", Type: "CNAME", Value: "nas.home.lan"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.PutIPAMRecords(ctx, "u3", "web.home.lan", []netip.Addr{v4}, true); err == nil {
+	if _, err := m.PutIPAMRecords(ctx, "u3", "web.home.lan", []netip.Addr{v4}, true); err == nil {
 		t.Fatal("cname accepted")
 	}
-	if err := m.PutIPAMRecords(ctx, "u3", "nas.home.lan", []netip.Addr{v4}, true); err == nil {
+	if _, err := m.PutIPAMRecords(ctx, "u3", "nas.home.lan", []netip.Addr{v4}, true); err == nil {
 		t.Fatal("other ipam record accepted")
 	}
 	recs, _ := m.Records(ctx)
@@ -180,7 +180,7 @@ func TestIPAMBridgeRecords(t *testing.T) {
 	err := m.IPAMBatch(ctx, func(ctx context.Context) error {
 		for i := 1; i <= 50; i++ {
 			ip := netip.AddrFrom4([4]byte{192, 168, 60, byte(i)})
-			if err := m.PutIPAMRecords(ctx, "b"+ip.String(), "h"+strconv.Itoa(i)+".home.lan", []netip.Addr{ip}, true); err != nil {
+			if _, err := m.PutIPAMRecords(ctx, "b"+ip.String(), "h"+strconv.Itoa(i)+".home.lan", []netip.Addr{ip}, true); err != nil {
 				return err
 			}
 		}
@@ -213,7 +213,7 @@ func TestIPAMBridgeCluster(t *testing.T) {
 	if err := a.PutIPAMExclude(ctx, "u2", "192.168.50.110", "fest"); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.PutIPAMRecords(ctx, "u1", "nas.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.20")}, true); err != nil {
+	if _, err := a.PutIPAMRecords(ctx, "u1", "nas.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.20")}, true); err != nil {
 		t.Fatal(err)
 	}
 	for _, item := range []string{ItemDHCPRes, ItemRecords} {
@@ -266,5 +266,69 @@ func TestIPAMBridgePages(t *testing.T) {
 	}
 	if off := page(false); !strings.Contains(off, "/dns64/dhcp/reservations/7/delete") || !strings.Contains(off, "IPAM64") {
 		t.Fatalf("ipam off:\n%s", off)
+	}
+}
+
+// Pruefmodus (IPAMCheck): Fehler wie beim Schreiben, aber nichts geschrieben; PutIPAMRecords meldet uebernommene
+// Eintraege von Hand.
+func TestIPAMBridgeCheck(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	s, err := m.AddDHCPScope(ctx, DHCPScope{Iface: "eth9", Subnet: "192.168.50.0/24", Start: "192.168.50.100", End: "192.168.50.150"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.AddDHCPReservation(ctx, DHCPReservation{ScopeID: s.ID, MAC: "02:00:00:00:00:03", IP: "192.168.50.30"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.AddRecord(ctx, Record{Name: "pi.home.lan", Type: "A", Value: "192.168.50.3"}); err != nil {
+		t.Fatal(err)
+	}
+	chk := IPAMCheck(ctx)
+	if err := m.PutIPAMReservation(chk, "u1", "02:00:00:00:00:03", "192.168.50.31", "x"); err == nil {
+		t.Fatal("check: dup mac accepted")
+	}
+	if err := m.PutIPAMReservation(chk, "u1", "02:00:00:00:00:04", "192.168.50.31", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.PutIPAMExclude(chk, "u2", "192.168.50.30", ""); err == nil {
+		t.Fatal("check: exclude over reservation accepted")
+	}
+	if err := m.PutIPAMExclude(chk, "u2", "192.168.50.120", ""); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := m.PutIPAMRecords(chk, "u3", "pi.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.3")}, true)
+	if err != nil || !claimed {
+		t.Fatalf("check claim: %v %v", claimed, err)
+	}
+	if st, _ := m.IPAMEntries(ctx); len(st.Reservations)+len(st.Excludes)+len(st.Records) != 0 {
+		t.Fatalf("check wrote: %+v", st)
+	}
+	if claimed, err := m.PutIPAMRecords(ctx, "u3", "pi.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.3")}, true); err != nil || !claimed {
+		t.Fatalf("claim: %v %v", claimed, err)
+	}
+	if claimed, err := m.PutIPAMRecords(ctx, "u4", "nas.home.lan", []netip.Addr{netip.MustParseAddr("192.168.50.4")}, true); err != nil || claimed {
+		t.Fatalf("new: %v %v", claimed, err)
+	}
+	// freigeben statt loeschen: der uebernommene Eintrag bleibt als Eintrag von Hand
+	if n, err := m.ReleaseIPAM(ctx, "u3"); err != nil || n != 1 {
+		t.Fatalf("release: %d %v", n, err)
+	}
+	if rrs, ok := m.Lookup("pi.home.lan", dns.TypeA); !ok || len(rrs) != 1 {
+		t.Fatalf("released record: %v", rrs)
+	}
+	// im Stapel: Netze und Adressen der Node einmal gelesen, Ergebnis wie ohne Stapel
+	if err := m.IPAMBatch(ctx, func(ctx context.Context) error {
+		for i := 40; i < 45; i++ {
+			if err := m.PutIPAMReservation(ctx, "b"+strconv.Itoa(i), "02:00:00:00:01:"+strconv.Itoa(i), "192.168.50."+strconv.Itoa(i), ""); err != nil {
+				return err
+			}
+		}
+		return m.PutIPAMReservation(ctx, "bx", "02:00:00:00:01:99", "10.9.9.9", "")
+	}); err == nil {
+		t.Fatal("batch: address outside networks accepted")
+	}
+	if st, _ := m.IPAMEntries(ctx); len(st.Reservations) != 5 {
+		t.Fatalf("batch: %+v", st.Reservations)
 	}
 }

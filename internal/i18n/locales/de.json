@@ -3272,6 +3272,7 @@
       "ipam64_conflict_dup": "Doppelte Adresse {ip}: zwei Geräte antworten ({macs}).",
       "ipam64_conflict_mac": "Fremdes Gerät an der festen Adresse {ip} ({macs}).",
       "ipam64_conflict_lease": "Der DHCP-Server hat die feste Adresse {ip} vergeben ({macs}).",
+      "ipam64_conflict_double": "Die Adresse {ip} wurde auf zwei Nodes gleichzeitig vergeben; der eigene Eintrag {name} wurde durch den der anderen Node ersetzt.",
       "ipam64_new_device": "Neues Gerät im Netz: {ip} ({mac}) {vendor}",
       "dyndns_addr_failed": "Öffentliche {family}-Adresse {count}-mal hintereinander nicht ermittelt.",
       "dyndns_limit_reached": "ipv64: Tageslimit für Updates erreicht.",
@@ -5626,7 +5627,9 @@
       "stale": "{ip} lange nicht gesehen",
       "stale_hint": "DNS-Eintrag zeigt auf eine Adresse ohne Gerät",
       "foreign": "Fremder DHCP-Server {ip} in {prefix}",
-      "foreign_hint": "aus DNS64 – abschalten"
+      "foreign_hint": "aus DNS64 – abschalten",
+      "double": "Adresse {ip} auf zwei Nodes vergeben",
+      "double_hint": "gleichzeitig vergeben – der Eintrag der anderen Node gilt, prüfen"
     },
     "conflicts": {
       "title": "Scan & Konflikte",
@@ -5682,7 +5685,7 @@
     },
     "handover": {
       "title": "An DNS64 übergeben",
-      "text": "Nimmt das Kennzeichen „IPAM64“ von allen Reservierungen, Ausnahmen und Einträgen in DNS64. Sie bleiben bestehen und sind dort wieder frei bearbeitbar; an den Adressen hier gehen die Schalter DNS und DHCP aus. Sinnvoll, bevor IPAM64 abgeschaltet wird.",
+      "text": "Nimmt das Kennzeichen „IPAM64“ von allen Reservierungen, Ausnahmen und Einträgen in DNS64. Sie bleiben bestehen und sind dort wieder frei bearbeitbar; an den Adressen hier gehen die Schalter DNS und DHCP aus. Die anderen Nodes im Cluster geben ihre Einträge ebenfalls frei. Sinnvoll, bevor IPAM64 abgeschaltet wird.",
       "confirm": "Alle Einträge aus IPAM64 an DNS64 übergeben?",
       "button": "Übergeben"
     },
@@ -5697,6 +5700,7 @@
       "state_off": "DNS64 aus",
       "state_planned": "neu",
       "none": "Nichts – weder DNS noch DHCP an.",
+      "released": "Nichts – die Einträge wurden an DNS64 übergeben. Schalte DNS oder DHCP ein, damit IPAM64 sie wieder verwaltet.",
       "hint": "Gekennzeichnete Einträge sind in DNS64 nur hier änderbar. Der Abgleich prüft alle 10 Minuten."
     },
     "title": "IPAM64",
@@ -5924,6 +5928,7 @@
     },
     "err": {
       "import": "Die Datei ist leer, zu groß oder hat keine Spalte ip bzw. prefix.",
+      "csv_line": "Die Zeile lässt sich nicht lesen (z. B. Anführungszeichen mitten im Feld).",
       "dyn": "„Dynamisch“ geht nur für globale IPv6-Präfixe (2000::/3).",
       "no_zone": "DNS ist an, aber es gibt keine Zone – trage eine an der Adresse oder am Präfix ein.",
       "no_dns64": "DNS64 läuft nicht.",

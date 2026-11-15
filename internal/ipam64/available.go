@@ -6,8 +6,9 @@ import (
 )
 
 // Freie Adressen: frei ist eine Adresse, die in keiner Quelle belegt ist, nicht Netz- oder Broadcast-Adresse ist und
-// weder im DHCP-Adressbereich noch in einem reservierten Adressbereich liegt. Gibt es im Praefix Adressbereiche fuer
-// feste Adressen, wird nur dort gesucht (bzw. im gewaehlten Bereich).
+// weder im DHCP-Adressbereich (auch dem des umgebenden DHCP-Netzes) noch in einem reservierten Adressbereich liegt
+// (auch einem des Eltern-Praefixes, der hineinreicht). Gibt es im Praefix selbst Adressbereiche fuer feste Adressen
+// (nicht in einem Kind-Praefix), wird nur dort gesucht (bzw. im gewaehlten Bereich).
 
 const maxFreeSearch = 1 << 16 // so viele Adressen hoechstens durchsuchen (IPv6, grosse Netze)
 
@@ -37,14 +38,21 @@ func (s *Snapshot) free(n *Net, rangeUID string, limit int) ([]netip.Addr, error
 	}
 	type span struct{ a, b netip.Addr }
 	var fixed, reserved []span
-	for _, r := range s.RangesIn(n.Prefix) {
-		a, b := netip.MustParseAddr(r.Start), netip.MustParseAddr(r.End)
+	first, last := n.Prefix.Masked().Addr(), lastAddr(n.Prefix)
+	for _, r := range s.Ranges {
+		a, err1 := netip.ParseAddr(r.Start)
+		b, err2 := netip.ParseAddr(r.End)
+		if err1 != nil || err2 != nil || a.Is4() != n.IsV4() {
+			continue
+		}
 		switch {
 		case rangeUID != "" && r.UID == rangeUID:
-			fixed = []span{{a, b}}
-		case rangeUID == "" && r.Kind == RangeFixed:
+			if n.Prefix.Contains(a) {
+				fixed = []span{{a, b}}
+			}
+		case rangeUID == "" && r.Kind == RangeFixed && s.NetOf(a) == n: // Bereiche eines Kind-Praefixes gehoeren dorthin
 			fixed = append(fixed, span{a, b})
-		case r.Kind == RangeReserved:
+		case r.Kind == RangeReserved && !b.Less(first) && !last.Less(a): // auch aus dem Eltern-Praefix hineinreichend
 			reserved = append(reserved, span{a, b})
 		}
 	}

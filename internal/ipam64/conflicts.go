@@ -41,7 +41,7 @@ func vendorOf(mac string) string {
 
 // Finding ist ein Konflikt oder Hinweis.
 type Finding struct {
-	Kind     string   `json:"kind"`     // dup | mac | lease (Konflikte), pool | stale | foreign (Hinweise)
+	Kind     string   `json:"kind"`     // dup | mac | lease | double (Konflikte), pool | stale | foreign (Hinweise)
 	Severity string   `json:"severity"` // conflict | hint
 	IP       string   `json:"ip"`
 	Prefix   string   `json:"prefix,omitempty"`
@@ -84,6 +84,7 @@ func (m *Module) Findings(ctx context.Context) ([]Finding, error) {
 			}
 		}
 	}
+	out = append(out, m.doubleFindings()...)
 	if m.foreign != nil {
 		for _, f := range m.foreign(ctx) {
 			out = append(out, Finding{Kind: "foreign", Severity: "hint", IP: f.Server, Prefix: f.Net})
