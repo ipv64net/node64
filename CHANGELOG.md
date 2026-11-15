@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- DNS64: Schutz vor DNS-Rebinding (Standard an; zeigt die eigene Domain öffentlich auf Geräte im Heimnetz, in den Einstellungen als Ausnahme eintragen); neue Heimnetz-CAs gelten nur für lokale und eigene Namen, eine vorhandene CA lässt sich per Knopf durch eine beschränkte ersetzen.
 - Honeypot64 (Sicherheit): Im Docker-Bridge-Netz gilt die Gateway-Adresse nicht mehr als lokal – Info-Seite und `/metrics` brauchen von dort das Token, Syslog nimmt sie nur einzeln eingetragen an.
 - PROXY64 1.56.4 (Sicherheit): Über CDN64 mit HTTP/3 durchgereichte Verbindungen gelten nur noch für ihren Namen (wie über TCP); Verbindungen ohne SNI halten die TLS-Vorgaben des Proxy-Hosts ein.
 - PROXY64 1.56.5: HTTP/3 über CDN64 (Modus 1) bricht bei manchen Clients nicht mehr nach etwa 10 Sekunden ab; Streams über CDN64 leiten UDP nicht mehr zu bekannten Verstärker-Diensten (z. B. DNS, NTP).

@@ -442,7 +442,7 @@ func (m *Module) denylist() (*filter.Allowlist, error) {
 // ---- Export/Import (module.Exporter) ----
 
 var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setAllowLst, setListHours,
-	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setMDNS, setDocker, setDockerIP, setDockerDomains, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
+	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setCanary, setRebind, setRebindOK, setMDNS, setDocker, setDockerIP, setDockerDomains, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
 	setNotifyUpstream, setNotifyLists, setACMEDom, setACMEPre, setACMEMail, setACMEStage}
 
 type exportData struct {

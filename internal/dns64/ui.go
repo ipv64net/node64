@@ -38,6 +38,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dns64/encrypted", page(m.pageTab("encrypted", "dns64.enc.title")))
 	mux.Handle("POST /dns64/encrypted", page(m.pageEncryptedSave))
 	mux.Handle("GET /dns64/ca.crt", page(m.pageCA))
+	mux.Handle("POST /dns64/encrypted/newca", page(m.pageNewCA))
 	mux.Handle("GET /dns64/dns64.mobileconfig", page(m.pageProfile))
 	mux.Handle("GET /dns64/settings", page(m.pageTab("settings", "dns64.settings.title")))
 	mux.Handle("POST /dns64/settings", page(m.pageSettingsSave))
@@ -205,7 +206,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_nodata", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
 	"reason_group", "reason_cat", "reason_svc", "reason_list", "lookup_title", "lookup_free", "lookup_nogroup", "lookup_own", "lookup_allowed", "lookup_list",
-	"lookup_groups_only", "lookup_excepted", "lookup_released", "lookup_group_allow", "lookup_group_block", "lookup_service", "lookup_cat", "lookup_none", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult", "top_col_domain", "top_col_client"}
+	"lookup_groups_only", "lookup_excepted", "lookup_released", "lookup_group_allow", "lookup_group_block", "lookup_service", "lookup_cat", "lookup_none", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_rebind", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult", "top_col_domain", "top_col_client"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))
@@ -265,6 +266,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.NotifyUp, c.NotifyLst = r.PostFormValue("notify_upstream") != "", r.PostFormValue("notify_lists") != ""
 	c.AllowNets = splitLines(r.PostFormValue("allow_nets"))
 	c.Canary = r.PostFormValue("firefox_canary") != ""
+	c.Rebind, c.RebindAllow = r.PostFormValue("rebind") != "", splitLines(r.PostFormValue("rebind_allow"))
 	c.MDNS = r.PostFormValue("mdns") != ""
 	c.Docker, c.DockerIP, c.DockerDomains = r.PostFormValue("docker") != "", r.PostFormValue("docker_ip"), r.PostFormValue("docker_domains")
 	m.apply(w, r, "/dns64/settings", c, "dns64.settings", "")

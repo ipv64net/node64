@@ -411,6 +411,7 @@
 				else if (details.indexOf("forward:") === 0) { details = t("reason_forward", { domain: details.slice(8), server: r.upstream || "" }); }
 				else if (details.indexOf("rewrite:") === 0) { details = t("reason_rewrite", { target: details.slice(8) }); }
 				else if (details === "canary") { details = t("reason_canary"); }
+				else if (details === "rebind") { details = t("reason_rebind"); }
 				else if (details === "bypass:icloud") { details = t("reason_bypass_icloud", { group: r.group || "" }); }
 				else if (details.indexOf("cat:svc:") === 0) { details = t("reason_svc", { svc: t("cat." + details.slice(4)), group: r.group || "" }); }
 				else if (details.indexOf("cat:") === 0) { details = t("reason_cat", { cat: t("cat." + details.slice(4)), group: r.group || "" }); }

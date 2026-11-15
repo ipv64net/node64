@@ -52,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.41.1"
+	version   = "1.42.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -359,7 +359,7 @@ func (m *Module) start(ctx context.Context) error {
 	m.mdnsDomains(ctx, e.local)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
 		Records: m, Split: m.split, Forward: m.forwardFor, Rewrite: m.rewriteFor, Zone: m.zoneAnswer, Updates: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
-		Policy: m.policy, Canary: cfg.Canary, Seen: m.pubArrived}
+		Policy: m.policy, Canary: cfg.Canary, Seen: m.pubArrived, Rebind: cfg.rebindFunc()}
 	e.srv.HintV4, e.srv.HintV6 = hintAddrs(cfg.Bind)
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()

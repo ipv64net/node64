@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.42.0 – unveröffentlicht
+
+### Neu
+- Schutz vor DNS-Rebinding (Einstellungen, Standard an): Antworten aus dem Internet liefern für öffentliche Namen keine Adressen aus dem Heimnetz mehr (privat, ULA, Loopback, Link-Local). Ausgenommen sind eigene Einträge, lokale Zonen und Namen, Weiterleitungen, Freigaben, ipv64-Domains, plex.direct, die Endungen der Docker-Labels und eigene Endungen („Weitere Endungen ohne Rebinding-Schutz“, im Cluster abgeglichen). Das Abfrage-Log zeigt „Rebinding-Schutz“, „Freigeben“ hebt ihn für den Namen auf. Zeigt deine eigene Domain öffentlich auf Geräte im Heimnetz, trag sie dort ein.
+
+### Sicherheit
+- Heimnetz-CA: Neue Installationen bekommen eine CA, die nur lokale Namen (.lan, .home.arpa …), die eigenen DoH/DoT-Namen und lokale Zonen erlaubt. Eine vorhandene CA bleibt; die Seite „Verschlüsselt“ zeigt einen Hinweis mit dem Knopf „Neue beschränkte CA anlegen“ und einer Anleitung (Geräte brauchen danach die neue CA bzw. das neue Profil). Namen, die die CA nicht erlaubt, fehlen im Zertifikat und werden dort angezeigt.
+
 ## 1.41.1 – unveröffentlicht
 
 ### Sicherheit

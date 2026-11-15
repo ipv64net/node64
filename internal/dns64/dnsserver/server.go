@@ -94,6 +94,7 @@ type Server struct {
 	Rewrite   RewriteFunc // Name antwortet wie ein anderer (nil = keins)
 	Zone      ZoneFunc    // lokale Zonen: Geraetenamen, SOA, NXDOMAIN fuer Unbekanntes (nil = keine)
 	Updates   Updater     // dynamische Updates mit TSIG (nil = keine, update.go)
+	Rebind    RebindFunc  // Schutz vor DNS-Rebinding je Name (nil = aus, rebind.go)
 	// Seen bekommt jede erlaubte Anfrage (Absender, Protokoll), z. B. fuer die Pruefung "Port veroeffentlicht?"
 	// (nil = niemand); muss sofort zurueckkehren
 	Seen func(client netip.Addr, proto string)
@@ -394,6 +395,8 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	if fwd != nil { // nach Filter und SafeSearch: an die eigenen Server statt an die Upstreams
 		return s.forward(r, fwd, e, querylog.StatusAllowed)
 	}
+	// Rebinding-Schutz; eine eigene Freigabe (auch der Geraetegruppe) hebt ihn auf
+	rebind := s.Rebind != nil && !groupAllowed && !s.Filter.Exempt(name) && s.Rebind(name)
 
 	if resp, state, refresh := s.Cache.Get(r); resp != nil {
 		// CNAME-Tarnung auch im Cache pruefen: Antworten sind fuer alle Gruppen gemeinsam zwischengespeichert
@@ -408,7 +411,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 			e.Reason = ReasonStale
 		}
 		if refresh {
-			s.refresh(r, released)
+			s.refresh(r, released, rebind)
 		}
 		return resp
 	}
@@ -431,6 +434,12 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	}
 
 	e.Status, e.Reason = querylog.StatusAllowed, reason
+	if rebind {
+		if m, hit := rebound(resp); hit {
+			resp = m
+			e.Status, e.Reason = querylog.StatusBlocked, ReasonRebind
+		}
+	}
 	s.Cache.Set(r, resp)
 	return resp
 }
@@ -454,7 +463,7 @@ func (s *Server) cnameBlocked(resp *dns.Msg, qtype uint16, mask uint64) (bool, s
 
 // refresh fetches a new copy of a cached answer in the background, so the
 // client that triggered it is answered from the cache without waiting.
-func (s *Server) refresh(r *dns.Msg, released bool) {
+func (s *Server) refresh(r *dns.Msg, released, rebind bool) {
 	select {
 	case s.refreshSem <- struct{}{}:
 	default:
@@ -476,6 +485,9 @@ func (s *Server) refresh(r *dns.Msg, released bool) {
 			s.Cache.Delete(req)
 			s.Cache.RefreshDone(true)
 			return
+		}
+		if rebind {
+			resp, _ = rebound(resp)
 		}
 		s.Cache.Set(req, resp)
 		s.Cache.RefreshDone(true)

@@ -34,14 +34,24 @@ type encView struct {
 	Host     string // Name fuer die Geraete
 	DoHURL   string
 	DoQURL   string
-	CA       bool // eigene CA (zum Herunterladen)
-	Central  bool // zentrale Zertifikatsverwaltung vorhanden
+	CA       bool     // eigene CA (zum Herunterladen)
+	CAOld    bool     // Heimnetz-CA ohne Beschraenkung der Namen (vor DNS64 1.41.1 angelegt)
+	CAMiss   []string // eingestellte Namen, die die beschraenkte CA nicht ausstellt
+	Central  bool     // zentrale Zertifikatsverwaltung vorhanden
 	Certs    []centralOpt
 	Current  *centralOpt // central: das gewaehlte Zertifikat
 }
 
 func (m *Module) encView(r *http.Request, c config) encView {
 	v := encView{CA: c.CertMode == certSelf, Central: m.certs != nil}
+	if ca := m.homeCA(); v.CA && ca != nil {
+		v.CAOld = len(ca.PermittedDNSDomains) == 0
+		for _, n := range c.Names {
+			if n = strings.TrimPrefix(hostName(n), "*."); !v.CAOld && net.ParseIP(n) == nil && !permitsName(ca.PermittedDNSDomains, n) {
+				v.CAMiss = append(v.CAMiss, n)
+			}
+		}
+	}
 	if v.Central {
 		v.Certs = m.centralList(r.Context())
 		for i := range v.Certs {
@@ -132,6 +142,25 @@ func (m *Module) pageEncryptedSave(w http.ResponseWriter, r *http.Request) {
 		c.CertID = id
 	}
 	m.apply(w, r, "/dns64/encrypted", c, "dns64.encrypted", "doh="+b2s(c.DoH)+" dot="+b2s(c.DoT)+" doq="+b2s(c.DoQ)+" cert="+c.CertMode)
+}
+
+// pageNewCA: neue, beschraenkte Heimnetz-CA anlegen (Knopf auf der Seite); danach neu starten (neues Zertifikat).
+func (m *Module) pageNewCA(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := m.renewCA(ctx); err != nil {
+		m.log.Error("dns64 new home CA failed", "err", err)
+		m.g.Flash(w, r, "danger", m.g.T(r, "dns64.enc.newca_failed", "err", err.Error()))
+		http.Redirect(w, r, "/dns64/encrypted", http.StatusSeeOther)
+		return
+	}
+	m.log.Info("dns64 new home CA created", "by", m.g.Actor(r))
+	m.audit(r, "dns64.newca", "", "")
+	if err := m.restart(ctx); err != nil {
+		m.g.Flash(w, r, "danger", m.g.T(r, "dns64.err.restart", "err", err.Error()))
+	} else {
+		m.g.Flash(w, r, "success", m.g.T(r, "dns64.enc.newca_done"))
+	}
+	http.Redirect(w, r, "/dns64/encrypted", http.StatusSeeOther)
 }
 
 // caDER liefert die Heimnetz-CA (nil, wenn es keine gibt).

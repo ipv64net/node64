@@ -1,5 +1,13 @@
 # Changes – DNS64
 
+## 1.42.0 – unreleased
+
+### New
+- DNS rebinding protection (settings, on by default): answers from the internet no longer return addresses of the home network (private, ULA, loopback, link-local) for public names. Exempt are own records, local zones and names, forwards, releases, ipv64 domains, plex.direct, the suffixes of the Docker labels and own suffixes ("More suffixes without rebinding protection", synced in the cluster). The query log shows "rebinding protection", "Release" lifts it for the name. If your own domain points to devices in your home network publicly, add it there.
+
+### Security
+- Home network CA: new installations get a CA that only allows local names (.lan, .home.arpa …), your own DoH/DoT names and local zones. An existing CA stays; the "Encrypted" page shows a hint with the button "Create new restricted CA" and instructions (devices then need the new CA or the new profile). Names the CA does not allow are missing from the certificate and are listed there.
+
 ## 1.41.1 – unreleased
 
 ### Security

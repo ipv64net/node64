@@ -1063,6 +1063,16 @@
             "description": "Adressen fuer Docker-Eintraege ohne Label node64.dns.ip (IPv4/IPv6, Komma); leer = LAN-Adresse der Node (im Docker-Bridge-Netz unbekannt)",
             "example": "192.168.1.5, fd00::5"
           },
+          "rebind": {
+            "type": "boolean",
+            "description": "Schutz vor DNS-Rebinding: A/AAAA mit Adressen aus dem eigenen Netz (privat, ULA, Loopback, Link-Local) fallen aus Antworten des Internets fuer oeffentliche Namen; ausgenommen eigene Eintraege, Zonen, lokale Namen, Weiterleitungen, Freigaben, ipv64-Domains, plex.direct, rebind_allow und docker_domains. Standard an"
+          },
+          "rebind_allow": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Weitere Endungen ohne Rebinding-Schutz (z. B. die eigene Domain, deren oeffentliche Eintraege auf das Heimnetz zeigen)",
+            "example": ["example.com"]
+          },
           "docker_domains": {
             "type": "string",
             "description": "Weitere erlaubte Endungen fuer Namen aus Docker-Labels (Komma), z. B. die eigene Domain; ohne Eintrag nur lokale Endungen (.lan, .home.arpa ...) und lokale Zonen",

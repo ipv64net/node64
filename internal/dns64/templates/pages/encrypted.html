@@ -107,6 +107,11 @@
 					<a class="btn btn-sm btn-outline-primary" href="/dns64/dns64.mobileconfig?proto=doh&amp;host={{$e.Host}}"><i class="bi bi-apple"></i> {{.T "dns64.enc.dl_profile" "proto" "DoH"}}</a>
 					<a class="btn btn-sm btn-outline-primary" href="/dns64/dns64.mobileconfig?proto=dot&amp;host={{$e.Host}}"><i class="bi bi-apple"></i> {{.T "dns64.enc.dl_profile" "proto" "DoT"}}</a>
 				</div>
+				{{if or $e.CAOld $e.CAMiss}}<div class="alert alert-warning small py-2" id="ca-neu">
+					<i class="bi bi-shield-exclamation"></i> {{if $e.CAOld}}{{.T "dns64.enc.ca_old"}}{{else}}{{.T "dns64.enc.ca_miss" "names" (join $e.CAMiss ", ")}}{{end}}
+					<ol class="mb-2 mt-1 ps-3"><li>{{.T "dns64.enc.newca_step1"}}</li><li>{{.T "dns64.enc.newca_step2"}}</li><li>{{.T "dns64.enc.newca_step3"}}</li></ol>
+					<form method="post" action="/dns64/encrypted/newca" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-warning" type="submit" data-confirm="{{.T "dns64.enc.newca_confirm"}}"><i class="bi bi-arrow-repeat"></i> {{.T "dns64.enc.newca"}}</button></form>
+				</div>{{end}}
 				<ul class="ps-3 mb-2">
 					<li>{{.T "dns64.enc.howto_apple"}}</li>
 					<li>{{.T "dns64.enc.howto_windows"}}</li>

@@ -62,7 +62,7 @@ func dotLeaf(t *testing.T, port int) *x509.Certificate {
 func TestCentralMigrationACME(t *testing.T) {
 	m, _ := testModule(t)
 	ctx := context.Background()
-	if _, _, err := m.loadOrCreateCA(); err != nil { // vorhandene Heimnetz-CA
+	if _, _, err := m.loadOrCreateCA(nil); err != nil { // vorhandene Heimnetz-CA
 		t.Fatal(err)
 	}
 	// vorhandenes "Let's-Encrypt"-Zertifikat fuer dns.home.ipv64.de
@@ -143,7 +143,7 @@ func TestCentralSelf(t *testing.T) {
 	if err != nil || m.certInUse.Load() != own.ID {
 		t.Fatalf("owned %v %v, in use %d", own, err, m.certInUse.Load())
 	}
-	ca, _, err := m.loadOrCreateCA()
+	ca, _, err := m.loadOrCreateCA(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

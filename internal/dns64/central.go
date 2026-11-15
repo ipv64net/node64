@@ -61,7 +61,7 @@ func (m *Module) migrateCentral(ctx context.Context, c *config) {
 
 func (m *Module) doMigrate(ctx context.Context, c *config) error {
 	if _, err := os.Stat(m.caFile()); err == nil {
-		if _, err := m.centralCA(ctx); err != nil {
+		if _, err := m.centralCA(ctx, *c); err != nil {
 			return err
 		}
 	}
@@ -109,13 +109,13 @@ func (m *Module) centralAccount(ctx context.Context, c config) error {
 }
 
 // centralCA: die Heimnetz-CA in der Verwaltung (beim ersten Mal aus tls/ca.pem uebernommen bzw. neu erzeugt).
-func (m *Module) centralCA(ctx context.Context) (int64, error) {
+func (m *Module) centralCA(ctx context.Context, c config) (int64, error) {
 	if id, _ := strconv.ParseInt(m.core.SettingOr(ctx, setCAID, ""), 10, 64); id > 0 {
 		if _, err := m.certs.GetCA(ctx, id); err == nil {
 			return id, nil
 		}
 	}
-	if _, _, err := m.loadOrCreateCA(); err != nil {
+	if _, _, err := m.loadOrCreateCA(m.caPermitted(c)); err != nil {
 		return 0, err
 	}
 	certPEM, err := os.ReadFile(m.caFile())
@@ -135,11 +135,14 @@ func (m *Module) centralCA(ctx context.Context) (int64, error) {
 
 // centralSelf: Server-Zertifikat der Heimnetz-CA aus der Verwaltung (Namen und private IPs der Node).
 func (m *Module) centralSelf(ctx context.Context, c config) (*tls.Certificate, int64, error) {
-	caID, err := m.centralCA(ctx)
+	caID, err := m.centralCA(ctx, c)
 	if err != nil {
 		return nil, 0, err
 	}
 	dnsNames, ips := wantedNames(c.Names)
+	if ca, err := m.certs.GetCA(ctx, caID); err == nil { // beschraenkte CA: nur erlaubte Namen (sonst lehnt sie ab)
+		dnsNames = permittedNames(ca.PermittedDNS, dnsNames)
+	}
 	// passt das vorhandene, ohne die Verwaltung zu bemuehen (EnsureIssued wartet auf laufende Abrufe)
 	if own, err := m.certs.Owned(ctx, certOwner); err == nil && own.CAID == caID && time.Until(own.NotAfter) > renewDays*24*time.Hour {
 		if crt := m.certs.ByID(own.ID); crt != nil && covers(crt.Leaf, dnsNames, ips) {

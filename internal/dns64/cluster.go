@@ -56,7 +56,7 @@ func ClusterItems() []ClusterItem {
 type ClusterHook func(ctx context.Context, item, id string, deleted bool)
 
 var clusterKeys = map[string][]string{
-	ItemSettings: {setUpstreams, setUpMode, setUpCount, setBlockMode, setCacheSize, setAnonymize, setRetention, setCanary, setNotifyUpstream, setNotifyLists},
+	ItemSettings: {setUpstreams, setUpMode, setUpCount, setBlockMode, setCacheSize, setAnonymize, setRetention, setCanary, setRebind, setRebindOK, setNotifyUpstream, setNotifyLists},
 	ItemLists:    {setLists, setListHours, setAllowLst},
 }
 

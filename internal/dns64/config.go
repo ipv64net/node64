@@ -33,6 +33,8 @@ const (
 	setAnonymize = "dns64.anonymize"      // off | mask | hide
 	setAllowNets = "dns64.allow_nets"     // weitere Client-Netze, eins je Zeile
 	setCanary    = "dns64.firefox_canary" // 1 = use-application-dns.net -> NXDOMAIN (Firefox schaltet sein DoH ab)
+	setRebind    = "dns64.rebind"         // 1 = Schutz vor DNS-Rebinding (Standard an)
+	setRebindOK  = "dns64.rebind_allow"   // Endungen ohne Rebinding-Schutz, eine je Zeile
 	setMDNS      = "dns64.mdns"           // 1 = .local und unbekannte Geraete per mDNS im eigenen Netz fragen (je Node)
 	setMDNSDoms  = "dns64.mdns_domains"   // gelernte Endungen des Routers (je Node, JSON Endung -> zuletzt gesehen)
 	setDoH       = "dns64.doh"            // 1 = DoH fuer Geraete
@@ -90,6 +92,8 @@ type config struct {
 	Anonymize     string            `json:"anonymize"`
 	AllowNets     []string          `json:"allow_nets"`
 	Canary        bool              `json:"firefox_canary"` // Firefox nutzt DNS64 statt seines eigenen DoH
+	Rebind        bool              `json:"rebind"`         // Schutz vor DNS-Rebinding (rebind.go)
+	RebindAllow   []string          `json:"rebind_allow"`   // Endungen ohne Rebinding-Schutz (zusaetzlich zu den festen)
 	MDNS          bool              `json:"mdns"`           // mDNS-Bruecke: .local und Geraetenamen aus dem eigenen Netz
 	Docker        bool              `json:"docker"`         // Eintraege aus Docker-Labels node64.dns.* (docker.go, je Node)
 	DockerIP      string            `json:"docker_ip"`      // Adressen fuer Docker-Eintraege ohne Label node64.dns.ip ("" = LAN-Adresse)
@@ -143,6 +147,8 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		Anonymize:     oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
 		AllowNets:     splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
 		Canary:        m.core.SettingOr(ctx, setCanary, "1") == "1",
+		Rebind:        m.core.SettingOr(ctx, setRebind, "1") == "1",
+		RebindAllow:   splitLines(m.core.SettingOr(ctx, setRebindOK, "")),
 		MDNS:          m.core.SettingOr(ctx, setMDNS, "") == "1",
 		Docker:        m.core.SettingOr(ctx, setDocker, "") == "1",
 		DockerIP:      m.core.SettingOr(ctx, setDockerIP, ""),
@@ -286,6 +292,39 @@ func (c config) anonymizer() func(netip.Addr) string {
 	return nil
 }
 
+// ipv64Domains: Domains der DynDNS-Namen von ipv64.net (wie $RESV_DOMAINS in api_v2.php); solche Namen zeigen oft
+// gewollt auf eine Adresse im eigenen Netz.
+var ipv64Domains = []string{"ipv64.net", "ipv64.de", "any64.de", "api64.de", "dns64.de", "dyndns64.de", "dynipv6.de", "eth64.de",
+	"home64.de", "iot64.de", "lan64.de", "nas64.de", "root64.de", "route64.de", "srv64.de", "tcp64.de", "udp64.de", "vpn64.de", "wan64.de"}
+
+// rebindFree: feste Ausnahmen vom Rebinding-Schutz - ipv64-Domains und plex.direct (Plex: <ip>.<id>.plex.direct
+// liefert absichtlich die LAN-Adresse des Servers).
+var rebindFree = append([]string{"plex.direct"}, ipv64Domains...)
+
+// rebindFunc: Schutz vor DNS-Rebinding fuer den DNS-Server (nil = aus). Ausgenommen sind die festen Endungen, die
+// eigenen (RebindAllow) und die freigegebenen Endungen der Docker-Labels.
+func (c config) rebindFunc() dnsserver.RebindFunc {
+	if !c.Rebind {
+		return nil
+	}
+	free := map[string]bool{}
+	for _, d := range slices.Concat(rebindFree, c.RebindAllow, dockerSplit(c.DockerDomains)) {
+		free[hostName(d)] = true
+	}
+	return func(name string) bool {
+		for s := name; ; {
+			if free[s] {
+				return false
+			}
+			i := strings.IndexByte(s, '.')
+			if i < 0 {
+				return true
+			}
+			s = s[i+1:]
+		}
+	}
+}
+
 // saveConfig prueft und speichert die Einstellungen.
 func (m *Module) saveConfig(ctx context.Context, c config) error {
 	if err := c.validate(); err != nil {
@@ -302,7 +341,7 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setPort:     strconv.Itoa(c.Port), setBind: c.Bind, setRouter: c.Router, setRetention: strconv.Itoa(c.Retention),
 		setUpMode: c.UpMode, setUpCount: strconv.Itoa(c.UpCount), setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
-		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary), setMDNS: b2s(c.MDNS), setDocker: b2s(c.Docker), setDockerIP: c.DockerIP, setDockerDomains: c.DockerDomains,
+		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary), setRebind: b2s(c.Rebind), setRebindOK: strings.Join(c.RebindAllow, "\n"), setMDNS: b2s(c.MDNS), setDocker: b2s(c.Docker), setDockerIP: c.DockerIP, setDockerDomains: c.DockerDomains,
 		setDoH: b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
 		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setCertID: strconv.FormatInt(c.CertID, 10), setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
 		setACMEDom: c.ACMEDomain, setACMEPre: c.ACMEPrefix, setACMEMail: c.ACMEEmail, setACMEStage: b2s(c.ACMEStaging),
@@ -334,6 +373,18 @@ func (c *config) validate() error {
 	if !validDockerIP(c.DockerIP) {
 		return errCfg("err_docker_ip")
 	}
+	var ok []string
+	for _, d := range c.RebindAllow {
+		for _, x := range dockerSplit(d) {
+			if x = strings.TrimPrefix(hostName(x), "*."); !validName(x) {
+				return errCfg("err_rebind_allow")
+			}
+			if !slices.Contains(ok, x) {
+				ok = append(ok, x)
+			}
+		}
+	}
+	c.RebindAllow = ok
 	doms := dockerSplit(c.DockerDomains)
 	for i, d := range doms {
 		doms[i] = hostName(d)

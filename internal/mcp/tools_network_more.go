@@ -73,7 +73,7 @@ func dns64Config(c *call, a map[string]any) (map[string]any, error) {
 		}
 		for k, v := range pick(s, "port", "bind", "router", "retention_days", "upstream_mode", "list_hours", "block_mode", "cache_size", "anonymize", "allow_nets",
 			"doh", "dot", "doq", "doh_port", "dot_port", "names", "cert_mode", "cert_id", "notify_upstream", "notify_lists", "acme_domain", "acme_prefix", "acme_staging",
-			"upstream_count", "firefox_canary", "mdns", "docker", "docker_ip", "docker_domains") {
+			"upstream_count", "firefox_canary", "rebind", "rebind_allow", "mdns", "docker", "docker_ip", "docker_domains") {
 			out[k] = v
 		}
 		ups := []any{}
