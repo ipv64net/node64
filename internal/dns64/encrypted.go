@@ -163,7 +163,7 @@ func (x *encrypted) serveDoQ(srv *dnsserver.Server) {
 			return
 		}
 		ip := clientAddr(c.RemoteAddr())
-		if !srv.Allowed(ip) {
+		if !srv.Admit(ip) {
 			_ = c.CloseWithError(0, "refused") // nicht erlaubtes Netz: Verbindung gleich wieder zu
 			continue
 		}
@@ -221,7 +221,7 @@ func doqStream(s *quic.Stream, srv *dnsserver.Server, ip netip.Addr) {
 func dohHandler(srv *dnsserver.Server) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := clientAddr(addrString(r.RemoteAddr))
-		if !srv.Allowed(ip) {
+		if !srv.Admit(ip) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

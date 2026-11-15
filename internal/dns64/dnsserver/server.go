@@ -187,6 +187,11 @@ func (s *Server) Handler(proto string) dns.Handler {
 // Clients outside the allowed networks get REFUSED.
 func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg {
 	start := time.Now()
+	// Pruefnamen der eigenen Node (Router-Suche, "Port veroeffentlicht?") vor der Netzpruefung: sie kommen im
+	// Bridge-Netz ueber das Docker-Gateway zurueck, das sonst abgewiesen wird
+	if len(r.Question) == 1 && s.Local != nil && s.Local.SelfProbe(r.Question[0].Name) {
+		return errorMsg(r, dns.RcodeNameError)
+	}
 	if !s.acl.allowed(clientIP) {
 		// Never act as an open resolver on the internet.
 		return errorMsg(r, dns.RcodeRefused)
@@ -199,9 +204,6 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 	}
 
 	q := r.Question[0]
-	if s.Local != nil && s.Local.SelfProbe(q.Name) { // Router-Suche dieser Node landet bei ihr selbst
-		return errorMsg(r, dns.RcodeNameError)
-	}
 	name := strings.TrimSuffix(strings.ToLower(q.Name), ".")
 	client := clientIP.String()
 	if s.Anonymize != nil {
@@ -215,7 +217,7 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 		Proto:  proto,
 	}
 	var pol *Policy
-	if s.Policy != nil {
+	if s.Policy != nil && localnet.Origin(clientIP).IsValid() { // ueber das Docker-Gateway: Geraet unbekannt, keine Gruppe
 		if pol = s.Policy(clientIP); pol != nil {
 			entry.Group = pol.Group
 		}
@@ -247,6 +249,10 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 
 // Allowed reports whether ip may use this resolver (private, attached or configured networks).
 func (s *Server) Allowed(ip netip.Addr) bool { return s.acl.allowed(ip) }
+
+// Admit: Verbindung fuer DoH/DoQ annehmen - erlaubte Netze und das Docker-Gateway (dessen Anfragen beantwortet
+// Answer nur fuer eigene Pruefnamen bzw. eingetragenes Gateway, sonst REFUSED).
+func (s *Server) Admit(ip netip.Addr) bool { return localnet.MaskedGateway(ip) || s.acl.allowed(ip) }
 
 // Refused: queries from outside the allowed networks since start.
 func (s *Server) Refused() Refused { return s.acl.stats() }

@@ -29,6 +29,7 @@
 	<div class="small mt-2">{{.T "dns64.pub.run"}} <code class="user-select-all">{{$d.Pub.Publish}}</code></div>
 	<div class="small mt-1">{{.T "dns64.pub.compose"}} <code class="user-select-all">ports: [{{$d.Pub.Compose}}]</code></div>
 	<div class="small mt-1 text-body-secondary">{{.T "dns64.pub.host"}}</div></div>{{end}}
+{{if $d.Pub.GatewayOff}}<div class="alert alert-warning"><i class="bi bi-shield-exclamation"></i> {{.T "dns64.pub.gateway_off" "gw" $d.Pub.Gateway "n" $d.Pub.GatewayOff}}{{.Doc "dns64#docker"}}</div>{{end}}
 {{if $d.Pub.GatewaySeen}}<div class="alert alert-info"><i class="bi bi-info-circle"></i> {{.T "dns64.pub.gateway" "gw" $d.Pub.Gateway}}{{.Doc "dns64#docker"}}</div>{{end}}
 <script type="application/json" id="dns64-data">{{$d.JS}}</script>
 {{if $d.Running}}

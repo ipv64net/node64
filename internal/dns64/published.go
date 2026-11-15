@@ -344,6 +344,7 @@ type pubView struct {
 	Publish     string // -p 53:53/udp -p 53:53/tcp …
 	Compose     string // "53:53/udp", "53:53/tcp" …
 	GatewaySeen bool   // das Gateway steht in den Clients der letzten 24 Stunden (Absender von Docker ersetzt)
+	GatewayOff  int64  // seit dem Start abgewiesene Anfragen ueber das Gateway (Herkunft unbekannt, Review WE-3)
 }
 
 func (m *Module) pubView(ctx context.Context, e *engine) pubView {
@@ -360,6 +361,9 @@ func (m *Module) pubView(ctx context.Context, e *engine) pubView {
 		}
 		v.Publish += "-p " + p + ":" + p + "/" + proto
 		v.Compose += `"` + p + ":" + p + "/" + proto + `"`
+	}
+	if e != nil && e.srv != nil {
+		v.GatewayOff = e.srv.Refused().Gateway
 	}
 	if e != nil && st.Gateway != "" {
 		if rows, err := e.store.RecentClients(ctx, time.Now().Add(-24*time.Hour), 500); err == nil {

@@ -3966,6 +3966,7 @@
       "compose": "docker compose:",
       "host": "Alternatively network_mode: host – then nothing needs to be published, and DNS64 sees the real device addresses.",
       "gateway": "The log shows the Docker gateway {gw} instead of the device IP. Real client IPs (and device groups) are only available with network_mode: host.",
+      "gateway_off": "{n} queries arrived through the Docker gateway {gw} and were refused: Docker replaces the device address there, so the query could also come from the internet (open resolver). Fix: start the container with network_mode: host (recommended, DNS64 then sees the real devices). If the Docker host is certainly not reachable from the internet, you can add {gw} under Settings → Further allowed client networks – device groups do not apply then.",
       "anon_mask": "\"Client addresses in the log\" is set to \"shortened\": devices in the same network appear with the same shortened address (Settings).",
       "anon_hide": "\"Client addresses in the log\" is set to \"do not store\": no client address is in the log (Settings)."
     },

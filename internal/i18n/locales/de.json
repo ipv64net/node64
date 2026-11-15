@@ -3966,6 +3966,7 @@
       "compose": "docker compose:",
       "host": "Alternativ network_mode: host – dann braucht es keine Veröffentlichung, und DNS64 sieht die echten Adressen der Geräte.",
       "gateway": "Im Log steht das Docker-Gateway {gw} statt der Geräte-IP. Echte Client-IPs (und Gerätegruppen) gibt es nur mit network_mode: host.",
+      "gateway_off": "{n} Anfragen kamen über das Docker-Gateway {gw} an und wurden abgewiesen: Docker ersetzt dabei die Adresse des Geräts, die Anfrage könnte also auch aus dem Internet kommen (offener Resolver). Abhilfe: Container mit network_mode: host starten (empfohlen, dann sieht DNS64 die echten Geräte). Ist der Docker-Host aus dem Internet sicher nicht erreichbar, kannst du {gw} unter Einstellungen → Weitere erlaubte Client-Netze eintragen – Gerätegruppen gelten dann nicht.",
       "anon_mask": "„Client-Adressen im Log“ steht auf „gekürzt“: Geräte im selben Netz erscheinen mit derselben gekürzten Adresse (Einstellungen).",
       "anon_hide": "„Client-Adressen im Log“ steht auf „nicht speichern“: Es steht keine Client-Adresse im Log (Einstellungen)."
     },

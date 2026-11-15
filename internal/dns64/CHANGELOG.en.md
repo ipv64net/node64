@@ -7,6 +7,7 @@
 
 ### Security
 - Home network CA: new installations get a CA that only allows local names (.lan, .home.arpa …), your own DoH/DoT names and local zones. An existing CA stays; the "Encrypted" page shows a hint with the button "Create new restricted CA" and instructions (devices then need the new CA or the new profile). Names the CA does not allow are missing from the certificate and are listed there.
+- Docker bridge network: queries arriving through the Docker gateway (Docker replaces the device address there, e.g. with IPv6 without ip6tables) are refused – they could also come from the internet. Overview, query log and settings then show a hint: network_mode: host is recommended; if you are sure the Docker host is not reachable from the internet, add the gateway under "Further allowed client networks" (without device groups).
 
 ## 1.41.1 – unreleased
 

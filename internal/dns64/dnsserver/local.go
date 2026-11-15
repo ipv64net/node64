@@ -13,6 +13,7 @@ import (
 	"github.com/miekg/dns"
 	"golang.org/x/net/publicsuffix"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 )
 
@@ -198,9 +199,10 @@ func attachedAllowed(p netip.Prefix) bool {
 
 // Refused counts queries from outside the allowed networks (since start).
 type Refused struct {
-	Count  int64
-	LastIP netip.Addr
-	LastAt time.Time
+	Count   int64
+	LastIP  netip.Addr
+	LastAt  time.Time
+	Gateway int64 // davon ueber das Docker-Gateway (Herkunft unbekannt, localnet.MaskedGateway)
 }
 
 // clientACL accepts private/local addresses plus any address in a subnet
@@ -213,6 +215,7 @@ type clientACL struct {
 
 	log     *slog.Logger // nil = no log line
 	refused atomic.Int64
+	gateway atomic.Int64 // abgewiesen, weil ueber das Docker-Gateway (Herkunft unbekannt)
 	lastMu  sync.Mutex
 	last    Refused
 	logged  time.Time // last log line (at most one per hour)
@@ -226,6 +229,18 @@ func newClientACL(extra []netip.Prefix) *clientACL {
 
 func (a *clientACL) allowed(ip netip.Addr) bool {
 	if !ip.IsValid() {
+		return false
+	}
+	// Im Docker-Bridge-Netz kann hinter der Gateway-Adresse jeder stecken, auch das Internet (Userland-Proxy, IPv6
+	// ohne ip6tables): nur, wenn das Gateway ausdruecklich als weiteres Client-Netz eingetragen ist (Review WE-3)
+	if localnet.MaskedGateway(ip) {
+		for _, p := range a.extra {
+			if p.Bits() > 0 && p.Contains(ip.Unmap()) {
+				return true
+			}
+		}
+		a.gateway.Add(1)
+		a.refuse(ip)
 		return false
 	}
 	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip) {
@@ -275,7 +290,7 @@ func (a *clientACL) stats() Refused {
 	a.lastMu.Lock()
 	defer a.lastMu.Unlock()
 	r := a.last
-	r.Count = a.refused.Load()
+	r.Count, r.Gateway = a.refused.Load(), a.gateway.Load()
 	return r
 }
 

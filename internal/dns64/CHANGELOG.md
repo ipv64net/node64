@@ -7,6 +7,7 @@
 
 ### Sicherheit
 - Heimnetz-CA: Neue Installationen bekommen eine CA, die nur lokale Namen (.lan, .home.arpa …), die eigenen DoH/DoT-Namen und lokale Zonen erlaubt. Eine vorhandene CA bleibt; die Seite „Verschlüsselt“ zeigt einen Hinweis mit dem Knopf „Neue beschränkte CA anlegen“ und einer Anleitung (Geräte brauchen danach die neue CA bzw. das neue Profil). Namen, die die CA nicht erlaubt, fehlen im Zertifikat und werden dort angezeigt.
+- Docker-Bridge-Netz: Anfragen, die über das Docker-Gateway ankommen (Docker ersetzt dabei die Adresse des Geräts, z. B. bei IPv6 ohne ip6tables), werden abgewiesen – sie könnten auch aus dem Internet kommen. Übersicht, Abfrage-Log und Einstellungen zeigen dann einen Hinweis: network_mode: host empfohlen; wer sicher ist, dass der Docker-Host aus dem Internet nicht erreichbar ist, trägt das Gateway unter „Weitere erlaubte Client-Netze“ ein (ohne Gerätegruppen).
 
 ## 1.41.1 – unveröffentlicht
 
