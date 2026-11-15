@@ -62,13 +62,10 @@ a { color: var(--bs-primary); }
 .topbar { background: var(--bs-body-bg); min-height: 3.6rem; position: sticky; top: 0; z-index: 1020; }
 .app-body { min-height: calc(100vh - 3.6rem); }
 .sidebar { width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); background: var(--sidebar-bg); position: sticky; top: 3.6rem; height: calc(100vh - 3.6rem); overflow-y: auto; scrollbar-width: thin; }
-.sidebar-offcanvas { width: var(--sidebar-width); }
 .sidebar .nav-link, .sidebar-offcanvas .nav-link { color: var(--bs-body-color); padding: .55rem 1rem; border-left: 3px solid transparent; }
 .sidebar .nav-link .bi, .sidebar-offcanvas .nav-link .bi { width: 1.4rem; display: inline-block; }
 .sidebar .nav-link:hover, .sidebar-offcanvas .nav-link:hover { background: var(--bs-secondary-bg); }
 .sidebar .nav-link.active, .sidebar-offcanvas .nav-link.active { border-left-color: var(--ipv64-orange); font-weight: 600; background: var(--bs-secondary-bg); }
-.sidebar .nav-link.disabled, .sidebar-offcanvas .nav-link.disabled { opacity: .55; }
-.content { min-width: 0; } /* volle Breite auf allen Seiten */
 .sidebar-nav { padding-top: .5rem; padding-bottom: .5rem; }
 .nav-head { display: none; } /* Gruppenueberschriften nur im neuen Design */
 .sidebar-footer { padding: 1rem; border-top: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color); }
@@ -80,14 +77,12 @@ a { color: var(--bs-primary); }
 	.topbar .navbar-brand { margin-right: 0; }
 	.topbar .topbar-crumbs { margin-left: 0 !important; padding-left: 1.5rem !important; border-left: 0 !important; }
 	/* Seitenleiste eingeklappt: nur Symbole (Beschriftung als Tooltip), Zustand im Cookie node64_nav */
-	.sidebar { transition: width .2s ease, flex-basis .2s ease; overflow-x: hidden; }
 	.nav-mini { --sidebar-width: 4rem; }
 	.nav-mini .topbar .topbar-start { width: auto; }
 	.nav-mini .topbar .topbar-crumbs { margin-left: 1rem !important; border-left: 1px solid var(--bs-border-color) !important; padding-left: 1rem !important; }
 	.nav-mini .sidebar .nav-label, .nav-mini .sidebar .sidebar-footer { display: none; }
 	.nav-mini .sidebar .nav-link { padding-left: 0; padding-right: 0; text-align: center; white-space: nowrap; }
 	.nav-mini .sidebar .nav-link .bi { width: auto; font-size: 1.1rem; }
-	.nav-mini .sidebar .nav-link.nav-sub .bi { font-size: .95rem; }
 	.nav-mini .sidebar .nav-img { height: 20px; margin-right: 0; }
 }
 /* Healthchecks-Herz in Rot */
@@ -95,14 +90,11 @@ a { color: var(--bs-primary); }
 /* Tabellen ausserhalb von Karten: leichter Schatten (nicht im Karten-Modus auf dem Handy) */
 @media (min-width: 768px) {
 	.table-shadow { box-shadow: var(--bs-box-shadow-sm); border: 1px solid var(--bs-border-color-translucent); border-radius: .5rem; background: var(--bs-body-bg); }
-	.table-shadow > .table { margin-bottom: 0; }
 	.table-shadow > .table > :not(caption) > * > :first-child { padding-left: .75rem; }
 }
 /* Kopieren in die Zwischenablage */
 .btn-copy.copied { color: var(--bs-success); border-color: var(--bs-success); }
 .topbar-crumbs .breadcrumb { font-size: .9rem; flex-wrap: nowrap; white-space: nowrap; }
-.topbar-crumbs .breadcrumb-item { overflow: hidden; text-overflow: ellipsis; }
-.topbar-crumbs .breadcrumb-item:last-child { max-width: 40vw; font-weight: 600; }
 .topbar-crumbs .breadcrumb-item a { color: var(--bs-secondary-color); text-decoration: none; }
 .topbar-crumbs .breadcrumb-item a:hover { color: var(--bs-body-color); }
 .topbar-crumb-mobile { max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

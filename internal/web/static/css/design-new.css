@@ -303,7 +303,6 @@ h5, .h5, h6, .h6 { font-weight: 600; }
 	overflow-y: auto; scrollbar-width: thin; }
 .sidebar-brand { flex: 0 0 auto; height: var(--topbar-height); display: flex; align-items: center; padding: 0 1.25rem; border-bottom: 1px solid var(--n64-border); }
 .sidebar-brand .brand-mark { display: none; }
-.sidebar-offcanvas { width: var(--sidebar-width); }
 .sidebar-nav { padding: .75rem; gap: 2px; flex-wrap: nowrap; }
 .nav-head { padding: .9rem .65rem .35rem; font-size: .6875rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--n64-muted); }
 .nav-head:first-child { padding-top: .15rem; }
@@ -312,19 +311,16 @@ h5, .h5, h6, .h6 { font-weight: 600; }
 .sidebar .nav-link .nav-label, .sidebar-offcanvas .nav-link .nav-label { flex: 1 1 auto; min-width: 0; }
 .sidebar .nav-link:hover, .sidebar-offcanvas .nav-link:hover { background: var(--n64-surface-2); }
 .sidebar .nav-link.active, .sidebar-offcanvas .nav-link.active { background: var(--n64-accent-soft); color: var(--n64-accent-text); font-weight: 600; }
-.sidebar .nav-link.disabled, .sidebar-offcanvas .nav-link.disabled { opacity: .55; }
 /* Unterpunkt im Menue (z. B. Healthchecks-Sync unter Healthchecks) */
 .sidebar .nav-link.nav-sub, .sidebar-offcanvas .nav-link.nav-sub { padding: .28rem .65rem .28rem 1.6rem; color: var(--n64-muted); font-size: .875rem; }
 .sidebar .nav-link.nav-sub.active, .sidebar-offcanvas .nav-link.nav-sub.active { color: var(--n64-accent-text); }
 .sidebar .nav-link.nav-sub .bi, .sidebar-offcanvas .nav-link.nav-sub .bi { font-size: .9rem; }
 .sidebar-footer { margin: .75rem; padding: .75rem; border: 1px solid var(--n64-border); border-radius: .625rem; display: flex; flex-direction: column; gap: .3rem; }
 .sidebar-logo { margin-bottom: .25rem; }
-.content { min-width: 0; } /* volle Breite auf allen Seiten */
 
 @media (min-width: 992px) {
 	.topbar { padding-left: 1.5rem; padding-right: 1.5rem; }
 	/* Seitenleiste eingeklappt: nur Symbole (Beschriftung als Tooltip), Zustand im Cookie node64_nav */
-	.sidebar { transition: width .2s ease, flex-basis .2s ease; overflow-x: hidden; }
 	.nav-mini { --sidebar-width: 4.25rem; }
 	.nav-mini .sidebar .nav-label, .nav-mini .sidebar .sidebar-footer, .nav-mini .sidebar-brand .logo { display: none; }
 	.nav-mini .sidebar-brand { padding: 0; justify-content: center; }
@@ -333,21 +329,17 @@ h5, .h5, h6, .h6 { font-weight: 600; }
 	.nav-mini .sidebar .nav-head:first-child { display: none; }
 	.nav-mini .sidebar .nav-link, .nav-mini .sidebar .nav-link.nav-sub { padding: .5rem 0; justify-content: center; }
 	.nav-mini .sidebar .nav-link .bi { width: auto; font-size: 1.15rem; }
-	.nav-mini .sidebar .nav-link.nav-sub .bi { font-size: .95rem; }
 }
 /* Tabellen ausserhalb von Karten: als Flaeche mit Rand (nicht im Karten-Modus auf dem Handy) */
 @media (min-width: 768px) {
 	.table-shadow { box-shadow: var(--n64-shadow); border: 1px solid var(--n64-border); border-radius: .75rem; background: var(--bs-body-bg); overflow-x: auto; } /* clippt die Rundung, breite Tabellen scrollen */
-	.table-shadow > .table { margin-bottom: 0; }
 	.table-shadow > .table > :not(caption) > * > :first-child { padding-left: .9rem; }
 }
 /* Kopieren in die Zwischenablage */
 .btn-copy.copied { color: var(--n64-ok); border-color: var(--n64-ok); }
 .topbar-crumbs { min-width: 0; }
 .topbar-crumbs .breadcrumb { font-size: .9rem; flex-wrap: nowrap; white-space: nowrap; --bs-breadcrumb-divider-color: var(--n64-muted); }
-.topbar-crumbs .breadcrumb-item { overflow: hidden; text-overflow: ellipsis; }
 .topbar-crumbs .breadcrumb-item.active { color: var(--n64-text); }
-.topbar-crumbs .breadcrumb-item:last-child { max-width: 40vw; font-weight: 600; }
 .topbar-crumbs .breadcrumb-item a { color: var(--n64-muted); text-decoration: none; }
 .topbar-crumbs .breadcrumb-item a:hover { color: var(--n64-text); }
 .topbar-crumb-mobile { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

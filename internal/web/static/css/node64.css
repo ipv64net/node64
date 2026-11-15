@@ -16,6 +16,20 @@
 	src: url("fonts/TwemojiCountryFlags.woff2") format("woff2");
 }
 
+/* Layout-Regeln, die in beiden Designs gleich sind */
+.sidebar-offcanvas { width: var(--sidebar-width); }
+.sidebar .nav-link.disabled, .sidebar-offcanvas .nav-link.disabled { opacity: .55; }
+.content { min-width: 0; } /* volle Breite auf allen Seiten */
+.topbar-crumbs .breadcrumb-item { overflow: hidden; text-overflow: ellipsis; }
+.topbar-crumbs .breadcrumb-item:last-child { max-width: 40vw; font-weight: 600; }
+@media (min-width: 992px) {
+	.sidebar { transition: width .2s ease, flex-basis .2s ease; overflow-x: hidden; }
+	.nav-mini .sidebar .nav-link.nav-sub .bi { font-size: .95rem; }
+}
+@media (min-width: 768px) {
+	.table-shadow > .table { margin-bottom: 0; }
+}
+
 /* Logo je Farbschema */
 .logo-dark { display: none; }
 [data-bs-theme="dark"] .logo-light { display: none; }
