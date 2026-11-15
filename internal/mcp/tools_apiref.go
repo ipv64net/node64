@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // api_reference: Wegweiser zur REST-API der Node. MCP selbst aendert nichts; die KI erfaehrt hier aus der
@@ -62,7 +63,31 @@ type apiOp struct {
 	Responses   map[string]any   `json:"responses"`
 }
 
+// docCache haelt die geparste API-Beschreibung: openapi.json (rund 1 MB) aendert sich zur Laufzeit nicht, ohne Cache
+// wurde sie bei jedem Aufruf von api_reference geladen und vollstaendig geparst. Gelesen wird sie nur (resolve kopiert,
+// bevor es aendert).
+type docCache struct {
+	mu sync.Mutex
+	d  *openAPI
+}
+
 func (c *call) openAPI() (*openAPI, error) {
+	if dc := c.o.doc; dc != nil {
+		dc.mu.Lock()
+		defer dc.mu.Unlock()
+		if dc.d != nil {
+			return dc.d, nil
+		}
+		d, err := c.loadOpenAPI()
+		if err == nil {
+			dc.d = d
+		}
+		return d, err
+	}
+	return c.loadOpenAPI()
+}
+
+func (c *call) loadOpenAPI() (*openAPI, error) {
 	status, body, err := c.o.Backend.Get(c.ctx, c.id, "/api/openapi.json", nil)
 	if err != nil {
 		return nil, err

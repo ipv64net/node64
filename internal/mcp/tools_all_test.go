@@ -161,16 +161,16 @@ func init() {
 			sampleArgs[tool] = append(sampleArgs[tool], args)
 		}
 	}
-	parts("node_config", nil, "settings", "update", "link", "ipv64", "overview", "ports", "logging", "retention")
-	parts("notification_channels", nil, "channels", "ipv64", "types")
-	parts("certs_config", map[string]any{"id": 1}, "cert", "account", "dns_accounts", "dns_providers", "domains", "cas", "acme_cas", "dns_check")
-	parts("sonar64_status", nil, "status", "recent", "inbound", "settings")
-	parts("dns64_config", nil, "settings", "records", "zones", "forwards", "rewrites", "groups", "devices", "lists", "own_lists", "services", "docker")
-	parts("proxy_config", map[string]any{"id": 1, "ip": "203.0.113.9"}, "host", "streams", "access_lists", "limits", "protection", "settings", "online", "status", "stats", "docker", "geo_lookup")
-	parts("dyndns_config", nil, "targets", "settings", "account_names")
-	parts("honeypot_config", nil, "config", "status", "catalog", "watch", "live")
-	parts("monitor64_config", nil, "rules", "notify", "settings", "traps", "agent", "cluster")
-	parts("monitor64_details", map[string]any{"host": "nas01", "problem": "P1", "service": "disk:S4EW", "series": "cpu|util"}, "problem", "accesses", "smart", "traps", "series", "cluster_host")
+	parts("node_config", nil, partsNodeConfig.list...)
+	parts("notification_channels", nil, partsNotificationChannels.list...)
+	parts("certs_config", map[string]any{"id": 1}, partsCertsConfig.list...)
+	parts("sonar64_status", nil, partsSonar64Status.list...)
+	parts("dns64_config", nil, partsDns64Config.list...)
+	parts("proxy_config", map[string]any{"id": 1, "ip": "203.0.113.9"}, partsProxyConfig.list...)
+	parts("dyndns_config", nil, partsDyndnsConfig.list...)
+	parts("honeypot_config", nil, partsHoneypotConfig.list...)
+	parts("monitor64_config", nil, partsMonitor64Config.list...)
+	parts("monitor64_details", map[string]any{"host": "nas01", "problem": "P1", "service": "disk:S4EW", "series": "cpu|util"}, partsMonitor64Details.list...)
 	sampleArgs["check_events"] = []map[string]any{{}, {"check": "Backup-Push"}}
 	sampleArgs["online_checks"] = []map[string]any{{}, {"check": "OnLiNeTo"}}
 	sampleArgs["status_page_details"] = []map[string]any{{"page": "main"}}

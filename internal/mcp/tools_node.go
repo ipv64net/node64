@@ -8,6 +8,14 @@ import (
 	"time"
 )
 
+// Werte von "part" je Werkzeug: eine Liste fuer Schema und Auswertung (vorher je dreifach gepflegt).
+var (
+	partsNodeConfig           = partSet{def: "", list: []string{"settings", "update", "link", "ipv64", "overview", "ports", "logging", "retention"}}            // node_config
+	partsNotificationChannels = partSet{def: "channels", list: []string{"channels", "ipv64", "types"}}                                                          // notification_channels
+	partsCertsConfig          = partSet{def: "", list: []string{"cert", "account", "dns_accounts", "dns_providers", "domains", "cas", "acme_cas", "dns_check"}} // certs_config
+	partsSonar64Status        = partSet{def: "status", list: []string{"status", "recent", "inbound", "settings"}}                                               // sonar64_status
+)
+
 // Kern: Einstellungen der Node, Selbst-Update, Verknuepfung mit ipv64, Ports, Benachrichtigungskanaele,
 // Zertifikate und Sonar64. Nie: API-Key von ipv64, Kopplungscodes, Account-Kennung, Kanal-Zugangsdaten,
 // Werte der DNS-Zugaenge, private Schluessel, EAB-Kennungen.
@@ -16,26 +24,26 @@ func nodeTools() []Tool {
 	return []Tool{
 		{Name: "node_config", Area: AreaNode, Title: "Node configuration", Untrusted: true,
 			Desc:   "Node settings and state by part: settings (name, location, time zone, base URL, quiet hours and rate limits of notifications, update check), update (self-update: running version, mode, channel, window, latest check), link (connection to ipv64.net: plan, sync state, limits, open sync conflicts), ipv64 (state of the central ipv64 API key: plan, expiry; never the key), overview (dashboard figures: traffic, measuring nodes, account limits), ports (used ports with conflicts, shared entrance, listeners, UI name), logging (log levels), retention (data retention). Never includes keys, pairing codes or the account id.",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "settings", "update", "link", "ipv64", "overview", "ports", "logging", "retention")),
+			Schema: schema([]string{"part"}, partsNodeConfig.prop()),
 			Run:    nodeConfig},
 		{Name: "notification_channels", Area: AreaNotifications, Title: "Notification channels", Untrusted: true,
 			Desc:   "Notification channels by part: channels (channels of the node: type, enabled, default, language, down/up, names of the configured fields, last use and error; never their values), ipv64 (e-mail, SMS and app channels at ipv64.net), types (channel types with their fields, which fields are sensitive).",
-			Schema: schema(nil, pEnum("part", "Which part.", "channels", "channels", "ipv64", "types")),
+			Schema: schema(nil, partsNotificationChannels.prop()),
 			Run:    notificationChannels},
 		{Name: "certs_config", Area: AreaCerts, Title: "Certificate configuration", Untrusted: true,
 			Desc: "Certificate management by part: cert (one certificate with all settings, serial and fingerprint; needs id from list_certs), account (ACME account: e-mail, terms), dns_accounts (DNS accounts for DNS-01 with provider and names of the configured fields, never their values), dns_providers (supported DNS providers and their fields), domains (ipv64 domains of the account), cas (own certificate authorities), acme_cas (further ACME CAs), dns_check (own resolvers of the DNS-01 check). Never includes private keys.",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "cert", "account", "dns_accounts", "dns_providers", "domains", "cas", "acme_cas", "dns_check"),
+			Schema: schema([]string{"part"}, partsCertsConfig.prop(),
 				pIntOpt("id", "Certificate id (part cert).", 1, maxID)),
 			Run: certsConfig},
 		{Name: "sonar64_status", Area: AreaSonar64, Title: "Sonar64", Untrusted: true,
 			Desc:   "Sonar64 (latency measurements between ipv64 nodes) by part: status (participation, node state at ipv64, trust level), recent (own latest measurements and probes answered on UDP 6464), inbound (who measured this node), settings (participation, budget, quiet hours, profile).",
-			Schema: schema(nil, pEnum("part", "Which part.", "status", "status", "recent", "inbound", "settings"), pInt("limit", "Maximum rows (recent, inbound).", 50, 1, 200)),
+			Schema: schema(nil, partsSonar64Status.prop(), pInt("limit", "Maximum rows (recent, inbound).", 50, 1, 200)),
 			Run:    sonar64Status},
 	}
 }
 
 func nodeConfig(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "settings", "update", "link", "ipv64", "overview", "ports", "logging", "retention")
+	part, err := partsNodeConfig.arg(a)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +168,7 @@ func channelOut(m obj, keys ...string) obj {
 }
 
 func notificationChannels(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "channels", "channels", "ipv64", "types")
+	part, err := partsNotificationChannels.arg(a)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +222,7 @@ func notificationChannels(c *call, a map[string]any) (map[string]any, error) {
 }
 
 func certsConfig(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "cert", "account", "dns_accounts", "dns_providers", "domains", "cas", "acme_cas", "dns_check")
+	part, err := partsCertsConfig.arg(a)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +326,7 @@ func certsConfig(c *call, a map[string]any) (map[string]any, error) {
 }
 
 func sonar64Status(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "status", "status", "recent", "inbound", "settings")
+	part, err := partsSonar64Status.arg(a)
 	if err != nil {
 		return nil, err
 	}

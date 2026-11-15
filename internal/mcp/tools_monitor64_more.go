@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+// Werte von "part" je Werkzeug: eine Liste fuer Schema und Auswertung (vorher je dreifach gepflegt).
+var (
+	partsMonitor64Config  = partSet{def: "", list: []string{"rules", "notify", "settings", "traps", "agent", "cluster"}}        // monitor64_config
+	partsMonitor64Details = partSet{def: "", list: []string{"problem", "accesses", "smart", "traps", "series", "cluster_host"}} // monitor64_details
+)
+
 // Monitor64: Regeln, Benachrichtigung, Einstellungen, Traps, Agent-Verteilung, Cluster sowie Einzelheiten zu
 // Problemen, Zugaengen, SMART, Traps und Verlaeufen eines Hosts. Zugaenge ohne Geheimnisse (Positivliste der
 // Konfiguration, nie Passwort, Community, Token oder Push-Token).
@@ -16,11 +22,11 @@ func monitor64MoreTools() []Tool {
 	return []Tool{
 		{Name: "monitor64_config", Area: AreaMonitor64, Title: "Monitor64 configuration", Untrusted: true,
 			Desc:   "Monitor64 configuration by part: rules (thresholds: defaults, standard rules, overrides for groups/tags/hosts, host-specific rules), notify (channel routing, reminders, quiet hours, overrides), settings (interval, workers, retention, ports, scheduler state), traps (SNMP trap receiver and unknown senders), agent (agent distribution: versions, files, hosts, events), cluster (members, responsible node per host, orphaned hosts, key state).",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "rules", "notify", "settings", "traps", "agent", "cluster")),
+			Schema: schema([]string{"part"}, partsMonitor64Config.prop()),
 			Run:    m64Config},
 		{Name: "monitor64_details", Area: AreaMonitor64, Title: "Monitor64 details", Untrusted: true,
 			Desc: "Details by part: problem (one problem with its timeline, needs problem), accesses (accesses of a host with non-secret settings, agent state, and services found by discovery waiting to be adopted or ignored), smart (SMART values of a disk service, needs service), traps (received SNMP traps of a host), series (history of metrics, needs series), cluster_host (responsibility of a host in the cluster). Never includes credentials.",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "problem", "accesses", "smart", "traps", "series", "cluster_host"), hostArg,
+			Schema: schema([]string{"part"}, partsMonitor64Details.prop(), hostArg,
 				pStr("problem", "Problem id (from monitor64_problems), for part problem.", 80),
 				pStr("service", "Service key (from monitor64_host), for part smart, e.g. disk:S4EWNX0M123456.", 200),
 				pStr("series", "For part series: one or more 'service_key|metric' separated by commas (max 8), metric names from monitor64_host.", 1000),
@@ -32,7 +38,7 @@ func monitor64MoreTools() []Tool {
 func m64Actor(v any) string { return clean(str(asObj(v), "name"), 80) }
 
 func m64Config(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "rules", "notify", "settings", "traps", "agent", "cluster")
+	part, err := partsMonitor64Config.arg(a)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +195,7 @@ var m64AccessConfigFields = []string{"port", "user", "smart", "url", "node", "pi
 	"snmp_version", "level", "auth_proto", "priv_proto", "context", "profiles", "traps", "trap_engine_id"}
 
 func m64Details(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "problem", "accesses", "smart", "traps", "series", "cluster_host")
+	part, err := partsMonitor64Details.arg(a)
 	if err != nil {
 		return nil, err
 	}

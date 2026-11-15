@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+// Werte von "part" je Werkzeug: eine Liste fuer Schema und Auswertung (vorher je dreifach gepflegt).
+var (
+	partsHoneypotConfig = partSet{def: "", list: []string{"config", "status", "catalog", "watch", "live"}} // honeypot_config
+)
+
 // Honeypot64: fast alles, was hier steht, schreiben Angreifer (Benutzer, Passwoerter, Pfade, User-Agents,
 // Nutzdaten). Diese Felder stehen immer unter "untrusted".
 
@@ -28,7 +33,7 @@ func honeypotTools() []Tool {
 			Run:    honeypotLookupIP},
 		{Name: "honeypot_config", Area: AreaHoneypot, Title: "Honeypot64 configuration", Untrusted: true,
 			Desc:   "Honeypot64 configuration and state by part: config (profile, services, limits, retention, reporting, log sensor), status (trap services, warnings, counters, reporting to ipv64, log sensor state), catalog (all trap services with selection and state), watch (early warning: own networks and DynDNS IPs watched at ipv64, recent hits), live (attacks of the last minutes with country).",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "config", "status", "catalog", "watch", "live"), pInt("minutes", "Period for part live.", 15, 1, 60)),
+			Schema: schema([]string{"part"}, partsHoneypotConfig.prop(), pInt("minutes", "Period for part live.", 15, 1, 60)),
 			Run:    honeypotConfig},
 	}
 }
@@ -227,7 +232,7 @@ func honeypotLookupIP(c *call, a map[string]any) (map[string]any, error) {
 }
 
 func honeypotConfig(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "config", "status", "catalog", "watch", "live")
+	part, err := partsHoneypotConfig.arg(a)
 	if err != nil {
 		return nil, err
 	}

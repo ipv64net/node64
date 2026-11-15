@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+// Werte von "part" je Werkzeug: eine Liste fuer Schema und Auswertung (vorher je dreifach gepflegt).
+var (
+	partsDns64Config  = partSet{def: "", list: []string{"settings", "records", "zones", "forwards", "rewrites", "groups", "devices", "lists", "own_lists", "services", "docker"}}    // dns64_config
+	partsProxyConfig  = partSet{def: "", list: []string{"host", "streams", "access_lists", "limits", "protection", "settings", "online", "status", "stats", "docker", "geo_lookup"}} // proxy_config
+	partsDyndnsConfig = partSet{def: "", list: []string{"targets", "settings", "account_names"}}                                                                                     // dyndns_config
+)
+
 // DNS64, PROXY64 und DynDNS: Konfiguration und Nachschlagen. Adressen von Upstreams und Listen nur mit Schema und
 // Host (im Pfad stehen oft Profil-Kennungen), keine TSIG-Schluessel, keine Header-Werte und Seiten-HTML von PROXY64,
 // keine Passwoerter der Zugriffslisten, keine DynDNS-Tokens.
@@ -17,7 +24,7 @@ func networkMoreTools() []Tool {
 	return []Tool{
 		{Name: "dns64_config", Area: AreaDNS64, Title: "DNS64 configuration", Untrusted: true,
 			Desc: "DNS64 configuration by part: settings (ports, encrypted DNS, upstreams and block lists without URLs, cache, state), records (own DNS records), zones (local zones and the device names in them), forwards (conditional forwarding with state), rewrites, groups (device groups with members, lists, blocked services, schedules, current state), devices (devices of the last 24 h), lists (block and allow lists with state), own_lists (own allowed and blocked domains), services (services that can be blocked per click), docker (records from Docker labels). DHCP is in dns64_dhcp.",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "settings", "records", "zones", "forwards", "rewrites", "groups", "devices", "lists", "own_lists", "services", "docker"),
+			Schema: schema([]string{"part"}, partsDns64Config.prop(),
 				pStr("find", "Only entries containing this text (records, zones, devices, own_lists, services).", 100), pInt("limit", "Maximum entries per list.", 200, 1, 1000)),
 			Run: dns64Config},
 		{Name: "dns64_lookup", Area: AreaDNS64, Title: "DNS64 domain lookup",
@@ -25,13 +32,13 @@ func networkMoreTools() []Tool {
 			Schema: schema([]string{"domain"}, pStr("domain", "Domain name.", 253)), Run: dns64Lookup},
 		{Name: "proxy_config", Area: AreaProxy64, Title: "PROXY64 configuration", Untrusted: true,
 			Desc: "PROXY64 configuration and state by part: host (one host with all settings, locations, DNS records, linked checks and CDN64 servers; needs id from proxy_hosts), streams (TCP/UDP streams), access_lists (allowed networks and user names, never passwords), limits (overload protection: settings and bans), protection (what the CDN64 servers blocked per name: WAF, JA4, overload), settings (access log retention, default page for unknown names), online (CDN64 tunnel, servers, enabled names, quota), status (listeners, cache, hosts), stats (requests per host and per hour), docker (container sync), geo_lookup (country of an IP for country blocks, needs ip).",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "host", "streams", "access_lists", "limits", "protection", "settings", "online", "status", "stats", "docker", "geo_lookup"),
+			Schema: schema([]string{"part"}, partsProxyConfig.prop(),
 				pIntOpt("id", "Host id (part host; optional filter for part stats).", 1, maxID), pInt("hours", "Period in hours (part stats).", 24, 1, 168),
 				pEnum("days", "Period in days (part protection).", "1", "1", "7", "30"), pStr("ip", "IP address (part geo_lookup).", 45)),
 			Run: proxyConfig},
 		{Name: "dyndns_config", Area: AreaDynDNS, Title: "DynDNS configuration", Untrusted: true,
 			Desc:   "DynDNS configuration by part: targets (all targets with mode for IPv4/IPv6, fixed values, interface, state; never tokens), settings (check interval, IP sources, retention, notifications), account_names (names of the ipv64 account that can be used as targets).",
-			Schema: schema([]string{"part"}, pEnum("part", "Which part.", "", "targets", "settings", "account_names")),
+			Schema: schema([]string{"part"}, partsDyndnsConfig.prop()),
 			Run:    dyndnsConfig},
 	}
 }
@@ -52,7 +59,7 @@ func contains(find string, parts ...string) bool {
 // ---------------------------------------------------------------- DNS64
 
 func dns64Config(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "settings", "records", "zones", "forwards", "rewrites", "groups", "devices", "lists", "own_lists", "services", "docker")
+	part, err := partsDns64Config.arg(a)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +312,7 @@ func dns64Timeline(c *call, rng string) []any {
 // ---------------------------------------------------------------- PROXY64
 
 func proxyConfig(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "host", "streams", "access_lists", "limits", "protection", "settings", "online", "status", "stats", "docker", "geo_lookup")
+	part, err := partsProxyConfig.arg(a)
 	if err != nil {
 		return nil, err
 	}
@@ -522,7 +529,7 @@ func proxyAdvanced(adv obj) obj {
 // ---------------------------------------------------------------- DynDNS
 
 func dyndnsConfig(c *call, a map[string]any) (map[string]any, error) {
-	part, err := argPart(a, "", "targets", "settings", "account_names")
+	part, err := partsDyndnsConfig.arg(a)
 	if err != nil {
 		return nil, err
 	}

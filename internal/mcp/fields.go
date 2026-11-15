@@ -135,6 +135,15 @@ func first(m obj, keys ...string) any {
 	return nil
 }
 
+// partSet: erlaubte Werte des Arguments "part" eines Werkzeugs mit Standard ("" = Pflicht).
+type partSet struct {
+	def  string
+	list []string
+}
+
+func (p partSet) prop() schemaProp                     { return pEnum("part", "Which part.", p.def, p.list...) }
+func (p partSet) arg(a map[string]any) (string, error) { return argPart(a, p.def, p.list...) }
+
 // argPart: Parameter "part" (Teil der Daten) mit Standard und erlaubten Werten.
 func argPart(a map[string]any, def string, allowed ...string) (string, error) {
 	p := argStr(a, "part")

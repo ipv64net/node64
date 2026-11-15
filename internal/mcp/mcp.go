@@ -105,6 +105,8 @@ type Options struct {
 	Logger  *slog.Logger // nil = kein Log
 	// T uebersetzt Schluessel (Texte von Monitor64 kommen als "i18n:..."); nil = Schluessel bleiben stehen
 	T func(lang, key string, args ...any) string
+
+	doc *docCache // geparste API-Beschreibung (api_reference), je Handler einmal
 }
 
 // Instructions: Hinweise des Servers an die KI-Anwendung.
@@ -166,6 +168,9 @@ func (c *Counter) Snapshot() []CallCount {
 // muss vorher geprueft sein und den Schluessel im Kontext tragen (WithIdentity), sonst 400.
 func NewHandler(o Options) http.Handler {
 	cache := sdk.NewSchemaCache()
+	if o.doc == nil {
+		o.doc = &docCache{}
+	}
 	h := sdk.NewStreamableHTTPHandler(func(r *http.Request) *sdk.Server {
 		id, ok := IdentityFrom(r.Context())
 		if !ok {
