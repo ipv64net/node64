@@ -131,15 +131,14 @@ type Manager struct {
 	exp     time.Time
 	tries   int
 
-	nmu    sync.Mutex
-	nonces map[string]time.Time // gesehene Nonces der Anfragen (Wiederholungsschutz, transport.go)
+	nonces NonceCache // gesehene Nonces der Anfragen (Wiederholungsschutz, transport.go; hart begrenzt)
 
 	calls map[string]CallHandler // Anfragen der Module an andere Nodes, "modul/name" (call.go, unter mu)
 }
 
 // New laedt bzw. erzeugt den Schluessel.
 func New(ctx context.Context, d Deps) (*Manager, error) {
-	m := &Manager{d: d, db: d.Core.Writer()}
+	m := &Manager{d: d, db: d.Core.Writer(), nonces: NonceCache{TTL: 2 * timeSkew, Max: maxNonces}}
 	m.pull.kick, m.pull.busy = make(chan string, 16), map[string]*sync.Mutex{}
 	m.RegisterProvider(switchProvider{m}) // Schalter "Was wird abgeglichen" fuer den ganzen Cluster (syncswitch.go)
 	raw := d.Core.SettingOr(ctx, setKey, "")

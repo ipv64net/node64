@@ -305,28 +305,13 @@ func (m *Manager) sendSigned(w http.ResponseWriter, s *sigWriter, r *http.Reques
 	_, _ = w.Write(body)
 }
 
+// maxNonces: gemerkte Nonces des Cluster-Transports (je Anfrage eine, gemerkt fuer 2*timeSkew). Vorher wuchs die
+// Liste ohne Grenze, solange mehr als 1000 Anfragen juenger als 10 Minuten waren (Review).
+const maxNonces = 200_000
+
 // nonceFresh merkt sich eine Nonce (false = schon gesehen, Wiederholung). Gemerkt wird so lange, wie eine
-// Anfrage wegen ihres Zeitstempels gilt.
-func (m *Manager) nonceFresh(n string) bool {
-	m.nmu.Lock()
-	defer m.nmu.Unlock()
-	now := time.Now()
-	if m.nonces == nil {
-		m.nonces = map[string]time.Time{}
-	}
-	if len(m.nonces) > 1000 {
-		for k, t := range m.nonces {
-			if now.Sub(t) > 2*timeSkew {
-				delete(m.nonces, k)
-			}
-		}
-	}
-	if _, seen := m.nonces[n]; seen {
-		return false
-	}
-	m.nonces[n] = now
-	return true
-}
+// Anfrage wegen ihres Zeitstempels gilt (NonceCache, auch von Environment genutzt).
+func (m *Manager) nonceFresh(n string) bool { return m.nonces.Fresh(n, time.Now()) }
 
 // errHTTPS: Anfrage ohne TLS an /peer/* (der Cluster spricht nur HTTPS).
 var errHTTPS = errors.New("https required (cluster requests only over https)")
