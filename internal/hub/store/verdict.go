@@ -194,10 +194,14 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		silent = len(proxies) > 0
 	}
 	// Wartungsfenster (Portal oder Node): still wie auf der Node; dauert der Ausfall nach dem Fenster an, meldet ihn
-	// MaintenanceOver. Die Entwarnung eines so verschwiegenen Ausfalls bleibt ebenfalls still.
+	// MaintenanceOver (auch "wird nicht geprueft"). Die Entwarnung eines so verschwiegenen Ausfalls bleibt ebenfalls
+	// still; die eines vor der Wartung gemeldeten Ausfalls kommt auch in der Wartung (wie auf der Node), sonst bliebe
+	// der Ausfall fuer den Empfaenger offen.
 	maint := false
 	if !silent && s.InMaintenanceOf(userid, token, now) {
-		silent, maint = true, true
+		if !recoveryKind(kind) || unalerted(ctx, tx, token, kind) {
+			silent, maint = true, true
+		}
 	} else if !silent && unalerted(ctx, tx, token, kind) {
 		silent = true
 	}
@@ -338,6 +342,11 @@ func directNode(ctx context.Context, q rowQuerier, measuring []string, owner str
 
 // unalerted: die Entwarnung gehoert zu einem Ausfall, der in einer Wartung begann und nicht gemeldet wurde (letztes
 // Ereignis dieser Art im Gesamtzustand mit Wartungs-Flag) - dann ist auch sie still, wie auf der Node.
+// recoveryKind: Entwarnungen (Gegenstueck zu einer Stoerungsmeldung).
+func recoveryKind(kind string) bool {
+	return kind == "up" || kind == "flapping_end" || kind == "degraded_end"
+}
+
 func unalerted(ctx context.Context, q interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }, token, kind string) bool {
@@ -360,7 +369,7 @@ func unalerted(ctx context.Context, q interface {
 // Housekeeper, einmal je Minute.
 func (s *Store) MaintenanceOver(ctx context.Context) ([]OverallEvent, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT c.token, c.userid, c.state, c.state_since FROM hc2_checks c
-		WHERE c.deleted_at IS NULL AND c.paused = 0 AND c.state IN ('down','flapping','degraded')
+		WHERE c.deleted_at IS NULL AND c.paused = 0 AND c.state IN ('down','flapping','degraded','pending')
 		AND EXISTS (SELECT 1 FROM hc2_events e WHERE e.token = c.token AND e.source = '' AND e.time >= c.state_since AND e.flags & `+strconv.Itoa(FlagMaintenance)+` <> 0)
 		AND NOT EXISTS (SELECT 1 FROM hc2_events e WHERE e.token = c.token AND e.source = '' AND e.time >= c.state_since AND e.flags & `+strconv.Itoa(FlagMaintenance)+` = 0)
 		LIMIT 500`)
@@ -432,6 +441,8 @@ func (s *Store) maintenanceOver(ctx context.Context, token, state, since string,
 		e.Kind = "down"
 	case "flapping":
 		e.Kind = "flapping_start"
+	case "pending": // in der Wartung verschwiegenes "wird nicht geprueft" (keine Messstelle mehr)
+		e.Kind = "unchecked"
 	default:
 		e.Kind = "degraded"
 	}

@@ -568,15 +568,19 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 				c.log.Warn("maintenance reload failed", "err", err)
 			}
 			if nodes, err := c.st.LiveNodes(ctx); err == nil && c.st.IsHousekeeper(nodes) {
-				c.remind(ctx)
-				// in der Wartung verschwiegene Ausfaelle, die nach dem Fenster andauern, jetzt melden
+				// in der Wartung verschwiegene Ausfaelle, die nach dem Fenster andauern, jetzt melden - vor den
+				// Erinnerungen, die erst ab dieser Meldung zaehlen (sonst kaeme "noch gestoert" vor "gestoert")
 				list, err := c.st.MaintenanceOver(ctx)
 				if err != nil {
 					c.log.Warn("alerts after maintenance failed", "err", err)
 				}
 				for _, e := range list { // auch bei einem Fehler: diese sind schon eingetragen
+					c.mu.Lock()
+					c.reminders[e.Token] = e.Time
+					c.mu.Unlock()
 					c.onOverall(e)
 				}
+				c.remind(ctx)
 				if e := c.st.Metrics.DBErrorCount(); e != dbErrs {
 					dbErrs, dbErrAt = e, time.Now()
 				}

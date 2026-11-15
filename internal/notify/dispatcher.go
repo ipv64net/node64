@@ -379,31 +379,41 @@ func (d *Dispatcher) flush(ctx context.Context, uid int64, list []Alert) {
 	}
 }
 
-// channelsFor liefert die Kanaele eines Alerts: eigene Auswahl des Checks
-// oder die Standardkanaele, jeweils nur aktive.
-func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
+// ChannelReachability (optional, hub): ob der Sender eines Kanals gerade erreichbar ist (Node-Kanal: Node online).
+// Bei mehreren Kanaelen mit demselben Ziel gewinnt ein erreichbarer.
+type ChannelReachability interface {
+	ChannelReachable(ctx context.Context, ch *Channel) bool
+}
+
+// candidates liefert die Kanaele eines Alerts: eigene Auswahl des Checks
+// oder die Standardkanaele, jeweils nur aktive. nodeOwn (hub): die Kanaele, die die messende Node bei einem Direct-Alert
+// selbst sendet (gewaehlt bzw. Standard) - gleichzielige Kopien anderer Nodes entfallen nur, wenn eine davon den Alert
+// auch wirklich bekommt (targetsFor).
+func (d *Dispatcher) candidates(ctx context.Context, c CheckInfo) (out, nodeOwn []*Channel) {
 	all, err := d.st.ChannelsFor(ctx, c.UserID)
 	if err != nil {
 		d.log.Error("channels", "err", err)
-		return nil
+		return nil, nil
 	}
 	want := map[int64]bool{}
 	for _, id := range c.Channels {
 		want[id] = true
 	}
-	var out []*Channel
-	direct := d.direct(c)
-	nodeDest := map[string]bool{} // hub: Ziele, die die messende Node selbst bedient (auch als Kopie einer anderen Node)
-	for _, ch := range all {
-		if ch.Enabled && ch.DestKey != "" && skipForNode(c, ch) {
-			nodeDest[ch.DestKey] = true
+	chosen := func(ch *Channel) bool {
+		if len(want) > 0 {
+			return want[ch.ID] || (ch.RemoteID > 0 && want[-ch.RemoteID]) // -RemoteID: ohne Verknuepfung gewaehlter ipv64-Kanal
 		}
+		return ch.Default
 	}
+	direct := d.direct(c)
 	for _, ch := range all {
 		if !ch.Enabled {
 			continue
 		}
-		if skipForNode(c, ch) || (ch.DestKey != "" && nodeDest[ch.DestKey]) {
+		if skipForNode(c, ch) {
+			if ch.DestKey != "" && chosen(ch) {
+				nodeOwn = append(nodeOwn, ch)
+			}
 			continue // hub: sendet die messende Node selbst
 		}
 		if direct {
@@ -415,11 +425,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		} else if !c.Local && !d.sendServerChannels.Load() && d.hubSends() {
 			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
-		if len(want) > 0 {
-			if want[ch.ID] || (ch.RemoteID > 0 && want[-ch.RemoteID]) { // -RemoteID: ohne Verknuepfung gewaehlter ipv64-Kanal
-				out = append(out, ch)
-			}
-		} else if ch.Default {
+		if chosen(ch) {
 			out = append(out, ch)
 		}
 	}
@@ -430,6 +436,55 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 				out = append(out, ch)
 			}
 		}
+	}
+	return out, nodeOwn
+}
+
+// channelsFor: die Kanaele eines Checks ohne die, die die messende Node selbst sendet (Tests, Anzeige).
+func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
+	out, _ := d.candidates(ctx, c)
+	return out
+}
+
+// targetsFor liefert die Kanaele, die einen Alert bekommen: Auswahl bzw. Standardkanaele (candidates), Schalter von
+// Check und Kanal (flagsOK) und je Ziel (DestKey) nur ein Kanal - z. B. derselbe ntfy-Kanal als Kopie auf mehreren
+// verknuepften Nodes, sonst kaeme die Meldung doppelt (Forum 5172). Alle Versandwege (einzeln, Sammelmeldung,
+// Zusammenfassung nach der Ruhezeit) nutzen sie. Bei gleichem Ziel gewinnt ein erreichbarer Sender (hub: Node
+// online), damit eine Meldung nicht als Sendeauftrag an einer Node haengt, die gerade weg ist.
+func (d *Dispatcher) targetsFor(ctx context.Context, a Alert) []*Channel {
+	list, nodeOwn := d.candidates(ctx, a.Check)
+	covered := map[string]bool{} // Ziele, die die messende Node selbst mit diesem Alert bedient
+	for _, ch := range nodeOwn {
+		if ok, _ := flagsOK(a, ch); ok {
+			covered[ch.DestKey] = true
+		}
+	}
+	reach, _ := d.st.(ChannelReachability)
+	var out []*Channel
+	at := map[string]int{} // DestKey -> Index in out
+	for _, ch := range list {
+		if ok, why := flagsOK(a, ch); !ok {
+			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", why)
+			continue
+		}
+		if ch.DestKey == "" {
+			out = append(out, ch)
+			continue
+		}
+		if covered[ch.DestKey] {
+			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", "sent by the measuring node")
+			continue
+		}
+		i, dup := at[ch.DestKey]
+		if !dup {
+			at[ch.DestKey] = len(out)
+			out = append(out, ch)
+			continue
+		}
+		if reach != nil && !reach.ChannelReachable(ctx, out[i]) && reach.ChannelReachable(ctx, ch) {
+			out[i] = ch // gleiches Ziel, dieser Sender ist erreichbar
+		}
+		d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", "same target as another channel")
 	}
 	return out
 }
@@ -581,11 +636,9 @@ func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 	perChannel := map[int64][]Alert{}
 	chans := map[int64]*Channel{}
 	for _, a := range last {
-		for _, ch := range d.channelsFor(ctx, a.Check) {
-			if ok, _ := flagsOK(a, ch); ok {
-				perChannel[ch.ID] = append(perChannel[ch.ID], a)
-				chans[ch.ID] = ch
-			}
+		for _, ch := range d.targetsFor(ctx, a) {
+			perChannel[ch.ID] = append(perChannel[ch.ID], a)
+			chans[ch.ID] = ch
 		}
 	}
 	loc := d.location(uid)
@@ -733,32 +786,10 @@ func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
 		d.log.Debug("notification held (quiet hours)", "check", a.Check.Name, "kind", a.Kind)
 		return
 	}
-	seen := map[string]bool{}
-	for _, ch := range d.channelsFor(ctx, a.Check) {
-		if ok, why := flagsOK(a, ch); !ok {
-			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", why)
-			continue
-		}
-		if sameDest(seen, ch) {
-			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", "same target as another channel")
-			continue
-		}
+	for _, ch := range d.targetsFor(ctx, a) {
 		m := d.compose(ch.Lang, a)
 		d.send(ctx, ch, m)
 	}
-}
-
-// sameDest (hub): ein Kanal mit demselben Ziel (DestKey) hat die Meldung schon - z. B. derselbe ntfy-Kanal auf
-// zwei verknuepften Nodes eines Clusters, sonst gaebe es zwei Sendeauftraege und die Meldung kaeme doppelt.
-func sameDest(seen map[string]bool, ch *Channel) bool {
-	if ch.DestKey == "" {
-		return false
-	}
-	if seen[ch.DestKey] {
-		return true
-	}
-	seen[ch.DestKey] = true
-	return false
 }
 
 // sendSummary fasst viele gleichzeitige Stoerungen (bzw. Entwarnungen) je Kanal zusammen.
@@ -770,11 +801,7 @@ func (d *Dispatcher) sendSummary(ctx context.Context, list0 []Alert, up bool) {
 			d.hold(a)
 			continue
 		}
-		seen := map[string]bool{}
-		for _, ch := range d.channelsFor(ctx, a.Check) {
-			if ok, _ := flagsOK(a, ch); !ok || sameDest(seen, ch) {
-				continue
-			}
+		for _, ch := range d.targetsFor(ctx, a) {
 			perChannel[ch.ID] = append(perChannel[ch.ID], a)
 			chans[ch.ID] = ch
 		}

@@ -33,6 +33,7 @@ const (
 	ResetFileName   = "node64.reset" // Merker: beim naechsten Start das Datenverzeichnis leeren
 	maxUpload       = 1 << 30        // 1 GB fuer Datenbank-Wiederherstellung
 	maxImport       = 16 << 20
+	maxFormBody     = 10 << 20      // groesste Grenze, bei der Formulare wie ueblich (auch urlencoded) gelesen werden
 	transferTimeout = 2 * time.Hour // Zeitlimit fuer Backup-Download und Wiederherstellung (longTransfer)
 )
 
@@ -52,6 +53,12 @@ func bodyLimitFor(path string) int64 {
 		return maxUpload
 	case "/settings/import", "/api/import":
 		return maxImport
+	case "/ipam64/import": // CSV bis 2 MB; "Uebernehmen" schickt sie urlencoded erneut (bis dreifach)
+		return 8 << 20
+	case "/dns64/rules/save": // eigene Filterregeln als Textfeld (urlencoded)
+		return maxFormBody
+	case "/api/dns64/rules", "/api/dns64/denylist": // JSON bis 4 MB (rules_ui.go, lists_ui.go)
+		return 4<<20 + 64<<10
 	}
 	return maxBody
 }

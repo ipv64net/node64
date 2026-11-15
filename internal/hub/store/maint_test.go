@@ -24,7 +24,9 @@ func TestReverdictMaintenance(t *testing.T) {
 		{"down without maintenance", "up", "down", nil, false, 0, "down", 0},
 		{"recovery of a silenced outage", "down", "up", int64(5), false, FlagSilent | FlagMaintenance, "", FlagSilent},
 		{"recovery of an alerted outage", "down", "up", int64(5), false, 0, "up", 0},
-		{"recovery in maintenance", "down", "up", int64(5), true, 0, "", FlagSilent | FlagMaintenance},
+		// Review: die Entwarnung eines vor der Wartung gemeldeten Ausfalls kommt auch in der Wartung (wie auf der Node)
+		{"recovery of an alerted outage in maintenance", "down", "up", int64(5), true, 0, "up", 0},
+		{"recovery of a silenced outage in maintenance", "down", "up", int64(5), true, FlagSilent | FlagMaintenance, "", FlagSilent | FlagMaintenance},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var flags any
@@ -86,7 +88,8 @@ func TestMaintenanceOver(t *testing.T) {
 				t.Errorf("candidate query: %s", q)
 			}
 			return fakeResult{cols: []string{"token", "userid", "state", "state_since"}, rows: [][]driver.Value{
-				{"over", int64(7), "down", since}, {"running", int64(7), "down", since}, {"changed", int64(7), "flapping", since}}}
+				{"over", int64(7), "down", since}, {"running", int64(7), "down", since}, {"changed", int64(7), "flapping", since},
+				{"lost", int64(7), "pending", since}}} // Review: in der Wartung verschwiegenes "wird nicht geprueft"
 		case strings.HasPrefix(q, "SELECT userid, name, type"):
 			tok := args[0].Value.(string)
 			if tok == "running" {
@@ -95,6 +98,9 @@ func TestMaintenanceOver(t *testing.T) {
 			state, cur := "down", since
 			if tok == "changed" {
 				state, cur = "flapping", now.Format(TimeFormat) // Reverdict hat inzwischen entschieden
+			}
+			if tok == "lost" {
+				state = "pending"
 			}
 			return fakeResult{cols: []string{"userid", "name", "type", "target", "critical", "channels", "notify_down", "notify_up", "notify_degraded", "execution", "nodes",
 				"node_id", "state", "state_since", "last_reason", "last_message", "incident_id"},
@@ -114,10 +120,11 @@ func TestMaintenanceOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].Token != "over" || list[0].Kind != "down" || len(list[0].Channels) != 2 || list[0].Channels[1] != 5 || list[0].UserID != 7 {
+	if len(list) != 2 || list[0].Token != "over" || list[0].Kind != "down" || len(list[0].Channels) != 2 || list[0].Channels[1] != 5 || list[0].UserID != 7 ||
+		list[1].Token != "lost" || list[1].Kind != "unchecked" {
 		t.Fatalf("alerts: %+v", list)
 	}
-	if len(inserted) != 1 || inserted[0] != "over" {
+	if len(inserted) != 2 || inserted[0] != "over" || inserted[1] != "lost" {
 		t.Fatalf("events: %v", inserted)
 	}
 }

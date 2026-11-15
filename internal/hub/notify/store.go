@@ -160,6 +160,26 @@ func (s *Store) NodeOfChannel(id int64) string {
 	return s.nodeOf[id]
 }
 
+// ChannelReachable (notify.ChannelReachability): ein Node-Kanal ist erreichbar, wenn seine Node online ist (wie der
+// Verdict: Merker online und zuletzt gesehen vor weniger als 3 Minuten); Server-Kanaele immer. Gefragt wird nur bei
+// mehreren Kanaelen mit demselben Ziel.
+func (s *Store) ChannelReachable(ctx context.Context, ch *notify.Channel) bool {
+	if ch.Execution != "node" || ch.NodeID == "" {
+		return true
+	}
+	var online int
+	var last sql.NullString
+	if err := s.db.QueryRowContext(ctx, `SELECT online, last_seen FROM hc2_nodes WHERE node_id = ?`, ch.NodeID).Scan(&online, &last); err != nil {
+		return false
+	}
+	for _, f := range []string{timeFormat, "2006-01-02 15:04:05", time.RFC3339Nano} {
+		if t, err := time.ParseInLocation(f, last.String, time.UTC); err == nil {
+			return online == 1 && time.Since(t) < 3*time.Minute
+		}
+	}
+	return false
+}
+
 // AddSendOrder legt einen Sendeauftrag fuer einen Node-Kanal an.
 func (s *Store) AddSendOrder(ctx context.Context, nodeID string, ch *notify.Channel, m notify.Message) error {
 	payload, _ := json.Marshal(map[string]any{"title": m.Title, "text": m.Text, "url": m.URL, "priority": m.Priority, "kind": m.Kind, "language": m.Language,

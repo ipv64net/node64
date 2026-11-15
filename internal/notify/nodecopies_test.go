@@ -65,10 +65,57 @@ func TestHubSendsNodeCopiesOnce(t *testing.T) {
 	st.list[0].NotifyUp = true
 
 	// Direct: die messende Node sendet ihre Kopie selbst, der hub laesst auch die Kopie der anderen Node aus
+	ctx := context.Background()
 	c.DirectNode = "raspi5"
-	if got := chanNames(d.channelsFor(context.Background(), c)); !sameNames(got, "ntfy anders", "geheim nur lokal") {
+	down := Alert{Kind: KindDown, Check: c}
+	if got := chanNames(d.targetsFor(ctx, down)); !sameNames(got, "ntfy anders", "geheim nur lokal") {
 		t.Fatalf("direct node raspi5: %v", got)
 	}
+	// Review: nutzt die messende Node ihre Kopie fuer diesen Alert nicht (kein Standard bzw. Entwarnung aus), sendet
+	// der hub die Kopie der anderen Node - vorher bekam niemand die Meldung
+	st.list[0].Default = false
+	if got := chanNames(d.targetsFor(ctx, down)); !sameNames(got, "ntfy", "ntfy anders", "geheim nur lokal") || d.targetsFor(ctx, down)[0].NodeID != "raspi4" {
+		t.Fatalf("own copy not chosen: %v", got)
+	}
+	st.list[0].Default, st.list[0].NotifyUp = true, false
+	if got := chanNames(d.targetsFor(ctx, Alert{Kind: KindUp, Check: c})); !sameNames(got, "ntfy", "ntfy anders", "geheim nur lokal") {
+		t.Fatalf("own copy without recovery: %v", got)
+	}
+	st.list[0].NotifyUp = true
+}
+
+// Review: Bei gleichem Ziel gewinnt ein erreichbarer Sender; sonst hing die Meldung als Sendeauftrag an einer Node,
+// die gerade weg ist (Auftraege verfallen nach 1 h), und die Kopie der erreichbaren Node war verworfen.
+func TestTargetsPreferReachable(t *testing.T) {
+	bundle, err := i18n.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := DestKeyOf(TypeNtfy, "de", map[string]string{"server": "https://ntfy.example", "topic": "alarm"})
+	ch := func(id int64, node string) *Channel {
+		return &Channel{ID: id, Type: TypeNtfy, Name: "ntfy", Enabled: true, Default: true, NotifyDown: true, NotifyUp: true, Lang: "de",
+			Execution: "node", NodeID: node, DestKey: key}
+	}
+	st := &reachChannels{fakeChannels: fakeChannels{list: []*Channel{ch(1, "weg"), ch(2, "da")}}, online: map[string]bool{"da": true}}
+	d := NewMultiDispatcher(st, nil, bundle, func(int64) Settings { return func(_, def string) string { return def } }, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.SetSendServerChannels(true)
+	got := d.targetsFor(context.Background(), Alert{Kind: KindDown, Check: CheckInfo{UserID: 7, NotifyDown: true, NotifyUp: true}})
+	if len(got) != 1 || got[0].NodeID != "da" {
+		t.Fatalf("targets: %+v", got)
+	}
+	st.online["weg"] = true // beide erreichbar: der erste bleibt
+	if got := d.targetsFor(context.Background(), Alert{Kind: KindDown, Check: CheckInfo{UserID: 7, NotifyDown: true, NotifyUp: true}}); len(got) != 1 || got[0].NodeID != "weg" {
+		t.Fatalf("both online: %+v", got)
+	}
+}
+
+type reachChannels struct {
+	fakeChannels
+	online map[string]bool
+}
+
+func (r *reachChannels) ChannelReachable(_ context.Context, ch *Channel) bool {
+	return r.online[ch.NodeID]
 }
 
 func targets(list []Message) []string {

@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 3.2.3 – 2026-11-15
+
+### Behoben
+- Benachrichtigungen bei gleichem Ziel auf mehreren verknüpften Nodes (Forum 5172): Der Kanal der messenden Node ersetzt die Kopie einer anderen Node nur noch, wenn er die Meldung wirklich bekommt (gewählt bzw. Standard, Störung/Entwarnung an) – vorher konnte die Meldung ganz ausbleiben. Bei gleichem Ziel sendet bevorzugt eine erreichbare Node, die Zusammenfassung nach der Ruhezeit kommt nur noch einmal je Ziel.
+- ipv64.net-Server: Die Entwarnung eines vor der Wartung gemeldeten Ausfalls kommt auch während der Wartung; ein in der Wartung verschwiegenes „wird nicht geprüft“ wird danach nachgeholt, und die Erinnerung „noch gestört“ kommt erst nach der Ausfallmeldung (mit dem Update der ipv64-Server).
+
 ## 3.2.2 – 2026-11-14
 
 ### Geändert

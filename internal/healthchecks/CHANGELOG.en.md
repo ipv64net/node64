@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 3.2.3 – 2026-11-15
+
+### Fixed
+- Notifications with the same target on several linked nodes (forum 5172): the channel of the measuring node replaces another node's copy only if it really gets the alert (selected or default, down/recovery on) – before, the alert could be lost entirely. With the same target, a reachable node is preferred, and the digest after quiet hours comes only once per target.
+- ipv64.net servers: the recovery of an outage alerted before a maintenance window is sent during the window as well; an "unchecked" silenced during maintenance is sent afterwards, and the "still down" reminder comes only after the outage alert (with the update of the ipv64 servers).
+
 ## 3.2.2 – 2026-11-14
 
 ### Changed

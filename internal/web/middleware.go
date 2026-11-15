@@ -247,7 +247,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 				break // Environment: kommt von einer anderen Node, das einmalige Ticket ist die Berechtigung (environment.go)
 			}
 			tok := r.Header.Get("X-CSRF-Token")
-			if tok == "" && bodyLimitFor(r.URL.Path) > maxBody {
+			if tok == "" && bodyLimitFor(r.URL.Path) > maxFormBody {
 				// Uploads (bis 1 GB): Formular erst lesen, wenn angemeldet, und nur als multipart (Datei auf Platte statt
 				// alles im Speicher); sonst muss der Token im Kopf stehen
 				if currentUser(r) != nil && strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
@@ -293,6 +293,9 @@ func (s *Server) auth(h http.HandlerFunc) http.Handler {
 		}
 		if (!readOnlyAllowed(r) || adminPath(r.URL.Path)) && !s.isAdmin(r) {
 			s.forbidRole(w, r)
+			return
+		}
+		if s.envForbidden(w, r) { // ueber Environment geoeffnet: keine Zugangsdaten anlegen oder aendern (environment.go)
 			return
 		}
 		h(w, r)

@@ -262,3 +262,43 @@ func TestDualListenerTemporaryError(t *testing.T) {
 		t.Fatalf("closed: %v", err)
 	}
 }
+
+// Review: Formulare und JSON der grossen Module (IPAM64-Import, DNS64-Regeln) ueber 1 MB scheiterten am Kern-Limit -
+// mit 403 CSRF statt der Vorschau bzw. "invalid JSON". Urlencoded bis maxFormBody wird wie ueblich gelesen.
+func TestLargeModuleBodies(t *testing.T) {
+	a := newTestApp(t)
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	got := map[string]int{}
+	for _, p := range []string{"/ipam64/import", "/dns64/rules/save", "/api/dns64/rules"} {
+		a.s.mux.Handle("POST "+p, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, err := io.ReadAll(r.Body)
+			if r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
+				got[p] = len(r.PostFormValue("data"))
+			} else if err == nil {
+				got[p] = len(b)
+			}
+		}))
+	}
+	_, page := a.get(t, "/settings")
+	csrf := csrfOf(t, page)
+	big := strings.Repeat("a;b\r\n", 600<<10) // 3 MB, urlencoded mehr
+	for _, p := range []string{"/ipam64/import", "/dns64/rules/save"} {
+		if resp, _ := a.post(t, p, url.Values{"_csrf": {csrf}, "data": {big}}); resp.StatusCode != http.StatusOK || got[p] != len(big) {
+			t.Fatalf("%s: %d, %d bytes", p, resp.StatusCode, got[p])
+		}
+	}
+	req, _ := http.NewRequest("POST", a.srv.URL+"/api/dns64/rules", strings.NewReader(strings.Repeat("x", 3<<20)))
+	req.Header.Set("X-CSRF-Token", csrf)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := a.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || got["/api/dns64/rules"] != 3<<20 {
+		t.Fatalf("api rules: %d, %d bytes", resp.StatusCode, got["/api/dns64/rules"])
+	}
+	if bodyLimitFor("/api/settings") != maxBody {
+		t.Fatal("andere Pfade bleiben bei 1 MB")
+	}
+}
