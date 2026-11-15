@@ -8,9 +8,9 @@
 //	LDAPIT_USERPW     Passwort der Testbenutzer
 //	LDAPIT_ANNA_GUID  objectGUID von anna, wie samba-tool sie anzeigt
 //
-// Erwartete Verzeichnisse: AD n64test.lan auf dc1.n64test.lan (anna, jürgen, "Schmidt, Eva" in Inner ⊂ Middle ⊂ Outer;
+// Erwartete Verzeichnisse: AD n64test.lan auf dc1.n64test.lan (anna, juergen mit Umlaut im Namen, "Schmidt, Eva" in Inner ⊂ Middle ⊂ Outer;
 // anna zusaetzlich in "Node64 Admins"; gesperrt deaktiviert), OpenLDAP auf ldap1.n64test.lan mit dc=mo,dc=lan
-// (memberof-Overlay) und dc=plain,dc=lan (ohne memberOf), je bob und jürgen in groupOfNames staff, bob zusaetzlich in
+// (memberof-Overlay) und dc=plain,dc=lan (ohne memberOf), je bob und juergen (Umlaut) in groupOfNames staff, bob zusaetzlich in
 // groupOfUniqueNames admins und posixGroup posix. Aufbau der Umgebung: testdata/integration/README.md.
 package ldapauth
 
