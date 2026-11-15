@@ -22,7 +22,6 @@ const (
 	MaxInterval     = 300
 	DefaultPort     = "8006"
 	DefaultPortPBS  = "8007"
-	maxAddresses    = 16
 )
 
 var (

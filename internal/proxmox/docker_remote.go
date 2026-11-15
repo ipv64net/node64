@@ -40,8 +40,6 @@ const (
 	dockerSSHPort      = "22"
 	dockerSSHSocket    = "/var/run/docker.sock"
 	dockerDialTimeout  = 10 * time.Second
-	dockerMaxSecret    = 64 << 10
-	dockerKeyComment   = "node64"
 	dockerSSHKeepAlive = 30 * time.Second
 )
 

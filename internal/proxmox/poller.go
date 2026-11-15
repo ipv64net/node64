@@ -6,36 +6,9 @@ import (
 	"time"
 )
 
-// Abfrage eines Systems im Takt des Plans:
-//   cluster/resources  alle sys.Interval Sekunden (Standard 30, 15–300) – ein Aufruf fuer Nodes und Gaeste
-//   cluster/status     alle 60 s (Clustername, quorate, Nodes online/IP → gelernte Adressen); frueher, wenn
-//                      cluster/resources einen Node anders sieht als der letzte Stand
-//   version            beim Start und alle 10 min
-//   certificates/info  je Node alle 10 min bzw. bei neuen Nodes, nur bei Systemen mit Pin: Fingerabdruck des
-//                      Zertifikats, das der Node benutzt, als Pin fuer seine gelernte Adresse (Failover im Cluster)
-//   qmpstatus          laufender VMs alle 2 min (hoechstens 4 gleichzeitig); VMs, deren letzter Wert nicht
-//                      „running“ ist, bei jeder Abfrage neu (hoechstens pveQMPRecheck), damit ein alter Wert
-//                      (angehalten, abgestuerzt) nach Fortsetzen bzw. Neustart nicht stehen bleibt
-//   Adressen           laufender Gaeste mit Check (WantIP) je Gast alle 5 min, hoechstens 8 je Abfrage (2 gleichzeitig):
-//                      QEMU agent/network-get-interfaces, LXC interfaces – fuer den Ping der Latenz (Check-Typ proxmox)
-// Jede Abfrage ergibt einen Snapshot (auch bei Fehler: OK=false, Error, keine Resources) und geht an fn.
-
-const (
-	pveStatusEvery    = 60 * time.Second
-	pveVersionEvery   = 10 * time.Minute
-	pveCertsEvery     = 10 * time.Minute
-	pveQMPEvery       = 2 * time.Minute
-	pveQMPParallel    = 4
-	pveBackoffStart   = 5 * time.Second
-	pveQMPRequestWait = 30 * time.Second // alle qmpstatus-Anfragen einer Runde zusammen
-	pveQMPRecheck     = 16               // VMs mit qmpstatus ungleich running je Abfrage neu fragen
-	pveLockGrace      = 4 * time.Hour    // gestoppter Gast mit Lock (Backup im Stopp-Modus, Migration): so lange neutral
-	pveIPEvery        = 5 * time.Minute  // Adresse eines Gasts so oft neu holen (auch nach Fehlern)
-	pveIPWant         = 10 * time.Minute // Gast gilt als gewuenscht, solange sein Check so kuerzlich gefragt hat
-	pveIPPerRound     = 8                // Adressen je Abfrage
-	pveIPParallel     = 2
-	pveIPRequestWait  = 8 * time.Second // alle Adress-Anfragen einer Runde zusammen
-)
+// pveBackoffStart: erste Wartezeit nach einem Fehler (DockerPoller). Die Proxmox- und PBS-Poller sind mit Monitor64
+// entfallen; das Paket liefert nur noch Client, Probe und den Docker-Abfrager.
+const pveBackoffStart = 5 * time.Second
 
 // ClampInterval bringt ein Intervall in die Grenzen (0 = Standard).
 func ClampInterval(sec int) time.Duration {
