@@ -1,5 +1,12 @@
 # Monitor64 – Changes
 
+## 0.1.18 – 2026-11-15
+
+Bug fixes:
+
+- Proxmox VE in a cluster: a VM or container that migrates to another node (manually or via HA) no longer counts as vanished. If the new node is set up as a host in Monitor64, the service moves there – with name, target state, reporting, thresholds and history, instead of waiting there as "new"; "Recent" shows "migrated from node A to node B". If the node is not set up (e.g. only one access to the cluster), the previous host keeps monitoring the guest with the values from the cluster ("runs on node B"). The same node name in another cluster does not count (#165).
+- Proxmox VE: for HA resources the target state comes from the HA configuration (`started` = should be running, `stopped`/`disabled` = may be off) instead of "start at boot"; while HA moves a guest (`migrate`, `relocate`), "Guest or container not running" stays quiet (#165).
+
 ## 0.1.17 – 2026-11-14
 
 Bug fixes:

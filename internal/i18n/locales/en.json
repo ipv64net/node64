@@ -6115,7 +6115,8 @@
       "r_by": "by {w}",
       "r_maint": "Maintenance added: {n}",
       "r_maint_end": "Maintenance ended: {n}",
-      "maint_problems": "In maintenance: {n} problems on {h} hosts"
+      "maint_problems": "In maintenance: {n} problems on {h} hosts",
+      "r_migrated": "{n} migrated"
     },
     "chart": {
       "range": "Time range",
@@ -6952,7 +6953,10 @@
       "agent_updated": "Agent {from} → {to}",
       "threshold_free": "only {value} GB free (threshold {limit} GB)",
       "hostkey_unconfirmed": "Host key not confirmed yet – the password is not sent before that. Choose \"Test\" at the access, compare the fingerprint and confirm it.",
-      "ssh_no_pubkey": "The server does not offer public key login – are you reaching the right server and port? (e.g. the name resolves differently inside the container, or the connection goes via IPv6)"
+      "ssh_no_pubkey": "The server does not offer public key login – are you reaching the right server and port? (e.g. the name resolves differently inside the container, or the connection goes via IPv6)",
+      "guest_migrated": "Migrated from node {from} to node {to} – taken over from host {host}, with settings and history",
+      "guest_followed": "Migrated from node {from} to node {to} – still monitored here (no active host for node {to} in Monitor64)",
+      "guest_back": "Back from node {from} on node {to}"
     },
     "push": {
       "mode_label": "Connection",
@@ -7765,7 +7769,11 @@
       "uf_wan_line_down": "line without connection: {list}",
       "uf_wans_online": "{n} lines online",
       "snmp_held": "as of {n} min ago (device not answering right now)",
-      "kernel_newer": "kernel {run} is running, {new} is installed"
+      "kernel_newer": "kernel {run} is running, {new} is installed",
+      "runs_on_node": "runs on node {node}",
+      "should_run_ha": "should be running (HA)",
+      "may_be_off_ha": "may be off (HA: {v})",
+      "ha_state": "HA: {v}"
     },
     "smart": {
       "title": "SMART values: {n}",

@@ -51,6 +51,9 @@ type Service struct {
 	Text    string   `json:"text,omitempty"`
 	// Default: beim Erkennen standardmaessig angeboten (false z. B. fuer Ports ohne Link, die noch nie verbunden waren)
 	Default bool `json:"default"`
+	// MovedTo: Gast eines Proxmox-Clusters laeuft jetzt auf dieser Node (#165); der Kern uebergibt den Dienst an
+	// den Host dieser Node, falls eingetragen, sonst bleibt er hier
+	MovedTo string `json:"moved_to,omitempty"`
 	// Smart: alle SMART-Werte einer Platte zum Nachschlagen (smart.go); nur im Speicher, nie gespeichert oder verteilt
 	Smart *SmartDetail `json:"-"`
 }

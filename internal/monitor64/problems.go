@@ -234,6 +234,10 @@ func (m *Module) purgeProblems(ctx context.Context, now time.Time) {
 	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_events WHERE ts < ? AND problem_uid IN (SELECT uid FROM m64_problems WHERE closed_at != '' AND closed_at < ?)`, cut, cut); err != nil {
 		m.log.Warn("monitor64: purge events", "err", err)
 	}
+	// Ereignisse ohne Problem im Ablauf des Hosts: migrierte Proxmox-Gaeste (#165)
+	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_events WHERE kind = ? AND problem_uid = '' AND ts < ?`, migratedKind, cut); err != nil {
+		m.log.Warn("monitor64: purge events", "err", err)
+	}
 	if _, err := m.st.Writer().ExecContext(ctx, `DELETE FROM m64_problems WHERE closed_at != '' AND closed_at < ?`, cut); err != nil {
 		m.log.Warn("monitor64: purge problems", "err", err)
 	}

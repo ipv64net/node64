@@ -42,7 +42,7 @@ func (m *Module) newAPICollector(a *Access, h *Host, cfg accessConfig, secret st
 		if addr == "" {
 			addr = "https://" + apiHostPort(h.Address, 8006)
 		}
-		c, err := apis.NewPVE(apis.PVEConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin, Node: cfg.Node, Seen: m.pveSeen})
+		c, err := apis.NewPVE(apis.PVEConfig{Addresses: splitAddrs(addr), TokenID: cfg.TokenID, Secret: secret, Pin: cfg.Pin, Node: cfg.Node, Seen: m.pveSeen, Tag: a.UID})
 		if err != nil {
 			return nil, err
 		}

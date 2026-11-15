@@ -612,8 +612,10 @@ function pageOverview() {
 		case 'resolved': icon = 'bi-person-check text-primary'; t = L('ov.r_resolved', { n: name }); sub = L('ov.r_by', { w: whoTxt(r.by) }) + (r.text ? ' – ' + quote(r.text) : ''); break;
 		case 'maint': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint', { n: tx(r.text || '') }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
 		case 'maint_end': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint_end', { n: tx(r.text || '') }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
+		case 'migrated': icon = 'bi-arrow-left-right text-primary'; t = L('ov.r_migrated', { n: name }); sub = tx(r.text || ''); break;
 		}
-		return '<div class="prob-row" data-goto="/monitor64/problems?status=closed" role="link" tabindex="0"><i class="bi ' + icon + '"></i><div class="prob-main"><div class="prob-title">' + esc(t) + '</div><div class="prob-sub">' + esc(sub) + '</div></div><span class="prob-since">' + esc(ago(r.at)) + '</span></div>';
+		var href = r.kind === 'migrated' && r.host_uid ? hostURL(r.host_uid, r.key || '') : '/monitor64/problems?status=closed';
+		return '<div class="prob-row" data-goto="' + esc(href) + '" role="link" tabindex="0"><i class="bi ' + icon + '"></i><div class="prob-main"><div class="prob-title">' + esc(t) + '</div><div class="prob-sub">' + esc(sub) + '</div></div><span class="prob-since">' + esc(ago(r.at)) + '</span></div>';
 	}
 	function render() {
 		var c = data.counts || {};

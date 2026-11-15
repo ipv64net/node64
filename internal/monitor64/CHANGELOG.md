@@ -1,5 +1,12 @@
 # Monitor64 – Änderungen
 
+## 0.1.18 – 2026-11-15
+
+Fehlerbehebungen:
+
+- Proxmox VE im Cluster: Eine VM bzw. ein Container, der auf eine andere Node migriert (von Hand oder per HA), gilt nicht mehr als verschwunden. Ist die neue Node in Monitor64 als Host eingetragen, zieht der Dienst dorthin um – mit Name, Soll-Zustand, Melden, Schwellen und Verlauf, statt dort als „neu“ zu warten; unter „Zuletzt“ steht „migriert von Node A nach Node B“. Ist die Node nicht eingetragen (z. B. nur ein Zugang auf den Cluster), führt der bisherige Host den Gast mit den Werten aus dem Cluster weiter („läuft auf Node B“). Gleiche Node-Namen in einem anderen Cluster zählen nicht (#165).
+- Proxmox VE: Bei HA-Ressourcen gilt der Soll-Zustand aus der HA-Konfiguration (`started` = soll laufen, `stopped`/`disabled` = darf aus sein) statt „beim Booten starten“; während HA einen Gast verschiebt (`migrate`, `relocate`), meldet „Gast oder Container läuft nicht“ nichts (#165).
+
 ## 0.1.17 – 2026-11-14
 
 Fehlerbehebungen:

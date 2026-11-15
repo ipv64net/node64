@@ -90,6 +90,7 @@ var ruleKinds = []ruleKind{
 var coreTexts = []string{"detail.vanished", "detail.not_running", "detail.access", "detail.threshold", "detail.maint_silent", "detail.unack",
 	"detail.secret_unreadable", "detail.no_data", "detail.host_removed", "detail.zfs_errors", "detail.push_waiting", "detail.hostkey_unconfirmed", "err.not_running", "detail.traps", "detail.trap_last",
 	"detail.cluster_takeover", "detail.cluster_handover", "detail.handover",
+	"detail.guest_migrated", "detail.guest_followed", "detail.guest_back",
 	"detail.agent_updated", "agent.err_fallback", "agent.err_no_index", "agent.err_no_file"}
 
 // ruleGroups ist die Reihenfolge der Abschnitte auf der Seite Schwellen.

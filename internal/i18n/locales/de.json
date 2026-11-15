@@ -6115,7 +6115,8 @@
       "r_by": "von {w}",
       "r_maint": "Wartung eingetragen: {n}",
       "r_maint_end": "Wartung beendet: {n}",
-      "maint_problems": "Im Wartungsfenster: {n} Probleme auf {h} Hosts"
+      "maint_problems": "Im Wartungsfenster: {n} Probleme auf {h} Hosts",
+      "r_migrated": "{n} migriert"
     },
     "chart": {
       "range": "Zeitraum",
@@ -6952,7 +6953,10 @@
       "agent_updated": "Agent {from} → {to}",
       "threshold_free": "nur noch {value} GB frei (Schwelle {limit} GB)",
       "hostkey_unconfirmed": "Hostschlüssel noch nicht bestätigt – das Passwort wird vorher nicht gesendet. Am Zugang „Testen“ wählen, den Fingerabdruck vergleichen und bestätigen.",
-      "ssh_no_pubkey": "Der Server bietet keine Anmeldung per Schlüssel an – erreichst du den richtigen Server und Port? (z. B. löst der Name im Container anders auf, oder die Verbindung geht über IPv6)"
+      "ssh_no_pubkey": "Der Server bietet keine Anmeldung per Schlüssel an – erreichst du den richtigen Server und Port? (z. B. löst der Name im Container anders auf, oder die Verbindung geht über IPv6)",
+      "guest_migrated": "Migriert von Node {from} nach Node {to} – vom Host {host} übernommen, mit Einstellungen und Verlauf",
+      "guest_followed": "Migriert von Node {from} nach Node {to} – wird hier weitergeführt (kein aktiver Host für Node {to} in Monitor64)",
+      "guest_back": "Zurück von Node {from} auf Node {to}"
     },
     "push": {
       "mode_label": "Verbindung",
@@ -7765,7 +7769,11 @@
       "uf_wan_line_down": "Leitung ohne Verbindung: {list}",
       "uf_wans_online": "{n} Leitungen online",
       "snmp_held": "Stand von vor {n} Min. (Gerät antwortet gerade nicht)",
-      "kernel_newer": "Kernel {run} läuft, {new} ist installiert"
+      "kernel_newer": "Kernel {run} läuft, {new} ist installiert",
+      "runs_on_node": "läuft auf Node {node}",
+      "should_run_ha": "soll laufen (HA)",
+      "may_be_off_ha": "darf aus sein (HA: {v})",
+      "ha_state": "HA: {v}"
     },
     "smart": {
       "title": "SMART-Werte: {n}",

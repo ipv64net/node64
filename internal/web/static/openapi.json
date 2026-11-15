@@ -7183,7 +7183,8 @@
                     "ok",
                     "resolved",
                     "maint",
-                    "maint_end"
+                    "maint_end",
+                    "migrated"
                   ]
                 },
                 "host_uid": {
@@ -7194,6 +7195,10 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "key": {
+                  "type": "string",
+                  "description": "Dienst (z. B. vm:101 bei einem migrierten Proxmox-Gast)"
                 },
                 "text": {
                   "type": "string"
@@ -7207,7 +7212,7 @@
                 }
               }
             },
-            "description": "Zuletzt: gelöste Probleme und Wartung (höchstens 8)"
+            "description": "Zuletzt: gelöste Probleme, Wartung und migrierte Proxmox-Gäste (höchstens 8)"
           },
           "groups": {
             "type": "array",
@@ -8104,7 +8109,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "Art, z. B. ein Zustand (warn, crit …), ok, ack, unack, comment, resolved, bell, maint, maint_end, pause, resume, takeover, handover, agent_update"
+            "description": "Art, z. B. ein Zustand (warn, crit …), ok, ack, unack, comment, resolved, bell, maint, maint_end, pause, resume, takeover, handover, agent_update, migrated"
           },
           "text": {
             "type": "string"

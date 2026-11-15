@@ -79,6 +79,7 @@ type ovRecent struct {
 	HostUID string    `json:"host_uid,omitempty"`
 	Host    string    `json:"host,omitempty"`
 	Name    string    `json:"name,omitempty"`
+	Key     string    `json:"key,omitempty"`
 	Text    string    `json:"text,omitempty"`
 	By      Actor     `json:"by"`
 	At      time.Time `json:"at"`
@@ -217,8 +218,8 @@ func (m *Module) overview(ctx context.Context) ovData {
 		}
 		return stateRank[a.State] > stateRank[b.State]
 	})
-	// Zuletzt: geloeste Probleme und Wartung
-	if evs, err := m.store.RecentEvents(ctx, []string{"ok", "resolved", "maint", "maint_end"}, 16); err == nil {
+	// Zuletzt: geloeste Probleme, Wartung und migrierte Proxmox-Gaeste (#165)
+	if evs, err := m.store.RecentEvents(ctx, []string{"ok", "resolved", "maint", "maint_end", migratedKind}, 16); err == nil {
 		for _, e := range evs {
 			if e.Kind == "maint" && e.Problem != "" { // Hinweis am Problem ("in Wartung, nicht gemeldet"), keine eingetragene Wartung
 				continue
@@ -228,6 +229,7 @@ func (m *Module) overview(ctx context.Context) ovData {
 			}
 			rc := ovRecent{Kind: e.Kind, HostUID: e.HostUID, Host: names[e.HostUID], Text: e.Text, By: e.Actor, At: e.At}
 			if e.Key != "" {
+				rc.Key = e.Key
 				rc.Name = firstNonEmpty(svcNames[e.HostUID+"|"+e.Key], e.Key)
 			}
 			d.Recent = append(d.Recent, rc)

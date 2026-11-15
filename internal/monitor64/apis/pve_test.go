@@ -286,7 +286,8 @@ func TestPVEPartialAndErrors(t *testing.T) {
 	if hasSvc(svcs, "store:local") || !hasSvc(svcs, "cpu") || !hasSvc(svcs, "vm:101") {
 		t.Errorf("Dienste bei Teilfehler falsch")
 	}
-	if ct := svcByKey(t, svcs, "ct:200"); !strings.Contains(ct.Text, "Soll-Zustand unbekannt") || hasFact(ct, "guest_down") {
+	// ct:200 ist HA-Ressource (#165): der Soll-Zustand kommt aus HA, die fehlende Config schadet nicht
+	if ct := svcByKey(t, svcs, "ct:200"); !strings.Contains(ct.Text, "soll laufen (HA)") || strings.Contains(ct.Text, "Soll-Zustand unbekannt") || hasFact(ct, "guest_down") {
 		t.Errorf("ct:200 ohne Config = %+v", ct)
 	}
 

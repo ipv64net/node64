@@ -239,6 +239,14 @@ type AccessView struct {
 	Error    string `json:"error,omitempty"`
 }
 
+// foundSvc ist ein in der Runde gelieferter Dienst mit seinem Zugang (bei mehreren der mit dem besten Rang).
+type foundSvc struct {
+	svc  model.Service
+	via  string
+	acc  string
+	rank int
+}
+
 // hostRT ist der Laufzeitstand eines Hosts (je Node, gespeichert in m64_runtime).
 type hostRT struct {
 	mu       sync.Mutex
@@ -255,8 +263,10 @@ type hostRT struct {
 	Trend    map[string]trendState    `json:"trend,omitempty"`    // Fuellstand -> letzte Trendrechnung
 	Traps    *hostTraps               `json:"traps,omitempty"`    // SNMP-Traps (Kopie fuer den Neustart)
 	SeenUp   map[string][]string      `json:"seen_up,omitempty"`  // merkbarer Zustand der Sammler je Zugang (memo: SNMP-Ports mit Link, NUT TLS)
+	Moved    map[string]string        `json:"moved,omitempty"`    // Proxmox-Gast -> Node, auf der er hier weitergefuehrt wird (#165)
 	LastDisc time.Time                `json:"last_disc,omitzero"`
 	known    map[string]bool          // bei der Erkennung schon gesehene Dienste (nur im Speicher)
+	follow   []string                 // uebernommene Proxmox-Gaeste fuer den Sammler (nil = noch aus der Datenbank lesen)
 	dirty    bool
 
 	viewMu         sync.Mutex // eigene Sperre: die Oberflaeche wartet nicht auf eine laufende Abfrage
@@ -295,6 +305,9 @@ func (rt *hostRT) initMaps() {
 	}
 	if rt.Provider == nil {
 		rt.Provider = map[string]string{}
+	}
+	if rt.Moved == nil {
+		rt.Moved = map[string]string{}
 	}
 	if rt.Rising == nil {
 		rt.Rising = map[string]time.Time{}
@@ -410,13 +423,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	}
 
 	// 1. Zugaenge abfragen
-	type got struct {
-		svc  model.Service
-		via  string
-		acc  string
-		rank int
-	}
-	found := map[string]got{}
+	m.setFollow(rt) // Proxmox: uebernommene Gaeste auch auf anderen Nodes des Clusters suchen (#165)
+	found := map[string]foundSvc{}
 	failedAcc := map[string]bool{} // Zugang hat nicht geantwortet
 	partial := map[string]error{}  // Zugang hat nur teilweise geantwortet
 	var accViews []AccessView
@@ -466,7 +474,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		for _, s := range svcs {
 			s.Metrics = finiteMetrics(s.Metrics)
 			if g, ok := found[s.Key]; !ok || rank < g.rank {
-				found[s.Key] = got{svc: s, via: name, acc: a.row.UID, rank: rank}
+				found[s.Key] = foundSvc{svc: s, via: name, acc: a.row.UID, rank: rank}
 			}
 		}
 	}
@@ -481,7 +489,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	defer cancel()
 	// SNMP-Traps: eigener Dienst des Hosts, solange ein SNMP-Zugang Traps nutzt
 	if s, acc, ok := m.trapService(rt); ok {
-		found[s.Key] = got{svc: s, via: accessName("snmp"), acc: acc, rank: accessRank("snmp")}
+		found[s.Key] = foundSvc{svc: s, via: accessName("snmp"), acc: acc, rank: accessRank("snmp")}
 	}
 	ref := hostRef(h)
 	maint, win := m.inMaintenance(now, ref)
@@ -493,8 +501,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	// Nicht vorgeschlagene (Default false, z. B. einzelne Windows-Dienste, gestoppte Gaeste) kommen als "ignoriert" dazu,
 	// damit sie spaeter uebernommen werden koennen, ohne die Liste der neuen Dienste zu fuellen (UpsertDiscovered).
 	newKey := false
-	for k := range found {
-		if !rt.known[k] {
+	for k, g := range found {
+		if !rt.known[k] && g.svc.MovedTo == "" {
 			newKey = true
 			break
 		}
@@ -502,7 +510,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	if reachable && role == roleReport && (rt.LastDisc.IsZero() || now.Sub(rt.LastDisc) >= discoverEvery || newKey) {
 		offer := make([]model.Service, 0, len(found))
 		for _, g := range found {
-			offer = append(offer, g.svc)
+			if g.svc.MovedTo == "" { // Gast auf einer anderen Node (#165): dort erkannt, hier nicht vorschlagen
+				offer = append(offer, g.svc)
+			}
 		}
 		sort.Slice(offer, func(i, j int) bool { return offer[i].Key < offer[j].Key })
 		if _, err := m.store.UpsertDiscovered(dbctx, h.UID, offer, nil, SystemActor); err != nil {
@@ -521,6 +531,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		m.log.Warn("monitor64: services", "host", h.Name, "err", err)
 		return
 	}
+	rows = m.migrated(dbctx, h, rt, rows, found, role, now) // Gaeste auf anderen Nodes: uebergeben bzw. hier weiter
+	rt.follow = followKeys(rows)
 	// verschwunden: erst nach vanishRounds Runden ohne den Dienst, und nur wenn sein Zugang vollstaendig
 	// geantwortet hat; wieder geliefert = sofort zurueck.
 	var gone []string

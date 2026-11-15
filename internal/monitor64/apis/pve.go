@@ -25,10 +25,15 @@ import (
 //	/nodes/{node}/qemu?full=1, /lxc       Gaeste (vm:<vmid>, ct:<vmid>); Raten aus den Zaehlern zweier Runden,
 //	                                      full=1 liefert qmpstatus (io-error, guest-panicked, paused …)
 //	/nodes/{node}/{qemu|lxc}/{vmid}/config onboot (Soll-Zustand), je Gast alle 10 min
-//	/cluster/ha/status/current            HA (nur mit HA-Ressourcen)
+//	/cluster/ha/status/current            HA (nur mit HA-Ressourcen); Soll-Zustand der HA-Gaeste (request_state)
+//	/cluster/resources?type=vm            nur wenn ein uebernommener Gast hier fehlt: auf welcher Node er jetzt laeuft
 //	/cluster/ceph/status                  Ceph (falls eingerichtet, sonst stuendlich neu versucht)
 //
 // Seltener: /nodes/{node}/disks/list + /disks/smart?disk= (SMART, 30 min), /nodes/{node}/apt/update (60 min).
+//
+// Migration im Cluster (#165): Gaeste, die der Kern an diesem Host uebernommen hat (Follow), verfolgt der Sammler
+// auf andere Nodes desselben Clusters weiter. Er liefert sie mit den Werten aus /cluster/resources und MovedTo =
+// neue Node; der Kern uebergibt sie an den Host dieser Node, falls in Monitor64 eingetragen, sonst bleiben sie hier.
 //
 // Clusterweite Dienste (cluster, ha, ceph) bewertet nur eine Node: die mit der kleinsten Node-ID unter den Nodes,
 // die diese Node online sieht (bei getrenntem Cluster je Teil eine). Auf den uebrigen Nodes erscheinen die Dienste
@@ -49,12 +54,38 @@ type PVEConfig struct {
 	// clusterweiten Dienste bewertet die kleinste Node-ID unter den Nodes, die hier gerade erfolgreich abgefragt
 	// werden - nicht eine Node, die in Monitor64 fehlt, pausiert oder deren API nicht antwortet.
 	Seen *ClusterSeen
+	Tag  string // Kennung des Zugangs (ClusterSeen.ClusterOf)
 }
 
 // ClusterSeen merkt, welche Proxmox-Nodes zuletzt erfolgreich abgefragt wurden (je Cluster).
 type ClusterSeen struct {
-	mu sync.Mutex
-	at map[string]time.Time
+	mu  sync.Mutex
+	at  map[string]time.Time
+	tag map[string]string // Zugang -> Cluster der letzten erfolgreichen Runde
+}
+
+// markTag merkt den Cluster eines Zugangs ("" = Einzel-Node).
+func (c *ClusterSeen) markTag(tag, cluster string) {
+	if c == nil || tag == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tag == nil {
+		c.tag = map[string]string{}
+	}
+	c.tag[tag] = cluster
+}
+
+// ClusterOf liefert den Cluster eines Zugangs aus seiner letzten erfolgreichen Runde (known = schon eine Runde).
+func (c *ClusterSeen) ClusterOf(tag string) (cluster string, known bool) {
+	if c == nil {
+		return "", false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cluster, known = c.tag[tag]
+	return cluster, known
 }
 
 // seenFresh: so lange gilt eine Node nach der letzten erfolgreichen Runde als ueberwacht.
@@ -101,8 +132,10 @@ type PVE struct {
 	client *proxmox.Client
 	now    func() time.Time
 
-	nodeMu sync.Mutex
-	node   string // erkannte Node (cfg.Node leer): beim ersten Kontakt festgelegt, wechselt bei Failover nicht
+	nodeMu  sync.Mutex
+	node    string          // erkannte Node (cfg.Node leer): beim ersten Kontakt festgelegt, wechselt bei Failover nicht
+	cluster string          // Cluster der letzten Runde ("" = Einzel-Node bzw. unbekannt)
+	follow  map[string]bool // am Host uebernommene Gaeste (vm:101, ct:200), vom Kern vor jeder Runde gesetzt
 
 	mu        sync.Mutex
 	counters  map[string]*counter // Gast-Schluessel -> Zaehler der vorigen Runde
@@ -110,9 +143,16 @@ type PVE struct {
 	locks     map[string]lockSeen // Gast-Schluessel -> Sperre eines nicht laufenden Gasts seit
 	disks     slowDisks
 	updates   slowUpdates
-	cephUntil time.Time // kein Ceph: bis dahin nicht neu fragen
-	cephSeen  bool      // Ceph hat schon geantwortet (Fehler danach = Stoerung, nicht "kein Ceph")
-	owner     string    // Node, die die clusterweiten Dienste bewertet ("" = diese bzw. unbekannt)
+	cephUntil time.Time          // kein Ceph: bis dahin nicht neu fragen
+	cephSeen  bool               // Ceph hat schon geantwortet (Fehler danach = Stoerung, nicht "kein Ceph")
+	owner     string             // Node, die die clusterweiten Dienste bewertet ("" = diese bzw. unbekannt)
+	haState   map[string]haGuest // HA-Gast (vm:101) -> Soll- und aktueller Zustand
+}
+
+// haGuest ist der Zustand eines Gasts als HA-Ressource.
+type haGuest struct {
+	want string // Soll laut HA-Konfiguration: started, stopped, disabled, ignored (enabled = started)
+	cur  string // aktueller Zustand des HA-Managers: started, migrate, relocate, stopped, error ...
 }
 
 type lockSeen struct {
@@ -144,6 +184,33 @@ func (p *PVE) Node() string {
 	p.nodeMu.Lock()
 	defer p.nodeMu.Unlock()
 	return p.node
+}
+
+// Follow setzt die am Host uebernommenen Gaeste (Kern, vor jeder Runde): fehlen sie auf dieser Node, sucht der
+// Sammler sie im Cluster (#165). Andere Schluessel werden ignoriert.
+func (p *PVE) Follow(keys []string) {
+	m := map[string]bool{}
+	for _, k := range keys {
+		if strings.HasPrefix(k, "vm:") || strings.HasPrefix(k, "ct:") {
+			m[k] = true
+		}
+	}
+	p.nodeMu.Lock()
+	p.follow = m
+	p.nodeMu.Unlock()
+}
+
+// Cluster ist der Name des Clusters aus der letzten Runde ("" = Einzel-Node bzw. noch unbekannt).
+func (p *PVE) Cluster() string {
+	p.nodeMu.Lock()
+	defer p.nodeMu.Unlock()
+	return p.cluster
+}
+
+func (p *PVE) followed() map[string]bool {
+	p.nodeMu.Lock()
+	defer p.nodeMu.Unlock()
+	return p.follow
 }
 
 // fixNode legt die erkannte Node fest, falls noch keine bekannt ist, und liefert die feste Node.
@@ -295,6 +362,10 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	} else {
 		cl, _ := parseNodes(st)
 		p.cfg.Seen.mark(cl, node, now)
+		p.cfg.Seen.markTag(p.cfg.Tag, cl)
+		p.nodeMu.Lock()
+		p.cluster = cl
+		p.nodeMu.Unlock()
 		p.owner = clusterOwner(st, node, func(n string) bool { return p.cfg.Seen.fresh(cl, n, now) }) // bei Fehler gilt der vorige Stand
 		if svc, ok := clusterService(st); ok {
 			cw = append(cw, svc)
@@ -308,7 +379,7 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	out = append(out, p.disks.collect(ctx, p.client, node, now, p.cfg.SmartEvery, func(d diskEntry) string {
 		return firstNonEmpty(d.DevPath, "/dev/"+d.dev())
 	}, part)...)
-	out = append(out, p.guests(ctx, nodePath, now, part)...)
+	out = append(out, p.guests(ctx, node, now, part)...)
 	sortServices(out)
 	return out, part.result()
 }
@@ -393,12 +464,19 @@ func clusterService(st []pveStatus) (model.Service, bool) {
 
 // haEntry ist ein Eintrag aus /cluster/ha/status/current.
 type haEntry struct {
-	ID     string `json:"id"`
-	Type   string `json:"type"`
-	Node   string `json:"node"`
-	Status string `json:"status"`
-	State  string `json:"state"`
-	SID    string `json:"sid"`
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Node    string `json:"node"`
+	Status  string `json:"status"`
+	State   string `json:"state"`
+	SID     string `json:"sid"`
+	Request string `json:"request_state"` // Soll laut HA-Konfiguration (ab PVE 7; sonst aus /cluster/ha/resources)
+}
+
+// haResource ist ein Eintrag aus /cluster/ha/resources.
+type haResource struct {
+	SID   string `json:"sid"`
+	State string `json:"state"`
 }
 
 // haBad sind Zustaende einer HA-Ressource, die eine Stoerung bedeuten.
@@ -407,17 +485,23 @@ var haBad = map[string]bool{"error": true, "fence": true, "recovery": true}
 func (p *PVE) ha(ctx context.Context, part *partial) []model.Service {
 	var list []haEntry
 	if err := p.client.Get(ctx, "/cluster/ha/status/current", &list); err != nil {
-		if !absent(err) {
+		if absent(err) {
+			p.haState = nil
+		} else {
 			part.add("cluster/ha/status/current", err, "ha")
 		}
 		return nil
 	}
 	var res, bad []string
 	quorumOK := true
+	guests := map[string]haGuest{}
+	noRequest := false
 	for _, e := range list {
 		switch e.Type {
 		case "service":
 			res = append(res, e.SID)
+			guests[e.SID] = haGuest{want: strings.ToLower(e.Request), cur: strings.ToLower(e.State)}
+			noRequest = noRequest || e.Request == ""
 			if haBad[strings.ToLower(e.State)] {
 				bad = append(bad, e.SID+" "+e.State)
 			}
@@ -425,6 +509,20 @@ func (p *PVE) ha(ctx context.Context, part *partial) []model.Service {
 			quorumOK = strings.EqualFold(e.Status, "OK")
 		}
 	}
+	if noRequest { // aeltere PVE ohne request_state: Soll aus der HA-Konfiguration
+		var conf []haResource
+		if err := p.client.Get(ctx, "/cluster/ha/resources", &conf); err == nil {
+			for _, r := range conf {
+				if g, ok := guests[r.SID]; ok && g.want == "" {
+					g.want = strings.ToLower(r.State)
+					guests[r.SID] = g
+				}
+			}
+		} else if !absent(err) {
+			part.add("cluster/ha/resources", err, "ha")
+		}
+	}
+	p.haState = guests
 	if len(res) == 0 {
 		return nil // HA nicht benutzt
 	}
@@ -660,9 +758,18 @@ type guestItem struct {
 	vmid int
 	g    pveGuest
 	at   time.Time // Abrufzeitpunkt der Liste (Raten)
+	node string    // "" = diese Node; sonst die Node, auf die der Gast migriert ist (#165)
 }
 
-func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *partial) []model.Service {
+// pveResource ist ein Gast aus /cluster/resources?type=vm (alle Nodes des Clusters; ohne qmpstatus).
+type pveResource struct {
+	pveGuest
+	Type string `json:"type"` // qemu, lxc
+	Node string `json:"node"`
+}
+
+func (p *PVE) guests(ctx context.Context, node string, now time.Time, part *partial) []model.Service {
+	nodePath := "/nodes/" + url.PathEscape(node)
 	var items []guestItem
 	failed := map[string]bool{} // Praefix -> Liste fehlgeschlagen (Zaehler und Configs behalten)
 	for _, typ := range []string{proxmox.TypeQEMU, proxmox.TypeLXC} {
@@ -685,6 +792,7 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 			items = append(items, guestItem{typ: typ, key: guestPrefix(typ) + strconv.Itoa(vmid), vmid: vmid, g: g, at: at})
 		}
 	}
+	items = append(items, p.moved(ctx, node, items, failed, part)...)
 	// onboot je Gast (alle configEvery neu)
 	var need []guestItem
 	for _, it := range items {
@@ -700,7 +808,11 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 		var cfg struct {
 			OnBoot num `json:"onboot"`
 		}
-		err := p.client.Get(ctx, nodePath+"/"+it.typ+"/"+strconv.Itoa(it.vmid)+"/config", &cfg)
+		np := nodePath
+		if it.node != "" {
+			np = "/nodes/" + url.PathEscape(it.node)
+		}
+		err := p.client.Get(ctx, np+"/"+it.typ+"/"+strconv.Itoa(it.vmid)+"/config", &cfg)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -753,6 +865,60 @@ func (p *PVE) guests(ctx context.Context, nodePath string, now time.Time, part *
 	return out
 }
 
+// maxFollow: hoechstens so viele migrierte Gaeste je Runde verfolgen (je einer Config-Abfrage alle 10 min).
+const maxFollow = 200
+
+// moved: uebernommene Gaeste (Follow), die auf dieser Node fehlen, im Cluster suchen (#165). Laeuft einer jetzt auf
+// einer anderen Node, kommt er mit den Werten aus /cluster/resources und dieser Node zurueck. Nicht gefunden (z. B.
+// geloescht): nichts, der Kern zaehlt ihn wie bisher als verschwunden. Scheitert die Abfrage, gelten die fehlenden
+// Gaeste als Teilfehler (nicht "verschwunden" nennen, waehrend ihr Verbleib unbekannt ist).
+func (p *PVE) moved(ctx context.Context, node string, local []guestItem, failed map[string]bool, part *partial) []guestItem {
+	follow := p.followed()
+	if len(follow) == 0 {
+		return nil
+	}
+	have := make(map[string]bool, len(local))
+	for _, it := range local {
+		have[it.key] = true
+	}
+	var missing []string
+	for k := range follow {
+		pre, _, _ := strings.Cut(k, ":")
+		if !have[k] && !failed[pre+":"] {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	var list []pveResource
+	if err := p.client.Get(ctx, "/cluster/resources?type=vm", &list); err != nil {
+		part.add("cluster/resources", err, missing...)
+		return nil
+	}
+	at := p.now()
+	where := map[string]pveResource{}
+	for _, r := range list {
+		if r.VMID <= 0 || r.Template != 0 || r.Node == "" || r.Node == node {
+			continue
+		}
+		if r.Type != proxmox.TypeQEMU && r.Type != proxmox.TypeLXC {
+			continue
+		}
+		where[guestPrefix(r.Type)+strconv.Itoa(int(r.VMID))] = r
+	}
+	var out []guestItem
+	for _, k := range missing {
+		r, ok := where[k]
+		if !ok || len(out) >= maxFollow {
+			continue
+		}
+		out = append(out, guestItem{typ: r.Type, key: k, vmid: int(r.VMID), g: r.pveGuest, at: at, node: r.Node})
+	}
+	return out
+}
+
 func guestPrefix(typ string) string {
 	if typ == proxmox.TypeLXC {
 		return "ct:"
@@ -769,7 +935,11 @@ func guestID(key string) int {
 // qmpFault: QEMU-Zustaende, in denen die VM zwar als "running" gilt, aber steht (Speicher voll, Absturz).
 var qmpFault = map[string]bool{"io-error": true, "internal-error": true, "guest-panicked": true}
 
-// guestService: ein Gast als Dienst mit Zustand, CPU, RAM, Platte, Netz- und Disk-Raten und Soll-Zustand (onboot).
+// haMoving: Zustaende des HA-Managers, in denen ein Gast gerade umzieht (kurz gestoppt sein darf).
+var haMoving = map[string]bool{"migrate": true, "relocate": true}
+
+// guestService: ein Gast als Dienst mit Zustand, CPU, RAM, Platte, Netz- und Disk-Raten und Soll-Zustand (onboot,
+// bei HA-Gaesten der Soll-Zustand der HA-Ressource).
 //
 // Messgroessen fuer den Kern: running (1 = laeuft wirklich; 0 auch bei pausierter bzw. gestoerter VM laut
 // qmpstatus) und locked (1 = eine Sperre wie Backup im Stopp-Modus oder Migration erklaert, dass der Gast nicht
@@ -786,7 +956,7 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	if g.Name != "" {
 		name = fmt.Sprintf("%s (%s %d)", model.Raw(g.Name), label, it.vmid)
 	}
-	s := model.Service{Key: it.key, Name: name, Kind: kind, Default: true}
+	s := model.Service{Key: it.key, Name: name, Kind: kind, Default: true, MovedTo: it.node}
 	for _, t := range strings.FieldsFunc(g.Tags, func(r rune) bool { return r == ';' || r == ',' || r == ' ' }) {
 		if strings.EqualFold(t, proxmox.TagNoMonitor) {
 			s.Default = false
@@ -819,6 +989,11 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	default:
 		parts = append(parts, model.T("monitor64.txt.unknown"))
 	}
+	if it.node != "" {
+		parts = append(parts, model.T("monitor64.txt.runs_on_node", "node", it.node))
+	}
+	ha, haManaged := p.haState[it.key]
+	haManaged = haManaged && ha.want != "" && ha.want != "ignored"
 	// Sperre: bei laufenden Gaesten erklaert (Backup im Snapshot-Modus, Migration), bei nicht laufenden nur
 	// lockGrace lang (eine haengende Sperre verdeckt sonst einen gestoppten Gast); eine Stoerung geht vor.
 	lockOK := false
@@ -845,6 +1020,10 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 		parts = append(parts, txt)
 	} else {
 		delete(p.locks, it.key)
+	}
+	if haManaged && haMoving[ha.cur] && !fault { // HA verschiebt den Gast gerade (Relocate stoppt ihn kurz)
+		lockOK = true
+		parts = append(parts, model.T("monitor64.txt.ha_state", "v", ha.cur))
 	}
 	locked := 0.0
 	if lockOK {
@@ -889,21 +1068,29 @@ func (p *PVE) guestService(it guestItem, cfg guestCfg, cfgKnown bool) model.Serv
 	} else {
 		delete(p.counters, it.key)
 	}
+	// Soll-Zustand: bei HA-Gaesten die HA-Ressource (started = soll laufen, stopped/disabled = darf aus sein), sonst
+	// onboot
+	shouldRun, sollText := false, ""
 	switch {
+	case haManaged && (ha.want == "started" || ha.want == "enabled"):
+		shouldRun, sollText = true, model.T("monitor64.txt.should_run_ha")
+	case haManaged:
+		sollText = model.T("monitor64.txt.may_be_off_ha", "v", ha.want)
 	case !cfgKnown:
-		parts = append(parts, model.T("monitor64.txt.target_unknown"))
+		sollText = model.T("monitor64.txt.target_unknown")
 	case cfg.onboot:
-		parts = append(parts, model.T("monitor64.txt.should_run_onboot"))
+		shouldRun, sollText = true, model.T("monitor64.txt.should_run_onboot")
 	default:
-		parts = append(parts, model.T("monitor64.txt.may_be_off"))
+		sollText = model.T("monitor64.txt.may_be_off")
 	}
+	parts = append(parts, sollText)
 	switch {
 	case fault: // gestartet, steht aber: unabhaengig vom Soll-Zustand eine Stoerung
 		s.Facts = append(s.Facts, model.Fact{Code: "guest_fault", Text: model.T("monitor64.txt.vm_stalled", "v", qmp)}) // gilt auch bei Soll "aus"
-	case !active && cfgKnown && cfg.onboot && !lockOK:
-		t := parts[0] + ", " + model.T("monitor64.txt.should_run_onboot")
+	case !active && shouldRun && !lockOK:
+		t := parts[0] + ", " + sollText
 		if g.Lock != "" {
-			t = parts[0] + ", " + model.T("monitor64.txt.lock_longer", "v", g.Lock, "d", model.Sub(hoursText(lockGrace))) + ", " + model.T("monitor64.txt.should_run_onboot")
+			t = parts[0] + ", " + model.T("monitor64.txt.lock_longer", "v", g.Lock, "d", model.Sub(hoursText(lockGrace))) + ", " + sollText
 		}
 		s.Facts = append(s.Facts, model.Fact{Code: "guest_down", Text: t})
 	}
