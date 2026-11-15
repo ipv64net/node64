@@ -49,6 +49,7 @@ type Identity struct {
 	Email       string   // mail
 	DN          string   // Eintrag des Benutzers
 	GroupDNs    []string // Gruppen (memberOf, verschachtelt bzw. per Gruppensuche)
+	Disabled    bool     // nur Lookup: Konto im Verzeichnis deaktiviert (Authenticate lehnt das schon ab)
 }
 
 // TestResult ist das Ergebnis von „Verbindung testen“.
@@ -413,6 +414,50 @@ func Authenticate(ctx context.Context, cfg authcfg.LDAPConfig, bindPassword, use
 		return nil, err
 	}
 	return id, nil
+}
+
+// Lookup sucht Benutzer mit dem Dienstkonto (ohne deren Passwort) und liefert sie mit Gruppen und Sperre; fehlt ein
+// Name in der Antwort, gibt es ihn im Verzeichnis nicht (mehr). Fuer den regelmaessigen Abgleich der Gruppen und die
+// Nachpruefung bei Passkey-Anmeldungen. Fehler (Verbindung, Dienstkonto, Suche) brechen ab: dann ist nichts geprueft.
+func Lookup(ctx context.Context, cfg authcfg.LDAPConfig, bindPassword string, usernames []string) (map[string]*Identity, error) {
+	if strings.TrimSpace(cfg.BaseDN) == "" {
+		return nil, fmt.Errorf("%w: base dn missing", ErrConfig)
+	}
+	if err := acquire(ctx, Timeout(cfg)); err != nil {
+		return nil, err
+	}
+	defer release()
+	c, err := connect(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer c.close()
+	if err := bindService(c, cfg, bindPassword); err != nil {
+		return nil, err
+	}
+	out := map[string]*Identity{}
+	for _, name := range usernames {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !validName(strings.TrimSpace(name)) {
+			continue
+		}
+		e, err := findUser(c, cfg, strings.TrimSpace(name))
+		if errors.Is(err, ErrUnknownUser) || errors.Is(err, ErrAmbiguous) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		id := identity(cfg, e, name)
+		id.Disabled = disabled(cfg, e)
+		if id.GroupDNs, err = groups(c, cfg, e); err != nil {
+			return nil, err
+		}
+		out[name] = id
+	}
+	return out, nil
 }
 
 // Test verbindet, meldet das Dienstkonto an und sucht optional probeUser (ohne dessen Passwort).

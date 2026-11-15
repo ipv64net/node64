@@ -305,6 +305,7 @@
     "totp": "Code der Authenticator-App",
     "submit": "Anmelden",
     "failed": "Benutzername oder Passwort ist falsch.",
+    "ldap_unavailable": "Anmeldung über das Verzeichnis (AD/LDAP) gerade nicht möglich. Bitte später erneut versuchen oder einen lokalen Administrator fragen.",
     "ratelimited": "Zu viele Versuche. Bitte in {seconds} Sekunden erneut versuchen.",
     "logged_out": "Du bist abgemeldet.",
     "totp_title": "Zweiter Faktor",

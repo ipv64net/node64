@@ -278,6 +278,16 @@ func (s *Server) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	data, _ := json.Marshal(cred)
 	_ = s.Store.UpdatePasskey(ctx, base64.RawURLEncoding.EncodeToString(cred.ID), string(data))
+	if found.Source == store.SourceLDAP { // Passkey ersetzt nicht die Pruefung im Verzeichnis (geloescht, deaktiviert, Gruppen)
+		ok, reason := s.ldapRecheck(ctx, found)
+		if !ok {
+			s.auditEntry(ctx, store.AuditEntry{Actor: found.Username, Action: "login.ldap_denied", Details: "passkey: " + reason, IP: ip})
+			s.log.Warn("passkey login of ldap user denied", "user", found.Username, "ip", ip, "reason", reason)
+			writeErr(w, http.StatusUnauthorized, "passkey not accepted")
+			return
+		}
+		found, _ = s.Store.UserByID(ctx, found.ID)
+	}
 	if err := s.completeLogin(w, r, found, "passkey"); err != nil {
 		writeErr(w, http.StatusInternalServerError, "session error")
 		return

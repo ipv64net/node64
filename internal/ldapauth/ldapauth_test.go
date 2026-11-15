@@ -259,3 +259,27 @@ func TestCheckURL(t *testing.T) {
 		t.Error("ldap:// with StartTLS")
 	}
 }
+
+// Lookup: mehrere Benutzer ueber das Dienstkonto, Sperre und Gruppen; Unbekannte fehlen in der Antwort.
+func TestLookup(t *testing.T) {
+	f := adDirectory(t, false)
+	got, err := Lookup(ctxCA(t, f), adConfig(f), ldaptest.ServicePassword, []string{"mmuster", "gesperrt", "niemand"})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("lookup: %v %+v", err, got)
+	}
+	if m := got["mmuster"]; m == nil || m.StableKey != guidHex || m.Disabled || len(m.GroupDNs) != 2 {
+		t.Fatalf("mmuster: %+v", m)
+	}
+	if g := got["gesperrt"]; g == nil || !g.Disabled {
+		t.Fatalf("gesperrt: %+v", g)
+	}
+	if _, err := Lookup(ctxCA(t, f), adConfig(f), "falsch", []string{"mmuster"}); err == nil {
+		t.Fatal("wrong service password must fail the whole lookup")
+	}
+	binds, _, _ := f.Stats()
+	for _, b := range binds {
+		if b != ldaptest.Service {
+			t.Fatalf("lookup must only bind the service account, got %q", b)
+		}
+	}
+}

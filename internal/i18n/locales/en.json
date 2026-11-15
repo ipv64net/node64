@@ -305,6 +305,7 @@
     "totp": "Authenticator app code",
     "submit": "Sign in",
     "failed": "Username or password is wrong.",
+    "ldap_unavailable": "Sign-in via the directory (AD/LDAP) is not possible right now. Please try again later or ask a local administrator.",
     "ratelimited": "Too many attempts. Please try again in {seconds} seconds.",
     "logged_out": "You are signed out.",
     "totp_title": "Second factor",

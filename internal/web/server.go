@@ -73,11 +73,12 @@ type Deps struct {
 
 type Server struct {
 	Deps
-	log     *slog.Logger
-	mux     *http.ServeMux
-	handler http.Handler
-	pages   map[string]*template.Template
-	certsUI *certsui.UI // Seite „Zertifikate“ (nil ohne Verwaltung)
+	log        *slog.Logger
+	ldapSynced time.Time // letzter Abgleich der LDAP-Gruppen (nur housekeeping)
+	mux        *http.ServeMux
+	handler    http.Handler
+	pages      map[string]*template.Template
+	certsUI    *certsui.UI // Seite „Zertifikate“ (nil ohne Verwaltung)
 
 	uiCertSel    atomic.Int64     // Zertifikat der Oberflaeche: -1 selbst signiert, 0 automatisch, sonst Kennung
 	fallbackCert *tls.Certificate // NODE64_TLS_CERT bzw. selbst signiert
@@ -372,6 +373,10 @@ func (s *Server) housekeeping(ctx context.Context) {
 			}
 			if n, err := s.Store.PruneAudit(ctx, auditKeep(s.Store)); err == nil && n > 0 { // Audit-Log (audit.keep_days)
 				s.log.Debug("old audit entries removed", "count", n)
+			}
+			if time.Since(s.ldapSynced) >= time.Hour { // Gruppen der Benutzer aus AD/LDAP (auth_ldap.go)
+				s.ldapSynced = time.Now()
+				s.ldapSyncGroups(ctx)
 			}
 		}
 	}

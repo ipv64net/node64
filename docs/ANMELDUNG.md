@@ -46,6 +46,17 @@ Node64 meldet Benutzer gegen ein vorhandenes Active Directory oder LDAP (OpenLDA
 
 Klartext-LDAP ohne TLS geht nur mit dem Schalter „Klartext erlauben“; ein leeres Passwort wird immer abgelehnt.
 
+- **Rolle aus Gruppen nachgeprüft:** Node64 gleicht die Gruppen aller AD/LDAP-Benutzer stündlich über das
+  Dienstkonto ab, außerdem bei jeder Anmeldung mit Passkey. Wer im Verzeichnis gelöscht, deaktiviert oder in keiner
+  zugeordneten Gruppe mehr ist, verliert die Rolle aus den Gruppen. Das gilt auch für laufende Sitzungen und
+  API-/MCP-Keys; mit Passkey kommt er dann nicht mehr hinein. Ist das Verzeichnis nicht erreichbar, bleibt der letzte
+  Stand höchstens 24 Stunden gültig.
+- **Dienstkonto-Passwort:** Werden Server, Dienstkonto oder TLS-Einstellungen geändert, muss das Bind-Passwort neu
+  eingegeben werden. So geht das gespeicherte Passwort nie an einen anderen Server.
+- Fehlversuche (falsches Passwort, unbekannter Name) zählen wie bei lokalen Benutzern. Ist das Verzeichnis nicht
+  erreichbar, erscheint ein eigener Hinweis, und der Versuch zählt nicht. Fehlgeschlagene Anmeldungen antworten
+  immer gleich spät, damit sich Benutzernamen nicht über die Antwortzeit erraten lassen.
+
 ## SSO über OpenID Connect
 
 Das geht mit jedem OIDC-Anbieter, etwa Authelia, Authentik, Keycloak, Pocket ID, Zitadel oder Kanidm.
@@ -58,7 +69,9 @@ Das geht mit jedem OIDC-Anbieter, etwa Authelia, Authentik, Keycloak, Pocket ID,
 
 Standardmäßig kommt **nur hinein, wer sein Konto verknüpft hat**. Optional (Reiter Anmeldung → „SSO: Benutzer über
 Gruppen anlegen“, Standard aus) legt Node64 Benutzer beim ersten Anmelden an, wenn der Gruppen-Claim (Standard
-`groups`; beim Anbieter den Scope/Claim freigeben) eine zugeordnete Node64-Gruppe enthält.
+`groups`; beim Anbieter den Scope/Claim freigeben) eine zugeordnete Node64-Gruppe enthält. Die Gruppen werden bei
+jeder SSO-Anmeldung übernommen. Ohne passende Gruppe ist der Benutzer abgelehnt und verliert die Rolle aus den
+Gruppen. Ohne SSO-Anmeldung (nur Passkey oder API-Key) gilt der letzte Stand höchstens 7 Tage.
 
 ### Beispiel Authelia (`configuration.yml`)
 

@@ -306,6 +306,9 @@ func TestOIDCGroupsJIT(t *testing.T) {
 	if resp := sso("carol", map[string]any{"preferred_username": "carol", "groups": []string{}}); resp.Header.Get("Location") != "/login" {
 		t.Fatal("carol without groups must be denied")
 	}
+	if u, _ := a.store.UserByUID(ctx, uid); len(u.ExtGroupUIDs) != 0 { // abgelehnt: Rolle aus SSO-Gruppen entfaellt
+		t.Fatalf("denied sso login must clear the groups: %v", u.ExtGroupUIDs)
+	}
 }
 
 func TestLDAPCardAndForms(t *testing.T) {

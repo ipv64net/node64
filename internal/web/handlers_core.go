@@ -160,8 +160,28 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "login", v)
 }
 
+// loginFailFloor: fehlgeschlagene Passwort-Anmeldungen antworten fruehestens nach dieser Zeit, egal ob der Name lokal,
+// im Verzeichnis oder gar nicht bekannt ist (argon2 bzw. Verzeichnis-Abfrage dauern verschieden lang): Benutzernamen
+// sollen nicht ueber die Antwortzeit erratbar sein. Tests setzen 0.
+var loginFailFloor = 800 * time.Millisecond
+
+// failDelay wartet bis loginFailFloor nach start (bricht ab, wenn die Anfrage endet).
+func failDelay(ctx context.Context, start time.Time) {
+	d := loginFailFloor - time.Since(start)
+	if d <= 0 {
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
+}
+
 func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	start := time.Now()
 	v := s.view(r, "login.title")
 	f := s.formValues(r, "username", "password", "next")
 	v.Form = map[string]string{"username": f["username"], "next": safeNext(f["next"])}
@@ -182,7 +202,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if s.ldapLogin(w, r, v, u, f["username"], f["password"], keys) { // kein lokaler Benutzer und AD/LDAP an (auth_ldap.go)
+	if s.ldapLogin(w, r, v, u, f["username"], f["password"], keys, start) { // kein lokaler Benutzer und AD/LDAP an (auth_ldap.go)
 		return
 	}
 	if u == nil || !VerifyPassword(u.PasswordHash, f["password"]) {
@@ -193,6 +213,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(f["username"], 64), Action: "login.failed", IP: ip})
 		s.log.Warn("login failed", "user", f["username"], "ip", ip)
+		failDelay(ctx, start)
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.failed")}
 		s.render(w, r, http.StatusUnauthorized, "login", v)
 		return

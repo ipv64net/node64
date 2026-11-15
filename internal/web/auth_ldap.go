@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-ldap/ldap/v3"
@@ -40,8 +42,10 @@ func (s *Server) ldapRoutes() {
 // ---------------------------------------------------------------- Anmeldung mit Passwort
 
 // ldapLogin uebernimmt die Passwort-Anmeldung, wenn kein lokaler Benutzer passt und AD/LDAP an ist. false = nicht
-// zustaendig (dann weiter wie bisher). Der Versuch ist schon verbucht (keys), bei Erfolg kommt er zurueck.
-func (s *Server) ldapLogin(w http.ResponseWriter, r *http.Request, v *View, u *store.User, username, password string, keys []string) bool {
+// zustaendig (dann weiter wie bisher). Der Versuch ist schon verbucht (keys), bei Erfolg kommt er zurueck. Als
+// Fehlversuch (Honeypot64-Meldung) zaehlen nur falsches Passwort und unbekannter Name; ist das Verzeichnis nicht
+// erreichbar oder falsch eingerichtet, kommt der Versuch zurueck. Abgelehnte Benutzer verlieren ihre Gruppen aus LDAP.
+func (s *Server) ldapLogin(w http.ResponseWriter, r *http.Request, v *View, u *store.User, username, password string, keys []string, start time.Time) bool {
 	if u != nil && u.Source == store.SourceLocal {
 		return false
 	}
@@ -51,30 +55,54 @@ func (s *Server) ldapLogin(w http.ResponseWriter, r *http.Request, v *View, u *s
 		return false
 	}
 	ip := s.clientIP(r)
-	deny := func(action, reason string) {
-		s.loginFailed(r, ip)
+	deny := func(action, reason string, counts bool) {
+		if counts {
+			s.loginFailed(r, ip)
+		}
 		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(username, 64), Action: action, Details: "ldap: " + truncate(reason, 300), IP: ip})
 		s.log.Warn("ldap login denied", "user", truncate(username, 64), "ip", ip, "reason", reason)
+		failDelay(ctx, start)
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.failed")}
 		s.render(w, r, http.StatusUnauthorized, "login", v)
 	}
 	id, err := ldapauth.Authenticate(s.ldapContext(ctx), cfg, s.ldapBindPassword(cfg), username, password)
-	if err != nil {
-		deny("login.failed", ldapReason(err))
+	switch {
+	case errors.Is(err, ldapauth.ErrInvalidCredentials):
+		deny("login.failed", ldapReason(err), true)
+		return true
+	case errors.Is(err, ldapauth.ErrUnknownUser), errors.Is(err, ldapauth.ErrDisabled):
+		if u != nil && u.Source == store.SourceLDAP { // im Verzeichnis geloescht bzw. deaktiviert: Rolle aus LDAP entfaellt
+			_ = s.Store.SetUserExtGroups(ctx, u.ID, nil)
+		}
+		deny("login.failed", ldapReason(err), errors.Is(err, ldapauth.ErrUnknownUser))
+		return true
+	case errors.Is(err, ldapauth.ErrAmbiguous):
+		deny("login.failed", ldapReason(err), false)
+		return true
+	case err != nil: // Verzeichnis nicht erreichbar, ausgelastet oder falsch eingerichtet: kein Fehlversuch des Benutzers
+		s.limiter.refund(keys...)
+		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(username, 64), Action: "login.ldap_error", Details: "ldap: " + truncate(ldapReason(err), 300), IP: ip})
+		s.log.Warn("ldap login: directory error", "user", truncate(username, 64), "ip", ip, "err", ldapReason(err))
+		failDelay(ctx, start)
+		v.Flash = &Flash{Kind: "warning", Text: v.T("login.ldap_unavailable")}
+		s.render(w, r, http.StatusServiceUnavailable, "login", v)
 		return true
 	}
 	groups := s.ldapGroupUIDs(ctx, id.GroupDNs)
 	if len(groups) == 0 {
-		deny("login.ldap_denied", "no matching node64 group")
+		if old, _ := s.Store.UserByUID(ctx, store.ExternalUID(store.SourceLDAP, id.StableKey)); old != nil && old.Source == store.SourceLDAP {
+			_ = s.Store.SetUserExtGroups(ctx, old.ID, nil)
+		}
+		deny("login.ldap_denied", "no matching node64 group", false)
 		return true
 	}
-	nu, created, reason, err := s.ldapUser(r, id, groups)
+	nu, created, reason, err := s.extUser(r, store.SourceLDAP, store.ExternalUID(store.SourceLDAP, id.StableKey), id.Username, id.Email, groups)
 	if err != nil {
 		s.fail(w, r, err)
 		return true
 	}
 	if nu == nil {
-		deny("login.ldap_denied", reason)
+		deny("login.ldap_denied", reason, false)
 		return true
 	}
 	s.limiter.refund(keys...)
@@ -114,39 +142,46 @@ func ldapReason(err error) string {
 	return err.Error()
 }
 
-// ldapUser sucht den Benutzer ueber die feste UID oder legt ihn an; nil mit Grund = abgelehnt.
-func (s *Server) ldapUser(r *http.Request, id *ldapauth.Identity, groups []string) (u *store.User, created bool, reason string, err error) {
+// extUser sucht einen Benutzer aus LDAP bzw. SSO ueber seine feste UID oder legt ihn an (gemeinsam fuer beide
+// Quellen); nil mit Grund = abgelehnt. Namen werden klein geschrieben, ein vorhandenes Konto gleichen Namens wird nie
+// uebernommen. Bei vorhandenem Benutzer aktualisiert es die Gruppen und (falls geliefert) die E-Mail.
+func (s *Server) extUser(r *http.Request, source, uid, name, email string, groups []string) (u *store.User, created bool, reason string, err error) {
 	ctx := r.Context()
-	uid := store.ExternalUID(store.SourceLDAP, id.StableKey)
+	email = truncate(strings.TrimSpace(email), 254)
 	if u, err = s.Store.UserByUID(ctx, uid); err != nil {
 		return nil, false, "", err
 	}
 	if u == nil {
-		if !extNameOK(id.Username) {
-			s.log.Warn("ldap login: user name with characters node64 does not allow, not created", "user", truncate(id.Username, 64))
+		name = strings.ToLower(strings.TrimSpace(name))
+		if !extNameOK(name) {
+			s.log.Warn(source+" login: user name with characters node64 does not allow, not created", "user", truncate(name, 64))
 			return nil, false, "invalid user name", nil
 		}
-		other, err := s.Store.UserByName(ctx, id.Username)
+		other, err := s.Store.UserByName(ctx, name)
 		if err != nil {
 			return nil, false, "", err
 		}
 		if other != nil { // nie ein vorhandenes Konto uebernehmen
-			s.log.Warn("ldap login: user name already used by another node64 user, not taken over", "user", id.Username, "source", other.Source)
+			s.log.Warn(source+" login: user name already used by another node64 user, not taken over", "user", name, "source", other.Source)
 			return nil, false, "user name taken by another node64 user", nil
 		}
-		u, err = s.Store.CreateUserWith(ctx, store.NewUser{UID: uid, Username: id.Username, Lang: s.lang(r), Role: store.RoleRead,
-			Source: store.SourceLDAP, Email: truncate(id.Email, 254), ExtGroupUIDs: groups})
+		u, err = s.Store.CreateUserWith(ctx, store.NewUser{UID: uid, Username: name, Lang: s.lang(r), Role: store.RoleRead,
+			Source: source, Email: email, ExtGroupUIDs: groups})
 		if err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				return nil, false, "user name taken by another node64 user", nil
 			}
 			return nil, false, "", err
 		}
-		return u, true, "", nil
+		if err := s.Store.SetUserExtGroups(ctx, u.ID, groups); err != nil { // Zeitpunkt der Pruefung festhalten
+			return nil, false, "", err
+		}
+		u, err = s.Store.UserByID(ctx, u.ID)
+		return u, true, "", err
 	}
-	if u.Source != store.SourceLDAP {
-		s.log.Warn("ldap login: uid belongs to a user of another source", "user", u.Username, "source", u.Source)
-		return nil, false, "uid belongs to a non-ldap user", nil
+	if u.Source != source {
+		s.log.Warn(source+" login: uid belongs to a user of another source", "user", u.Username, "source", u.Source)
+		return nil, false, "uid belongs to a user of another source", nil
 	}
 	if u.Disabled {
 		return nil, false, "user disabled in node64", nil
@@ -154,8 +189,10 @@ func (s *Server) ldapUser(r *http.Request, id *ldapauth.Identity, groups []strin
 	if err := s.Store.SetUserExtGroups(ctx, u.ID, groups); err != nil {
 		return nil, false, "", err
 	}
-	if err := s.Store.SetUserEmail(ctx, u.ID, truncate(id.Email, 254)); err != nil {
-		return nil, false, "", err
+	if email != "" {
+		if err := s.Store.SetUserEmail(ctx, u.ID, email); err != nil {
+			return nil, false, "", err
+		}
 	}
 	u, err = s.Store.UserByID(ctx, u.ID)
 	return u, false, "", err
@@ -188,6 +225,82 @@ func ldapGroupMatches(g *store.Group, dns []string) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------- Nachpruefen ohne Passwort
+
+// ldapCheckedGroups: Node64-Gruppen eines Benutzers nach ldapauth.Lookup (id nil = nicht gefunden); Grund, wenn er
+// abzulehnen ist (dann keine Gruppen).
+func (s *Server) ldapCheckedGroups(ctx context.Context, u *store.User, id *ldapauth.Identity) ([]string, string) {
+	switch {
+	case id == nil:
+		return nil, "not found in directory"
+	case store.ExternalUID(store.SourceLDAP, id.StableKey) != u.UID:
+		return nil, "directory entry belongs to another account"
+	case id.Disabled:
+		return nil, "account disabled in directory"
+	}
+	groups := s.ldapGroupUIDs(ctx, id.GroupDNs)
+	if len(groups) == 0 {
+		return nil, "no matching node64 group"
+	}
+	return groups, ""
+}
+
+// ldapRecheck prueft einen Benutzer aus LDAP mit dem Dienstkonto nach (Passkey-Anmeldung) und uebernimmt seine
+// Gruppen; geloescht, deaktiviert oder in keiner zugeordneten Gruppe = abgelehnt (Gruppen weg). Ist AD/LDAP aus oder
+// das Verzeichnis nicht erreichbar, bleibt der letzte Stand; der gilt nur begrenzt (store.ExtMaxAgeLDAP).
+func (s *Server) ldapRecheck(ctx context.Context, u *store.User) (bool, string) {
+	cfg := authcfg.LoadLDAP(ctx, s.Store)
+	if !cfg.Enabled {
+		return true, ""
+	}
+	found, err := ldapauth.Lookup(s.ldapContext(ctx), cfg, s.ldapBindPassword(cfg), []string{u.Username})
+	if err != nil {
+		s.log.Warn("ldap recheck: directory error, last state kept", "user", u.Username, "err", ldapReason(err))
+		return true, ""
+	}
+	groups, reason := s.ldapCheckedGroups(ctx, u, found[u.Username])
+	_ = s.Store.SetUserExtGroups(ctx, u.ID, groups)
+	return reason == "", reason
+}
+
+// ldapSyncGroups gleicht die Gruppen aller Benutzer aus LDAP mit dem Verzeichnis ab (housekeeping, stuendlich). So
+// enden Rollen aus Gruppen auch ohne neue Anmeldung (Passkey, API-/MCP-Keys, laufende Sitzungen). Bei einem Fehler
+// bleibt alles, wie es ist; die Gruppen laufen dann nach store.ExtMaxAgeLDAP ab.
+func (s *Server) ldapSyncGroups(ctx context.Context) {
+	cfg := authcfg.LoadLDAP(ctx, s.Store)
+	if !cfg.Enabled {
+		return
+	}
+	users, err := s.Store.Users(ctx)
+	if err != nil {
+		return
+	}
+	var list []*store.User
+	var names []string
+	for _, u := range users {
+		if u.Source == store.SourceLDAP && !u.Disabled {
+			list, names = append(list, u), append(names, u.Username)
+		}
+	}
+	if len(list) == 0 {
+		return
+	}
+	found, err := ldapauth.Lookup(s.ldapContext(ctx), cfg, s.ldapBindPassword(cfg), names)
+	if err != nil {
+		s.log.Warn("ldap group sync failed, last state kept", "err", ldapReason(err))
+		return
+	}
+	for _, u := range list {
+		groups, reason := s.ldapCheckedGroups(ctx, u, found[u.Username])
+		sorted := slices.Clone(groups)
+		slices.Sort(sorted)
+		if !slices.Equal(sorted, u.ExtGroupUIDs) && !(len(sorted) == 0 && len(u.ExtGroupUIDs) == 0) {
+			s.log.Info("ldap group sync: groups changed", "user", u.Username, "groups", len(groups), "reason", reason)
+		}
+		_ = s.Store.SetUserExtGroups(ctx, u.ID, groups)
+	}
 }
 
 // ldapContext: eigene CAs der Zertifikatsverwaltung zusaetzlich vertrauen (internes AD mit eigener CA).
@@ -228,6 +341,7 @@ func (s *Server) oidcGroupUser(r *http.Request, idt *oidc.IDToken, provider, lab
 	groups := s.oidcGroupUIDs(ctx, claimStrings(cl[claim]))
 	if u != nil {
 		if len(groups) == 0 && u.Source == store.SourceOIDC { // ueber Gruppen angelegt, jetzt in keiner mehr
+			_ = s.Store.SetUserExtGroups(ctx, u.ID, nil)
 			s.log.Warn("sso login: no matching node64 group", "user", u.Username)
 			return nil
 		}
@@ -235,41 +349,25 @@ func (s *Server) oidcGroupUser(r *http.Request, idt *oidc.IDToken, provider, lab
 		nu, _ := s.Store.UserByID(ctx, u.ID)
 		return nu
 	}
+	uid := store.ExternalUID(store.SourceOIDC, idt.Issuer+"\x00"+idt.Subject)
 	if len(groups) == 0 {
+		if old, _ := s.Store.UserByUID(ctx, uid); old != nil && old.Source == store.SourceOIDC { // abgelehnt: Gruppen weg
+			_ = s.Store.SetUserExtGroups(ctx, old.ID, nil)
+		}
 		return nil
 	}
 	email, _ := cl["email"].(string)
-	uid := store.ExternalUID(store.SourceOIDC, idt.Issuer+"\x00"+idt.Subject)
-	nu, err := s.Store.UserByUID(ctx, uid)
-	if err != nil {
+	name, _ := cl["preferred_username"].(string)
+	if name = strings.TrimSpace(name); name == "" {
+		name, _, _ = strings.Cut(strings.TrimSpace(email), "@")
+	}
+	nu, created, reason, err := s.extUser(r, store.SourceOIDC, uid, name, email, groups)
+	if err != nil || nu == nil {
+		s.log.Warn("sso login: user not accepted", "user", truncate(name, 64), "label", truncate(label, 64), "reason", reason, "err", err)
 		return nil
 	}
-	if nu == nil {
-		name, _ := cl["preferred_username"].(string)
-		if name = strings.TrimSpace(name); name == "" {
-			name, _, _ = strings.Cut(strings.TrimSpace(email), "@")
-		}
-		name = strings.ToLower(name)
-		if !extNameOK(name) {
-			s.log.Warn("sso login: no usable user name in the id token (characters node64 does not allow)", "user", truncate(name, 64), "label", truncate(label, 64))
-			return nil
-		}
-		if other, err := s.Store.UserByName(ctx, name); err != nil || other != nil { // nie ein vorhandenes Konto uebernehmen
-			s.log.Warn("sso login: user name already used by another node64 user, not taken over", "user", name)
-			return nil
-		}
-		nu, err = s.Store.CreateUserWith(ctx, store.NewUser{UID: uid, Username: name, Lang: s.lang(r), Role: store.RoleRead,
-			Source: store.SourceOIDC, Email: truncate(strings.TrimSpace(email), 254), ExtGroupUIDs: groups})
-		if err != nil {
-			s.log.Warn("sso login: user not created", "user", name, "err", err)
-			return nil
-		}
+	if created {
 		s.auditEntry(ctx, store.AuditEntry{Actor: nu.Username, Action: "login.oidc_created", Target: truncate(label, 100), Details: provider, IP: s.clientIP(r)})
-	} else {
-		if nu.Source != store.SourceOIDC || nu.Disabled {
-			return nil
-		}
-		_ = s.Store.SetUserExtGroups(ctx, nu.ID, groups)
 	}
 	if err := s.Store.LinkIdentity(ctx, nu.ID, provider, idt.Subject, truncate(label, 200)); err != nil {
 		s.log.Warn("sso login: identity not linked", "user", nu.Username, "err", err)
@@ -388,6 +486,9 @@ func (s *Server) ldapBuild(ctx context.Context, in ldapInput) (authcfg.LDAPConfi
 			return c, &ldapFieldErr{"bind_password", "no secret key to encrypt the password"}
 		}
 		c.BindPasswordEnc = s.Box.Encrypt(in.BindPassword)
+	case old.BindPasswordEnc != "" && !sameBindTarget(old, c):
+		// gespeichertes Passwort nie an einen anderen Server bzw. fuer ein anderes Konto schicken
+		return c, &ldapFieldErr{"bind_password", "bind password required again (server, account or tls changed)"}
 	default:
 		c.BindPasswordEnc = old.BindPasswordEnc
 	}
@@ -395,6 +496,13 @@ func (s *Server) ldapBuild(ctx context.Context, in ldapInput) (authcfg.LDAPConfi
 		return c, &ldapFieldErr{"bind_password", "bind password required"}
 	}
 	return c, nil
+}
+
+// sameBindTarget: Server, Dienstkonto und TLS-Einstellungen unveraendert (dann darf das gespeicherte Bind-Passwort
+// weiter benutzt werden).
+func sameBindTarget(a, b authcfg.LDAPConfig) bool {
+	return slices.Equal(a.URLs, b.URLs) && a.BindDN == b.BindDN && a.StartTLS == b.StartTLS && a.AllowPlain == b.AllowPlain &&
+		a.SkipVerify == b.SkipVerify
 }
 
 // ldapAuditDetails: Zusammenfassung ohne Passwort.

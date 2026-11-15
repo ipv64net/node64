@@ -253,5 +253,6 @@ func TestSecurityHeadersAndStatic(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	loginFailFloor = 0 // Antwortzeit fehlgeschlagener Anmeldungen nicht angleichen (eigener Test)
 	os.Exit(m.Run())
 }
