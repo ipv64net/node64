@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.2 – 2026-11-15
+
 - Environment (security): a session opened via Environment can no longer create or change credentials (API and MCP keys, passkeys, 2FA, SSO link, password) – they used to apply without the limits of the session; if duties are open on the target node (new password, 2FA), you land on its sign-in page. If the target node does not know the address of the opening node (e.g. access through another name, added nodes), the sign-in must be confirmed there once. The "Environment → Sign-in" switch also applies on the target node. Revoked access keys no longer count as a failed attempt on every page view and no longer slow down other keys; the status of added nodes is kept briefly instead of being fetched on every view.
 - Health checks: same channel on several linked nodes – the alert can no longer be lost entirely, a reachable node is preferred, the digest after quiet hours comes only once (forum 5172). Recovery during maintenance, "unchecked" sent afterwards and reminder only after the outage alert (with the update of the ipv64 servers).
 - IPAM64 import and custom DNS64 filter rules: files and rules above 1 MB no longer fail at the general size limit (before 403 or "invalid JSON").

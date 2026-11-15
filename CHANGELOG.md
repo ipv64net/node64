@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.2 – 2026-11-15
+
 - Environment (Sicherheit): In einer über Environment geöffneten Sitzung lassen sich keine Zugangsdaten mehr anlegen oder ändern (API- und MCP-Keys, Passkeys, 2FA, SSO-Verknüpfung, Passwort) – sie galten danach ohne die Begrenzung der Sitzung; stehen auf der Ziel-Node noch Pflichten aus (neues Passwort, 2FA), geht es zur Anmeldeseite. Kennt die Ziel-Node die Adresse der öffnenden Node nicht (z. B. Zugriff über einen anderen Namen, hinzugefügte Nodes), muss die Anmeldung dort einmal bestätigt werden. Der Schalter „Environment → Anmeldung“ gilt auch auf der Ziel-Node. Widerrufene Zugangsschlüssel zählen nicht mehr bei jedem Seitenaufruf als Fehlversuch und bremsen keine anderen Schlüssel; der Status hinzugefügter Nodes wird kurz gemerkt statt bei jedem Aufruf neu abgefragt.
 - Healthchecks: Gleicher Kanal auf mehreren verknüpften Nodes – die Meldung kann nicht mehr ganz ausbleiben, bevorzugt sendet eine erreichbare Node, die Zusammenfassung nach der Ruhezeit kommt nur einmal (Forum 5172). Entwarnung während einer Wartung, nachgeholtes „wird nicht geprüft“ und Erinnerung erst nach der Ausfallmeldung (mit dem Update der ipv64-Server).
 - IPAM64-Import und eigene DNS64-Filterregeln: Dateien bzw. Regeln über 1 MB scheitern nicht mehr am allgemeinen Größenlimit (vorher 403 bzw. „invalid JSON“).
