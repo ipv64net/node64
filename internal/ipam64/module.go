@@ -38,7 +38,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.6.1"
+	version = "0.6.2"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -172,7 +172,7 @@ func (m *Module) hintList(ctx context.Context) []NetHint {
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.ipam64", Icon: "bi-grid-3x3-gap", Path: "/ipam64", Available: true, Order: 45,
+	return module.Info{Name: Name, TitleKey: "nav.ipam64", Icon: "bi-grid-3x3-gap", Image: "ipam64.svg", Path: "/ipam64", Available: true, Order: 45,
 		Version: version, Changelog: changelog, ChangelogEN: changelogEN}
 }
 

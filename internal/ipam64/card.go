@@ -22,7 +22,7 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 			usedV4 += int64(n.Used)
 		}
 	}
-	c := &module.Card{TitleKey: "nav.ipam64", Icon: "bi-grid-3x3-gap", Path: "/ipam64", Stats: []module.CardStat{
+	c := &module.Card{TitleKey: "nav.ipam64", Icon: "bi-grid-3x3-gap", Image: "ipam64.svg", Path: "/ipam64", Stats: []module.CardStat{
 		{LabelKey: "ipam64.card.prefixes", Value: int64(len(snap.Nets))},
 		{LabelKey: "ipam64.card.used", Value: int64(used)},
 		{LabelKey: "ipam64.card.conflicts", Value: int64(conflicts)},

@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-	<h1 class="h4 mb-0 me-auto"><i class="bi bi-grid-3x3-gap text-primary"></i> {{.T "ipam64.title"}}</h1>
+	<h1 class="h4 mb-0 me-auto"><img src="/static/img/ipam64.svg" alt="{{.T "ipam64.title"}}" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/ipam64_dark.svg" alt="{{.T "ipam64.title"}}" height="26" class="me-1 align-text-bottom logo logo-dark"></h1>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/conflicts" id="ipam-conflicts-link"><i class="bi bi-radar"></i> {{.T "ipam64.conflicts.title"}}</a>
 	<a class="btn btn-sm btn-outline-secondary" href="/ipam64/setup" id="ipam-setup"><i class="bi bi-magic"></i> {{.T "ipam64.setup.button"}}</a>
 	<div class="btn-group btn-group-sm" role="group" aria-label="CSV"><a class="btn btn-outline-secondary" href="/ipam64/export.csv" id="ipam-export"><i class="bi bi-download"></i> {{.T "ipam64.export"}}</a><a class="btn btn-outline-secondary" href="/ipam64/import" id="ipam-import"><i class="bi bi-upload"></i> {{.T "ipam64.import.button"}}</a></div>

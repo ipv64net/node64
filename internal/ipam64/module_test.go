@@ -557,7 +557,7 @@ func TestHelpers(t *testing.T) {
 // Seiten, Formulare, CSV und API ueber den echten Webserver (Modul aus = 404).
 // untranslated meldet einen i18n-Schluessel ipam64.* in einer Seite (das Skript ipam64.js zaehlt nicht).
 func untranslated(body string) bool {
-	return strings.Contains(strings.ReplaceAll(body, "ipam64.js", ""), "ipam64.")
+	return strings.Contains(strings.NewReplacer("ipam64.js", "", "ipam64.svg", "").Replace(body), "ipam64.")
 }
 
 func TestPagesRender(t *testing.T) {

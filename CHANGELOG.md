@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- IPAM64: eigenes Logo in der Übersicht, auf dem Dashboard und unter Einstellungen → Module.
 - PROXY64 1.56.6 (Sicherheit): Anfragen über das Docker-Gateway (Bridge-Netz) gelten nicht mehr als Heimnetz – Zugriffslisten mit privaten Netzen, „nur eigenes Netz“ und die Heimnetz-Ausnahme der Limits greifen für sie nicht; ein Hinweis empfiehlt `network_mode: host`.
 
 ## 1.7.3 – 2026-11-15

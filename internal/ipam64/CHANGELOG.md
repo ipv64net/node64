@@ -1,6 +1,10 @@
 # IPAM64 – Änderungen
 
-## 0.6.1 – unveröffentlicht
+## 0.6.2 – 2026-11-15
+
+- Eigenes Logo (hell und dunkel) in der Übersicht, auf dem Dashboard und unter Einstellungen → Module.
+
+## 0.6.1 – 2026-11-15
 
 Behoben (Code-Review):
 
