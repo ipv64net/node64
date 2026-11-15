@@ -97,9 +97,9 @@ func TestMailcowCollect(t *testing.T) {
 		c.Facts[0].Text != "läuft nicht: clamd-mailcow (restarting), rspamd-mailcow (exited)" || !strings.HasPrefix(c.Text, "5 Container, 3 laufen") {
 		t.Errorf("containers: %+v %q", c.Facts, c.Text)
 	}
-	// Mail-Speicher: Belegung aus used_percent, Groessen wie df -h
+	// Mail-Speicher: Belegung aus used_percent, Groessen wie df -H (Zehnerpotenzen)
 	v := svcByKey(t, svcs, "fs:vmail")
-	if v.Kind != "fs" || v.Metrics[0].Value != 28 || v.Metrics[0].Rule != model.RuleFS || v.Metrics[0].Max != 41*(1<<30) || v.Metrics[1].Value != 30*(1<<30) {
+	if v.Kind != "fs" || v.Metrics[0].Value != 28 || v.Metrics[0].Rule != model.RuleFS || v.Metrics[0].Max != 41e9 || v.Metrics[1].Value != 30e9 {
 		t.Errorf("vmail: %+v", v.Metrics)
 	}
 	// Warteschlange: zurueckgestellt traegt die Schwelle; incoming zaehlt zu aktiv; Domain des ersten Empfaengers
@@ -190,7 +190,7 @@ func TestMailcowConfigAndSizes(t *testing.T) {
 			t.Errorf("%+v angenommen", c)
 		}
 	}
-	for in, want := range map[string]float64{"41G": 41 * (1 << 30), "1.5T": 1.5 * (1 << 40), "512M": 512 * (1 << 20), "0": 0, "2,5G": 2.5 * (1 << 30), "100K": 100 * 1024} {
+	for in, want := range map[string]float64{"41G": 41e9, "1.5T": 1.5e12, "512M": 512e6, "0": 0, "2,5G": 2.5e9, "100k": 100e3, "100K": 100e3} {
 		if got, ok := mcSize(in); !ok || got != want {
 			t.Errorf("mcSize(%q) = %v, %v", in, got, ok)
 		}
@@ -204,5 +204,30 @@ func TestMailcowConfigAndSizes(t *testing.T) {
 	}
 	if _, ok := (mcVmail{}).service(); ok {
 		t.Error("leeres vmail ergibt einen Dienst")
+	}
+}
+
+// Review 11: (a) /status/containers liefert null bzw. {}, wenn mailcow seine Docker-API nicht erreicht - das war "0
+// Container", alles gruen. (b) Empfaenger in der Warteschlange stehen als "adresse (Grund)"; ein @ im Grund ergab eine
+// falsche Domain. (c) Groessen kommen aus df -H (Zehnerpotenzen, data/Dockerfiles/dockerapi/modules/DockerApi.py).
+func TestReviewMailcowEmptyContainersAndRecipients(t *testing.T) {
+	for _, body := range []string{`null`, `{}`, `[]`} {
+		f := newFakeMailcow()
+		f.routes["/api/v1/get/status/containers"] = body
+		m := mailcowFor(t, f, mcTestKey)
+		svcs, err := m.Collect(context.Background())
+		var pe *PartialError
+		if !errors.As(err, &pe) || !pe.Affects("containers") || hasSvc(svcs, "containers") {
+			t.Errorf("Container %s: err=%v Dienst=%v", body, err, hasSvc(svcs, "containers"))
+		}
+		if res := m.Test(context.Background()); res.OK {
+			t.Errorf("Test mit Container %s: OK", body)
+		}
+	}
+	f := newFakeMailcow()
+	f.routes["/api/v1/get/mailq/all"] = `[{"queue_name":"deferred","recipients":["a@gmx.de (host mx.gmx.net[212.227.17.5] said: 450 4.7.1 <x@spam.example> greylisted)"]}]`
+	svcs, _ := mailcowFor(t, f, mcTestKey).Collect(context.Background())
+	if q := svcByKey(t, svcs, "mailq"); !strings.Contains(q.Text, "(gmx.de 1)") {
+		t.Errorf("Domain mit Grund: %q", q.Text)
 	}
 }

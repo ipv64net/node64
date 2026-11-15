@@ -6311,6 +6311,10 @@
               "null"
             ],
             "description": "Agent automatisch aktualisieren; fehlt bzw. null = unverändert (neu: true)"
+          },
+          "clear_secrets": {
+            "type": "boolean",
+            "description": "Nur PUT mit neuer Adresse: Zugänge ohne eigene Adresse und ohne gebundenes Ziel (Fingerabdruck, Hostschlüssel) würden ihr Geheimnis an die neue Adresse senden – die Anfrage scheitert dann mit 400 address_secret. true entfernt diese Geheimnisse (danach am Zugang neu eingeben)."
           }
         }
       },
@@ -15229,18 +15233,10 @@
                         "type": "string"
                       },
                       "local": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "description": "Nur für Administratoren, bei „Nur lesen“ null (enthält Check-Parameter und Kanal-Einstellungen)."
+                        "type": "object"
                       },
                       "server": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "description": "Nur für Administratoren, bei „Nur lesen“ null (enthält Check-Parameter und Kanal-Einstellungen)."
+                        "type": "object"
                       },
                       "server_revision": {
                         "type": "integer"
@@ -15248,9 +15244,6 @@
                       "created_at": {
                         "type": "string",
                         "format": "date-time"
-                      },
-                      "error": {
-                        "type": "string"
                       }
                     }
                   }
@@ -17066,7 +17059,7 @@
           "Benutzerverwaltung"
         ],
         "summary": "Eigene Sprache und Zeitzone",
-        "description": "Fehlende Felder bleiben. Die Zeitzone gilt bei Administratoren auch für die Node; bei „Nur lesen“ nur für das eigene Konto.",
+        "description": "Fehlende Felder bleiben. Die Zeitzone gilt auch für die Node.",
         "requestBody": {
           "required": true,
           "content": {

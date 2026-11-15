@@ -188,25 +188,9 @@ func smartctlAttrs(m *Metrics, byDev map[string]*m64proto.SMART) {
 		}
 		x.Attrs = append(x.Attrs, *a)
 		raw, _ := strconv.ParseFloat(a.Raw, 64)
-		switch a.ID {
-		case 5:
-			x.Reallocated = ptrU(raw)
-		case 197:
-			x.Pending = ptrU(raw)
-		case 198:
-			x.Uncorrectable = ptrU(raw)
-		case 199:
-			x.CRCErrors = ptrU(raw)
-		case 177, 231, 233, 202, 169: // verbleibende Lebensdauer in % (normierter Wert); erster Treffer gilt
-			if x.WearPercentUsed == nil && a.Value > 0 && a.Value <= 100 {
-				w := float64(100 - a.Value)
-				x.WearPercentUsed = &w
-			}
-		}
+		x.ApplyATAAttr(a.ID, a.Value, u64(raw)) // Zaehler und Verschleiss wie beim Agent (m64proto)
 	}
 }
-
-func ptrU(v float64) *uint64 { x := u64(v); return &x }
 
 // smartctlValues: einzelne Werte von NVMe- und SCSI-Platten fuer den SMART-Dialog (Schluessel wie beim Agent).
 func smartctlValues(m *Metrics, byDev map[string]*m64proto.SMART) {

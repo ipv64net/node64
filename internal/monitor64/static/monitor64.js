@@ -1574,7 +1574,13 @@ function pageHost() {
 				break;
 			case 'edit':
 				modal(L('host.edit'), hostForm(h), [{ label: L('cancel') }, { label: L('save'), cls: 'btn-primary', click: function (close) {
-					return hostPut(hostFromForm(h)).then(function () { close(); toast(L('host.saved_toast')); return reload().then(buildCharts); });
+					var body = hostFromForm(h), saved = function () { close(); toast(L('host.saved_toast')); return reload().then(buildCharts); };
+					return hostPut(body).then(saved, function (e) {
+						// neue Adresse: Geheimnisse von Zugaengen ohne gebundenes Ziel gingen sonst dorthin - nur nach Bestaetigung entfernen
+						if (e.code !== 'address_secret') { throw e; }
+						body.clear_secrets = true;
+						confirmBox(L('host.address_secret_title'), tx(e.message), L('host.address_secret_ok'), function () { return hostPut(body).then(saved).catch(fail); });
+					});
 				} }], true);
 				break;
 			case 'pause':
@@ -1621,8 +1627,19 @@ function pageHost() {
 						if (fb) {
 							fb.onclick = function () {
 								// SSH mit Passwort: der bestaetigte Fingerabdruck wird der Hostschluessel (erst danach geht das Passwort raus)
-								var put = acc.type === 'ssh' ? { config: acc.config || {}, hostkey: fb.dataset.fpConfirm } : { config: Object.assign({}, acc.config || {}, { pin: fb.dataset.fpConfirm }) };
-								lock(fb, function () { return api('PUT', au, put).then(function () { return api('POST', au + '/test'); }).then(function (r2) { mb.innerHTML = '<div>' + testHTML(r2) + '</div>'; return reload(); }); }).catch(fail);
+								var fp = fb.dataset.fpConfirm, cfg = acc.config || {};
+								var put = acc.type === 'ssh' ? { config: cfg, hostkey: fp } : { config: Object.assign({}, cfg, { pin: fp }) };
+								var apply = function (btn) { return lock(btn, function () { return api('PUT', au, put).then(function () { return api('POST', au + '/test'); }).then(function (r2) { mb.innerHTML = '<div>' + testHTML(r2) + '</div>'; return reload(); }); }).catch(fail); };
+								if (acc.type === 'ssh' || !acc.secret_set || !cfg.pin || cfg.pin === fp) { apply(fb); return; }
+								// vorhandener Fingerabdruck geaendert: das gespeicherte Geheimnis geht nur an das bisherige Ziel - hier neu eingeben
+								var box = document.createElement('div');
+								box.className = 'mt-2';
+								box.innerHTML = '<label class="form-label small mb-1" for="m64-fp-secret">' + esc(L('new.fp_secret')) + '</label><div class="input-group input-group-sm">' +
+									'<input type="password" class="form-control" id="m64-fp-secret" autocomplete="new-password"><button class="btn btn-primary" type="button">' + esc(L('new.fp_apply')) + '</button></div>';
+								fb.replaceWith(box);
+								var inp = $('input', box), ok = $('button', box);
+								inp.focus();
+								ok.onclick = function () { if (!inp.value) { inp.focus(); return; } put.secret = inp.value; apply(ok); };
 							};
 						}
 					});

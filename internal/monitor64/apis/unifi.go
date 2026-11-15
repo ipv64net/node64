@@ -210,39 +210,72 @@ func (u *Unifi) login(ctx context.Context) error {
 	u.cookie, u.csrf = "", ""
 	u.sm.Unlock()
 	if !detected {
-		// Der selbst gehostete Network Server beantwortet GET /status ohne Anmeldung mit seiner Huelle
-		// ({"meta":{"rc":"ok","up":true,...}}); auf UniFi OS liegt die Network Application unter /proxy/network, dort
-		// kommt an dieser Stelle etwas anderes. (GET / taugt nicht: ein startender Server antwortet darauf mit 200
-		// statt mit der Weiterleitung – so gesehen an einem echten Network Server 10.0.162.)
-		var st struct {
-			Meta struct {
-				RC string `json:"rc"`
-				Up *bool  `json:"up"`
-			} `json:"meta"`
+		if err := u.detect(ctx); err != nil {
+			return err
 		}
-		_, err := u.wc.do(ctx, http.MethodGet, "/status", nil, nil, &st)
-		var we *webError
-		if err != nil && !(errors.As(err, &we) && we.Status != 0) {
-			return err // Netz, Zertifikat: keine Antwort, die etwas ueber die Art sagt
-		}
-		os := err != nil || st.Meta.RC == ""
-		if !os && st.Meta.Up != nil && !*st.Meta.Up {
-			return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.uf_starting"), Where: "GET /status"}
-		}
-		u.sm.Lock()
-		u.detected, u.unifiOS = true, os
-		u.sm.Unlock()
 	}
 	u.sm.Lock()
 	os := u.unifiOS
 	u.sm.Unlock()
+	err := u.loginAt(ctx, os)
+	var we *webError
+	if err != nil && errors.As(err, &we) && we.Status >= 400 && we.Status < 500 {
+		// abgelehnt bzw. Pfad unbekannt: war die Art falsch erkannt (z. B. aus einer frueheren Antwort), einmal neu
+		// erkennen und nur bei anderer Art am anderen Pfad anmelden - sonst ist es wirklich die Anmeldung (Review 8)
+		u.sm.Lock()
+		u.detected = false
+		u.sm.Unlock()
+		if derr := u.detect(ctx); derr == nil {
+			u.sm.Lock()
+			now := u.unifiOS
+			u.sm.Unlock()
+			if now != os {
+				err = u.loginAt(ctx, now)
+			}
+		}
+	}
+	if err != nil {
+		return u.loginFailed(err)
+	}
+	return nil
+}
+
+// detect: UniFi OS oder selbst gehosteter Network Server? Der Server beantwortet GET /status ohne Anmeldung mit seiner
+// Huelle ({"meta":{"rc":"ok","up":true,...}}); auf UniFi OS liegt die Network Application unter /proxy/network, dort
+// kommt an dieser Stelle etwas anderes (die Oberflaeche bzw. ein 4xx). (GET / taugt nicht: ein startender Server
+// antwortet darauf mit 200 statt mit der Weiterleitung – so gesehen an einem echten Network Server 10.0.162.)
+// Festgelegt wird nur bei eindeutiger Antwort: 5xx (Proxy davor, Neustart) und ein startender Server sagen nichts.
+func (u *Unifi) detect(ctx context.Context) error {
+	var st struct {
+		Meta struct {
+			RC string `json:"rc"`
+			Up *bool  `json:"up"`
+		} `json:"meta"`
+	}
+	_, err := u.wc.do(ctx, http.MethodGet, "/status", nil, nil, &st)
+	var we *webError
+	if err != nil && !(errors.As(err, &we) && we.Status != 0 && we.Status < 500) {
+		return err // Netz, Zertifikat, 5xx: keine Antwort, die etwas ueber die Art sagt
+	}
+	os := err != nil || st.Meta.RC == ""
+	if !os && st.Meta.Up != nil && !*st.Meta.Up {
+		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.uf_starting"), Where: "GET /status"}
+	}
+	u.sm.Lock()
+	u.detected, u.unifiOS = true, os
+	u.sm.Unlock()
+	return nil
+}
+
+// loginAt meldet am Pfad der Art an und merkt Sitzung und CSRF-Token (Fehler: unbewertet, siehe loginFailed).
+func (u *Unifi) loginAt(ctx context.Context, os bool) error {
 	path := "/api/login"
 	if os {
 		path = "/api/auth/login"
 	}
 	hdr, err := u.wc.do(ctx, http.MethodPost, path, nil, map[string]string{"username": u.cfg.User, "password": u.cfg.Secret}, nil)
 	if err != nil {
-		return u.loginFailed(err)
+		return err
 	}
 	var parts []string
 	csrf := firstNonEmpty(hdr.Get("X-Updated-Csrf-Token"), hdr.Get("X-Csrf-Token"))
@@ -256,7 +289,7 @@ func (u *Unifi) login(ctx context.Context) error {
 		}
 	}
 	if len(parts) == 0 {
-		return u.loginFailed(&webError{Kind: errWebResp, Detail: model.T("monitor64.txt.uf_no_session"), Where: "POST " + path})
+		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.uf_no_session"), Where: "POST " + path}
 	}
 	u.sm.Lock()
 	u.cookie, u.csrf = strings.Join(parts, "; "), csrf

@@ -355,6 +355,7 @@ type sshCollector struct {
 	ran         bool // mindestens ein langsamer Lauf beendet
 	lastSmart   time.Time
 	lastUpdates time.Time
+	updStamp    string // Stand der Paketdatenbank beim letzten Updates-Lauf (#159)
 	smartPart   slowPart
 	updPart     slowPart
 }
@@ -398,7 +399,7 @@ func (s *sshCollector) collect(ctx context.Context) ([]model.Service, error) {
 	if perr != nil {
 		return nil, transport.CleanError(perr)
 	}
-	if done := s.startSlow(now); done != nil {
+	if done := s.startSlow(now, rep.PkgStamp); done != nil {
 		// Erster langsamer Lauf: im Rahmen dieser Runde auf das Ergebnis warten, damit SMART/Updates nicht erst
 		// eine Runde spaeter auftauchen. Die schnellen Werte sind schon da.
 		select {
@@ -413,15 +414,16 @@ func (s *sshCollector) collect(ctx context.Context) ([]model.Service, error) {
 }
 
 // startSlow startet den langsamen Lauf, wenn er faellig ist und keiner laeuft. done ist nur beim allerersten Lauf
-// gesetzt (sonst nil: nicht warten).
-func (s *sshCollector) startSlow(now time.Time) (done chan struct{}) {
+// gesetzt (sonst nil: nicht warten). stamp ist der Stand der Paketdatenbank aus dem schnellen Lauf: aendert er sich,
+// sind die Updates fruehestens updStampMinAge nach dem letzten Lauf wieder faellig (#159, wie im Agent).
+func (s *sshCollector) startSlow(now time.Time, stamp string) (done chan struct{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.running || s.life.Err() != nil {
 		return nil
 	}
 	doSmart := s.smart && now.Sub(s.lastSmart) >= smartEvery
-	doUpd := now.Sub(s.lastUpdates) >= updatesEvery
+	doUpd := updatesDue(now, s.lastUpdates, stamp, s.updStamp)
 	if !doSmart && !doUpd {
 		return nil
 	}
@@ -432,7 +434,7 @@ func (s *sshCollector) startSlow(now time.Time) (done chan struct{}) {
 	}
 	if doUpd {
 		args = append(args, m64linux.ScriptArgUpdates)
-		s.lastUpdates = now
+		s.lastUpdates, s.updStamp = now, stamp
 	}
 	s.running = true
 	ch := make(chan struct{})
@@ -441,6 +443,15 @@ func (s *sshCollector) startSlow(now time.Time) (done chan struct{}) {
 		return nil
 	}
 	return ch
+}
+
+// updatesDue: Updates per SSH faellig - stuendlich oder wenn sich die Paketdatenbank seit dem letzten Lauf geaendert
+// hat (fruehestens updStampMinAge danach; ohne Stand vom letzten Lauf nur stuendlich).
+func updatesDue(now, last time.Time, stamp, lastStamp string) bool {
+	if now.Sub(last) >= updatesEvery {
+		return true
+	}
+	return stamp != "" && lastStamp != "" && stamp != lastStamp && now.Sub(last) >= updStampMinAge
 }
 
 func (s *sshCollector) runSlow(args []string, doSmart, doUpd bool, done chan struct{}) {

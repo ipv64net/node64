@@ -35,6 +35,7 @@ type fakeUnifi struct {
 	noCSRF   int  // Anfragen ohne passenden CSRF-Token
 	keyCalls int  // Anfragen mit API-Schluessel
 	expire   bool // die naechste Datenabfrage antwortet "Sitzung abgelaufen"
+	statusRC int  // GET /status antwortet einmal mit diesem Status (z. B. 502 vom Proxy davor)
 	starting bool // selbst gehostet: die Anwendung startet noch
 }
 
@@ -113,6 +114,13 @@ func (f *fakeUnifi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	loginPath, logoutPath := "/api/login", "/api/logout"
 	if f.os {
 		loginPath, logoutPath = "/api/auth/login", "/api/auth/logout"
+	}
+	if path == "/status" && f.statusRC != 0 {
+		rc := f.statusRC
+		f.statusRC = 0
+		w.WriteHeader(rc)
+		_, _ = w.Write([]byte("<html>Bad Gateway</html>"))
+		return
 	}
 	switch {
 	case path == "/status" && f.os: // UniFi OS: die Oberflaeche der Konsole, keine Huelle der Network Application
@@ -576,4 +584,40 @@ func TestUnifiTest(t *testing.T) {
 	if res = login.Test(context.Background()); !res.OK {
 		t.Fatalf("Test mit Anmeldung: %s", de(res.Error))
 	}
+}
+
+// Review 8: Jede Fehlerantwort beim ersten GET /status galt als UniFi OS und blieb fuer immer gesetzt - ein kurz
+// nicht erreichbarer selbst gehosteter Server (502 vom Proxy davor) liess die Anmeldung danach immer am falschen Pfad
+// scheitern. 5xx entscheidet nichts; eine Anmeldung, die am Pfad scheitert, erkennt neu.
+func TestReviewUnifiDetectAmbiguous(t *testing.T) {
+	f := newFakeUnifi(false)
+	f.statusRC = 502
+	u, _ := unifiFor(t, f, UnifiConfig{User: ufTestUser, Secret: ufTestPass})
+	if _, err := u.Collect(context.Background()); err == nil {
+		t.Fatal("502 ohne Fehler")
+	}
+	if _, err := u.Collect(context.Background()); err != nil {
+		t.Fatalf("nach dem 502: %v", deErr(err))
+	}
+	// falsch erkannt (z. B. von einer frueheren Antwort): Anmeldung am falschen Pfad -> naechste Runde neu erkennen
+	w, _ := unifiFor(t, f, UnifiConfig{User: ufTestUser, Secret: ufTestPass})
+	w.sm.Lock()
+	w.detected, w.unifiOS = true, true
+	w.sm.Unlock()
+	if _, err := w.Collect(context.Background()); err != nil {
+		t.Fatalf("nach falscher Erkennung (gleich neu erkannt): %v", deErr(err))
+	}
+	// falsches Passwort: neu erkannt, gleiche Art - kein zweiter Versuch
+	f.mu.Lock()
+	n := f.logins
+	f.mu.Unlock()
+	p, _ := unifiFor(t, f, UnifiConfig{User: ufTestUser, Secret: "falsch-falsch"})
+	if _, err := p.Collect(context.Background()); err == nil {
+		t.Fatal("falsches Passwort angenommen")
+	}
+	f.mu.Lock()
+	if f.logins != n+1 {
+		t.Errorf("Anmeldeversuche mit falschem Passwort: %d", f.logins-n)
+	}
+	f.mu.Unlock()
 }

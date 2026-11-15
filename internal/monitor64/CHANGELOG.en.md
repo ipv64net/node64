@@ -1,5 +1,26 @@
 # Monitor64 – Changes
 
+## 0.1.19 – 2026-11-15
+
+Security (code review):
+
+- Access: switching the type to SNMP requires entering the secret again – before, the old one (e.g. a Proxmox token) stayed and was sent to the device as an SNMP community in plain text.
+- Host: with a new address, Monitor64 asks before stored secrets of accesses without an address of their own and without a bound target (fingerprint, host key) would go to the new address; once confirmed, these secrets are removed and must be entered again.
+- SNMP traps (v3): protection against replayed traps applies again per engine ID and user without expiry – captured traps were accepted again after an hour or via the address of another host.
+
+Bug fixes:
+
+- "Confirm/accept fingerprint" after the test always failed with "enter the secret again". Setting a fingerprint for the first time works without the secret; for a changed fingerprint the dialog asks for the secret right away.
+- Cluster: the SMART dialog also works on a node that does not monitor the host itself (before: 404). Removing an acknowledgement here is no longer reverted by an older state from another node.
+- If a value with a warning is missing for three intervals while the service runs, it becomes "unknown" instead of green (no all-clear without recovery); only a stopped guest or container leaves values out on purpose.
+- UniFi: an error answer (e.g. 502 from a proxy) at the first detection no longer fixes the type (UniFi OS or Network Server) permanently wrong; a sign-in at the wrong path detects again.
+- SNMP: if the probe value is missing at the first profile selection (e.g. after a restart), the next round asks again instead of 60 minutes without profile; if the scalars of a profile fail, disks and volumes come from the last state.
+- mailcow: no containers (mailcow cannot reach its Docker API) counts as an error instead of "0 containers"; the domain of deferred mails is right even with a reason in the list; mail storage sizes in powers of ten like mailcow (`df -H`).
+- FRITZ!Box: after a FRITZ!OS update the service shows the new version (description re-read hourly, the running version takes precedence).
+- Updates after `pkg upgrade` (FreeBSD/OPNsense, agent 0.1.7) and via SSH after `apt upgrade` & co. current after about a minute instead of up to an hour later (like the Linux agent, #159).
+- Host address: host names are checked according to RFC 1123 (e.g. "nas..lan", "-nas" or "host.123" are rejected).
+- **Agent 0.1.7 (FreeBSD):** re-read updates after the package database changed.
+
 ## 0.1.18 – 2026-11-15
 
 Bug fixes:

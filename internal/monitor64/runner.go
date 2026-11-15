@@ -665,10 +665,11 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind)
 			st := tr.Status(e, now)
-			if ok && st.State == eval.Unknown {
-				// Dienst kommt weiter, nur dieser Wert seit 3 Intervallen nicht (gestoppte VM mit Warnung zu CPU/RAM):
-				// gewollt weggelassen - die Warnung gilt nicht mehr, statt 7 Tage "unbekannt" (kurz fehlend, z. B. erste
-				// Runde ohne Rate, bleibt der letzte Zustand)
+			if ok && st.State == eval.Unknown && svcStopped(g.svc) {
+				// Dienst kommt weiter, ist aber aus (gestoppte VM mit Warnung zu CPU/RAM): Wert gewollt weggelassen - die
+				// Warnung gilt nicht mehr, statt 7 Tage "unbekannt". Laeuft der Dienst, bleibt der fehlende Wert nach 3
+				// Intervallen "unbekannt" (Teilfehler, Sammler liefert ihn nicht mehr) - keine Entwarnung ohne Erholung
+				// (Review 7); kurz fehlend (erste Runde ohne Rate) bleibt der letzte Zustand
 				delete(rt.Kinds, key)
 				delete(rt.Trackers, key)
 				rt.dirty = true
@@ -877,6 +878,17 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	rt.setView(&HostView{Host: h, View: hres.View, State: hres.State, Checked: now, Accesses: accViews, Services: views, New: newCount, Maint: win,
 		Cluster: m.clusterSelfRef(role)})
 	m.saveRuntime(dbctx, rt, hostMem)
+}
+
+// svcStopped: der Dienst meldet sich als aus (Messgroesse running = 0: Gast, Container, Windows-Dienst) - seine
+// Werte fehlen dann gewollt.
+func svcStopped(s model.Service) bool {
+	for _, mt := range s.Metrics {
+		if mt.Name == "running" {
+			return mt.Value == 0
+		}
+	}
+	return false
 }
 
 // upsOnBattery: die USV meldet Batteriebetrieb (Messgroesse on_battery bzw. Fact ups_on_battery).

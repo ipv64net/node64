@@ -305,7 +305,6 @@
     "totp": "Authenticator app code",
     "submit": "Sign in",
     "failed": "Username or password is wrong.",
-    "ldap_unavailable": "Sign-in via the directory (AD/LDAP) is not possible right now. Please try again later or ask a local administrator.",
     "ratelimited": "Too many attempts. Please try again in {seconds} seconds.",
     "logged_out": "You are signed out.",
     "totp_title": "Second factor",
@@ -1821,7 +1820,6 @@
     "user": "User",
     "language": "Language",
     "timezone": "Time zone",
-    "timezone_node_hint": "As an administrator, this also sets the node's time zone.",
     "password_current": "Current password",
     "password_new": "New password",
     "password_changed": "Password changed. Other sessions were signed out.",
@@ -3800,7 +3798,6 @@
     "server_deleted": "deleted on the server",
     "local_version": "This node",
     "server_version": "ipv64.net",
-    "versions_admin_only": "Only administrators see both versions (they contain check parameters and channel settings).",
     "keep_server": "Take ipv64 state",
     "keep_local": "Send again",
     "conflict_resolved": "Conflict resolved.",
@@ -6191,7 +6188,9 @@
       "delete_hint": "This action is recorded with your name in the audit log.",
       "pending_free": "below {v} for {m} min – {s} after {n} min",
       "more_rules": "+{n} more",
-      "pending_state": "{s} from {t} ({k})"
+      "pending_state": "{s} from {t} ({k})",
+      "address_secret_title": "New address",
+      "address_secret_ok": "Save and remove secrets"
     },
     "acc": {
       "type": "Type",
@@ -6755,7 +6754,7 @@
       "hint_pmg": "In the Mail Gateway under Configuration → User Management, create a dedicated user with the role \"Auditor\" (realm \"Proxmox Mail Gateway Authentication Server\", without a second factor) and enter it here with its realm, e.g. monitor64@pmg. The Mail Gateway has no API tokens, hence user and password. The certificate is usually self-signed – confirm the fingerprint during the test.",
       "hint_mailcow": "In mailcow under System → Configuration → Access → API, enable read-only access, add this node's address to \"Allow API access from\" and paste the key here. Note: mailcow counts requests with a wrong key as failed logins and may ban the node (Fail2ban).",
       "hint_fritzbox": "In the FRITZ!Box enable \"Allow access for applications\" under Home Network → Network → Network Settings and create a dedicated user under System → FRITZ!Box Users. For all values it needs the right \"FRITZ!Box Settings\" – the FRITZ!Box has no read-only role; without the right you get access type, line state and the update status. Access works from the home network only. The self-signed certificate changes with every FRITZ!OS update, so Monitor64 does not check it; thanks to digest authentication the password never crosses the wire.",
-      "fp_changed": "The device presents a different certificate than the remembered one (e.g. after a new name or an update) – token or password were not sent. If this is expected: compare and accept the new fingerprint, then enter the secret again and save.",
+      "fp_changed": "The device presents a different certificate than the remembered one (e.g. after a new name or an update) – token or password were not sent. If this is expected: compare and accept the new fingerprint; you will be asked for the secret again.",
       "fp_accept_changed": "Accept new fingerprint",
       "docker_host_ip": "<IP of the Docker host>",
       "from_bridge": "The node runs in the Docker bridge network: the host does not see the container's address but the Docker host's. Please put the Docker host's LAN address into from=\"…\".",
@@ -6764,7 +6763,9 @@
       "hint_mikrotik": "For RouterOS version 7 and later (REST API over HTTPS). On the router, create a dedicated user in a group with only read, api and rest-api, and give the www-ssl service a certificate – without one RouterOS accepts no HTTPS connection. The commands below do both (in the router's terminal). The certificate is self-signed – confirm the fingerprint during the test. Monitor64 only reads and triggers nothing; whether an update is available is only shown after the router has checked for itself. RouterOS 6 has no REST API – use SNMP there.",
       "dev_cmd": "Set up on the device",
       "cmd_password": "password",
-      "hint_unifi": "For the UniFi Network Application on a UniFi OS console (UDM, UDR, UCG, Cloud Key, UniFi OS Server) or as a self-hosted Network Server. Easiest with an API key: create a key in UniFi Network under \"Integrations\" (Network 9: Settings → Control Plane → Integrations), enter it here as the secret and leave the user empty – this only works on UniFi OS. Otherwise create a local admin with the role \"View Only\" (\"Restrict to local access only\", without two-factor login) and enter user and password; for the self-hosted server the port belongs in the URL (usually 8443). Monitor64 only reads. The certificate is usually self-signed – confirm the fingerprint during the test."
+      "hint_unifi": "For the UniFi Network Application on a UniFi OS console (UDM, UDR, UCG, Cloud Key, UniFi OS Server) or as a self-hosted Network Server. Easiest with an API key: create a key in UniFi Network under \"Integrations\" (Network 9: Settings → Control Plane → Integrations), enter it here as the secret and leave the user empty – this only works on UniFi OS. Otherwise create a local admin with the role \"View Only\" (\"Restrict to local access only\", without two-factor login) and enter user and password; for the self-hosted server the port belongs in the URL (usually 8443). Monitor64 only reads. The certificate is usually self-signed – confirm the fingerprint during the test.",
+      "fp_secret": "Secret (token or password) for the new certificate – the stored one only goes to the previous one",
+      "fp_apply": "Apply and test"
     },
     "nf": {
       "where": "Where to",
@@ -6940,7 +6941,8 @@
       "agent_none": "The host has no enabled agent access.",
       "agent_current": "The agent is already up to date (version {version}).",
       "backup_max_age_h": "Maximum backup age: 1 to 8760 hours (Proxmox Backup Server only).",
-      "site": "Invalid site (letters, digits, - and _; UniFi access only)."
+      "site": "Invalid site (letters, digits, - and _; UniFi access only).",
+      "address_secret": "New address: the accesses {list} would send their stored secret to the new address (their target is not bound by fingerprint or host key). Saving removes these secrets – enter them again at the access afterwards."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",
@@ -7784,7 +7786,10 @@
       "runs_on_node": "runs on node {node}",
       "should_run_ha": "should be running (HA)",
       "may_be_off_ha": "may be off (HA: {v})",
-      "ha_state": "HA: {v}"
+      "ha_state": "HA: {v}",
+      "mc_no_containers": "mailcow reports no containers – can mailcow reach its Docker API (dockerapi-mailcow)?",
+      "mc_no_vmail": "mailcow reports no mail storage",
+      "fb_no_soap_body": "answer without SOAP body"
     },
     "smart": {
       "title": "SMART values: {n}",

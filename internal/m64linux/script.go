@@ -65,7 +65,7 @@ var mgrNameRE = regexp.MustCompile(`^[a-z]{2,16}$`)
 func knownSection(name string) bool {
 	switch name {
 	case "start", "end", "attr", "note", "df", "df_i", "zpool_list", "zpool_list_rc", "zpool_status",
-		"systemd_failed", "systemd_state", "needs_restarting", "vcgencmd_throttled":
+		"systemd_failed", "systemd_state", "needs_restarting", "vcgencmd_throttled", "pkgstamp":
 		return true
 	}
 	kind, rest, ok := strings.Cut(name, ":")
@@ -237,6 +237,12 @@ func ParseScriptOutput(out []byte, now time.Time) (*m64proto.Report, error) {
 			}
 		case name == "end":
 			ended = true
+		case name == "pkgstamp": // Stand der Paketdatenbank (#159): die Node liest die Updates bei Aenderung neu
+			b := sec.body
+			if len(b) > 4096 {
+				b = b[:4096]
+			}
+			r.PkgStamp = strings.TrimSpace(string(b))
 		default:
 			cmd[name] = sec.body
 		}

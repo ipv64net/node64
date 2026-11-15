@@ -40,6 +40,7 @@ import (
 const (
 	fbMaxBody     = 1 << 20
 	fbUpdateEvery = time.Hour
+	fbDescEvery   = time.Hour        // /tr64desc.xml neu lesen (FRITZ!OS-Update, neue Dienste)
 	fbConnEvery   = 10 * time.Minute // Art der Verbindung neu bestimmen
 
 	fbSvcDeviceInfo = "urn:dslforum-org:service:DeviceInfo:1"
@@ -73,7 +74,9 @@ type Fritzbox struct {
 	now func() time.Time
 	mu  sync.Mutex // eine Runde zur Zeit
 
+	descMu  sync.Mutex // Test laeuft neben der Runde
 	desc    *fbDesc
+	descAt  time.Time
 	digMu   sync.Mutex
 	dig     fbChallenge
 	nc      int
@@ -163,11 +166,27 @@ func (f *Fritzbox) fetch(ctx context.Context, method, path string, body []byte, 
 	return resp.StatusCode, resp.Header, b, nil
 }
 
-// description laedt /tr64desc.xml einmal (ohne Anmeldung).
+// description laedt /tr64desc.xml (ohne Anmeldung), danach stuendlich neu (nach einem FRITZ!OS-Update nennt sie die
+// neue Version und ggf. andere Dienste, Review 12). Scheitert das erneute Lesen, gilt die bisherige.
 func (f *Fritzbox) description(ctx context.Context) (*fbDesc, error) {
-	if f.desc != nil {
+	f.descMu.Lock()
+	defer f.descMu.Unlock()
+	if f.desc != nil && f.now().Sub(f.descAt) < fbDescEvery {
 		return f.desc, nil
 	}
+	d, err := f.readDescription(ctx)
+	if err != nil {
+		if f.desc != nil {
+			f.descAt = f.now() // naechster Versuch in einer Stunde
+			return f.desc, nil
+		}
+		return nil, err
+	}
+	f.desc, f.descAt = d, f.now()
+	return d, nil
+}
+
+func (f *Fritzbox) readDescription(ctx context.Context) (*fbDesc, error) {
 	st, _, b, err := f.fetch(ctx, http.MethodGet, "/tr64desc.xml", nil, nil)
 	if err != nil {
 		return nil, err
@@ -179,7 +198,6 @@ func (f *Fritzbox) description(ctx context.Context) (*fbDesc, error) {
 	if err != nil || len(d.Ctrl) == 0 {
 		return nil, &webError{Kind: errWebResp, Status: st, Detail: model.T("monitor64.txt.fb_no_tr064"), Where: "GET /tr64desc.xml"}
 	}
-	f.desc = d
 	return d, nil
 }
 
@@ -463,7 +481,7 @@ func parseFBResponse(b []byte) (map[string]string, *fbFault, error) {
 		}
 	}
 	if bodyAt < 0 {
-		return nil, nil, errors.New("kein SOAP-Body")
+		return nil, nil, errors.New(model.T("monitor64.txt.fb_no_soap_body"))
 	}
 	return out, fault, nil
 }
@@ -560,7 +578,8 @@ func (f *Fritzbox) Collect(ctx context.Context) ([]model.Service, error) {
 	case err == nil:
 		up := time.Duration(fbNum(info, "NewUpTime")) * time.Second
 		sys.Metrics = []model.Metric{{Name: "uptime", Value: up.Seconds(), Unit: "s"}}
-		sys.Text = model.T("monitor64.txt.fb_system", "v", firstNonEmpty(ver, shortText(info["NewSoftwareVersion"])), "t", model.Sub(hoursText(up)))
+		// die laufende Version aus DeviceInfo vor der (stuendlich gelesenen) Beschreibung
+		sys.Text = model.T("monitor64.txt.fb_system", "v", firstNonEmpty(shortText(info["NewSoftwareVersion"]), ver), "t", model.Sub(hoursText(up)))
 	case errors.Is(err, errWebPerm): // ohne das Recht: nur, was die Beschreibung nennt
 		sys.Text = model.T("monitor64.txt.fb_system_plain", "v", firstNonEmpty(ver, "?"))
 	default:

@@ -97,7 +97,7 @@ func (m *Mailcow) hint(err error) error {
 }
 
 // get fragt einen Pfad ab. mailcow meldet manche Fehler mit Status 200 als {"type":"error","msg":...} und leere
-// Listen als {} oder []; beides wird hier abgefangen (out bleibt bei einer leeren Liste leer).
+// Listen als {}, [] oder null; beides wird hier abgefangen (out bleibt bei einer leeren Liste leer).
 func (m *Mailcow) get(ctx context.Context, path string, out any) error {
 	var raw json.RawMessage
 	if err := m.wc.get(ctx, path, &raw); err != nil {
@@ -119,6 +119,9 @@ func (m *Mailcow) get(ctx context.Context, path string, out any) error {
 		if string(b) == "{}" {
 			return nil // leere Liste
 		}
+	}
+	if s := string(b); s == "[]" || s == "null" {
+		return nil // leere Liste (bzw. keine Daten, z. B. Container ohne Docker-API: der Aufrufer prueft)
 	}
 	if err := json.Unmarshal(b, out); err != nil {
 		return &webError{Kind: errWebResp, Detail: model.T("monitor64.txt.resp_json") + ": " + devText(err.Error()), Where: "GET " + path}
@@ -150,6 +153,10 @@ func (m *Mailcow) Test(ctx context.Context) TestResult {
 		res.Error = scrub(m.hint(err).Error(), m.secrets()...)
 		return res
 	}
+	if len(ctrs) == 0 { // mailcow erreicht seine Docker-API nicht (Review 11)
+		res.Error = model.T("monitor64.txt.mc_no_containers")
+		return res
+	}
 	res.OK = true
 	svc := mcContainers(ctrs)
 	res.Summary = svc.Text
@@ -172,12 +179,21 @@ func (m *Mailcow) Collect(ctx context.Context) ([]model.Service, error) {
 		return nil, scrubErr(m.hint(err), m.secrets()...)
 	}
 	part := &partial{secrets: m.secrets()}
-	out := []model.Service{mcContainers(ctrs)}
+	var out []model.Service
+	// keine Container: mailcow erreicht seine Docker-API nicht (json_api.php liefert dann null) - kein "0 Container,
+	// alles gut", sondern ein Teilfehler (Dienst nach 3 Intervallen unbekannt, Review 11)
+	if len(ctrs) == 0 {
+		part.add("status/containers", errors.New(model.T("monitor64.txt.mc_no_containers")), "containers")
+	} else {
+		out = append(out, mcContainers(ctrs))
+	}
 	var vm mcVmail
 	if err := m.get(ctx, "/api/v1/get/status/vmail", &vm); err != nil {
 		part.add("status/vmail", err, "fs:vmail")
 	} else if s, ok := vm.service(); ok {
 		out = append(out, s)
+	} else {
+		part.add("status/vmail", errors.New(model.T("monitor64.txt.mc_no_vmail")), "fs:vmail")
 	}
 	var q []mcQueued
 	if err := m.get(ctx, "/api/v1/get/mailq/all", &q); err != nil {
@@ -227,7 +243,7 @@ func mcContainers(ctrs map[string]mcContainer) model.Service {
 	return s
 }
 
-// mcVmail ist /status/vmail (Groessen wie df -h: "41G", Belegung "28%").
+// mcVmail ist /status/vmail (Groessen wie df -H: "41G", Belegung "28%").
 type mcVmail struct {
 	Disk    string `json:"disk"`
 	Total   string `json:"total"`
@@ -235,7 +251,8 @@ type mcVmail struct {
 	Percent string `json:"used_percent"`
 }
 
-// mcSize liest eine Groesse wie "41G", "1.5T" oder "512M" (Zweierpotenzen wie df -h).
+// mcSize liest eine Groesse wie "41G", "1.5T" oder "512M". mailcow fragt den Platz mit "df -H" ab (Zehnerpotenzen,
+// data/Dockerfiles/dockerapi/modules/DockerApi.py), nicht mit df -h (Review 11).
 func mcSize(s string) (float64, bool) {
 	s = strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
 	if s == "" {
@@ -244,15 +261,15 @@ func mcSize(s string) (float64, bool) {
 	mult := 1.0
 	switch s[len(s)-1] {
 	case 'K', 'k':
-		mult = 1 << 10
+		mult = 1e3
 	case 'M':
-		mult = 1 << 20
+		mult = 1e6
 	case 'G':
-		mult = 1 << 30
+		mult = 1e9
 	case 'T':
-		mult = 1 << 40
+		mult = 1e12
 	case 'P':
-		mult = 1 << 50
+		mult = 1e15
 	}
 	if mult > 1 {
 		s = s[:len(s)-1]
@@ -300,8 +317,10 @@ func mcQueue(list []mcQueued) model.Service {
 		if q.Queue != "deferred" || len(q.Recipients) == 0 {
 			continue
 		}
-		if i := strings.LastIndex(q.Recipients[0], "@"); i >= 0 {
-			dom[strings.ToLower(q.Recipients[0][i+1:])]++
+		// mailcow haengt den Grund an: "adresse (delay_reason)" (functions.mailq.inc.php); ein @ im Grund zaehlt nicht
+		rcpt, _, _ := strings.Cut(strings.TrimSpace(q.Recipients[0]), " ")
+		if i := strings.LastIndex(rcpt, "@"); i >= 0 && i < len(rcpt)-1 {
+			dom[strings.ToLower(strings.Trim(rcpt[i+1:], "<>"))]++
 		}
 	}
 	active := count["active"] + count["incoming"]

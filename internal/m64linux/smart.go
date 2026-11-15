@@ -337,22 +337,7 @@ func ParseSmartctl(dev string, b []byte) m64proto.SMART {
 	}
 	if j.ATAAttrs != nil {
 		for _, a := range j.ATAAttrs.Table {
-			switch a.ID {
-			case 5:
-				s.Reallocated = ptrU64(a.Raw.Value)
-			case 197:
-				s.Pending = ptrU64(a.Raw.Value)
-			case 198:
-				s.Uncorrectable = ptrU64(a.Raw.Value)
-			case 199:
-				s.CRCErrors = ptrU64(a.Raw.Value)
-			case 177, 231, 233, 202, 169:
-				// normierter Wert = verbleibende Lebensdauer in % (Samsung 177, 231 SSD_Life_Left,
-				// Intel 233, Crucial 202, WD 169); erster Treffer gilt
-				if s.WearPercentUsed == nil && a.Value > 0 && a.Value <= 100 {
-					s.WearPercentUsed = ptrF64(float64(100 - a.Value))
-				}
-			}
+			s.ApplyATAAttr(a.ID, a.Value, a.Raw.Value) // Zaehler und Verschleiss (gemeinsam mit smartctl_exporter)
 		}
 	}
 	if n := j.NVMeLog; n != nil {

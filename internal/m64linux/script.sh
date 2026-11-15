@@ -278,6 +278,14 @@ if [ -d /run/systemd/system ] && m64_have systemctl; then
 	fi
 fi
 
+# Stand der Paketdatenbank (Groesse, Aenderungszeit; Liste wie pkgFiles in collect.go): aendert er sich, liest die
+# Node die Updates neu, statt bis zu einer Stunde zu warten (#159)
+if m64_have stat; then
+	m64_sec pkgstamp
+	for m64_f in /var/lib/dpkg/status /var/lib/apt/lists /var/lib/rpm/rpmdb.sqlite /var/lib/rpm/Packages /usr/lib/sysimage/rpm/rpmdb.sqlite /usr/lib/sysimage/rpm/Packages /var/lib/pacman/local /var/lib/pacman/sync /lib/apk/db/installed /var/lib/opkg/status /usr/lib/opkg/status; do
+		[ -e "$m64_f" ] && stat -c '%n %s %Y' "$m64_f" 2>/dev/null
+	done
+fi
 if [ "$m64_updates" = 1 ]; then
 	# RHEL: Python-Aufruf, daher nur mit den Updates (hoechstens stuendlich)
 	if [ ! -e /var/run/reboot-required ] && m64_have needs-restarting; then

@@ -17,6 +17,8 @@ const (
 	saveEvery    = 5 * time.Minute      // Laufzeitstand je Host hoechstens so oft speichern (ausser bei Zustandswechsel)
 	smartEvery   = 30 * time.Minute     // SSH ohne Agent: SMART lesen
 	updatesEvery = time.Hour            // SSH ohne Agent: Paket-Updates pruefen
+	// SSH: Paketdatenbank geaendert (apt upgrade): Updates fruehestens so lange nach dem letzten Lauf neu (#159)
+	updStampMinAge = time.Minute
 )
 
 // startHosts laedt alle Hosts und plant ihre Abfragen ein.

@@ -1,5 +1,26 @@
 # Monitor64 – Änderungen
 
+## 0.1.19 – 2026-11-15
+
+Sicherheit (Code-Review):
+
+- Zugang: Wechselt die Art zu SNMP, muss das Geheimnis neu eingegeben werden – vorher blieb das alte (z. B. ein Proxmox-Token) und ging als SNMP-Community im Klartext ans Gerät.
+- Host: Bei einer neuen Adresse fragt Monitor64 nach, bevor gespeicherte Geheimnisse von Zugängen ohne eigene Adresse und ohne gebundenes Ziel (Fingerabdruck, Hostschlüssel) an die neue Adresse gingen; bestätigt werden diese Geheimnisse entfernt und sind neu einzugeben.
+- SNMP-Traps (v3): Der Schutz gegen wiederholte Traps gilt wieder je Engine-ID und Benutzer ohne Verfall – mitgeschnittene Traps wurden nach einer Stunde bzw. über die Adresse eines anderen Hosts wieder angenommen.
+
+Fehlerbehebungen:
+
+- „Fingerabdruck bestätigen/übernehmen“ nach dem Test scheiterte immer mit „Geheimnis neu eingeben“. Erstmals einen Fingerabdruck setzen geht ohne Geheimnis; bei geändertem Fingerabdruck fragt der Dialog das Geheimnis gleich mit ab.
+- Cluster: Der SMART-Dialog funktioniert auch auf einer Node, die den Host nicht selbst überwacht (vorher 404). Ein hier aufgehobenes Quittieren wird nicht mehr von einem älteren Stand einer anderen Node zurückgedreht.
+- Fehlt ein Wert mit Warnung bei einem laufenden Dienst drei Intervalle lang, wird er „unbekannt“ statt grün (keine Entwarnung ohne Erholung); nur ein gestoppter Gast bzw. Container lässt Werte gewollt weg.
+- UniFi: Eine Fehlerantwort (z. B. 502 vom Proxy) bei der ersten Erkennung legt die Art (UniFi OS oder Network Server) nicht mehr dauerhaft falsch fest; eine Anmeldung am falschen Pfad erkennt neu.
+- SNMP: Fehlt bei der ersten Profilwahl (z. B. nach einem Neustart) der Wert der Probe, fragt die nächste Runde neu statt 60 Minuten ohne Profil; scheitern die Skalare eines Profils, kommen Platten und Volumes aus dem letzten Stand.
+- mailcow: Keine Container (mailcow erreicht seine Docker-API nicht) gilt als Fehler statt „0 Container“; die Domain zurückgestellter Mails stimmt auch mit Grund in der Liste; Größen des Mail-Speichers in Zehnerpotenzen wie bei mailcow (`df -H`).
+- FRITZ!Box: Nach einem FRITZ!OS-Update steht die neue Version am Dienst (Beschreibung wird stündlich neu gelesen, die laufende Version gilt vorrangig).
+- Updates nach `pkg upgrade` (FreeBSD/OPNsense, Agent 0.1.7) und per SSH nach `apt upgrade` & Co. nach etwa einer Minute aktuell statt bis zu einer Stunde später (wie beim Linux-Agent, #159).
+- Host-Adresse: Hostnamen werden nach RFC 1123 geprüft (z. B. „nas..lan“, „-nas“ oder „host.123“ werden abgelehnt).
+- **Agent 0.1.7 (FreeBSD):** Updates nach Änderung der Paketdatenbank neu lesen.
+
 ## 0.1.18 – 2026-11-15
 
 Fehlerbehebungen:

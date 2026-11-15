@@ -69,6 +69,9 @@ type Info struct {
 
 // Report ist die Antwort auf "collect" (bzw. das Ergebnis der SSH-Abfrage ohne Agent).
 type Report struct {
+	// PkgStamp: Stand der Paketdatenbank aus dem SSH-Skript (Abschnitt pkgstamp); nur in der Node, nie uebertragen
+	PkgStamp string `json:"-"`
+
 	V      int     `json:"v"`
 	Time   int64   `json:"t"`                // Unix-Millisekunden (Uhr des Hosts; nur fuer Raten zwischen zwei Berichten)
 	Uptime float64 `json:"uptime,omitempty"` // Sekunden

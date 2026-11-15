@@ -35,6 +35,8 @@ type fakeFritz struct {
 	resp     map[string]string // "Dienst#Aktion" -> Argumente als XML
 	denied   map[string]bool   // "Dienst#Aktion" -> UPnP-Fehler 606
 	noDesc   bool
+	display  string // FRITZ!OS in /tr64desc.xml ("" = 154.08.02)
+	descHits int
 	hits     map[string]int
 	rejected int // Anfragen mit 401
 }
@@ -95,7 +97,12 @@ func (f *fakeFritz) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/xml")
-		_, _ = w.Write([]byte(fbDescXML("DeviceInfo", "Layer3Forwarding", "WANCommonInterfaceConfig", "WANDSLInterfaceConfig", "WANPPPConnection", "WANIPConnection", "UserInterface")))
+		f.descHits++
+		d := fbDescXML("DeviceInfo", "Layer3Forwarding", "WANCommonInterfaceConfig", "WANDSLInterfaceConfig", "WANPPPConnection", "WANIPConnection", "UserInterface")
+		if f.display != "" {
+			d = strings.Replace(d, "<Display>154.08.02</Display>", "<Display>"+f.display+"</Display>", 1)
+		}
+		_, _ = w.Write([]byte(d))
 		return
 	}
 	c, ok := parseFBChallenge(r.Header.Get("Authorization")) // gleiche Form wie die Aufforderung
@@ -413,5 +420,44 @@ func TestFritzboxParsers(t *testing.T) {
 	fb, err := NewFritzbox(FritzboxConfig{Address: "192.168.178.1", User: "monitor64", Password: "x"})
 	if err != nil || fb.wc.t.base != "https://192.168.178.1:49443" {
 		t.Errorf("Standard-Port: %v", err)
+	}
+}
+
+// Review 12: /tr64desc.xml wurde nur einmal gelesen und seine Version bevorzugt - nach einem FRITZ!OS-Update stand bis
+// zum Neustart der Node die alte Version am Dienst. Jetzt gilt NewSoftwareVersion aus DeviceInfo, die Beschreibung
+// wird stuendlich neu gelesen. Und "kein SOAP-Body" ist uebersetzbar.
+func TestReviewFritzboxVersionAfterUpdate(t *testing.T) {
+	f := newFakeFritz()
+	fb := fritzFor(t, f, f.pass)
+	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
+	fb.now = func() time.Time { return now }
+	svcs, err := fb.Collect(context.Background())
+	if err != nil || !strings.Contains(svcByKey(t, svcs, "system").Text, "154.08.02") {
+		t.Fatalf("vor dem Update: %v %q", err, svcByKey(t, svcs, "system").Text)
+	}
+	f.mu.Lock()
+	f.display = "154.08.10"
+	f.resp["DeviceInfo#GetInfo"] = strings.Replace(f.resp["DeviceInfo#GetInfo"], "154.08.02", "154.08.10", 1)
+	f.mu.Unlock()
+	now = now.Add(time.Minute)
+	svcs, _ = fb.Collect(context.Background())
+	if txt := svcByKey(t, svcs, "system").Text; !strings.Contains(txt, "154.08.10") {
+		t.Fatalf("nach dem Update: %q", txt)
+	}
+	// ohne Recht auf DeviceInfo: die Beschreibung wird stuendlich neu gelesen
+	f.mu.Lock()
+	f.denied["DeviceInfo#GetInfo"] = true
+	n := f.descHits
+	f.mu.Unlock()
+	now = now.Add(fbDescEvery + time.Minute)
+	svcs, _ = fb.Collect(context.Background())
+	f.mu.Lock()
+	hits := f.descHits
+	f.mu.Unlock()
+	if hits != n+1 || !strings.Contains(svcByKey(t, svcs, "system").Text, "154.08.10") {
+		t.Fatalf("Beschreibung neu gelesen: %d, %q", hits-n, svcByKey(t, svcs, "system").Text)
+	}
+	if _, _, err := parseFBResponse([]byte(`<?xml version="1.0"?><x/>`)); err == nil || !strings.HasPrefix(err.Error(), "i18n:") {
+		t.Errorf("Fehler ohne SOAP-Body nicht uebersetzbar: %v", err)
 	}
 }

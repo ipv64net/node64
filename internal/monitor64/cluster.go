@@ -46,7 +46,7 @@ const (
 )
 
 // ClusterCalls sind die Anfragen, die andere Nodes stellen duerfen (HandleClusterCall).
-var ClusterCalls = []string{callSeries, callRepoll, callReach, callTrap, callSparks}
+var ClusterCalls = []string{callSeries, callRepoll, callReach, callTrap, callSparks, callSmart}
 
 var (
 	clusterScanEvery = 2 * time.Second  // eigene Aenderungen suchen

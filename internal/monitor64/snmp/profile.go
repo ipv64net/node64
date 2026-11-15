@@ -489,9 +489,13 @@ func (c *Collector) selectProfiles(r *round) {
 		if p.Match.Probe != "" {
 			if _, ok := res[p.Match.Probe]; !ok {
 				// Probe ohne Wert: ein bisher gewaehltes Profil bleibt, bis das profileMisses-mal in Folge so ist
-				// (QNAP antwortet zeitweise ohne Wert – sonst fehlten Platten und Volumes eine Stunde, #136)
-				if c.probeMiss[p.ID]++; had[p.ID] && c.probeMiss[p.ID] < profileMisses {
-					sel, retry = append(sel, p), true
+				// (QNAP antwortet zeitweise ohne Wert – sonst fehlten Platten und Volumes eine Stunde, #136); bei der
+				// ersten Wahl (z. B. nach einem Neustart) fragt die naechste Runde neu, statt 60 min zu warten (Review 9)
+				if c.probeMiss[p.ID]++; c.probeMiss[p.ID] < profileMisses {
+					retry = true
+					if had[p.ID] {
+						sel = append(sel, p)
+					}
 				}
 				continue
 			}
@@ -588,6 +592,9 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 				failed[pt] = true
 			}
 			c.useHeld(r, p, append([]string{part}, tableParts(p)...), failed, accs, &order)
+			for _, k := range order { // die ergaenzten Dienste auch ausgeben (Review 10)
+				r.out = append(r.out, accs[k].s)
+			}
 			return
 		}
 		r.at = c.now() // Messzeitpunkt der Zaehler

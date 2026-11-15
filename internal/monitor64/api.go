@@ -136,6 +136,9 @@ type hostIn struct {
 	Notes        string   `json:"notes"`
 	Paused       bool     `json:"paused"`
 	AgentAutoUpd *bool    `json:"agent_autoupdate"`
+	// ClearSecrets: neue Adresse bestaetigt - die Geheimnisse der Zugaenge, die sonst an die neue Adresse gingen,
+	// werden entfernt (danach neu eingeben)
+	ClearSecrets bool `json:"clear_secrets,omitempty"`
 }
 
 var reAddress = regexp.MustCompile(`^[A-Za-z0-9._:\-\[\]%]{1,253}$`)
@@ -168,23 +171,46 @@ func cleanAddress(s string) (string, bool) {
 	if strings.ContainsAny(s, "[]") {
 		return "", false
 	}
-	// nur Ziffern und Punkte: muss eine IPv4-Adresse sein (Tippfehler wie "10.0.0.2.16" galten sonst als Hostname)
-	ip4 := func(h string) bool {
-		if strings.Trim(h, "0123456789.") != "" {
-			return true
+	// IPv4-Adresse oder Hostname nach RFC 1123 (Tippfehler wie "10.0.0.2.16" sind keines von beiden, Forum 5175)
+	host := func(h string) bool {
+		if a, err := netip.ParseAddr(h); err == nil {
+			return a.Is4() && !strings.Contains(h, "%")
 		}
-		a, err := netip.ParseAddr(h)
-		return err == nil && a.Is4()
+		return validHostname(h)
 	}
 	switch strings.Count(s, ":") {
 	case 0:
-		return s, !strings.Contains(s, "%") && ip4(s)
+		return s, host(s)
 	case 1:
 		h, p, _ := strings.Cut(s, ":")
-		return s, h != "" && port(p) && !strings.Contains(s, "%") && ip4(h)
+		return s, port(p) && host(h)
 	}
 	a, err := netip.ParseAddr(s)
 	return s, err == nil && a.Is6()
+}
+
+// validHostname prueft einen Hostnamen nach RFC 1123 (Review 14): hoechstens 253 Zeichen, Labels 1-63 Zeichen aus
+// Buchstaben, Ziffern und Bindestrich (nicht am Rand), keine leeren Labels, das letzte nicht rein numerisch (sonst
+// waere es eine verunglueckte IPv4-Adresse). Ein Punkt am Ende ist erlaubt. Bewusst zusaetzlich erlaubt: der
+// Unterstrich (Namen aus Windows-/NetBIOS-Netzen, die der Resolver aufloest).
+func validHostname(h string) bool {
+	h = strings.TrimSuffix(h, ".")
+	if h == "" || len(h) > 253 {
+		return false
+	}
+	labels := strings.Split(h, ".")
+	for _, l := range labels {
+		if l == "" || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(l); i++ {
+			c := l[i]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+				return false
+			}
+		}
+	}
+	return strings.Trim(labels[len(labels)-1], "0123456789") != ""
 }
 
 func cleanText(s string, max int) string {
@@ -382,6 +408,7 @@ func accessOuts(list []*Access) []accessOut {
 
 // buildAccess setzt die Felder eines Zugangs aus der Eingabe (Geheimnis verschluesselt).
 func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret bool, err error) {
+	oldType := a.Type
 	if isNew || in.Type != "" {
 		if !validAccessType(in.Type) {
 			return false, errBad("access_type")
@@ -429,7 +456,8 @@ func (m *Module) buildAccess(a *Access, in accessIn, isNew bool) (keepSecret boo
 		return false, errBad("secret")
 	}
 	if a.Type == "snmp" {
-		if err := m.snmpSecretIn(a, &in, isNew); err != nil {
+		// Geheimnis einer anderen Art nie als SNMP-Community bzw. v3-Passwort weiterverwenden (Review 1)
+		if err := m.snmpSecretIn(a, &in, isNew || oldType != "snmp"); err != nil {
 			return false, err
 		}
 	}
@@ -554,14 +582,48 @@ func (m *Module) apiHostUpdate(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	wasPaused := h.Paused
+	wasPaused, oldAddr := h.Paused, h.Address
 	if err := in.apply(h, h.IntervalSec); err != nil {
 		m.fail(w, r, err)
 		return
 	}
+	// neue Adresse: gespeicherte Geheimnisse von Zugaengen ohne eigene Adresse gingen sonst an das neue Ziel (Review 2)
+	var exposed []*Access
+	if !strings.EqualFold(oldAddr, h.Address) {
+		accs, err := m.store.Accesses(ctx, h.UID)
+		if err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		for _, a := range accs {
+			if secretFollowsAddress(a) {
+				exposed = append(exposed, a)
+			}
+		}
+		if len(exposed) > 0 && !in.ClearSecrets {
+			names := make([]string, 0, len(exposed))
+			for _, a := range exposed {
+				n := a.Type
+				if m.g.T != nil {
+					n = m.g.T(r, "monitor64.access."+a.Type)
+				}
+				names = append(names, n)
+			}
+			m.fail(w, r, errBad("address_secret", "list", strings.Join(names, ", ")))
+			return
+		}
+	}
 	if err := m.store.SaveHost(ctx, h, m.actor(r)); err != nil {
 		m.fail(w, r, err)
 		return
+	}
+	for _, a := range exposed {
+		a.Secret = ""
+		if err := m.store.SaveAccess(ctx, a, false, m.actor(r)); err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		m.audit(r, "access.secret_cleared", h.Name, "uid="+a.UID+" reason=address")
 	}
 	if h.Paused != wasPaused { // Pause im Verlauf (Statusseiten zaehlen pausierte Zeit nicht)
 		kind := "resume"
@@ -687,8 +749,9 @@ func (m *Module) apiAccessUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Ziel (Art, URL, Pin) geaendert und kein neues Geheimnis: das gespeicherte ginge sonst bei der naechsten Abfrage
-	// an das neue Ziel (wie beim Test: "das gespeicherte geht nur an das gespeicherte Ziel")
-	if keep && hadSecret && a.Type != "snmp" && (a.Type != oldType || targetChanged(a.Type, oldCfg, a.Config)) {
+	// an das neue Ziel (wie beim Test: "das gespeicherte geht nur an das gespeicherte Ziel"). SNMP zu SNMP fuehrt die
+	// Teile des Geheimnisses zusammen (snmpSecretIn); ein Wechsel zu SNMP verlangt ein neues.
+	if keep && hadSecret && !(a.Type == "snmp" && oldType == "snmp") && (a.Type != oldType || targetChanged(a.Type, oldCfg, a.Config)) {
 		m.fail(w, r, errBad("secret_again"))
 		return
 	}
@@ -1022,7 +1085,33 @@ func targetChanged(typ string, old, cur json.RawMessage) bool {
 	if typ == "fritzbox" {
 		o.Pin, c.Pin = "", ""
 	}
-	return o.URL != c.URL || o.Pin != c.Pin
+	// erstmals einen Fingerabdruck setzen (z. B. "Fingerabdruck uebernehmen" nach dem Test) bindet dasselbe Ziel enger:
+	// ohne Pin geht das Geheimnis nur an ein vertrautes Zertifikat dieser Adresse (Review 4)
+	return o.URL != c.URL || (o.Pin != c.Pin && o.Pin != "")
+}
+
+// secretFollowsAddress: Zugang mit gespeichertem Geheimnis, der die Adresse des Hosts nutzt (keine eigene) und dessen
+// Ziel nicht gebunden ist - bei neuer Host-Adresse ginge das Geheimnis an das neue Ziel. Gebunden: SSH/Agent mit
+// gemerktem Hostschluessel (Anmeldung erst nach der Pruefung), HTTPS mit Fingerabdruck (FRITZ!Box nutzt ihn nicht,
+// NUT mit Fingerabdruck erzwingt TLS). Docker nutzt die Host-Adresse nicht.
+func secretFollowsAddress(a *Access) bool {
+	if a.Secret == "" || a.Type == "docker" {
+		return false
+	}
+	var c accessConfig
+	_ = json.Unmarshal(a.Config, &c)
+	if c.URL != "" {
+		return false
+	}
+	switch a.Type {
+	case "ssh", "agent":
+		return a.HostKey == ""
+	case "snmp", "fritzbox", "unraid":
+		return true // Community im Klartext bzw. ohne Fingerabdruck / http
+	case "nut":
+		return c.Pin == "" || c.TLS == "off" // mit Fingerabdruck erzwingt der Sammler TLS
+	}
+	return c.Pin == ""
 }
 
 // decodeOptional liest einen JSON-Koerper wie decode; ein leerer Koerper ist erlaubt (has = false).

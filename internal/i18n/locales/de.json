@@ -305,7 +305,6 @@
     "totp": "Code der Authenticator-App",
     "submit": "Anmelden",
     "failed": "Benutzername oder Passwort ist falsch.",
-    "ldap_unavailable": "Anmeldung über das Verzeichnis (AD/LDAP) gerade nicht möglich. Bitte später erneut versuchen oder einen lokalen Administrator fragen.",
     "ratelimited": "Zu viele Versuche. Bitte in {seconds} Sekunden erneut versuchen.",
     "logged_out": "Du bist abgemeldet.",
     "totp_title": "Zweiter Faktor",
@@ -1821,7 +1820,6 @@
     "user": "Benutzer",
     "language": "Sprache",
     "timezone": "Zeitzone",
-    "timezone_node_hint": "Gilt als Administrator auch als Zeitzone der Node.",
     "password_current": "Aktuelles Passwort",
     "password_new": "Neues Passwort",
     "password_changed": "Passwort geändert. Andere Sitzungen wurden abgemeldet.",
@@ -3800,7 +3798,6 @@
     "server_deleted": "auf dem Server gelöscht",
     "local_version": "Diese Node",
     "server_version": "ipv64.net",
-    "versions_admin_only": "Beide Fassungen sieht nur ein Administrator (darin stehen Check-Parameter und Einstellungen der Kanäle).",
     "keep_server": "ipv64-Stand übernehmen",
     "keep_local": "Erneut senden",
     "conflict_resolved": "Konflikt aufgelöst.",
@@ -6191,7 +6188,9 @@
       "delete_hint": "Die Aktion wird mit deinem Namen im Audit-Log gespeichert.",
       "pending_free": "seit {m} Min. unter {v} – {s} ab {n} Min.",
       "more_rules": "+{n} weitere",
-      "pending_state": "{s} ab {t} ({k})"
+      "pending_state": "{s} ab {t} ({k})",
+      "address_secret_title": "Neue Adresse",
+      "address_secret_ok": "Speichern und Geheimnisse entfernen"
     },
     "acc": {
       "type": "Art",
@@ -6755,7 +6754,7 @@
       "hint_pmg": "Im Mail Gateway unter Konfiguration → Benutzerverwaltung einen eigenen Benutzer mit der Rolle „Auditor“ anlegen (Realm „Proxmox Mail Gateway Authentication Server“, ohne zweiten Faktor) und hier mit Realm eintragen, z. B. monitor64@pmg. API-Token kennt das Mail Gateway nicht, deshalb Benutzer und Passwort. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
       "hint_mailcow": "In mailcow unter System → Konfiguration → Zugriff → API den Nur-Lese-Zugriff einschalten, die Adresse dieser Node bei „API-Zugriff erlauben von“ eintragen und den Schlüssel hier einfügen. Achtung: Abfragen mit falschem Schlüssel zählt mailcow als Fehlversuch und kann die Node sperren (Fail2ban).",
       "hint_fritzbox": "In der FRITZ!Box unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ einschalten und unter System → FRITZ!Box-Benutzer einen eigenen Benutzer anlegen. Für alle Werte braucht er das Recht „FRITZ!Box Einstellungen“ – eine Nur-Lese-Rolle kennt die FRITZ!Box nicht; ohne das Recht kommen Zugangsart, Zustand der Leitung und der Update-Stand. Der Zugriff geht nur aus dem Heimnetz. Das selbst signierte Zertifikat ändert sich bei jedem FRITZ!OS-Update, daher prüft Monitor64 es nicht; das Kennwort geht per Digest-Anmeldung nie über die Leitung.",
-      "fp_changed": "Das Gerät zeigt ein anderes Zertifikat als das gemerkte (z. B. nach neuem Namen oder Update) – Token bzw. Passwort wurden nicht gesendet. Wenn das erwartet ist: neuen Fingerabdruck vergleichen und übernehmen, danach das Geheimnis erneut eingeben und speichern.",
+      "fp_changed": "Das Gerät zeigt ein anderes Zertifikat als das gemerkte (z. B. nach neuem Namen oder Update) – Token bzw. Passwort wurden nicht gesendet. Wenn das erwartet ist: neuen Fingerabdruck vergleichen und übernehmen; das Geheimnis wird dabei neu abgefragt.",
       "fp_accept_changed": "Neuen Fingerabdruck übernehmen",
       "docker_host_ip": "<IP des Docker-Hosts>",
       "from_bridge": "Die Node läuft im Docker-Bridge-Netz: Der Host sieht nicht die Adresse des Containers, sondern die des Docker-Hosts. Bitte bei from=\"…\" die LAN-Adresse des Docker-Hosts eintragen.",
@@ -6764,7 +6763,9 @@
       "hint_mikrotik": "Für RouterOS ab Version 7 (REST-API über HTTPS). Auf dem Router einen eigenen Benutzer in einer Gruppe mit nur read, api und rest-api anlegen und dem Dienst www-ssl ein Zertifikat geben – ohne Zertifikat nimmt RouterOS keine HTTPS-Verbindung an. Die Befehle unten erledigen beides (im Terminal des Routers). Das Zertifikat ist selbst signiert – den Fingerabdruck beim Test bestätigen. Monitor64 liest nur und stößt nichts an; ob ein Update bereitsteht, zeigt der Router erst, nachdem er selbst gesucht hat. RouterOS 6 hat keine REST-API – dort SNMP verwenden.",
       "dev_cmd": "Auf dem Gerät einrichten",
       "cmd_password": "Passwort",
-      "hint_unifi": "Für die UniFi Network Application auf einer UniFi-OS-Konsole (UDM, UDR, UCG, Cloud Key, UniFi OS Server) oder als selbst gehosteter Network Server. Am einfachsten mit API-Schlüssel: in UniFi Network unter „Integrations“ (bei Network 9 unter Einstellungen → Control Plane → Integrations) einen Schlüssel anlegen, hier als Geheimnis eintragen und den Benutzer leer lassen – das geht nur auf UniFi OS. Sonst einen lokalen Admin mit der Rolle „View Only“ anlegen („Restrict to local access only“, ohne Zwei-Faktor-Anmeldung) und Benutzer und Passwort eintragen; beim selbst gehosteten Server gehört der Port in die URL (meist 8443). Monitor64 liest nur. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen."
+      "hint_unifi": "Für die UniFi Network Application auf einer UniFi-OS-Konsole (UDM, UDR, UCG, Cloud Key, UniFi OS Server) oder als selbst gehosteter Network Server. Am einfachsten mit API-Schlüssel: in UniFi Network unter „Integrations“ (bei Network 9 unter Einstellungen → Control Plane → Integrations) einen Schlüssel anlegen, hier als Geheimnis eintragen und den Benutzer leer lassen – das geht nur auf UniFi OS. Sonst einen lokalen Admin mit der Rolle „View Only“ anlegen („Restrict to local access only“, ohne Zwei-Faktor-Anmeldung) und Benutzer und Passwort eintragen; beim selbst gehosteten Server gehört der Port in die URL (meist 8443). Monitor64 liest nur. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
+      "fp_secret": "Geheimnis (Token bzw. Passwort) für das neue Zertifikat – das gespeicherte geht nur an das bisherige",
+      "fp_apply": "Übernehmen und testen"
     },
     "nf": {
       "where": "Wohin",
@@ -6940,7 +6941,8 @@
       "agent_none": "Der Host hat keinen eingeschalteten Agent-Zugang.",
       "agent_current": "Der Agent ist schon aktuell (Version {version}).",
       "backup_max_age_h": "Höchstalter der Backups: 1 bis 8760 Stunden (nur Proxmox Backup Server).",
-      "site": "Site ungültig (Buchstaben, Ziffern, - und _; nur beim Zugang UniFi)."
+      "site": "Site ungültig (Buchstaben, Ziffern, - und _; nur beim Zugang UniFi).",
+      "address_secret": "Neue Adresse: Die Zugänge {list} würden ihr gespeichertes Geheimnis an die neue Adresse senden (ihr Ziel ist nicht über Fingerabdruck bzw. Hostschlüssel gebunden). Beim Speichern werden diese Geheimnisse entfernt – danach am Zugang neu eingeben."
     },
     "quote": "„{t}“",
     "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",
@@ -7784,7 +7786,10 @@
       "runs_on_node": "läuft auf Node {node}",
       "should_run_ha": "soll laufen (HA)",
       "may_be_off_ha": "darf aus sein (HA: {v})",
-      "ha_state": "HA: {v}"
+      "ha_state": "HA: {v}",
+      "mc_no_containers": "mailcow meldet keine Container – erreicht mailcow seine Docker-API (dockerapi-mailcow)?",
+      "mc_no_vmail": "mailcow meldet keinen Mail-Speicher",
+      "fb_no_soap_body": "Antwort ohne SOAP-Body"
     },
     "smart": {
       "title": "SMART-Werte: {n}",

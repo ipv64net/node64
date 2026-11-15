@@ -93,13 +93,12 @@ func (m *Module) problemApply(ctx context.Context, uid string, data json.RawMess
 	}
 	keepClosed, localNewer := false, false
 	if cur != nil {
-		// hier neuer (z. B. gerade quittiert, noch nicht gemeldet): Quittierung behalten und den eigenen Stand melden,
-		// statt ihn zu ueberschreiben und als abgeglichen zu merken (dann ginge die Quittierung ueberall verloren)
+		// hier neuer (z. B. gerade quittiert oder die Quittierung aufgehoben, noch nicht gemeldet): eigene Quittierung
+		// behalten und den eigenen Stand melden, statt ihn zu ueberschreiben und als abgeglichen zu merken (dann ginge
+		// die Aenderung ueberall verloren; auch ein aufgehobenes Quittieren, Review 6)
 		if parseTS(cur.Updated).After(parseTS(in.Updated)) {
 			localNewer = true
-			if in.Ack == "" {
-				in.Ack = cur.Ack
-			}
+			in.Ack = cur.Ack
 			in.Updated = cur.Updated
 		}
 		if stateRank[cur.Worst] > stateRank[in.Worst] {
