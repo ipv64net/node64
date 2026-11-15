@@ -118,6 +118,7 @@ type ListStatus struct {
 	Error     string    `json:"error,omitempty"`
 	Failures  int       `json:"failures"`       // Fehlversuche hintereinander
 	Hint      string    `json:"hint,omitempty"` // HintIPList: geladen, aber nur IP-Adressen statt Namen (#164)
+	Skipped   int       `json:"skipped"`        // Zeilen ohne DNS-Regel (nicht erkannt, z. B. Browser-Regeln, IP-Adressen)
 }
 
 // HintIPList: die Liste enthaelt IP-Adressen bzw. Netze statt Domains (z. B. Honeypot- oder Firewall-Listen). DNS64
@@ -467,6 +468,7 @@ func (m *Manager) rebuild() {
 	m.mu.Lock()
 	for i := range m.status {
 		m.status[i].Rules = counts[i]
+		m.status[i].Skipped = mt.Skipped(i)
 		m.status[i].Hint = hints[i]
 		m.status[i].UpdatedAt = mtimes[i]
 	}

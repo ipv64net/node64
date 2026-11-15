@@ -11,6 +11,14 @@
 ### Behoben
 - Upstreams: Mullvad ist keine Vorlage mehr – Mullvad hat sein öffentliches verschlüsseltes DNS eingestellt. Wer Mullvad eingeschaltet hat, behält den Eintrag als eigenen Upstream, bis er ihn entfernt (besser auf Quad9 oder einen anderen Server umstellen); ausgeschaltete Mullvad-Vorlagen verschwinden (#162).
 - Blocklisten: Enthält eine Liste IP-Adressen statt Domains (z. B. die Honeypot-Liste von ipv64.net, gedacht für Firewalls), steht an der Liste ein Hinweis statt kommentarlos „0“ Einträge. DNS64 sperrt Namen; IP-Listen gehören in PROXY64 → Blocklisten (#164).
+- IPv6-DNS per RA: Läuft auf demselben Host ein Router-Dienst (radvd, odhcpd, dnsmasq), sendet DNS64 auch direkt nach einem Neustart kein eigenes RA mehr. Bisher konnte das erste RA (Router-Lifetime 0, gleiche Absenderadresse) den Geräten die IPv6-Default-Route nehmen, bis der Router-Dienst wieder sendete. Der Dienst wird jetzt sofort an seiner Anmeldung als Router auf der Schnittstelle erkannt; auch das Zurücknehmen beim Stoppen entfällt dann.
+- IPv6-DNS per RA: Router Solicitations von Geräten noch ohne Adresse (Absender „::“) werden beantwortet.
+- Gerätenamen: Kennt die Nachbartabelle ein Gerät nur per IPv6, zählt seine IPv4-Vergabe aus DHCP wieder – der Name hatte sonst keinen A-Eintrag.
+- Eigene Sperrliste und Freigaben: Eine von Hand eingetragene hosts-Zeile mit Tab („0.0.0.0<Tab>ads.example.com“) wird gelesen statt beim nächsten Speichern aus der Datei gelöscht.
+- Eigene Filterregeln lesen hosts-Zeilen wie die Blocklisten: „192.168.1.10 nas.lan“ (eine Zuordnung, keine Sperre) und Zeilen mit mehreren Namen werden als ungültig gemeldet, statt nas.lan bzw. nur den ersten Namen zu sperren.
+- Blocklisten: Reine IP-Adressen zählen nicht mehr als Domain-Eintrag. Wie viele Zeilen einer Liste keine DNS-Regel ergaben (z. B. Browser-Regeln), zeigt ein Hinweis an der Zahl der Einträge (API `skipped`).
+- Docker-Bridge-Netz: Ein nachträglich angehängtes Docker-Netz zählt bei der Prüfung „Port veröffentlicht“ nicht mehr als Anfrage von außen.
+- DHCP im Cluster: Die Reserve-Node prüft die Haupt-Node im Hintergrund statt im Paketpfad – beim Failover hält der DHCP-Server nicht mehr bis zu einer Sekunde je Haupt-Node und Paket an.
 
 ## 1.40.1 – 2026-11-14
 

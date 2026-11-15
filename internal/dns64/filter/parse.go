@@ -169,7 +169,8 @@ func ToASCII(s string) string {
 }
 
 // normalizeDomain lowercases and validates a hostname. It needs at least one
-// dot so a stray word in a list cannot block a whole TLD by accident.
+// dot so a stray word in a list cannot block a whole TLD by accident. A purely numeric last label is an IPv4
+// address ("1.2.3.4"), not a name: no TLD consists of digits only.
 func normalizeDomain(s string) (string, bool) {
 	s = strings.TrimSuffix(strings.ToLower(ToASCII(s)), ".")
 	if len(s) < 3 || len(s) > 253 || !strings.Contains(s, ".") {
@@ -183,6 +184,9 @@ func normalizeDomain(s string) (string, bool) {
 		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' {
 			continue
 		}
+		return "", false
+	}
+	if tld := s[strings.LastIndexByte(s, '.')+1:]; strings.Trim(tld, "0123456789") == "" {
 		return "", false
 	}
 	return s, true

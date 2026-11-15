@@ -40,7 +40,8 @@ func LoadDenylist(path string) (*Allowlist, error) {
 }
 
 // loadDomainList liest eine Liste ("domain<TAB>Zeit" je Zeile). Von Hand eingetragene Zeilen im Adblock-Stil
-// (||example.com^, in den Freigaben auch @@||example.com^) und hosts-Zeilen zaehlen mit (ParseRule).
+// (||example.com^, in den Freigaben auch @@||example.com^) und hosts-Zeilen zaehlen mit (ParseRule), auch mit Tab
+// ("0.0.0.0<TAB>ads.example.com"): abgetrennt wird nur ein Zeitstempel hinter dem letzten Tab.
 func loadDomainList(path, header string, allow bool) (*Allowlist, error) {
 	a := &Allowlist{path: path, header: header, allow: allow, set: map[string]time.Time{}}
 	f, err := os.Open(path)
@@ -57,12 +58,17 @@ func loadDomainList(path, header string, allow bool) (*Allowlist, error) {
 		if line == "" || line[0] == '#' {
 			continue
 		}
-		name, ts, _ := strings.Cut(line, "\t")
+		name := line
+		var added time.Time
+		if i := strings.LastIndexByte(line, '\t'); i >= 0 {
+			if t, err := time.Parse(time.RFC3339, strings.TrimSpace(line[i+1:])); err == nil {
+				name, added = line[:i], t
+			}
+		}
 		r, tok, err := ParseRule(name)
 		if tok == "" || err != nil || r.Allow && !allow {
 			continue
 		}
-		added, _ := time.Parse(time.RFC3339, ts)
 		a.set[r.Domain] = added
 	}
 	return a, sc.Err()

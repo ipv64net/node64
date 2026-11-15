@@ -337,7 +337,7 @@ func (r *Resolver) onLink(ip netip.Addr) bool {
 	ip = ip.Unmap().WithZone("")
 	r.md.mu.Lock()
 	if r.md.nets == nil || time.Since(r.md.netsAt) > time.Minute {
-		r.md.nets, r.md.netsAt = localNets(), time.Now()
+		r.md.nets, r.md.netsAt = LocalNets(), time.Now()
 	}
 	nets := r.md.nets
 	r.md.mu.Unlock()
@@ -349,7 +349,8 @@ func (r *Resolver) onLink(ip netip.Addr) bool {
 	return false
 }
 
-func localNets() []netip.Prefix {
+// LocalNets: Netze der Schnittstellen dieser Node (je Aufruf neu gelesen).
+func LocalNets() []netip.Prefix {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return []netip.Prefix{}

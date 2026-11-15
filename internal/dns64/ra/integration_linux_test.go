@@ -91,3 +91,73 @@ func TestIntegrationRA(t *testing.T) {
 		t.Fatalf("not withdrawn: %+v", st)
 	}
 }
+
+// Code-Review 1.7: radvd auf demselben Host (hier im Namensraum der Node auf veth0, gleiche Link-Local-Adresse). Sein
+// naechstes RA kommt erst nach 16 s; der Sender darf trotzdem nie ein eigenes RA (Router-Lifetime 0) senden - das
+// naehme dem Geraet die Default-Route. Erkannt am Beitritt von radvd zu ff02::2; Forwarding allein (Kernel tritt
+// bei) zaehlt nicht. Nur mit DHCP_IT=1 und radvd.
+func TestIntegrationRASelfRouter(t *testing.T) {
+	if os.Getenv("DHCP_IT") != "1" {
+		t.Skip("DHCP_IT=1 fehlt")
+	}
+	_ = exec.Command("ip", "netns", "exec", "cli", "sysctl", "-qw", "net.ipv6.conf.all.forwarding=0").Run()
+	_ = exec.Command("ip", "netns", "exec", "cli", "sysctl", "-qw", "net.ipv6.conf.veth1.accept_ra=2").Run()
+	if err := exec.Command("sysctl", "-qw", "net.ipv6.conf.all.forwarding=1").Run(); err != nil {
+		t.Fatalf("forwarding: %v", err)
+	}
+	t.Cleanup(func() { _ = exec.Command("sysctl", "-qw", "net.ipv6.conf.all.forwarding=0").Run() })
+	dns := func(string) []netip.Addr { return []netip.Addr{netip.MustParseAddr("fd99::1")} }
+	run := func(s *Sender, d time.Duration) {
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() { defer close(done); s.Run(ctx) }()
+		time.Sleep(d)
+		cancel()
+		<-done
+	}
+
+	// nur Forwarding (Kernel in ff02::2): Sender kuendigt an
+	s := &Sender{Ifaces: []string{"veth0"}, DNS: dns}
+	run(s, 3*time.Second)
+	if s.Sent() < 1 {
+		t.Fatalf("forwarding only: sent %d, status %+v", s.Sent(), s.Status())
+	}
+
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "radvd.conf")
+	if err := os.WriteFile(conf, []byte(`interface veth0 {
+	AdvSendAdvert on; MinRtrAdvInterval 30; MaxRtrAdvInterval 60; AdvDefaultLifetime 180;
+	prefix 2001:db8:77::/64 { AdvOnLink on; AdvAutonomous on; };
+};
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	radvd := exec.Command("radvd", "-n", "-C", conf, "-p", filepath.Join(dir, "radvd.pid"), "-m", "stderr")
+	if err := radvd.Start(); err != nil {
+		t.Fatalf("radvd: %v", err)
+	}
+	t.Cleanup(func() { _ = radvd.Process.Kill(); _ = radvd.Wait() })
+	route := func() string {
+		out, _ := exec.Command("ip", "netns", "exec", "cli", "ip", "-6", "route", "show", "default").CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(route(), "fe80::") && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !strings.Contains(route(), "fe80::") {
+		t.Fatalf("no default route from radvd: %q", route())
+	}
+
+	s = &Sender{Ifaces: []string{"veth0"}, DNS: dns}
+	run(s, 5*time.Second) // RS, nach 2 s das erste RA - radvd sendet erst nach 16 s wieder
+	if s.Sent() != 0 {
+		t.Fatalf("own RA beside radvd: sent %d", s.Sent())
+	}
+	if st := s.Status(); st[0].ErrKind != "self_router" {
+		t.Fatalf("status %+v", st)
+	}
+	if r := route(); !strings.Contains(r, "fe80::") {
+		t.Fatalf("default route lost: %q", r)
+	}
+}

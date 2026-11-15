@@ -296,15 +296,25 @@ func (m *Module) dhcpStandbyReset() {
 	m.dh.soonMu.Unlock()
 }
 
-// dhcpStandby: Reserve-Node bleibt in diesem Netz still (Server.Standby, ohne gehaltene Sperre des Servers).
+// dhcpStandby: Reserve-Node bleibt in diesem Netz still (Server.Standby, ohne gehaltene Sperre des Servers). Liest nur
+// den letzten Stand: ist er abgelaufen, prueft dhcpStandbyProbe einmal im Hintergrund (Datenbank, TCP 53 der
+// Haupt-Nodes) - der DHCP-Paketpfad wartet nie darauf. Ohne Stand bleibt die Reserve bis dahin still.
 func (m *Module) dhcpStandby(subnet netip.Prefix) bool {
 	key := subnet.String()
 	m.dh.soonMu.Lock()
-	if e, ok := m.dh.standby[key]; ok && time.Since(e.at) < standbyCache {
-		m.dh.soonMu.Unlock()
-		return e.quiet
+	defer m.dh.soonMu.Unlock()
+	e, ok := m.dh.standby[key]
+	if (!ok || time.Since(e.at) >= standbyCache) && !m.dh.standbyBusy[key] {
+		if m.dh.standbyBusy == nil {
+			m.dh.standbyBusy = map[string]bool{}
+		}
+		m.dh.standbyBusy[key] = true
+		go m.dhcpStandbyProbe(key)
 	}
-	m.dh.soonMu.Unlock()
+	return !ok || e.quiet
+}
+
+func (m *Module) dhcpStandbyProbe(key string) {
 	alive, _ := m.dhcpPrimaryAlive(context.Background(), key)
 	if !alive && m.primaryAnswers(key) {
 		alive = true // im Cluster nicht erreichbar, aber die Haupt-Node antwortet direkt (nur die Verbindung zwischen den Nodes ist weg)
@@ -314,8 +324,8 @@ func (m *Module) dhcpStandby(subnet netip.Prefix) bool {
 		m.dh.standby = map[string]standbyState{}
 	}
 	m.dh.standby[key] = standbyState{alive, time.Now()}
+	delete(m.dh.standbyBusy, key)
 	m.dh.soonMu.Unlock()
-	return alive
 }
 
 type standbyState struct {
@@ -838,11 +848,19 @@ func (m *Module) primaryAnswers(subnet string) bool {
 		if !ok || !server.IsValid() {
 			continue
 		}
-		d := net.Dialer{Timeout: time.Second}
-		if conn, err := d.Dial("tcp", net.JoinHostPort(server.String(), "53")); err == nil {
-			_ = conn.Close()
+		if dhcpDialPrimary(net.JoinHostPort(server.String(), "53")) {
 			return true
 		}
 	}
 	return false
+}
+
+// dhcpDialPrimary: TCP-Verbindung zu addr klappt (hoechstens 1 s; Variable fuer Tests).
+var dhcpDialPrimary = func(addr string) bool {
+	d := net.Dialer{Timeout: time.Second}
+	conn, err := d.Dial("tcp", addr)
+	if err == nil {
+		_ = conn.Close()
+	}
+	return err == nil
 }

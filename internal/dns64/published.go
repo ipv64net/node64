@@ -125,23 +125,35 @@ func pubProto(c config, key string) string {
 	return ""
 }
 
+// ifaceNets: Netze der eigenen Schnittstellen (Variable fuer Tests).
+var ifaceNets = localnet.LocalNets
+
+var ownNetsCache struct {
+	sync.Mutex
+	nets []netip.Prefix
+	at   time.Time
+}
+
 // ownNets: Netze der eigenen Schnittstellen (im Bridge-Netz das Docker-Netz samt Gateway). Absender darin kamen
-// nicht ueber einen veroeffentlichten Port (Variable fuer Tests).
-var ownNets = sync.OnceValue(func() []netip.Prefix {
-	var out []netip.Prefix
-	ifs, _ := net.Interfaces()
-	for _, ifc := range ifs {
-		list, _ := ifc.Addrs()
-		for _, x := range list {
-			if n, ok := x.(*net.IPNet); ok {
-				if p, err := netip.ParsePrefix(n.String()); err == nil {
-					out = append(out, p.Masked())
-				}
-			}
+// nicht ueber einen veroeffentlichten Port. Eine Minute zwischengespeichert; fresh liest neu, damit ein nachtraeglich
+// angehaengtes Docker-Netz nicht als "von aussen" zaehlt.
+func ownNets(fresh bool) []netip.Prefix {
+	ownNetsCache.Lock()
+	defer ownNetsCache.Unlock()
+	if fresh || ownNetsCache.nets == nil || time.Since(ownNetsCache.at) > time.Minute {
+		ownNetsCache.nets, ownNetsCache.at = ifaceNets(), time.Now()
+	}
+	return ownNetsCache.nets
+}
+
+func inNets(nets []netip.Prefix, ip netip.Addr) bool {
+	for _, p := range nets {
+		if p.Contains(ip) {
+			return true
 		}
 	}
-	return out
-})
+	return false
+}
 
 // pubArrived merkt (nur solange ein Port fehlt), dass eine Anfrage ueber proto von ausserhalb der Container-Netze
 // ankam: dann ist der Port auf dem Host veroeffentlicht, auch wenn das Gateway nicht hinfuehrt (dnsserver.Server.Seen,
@@ -158,10 +170,8 @@ func (m *Module) pubArrived(ip netip.Addr, proto string) {
 	if !ip.IsValid() || ip.IsLoopback() || ip.IsUnspecified() {
 		return
 	}
-	for _, p := range ownNets() {
-		if p.Contains(ip) {
-			return
-		}
+	if inNets(ownNets(false), ip) || inNets(ownNets(true), ip) { // neu lesen nur vor einem Beleg (danach ist proto gemerkt)
+		return
 	}
 	if _, dup := m.pubSeen.LoadOrStore(proto, time.Now()); !dup {
 		m.log.Info("dns64 port reachable from outside the container networks, notice cleared", "proto", proto, "client", ip.String())

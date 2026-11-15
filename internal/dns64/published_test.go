@@ -65,15 +65,20 @@ func TestPublishedProbe(t *testing.T) {
 func TestPublishedHostIPBinding(t *testing.T) {
 	m, port := testModule(t)
 	ctx := context.Background()
-	oldBridge, oldNets, oldSelf := pubBridge, ownNets, pubSelf
+	oldBridge, oldNets, oldSelf := pubBridge, ifaceNets, pubSelf
 	pubBridge = func() bool { return false } // der Lauf im Hintergrund prueft nicht dazwischen
-	ownNets = func() []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("172.20.0.0/16")} }
+	ifaceNets = func() []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("172.20.0.0/16")} }
+	ownNetsCache.nets = nil
 	pubSelf = func() (string, error) { return "node64", nil }
 	fd := &fakeBindings{}
 	srv := httptest.NewServer(fd)
 	oldHost := dockerDNSHost
 	dockerDNSHost = func() string { return srv.URL }
-	t.Cleanup(func() { pubBridge, ownNets, pubSelf, dockerDNSHost = oldBridge, oldNets, oldSelf, oldHost; srv.Close() })
+	t.Cleanup(func() {
+		pubBridge, ifaceNets, pubSelf, dockerDNSHost = oldBridge, oldNets, oldSelf, oldHost
+		ownNetsCache.nets = nil
+		srv.Close()
+	})
 
 	port = startUp(t, m, port)
 	e := m.running()
@@ -89,6 +94,14 @@ func TestPublishedHostIPBinding(t *testing.T) {
 	m.pubArrived(netip.MustParseAddr("172.20.0.1"), "udp") // Gateway bzw. Docker-Netz: kein Beleg
 	if v := m.pubView(ctx, e); len(v.Missing) != 2 {
 		t.Fatalf("Ankunft aus dem Docker-Netz zaehlt: missing = %v", v.Missing)
+	}
+	// Code-Review 1.7: nachtraeglich angehaengtes Docker-Netz (docker network connect) zaehlt ebenfalls nicht
+	ifaceNets = func() []netip.Prefix {
+		return []netip.Prefix{netip.MustParsePrefix("172.20.0.0/16"), netip.MustParsePrefix("172.31.0.0/16")}
+	}
+	m.pubArrived(netip.MustParseAddr("172.31.0.1"), "udp")
+	if v := m.pubView(ctx, e); len(v.Missing) != 2 {
+		t.Fatalf("Ankunft aus spaeter angehaengtem Docker-Netz zaehlt: missing = %v", v.Missing)
 	}
 	m.pubArrived(netip.MustParseAddr("192.168.2.50"), "udp") // echter LAN-Client ueber UDP
 	if v := m.pubView(ctx, e); len(v.Missing) != 1 || v.Missing[0] != p+"/tcp" || v.Publish != "-p "+p+":"+p+"/tcp" {

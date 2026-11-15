@@ -92,6 +92,7 @@ type dhcpState struct {
 	leasesT      *time.Timer             // Vergaben an den Cluster melden (gebuendelt)
 	applyT       *time.Timer             // DHCP-Server nach Uebernahmen neu starten (gebuendelt)
 	standby      map[string]standbyState // Reserve: Zustand je Netz (kurz zwischengespeichert)
+	standbyBusy  map[string]bool         // Reserve: Pruefung je Netz laeuft im Hintergrund
 	conflictSent map[string]bool         // zwei Haupt-Nodes: gemeldet (Netz|Node)
 
 	ra raState // IPv6-DNS per Router Advertisement (dhcp_ra.go)

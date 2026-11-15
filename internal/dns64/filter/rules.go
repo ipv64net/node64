@@ -78,11 +78,11 @@ func ParseRule(line string) (r Rule, tok string, err error) {
 			return Rule{}, tok, ErrInvalidDomain
 		}
 		s = f[0]
-		if isIP(f[0]) && len(f) > 1 { // hosts-Format
+		if isIP(f[0]) && len(f) > 1 { // hosts-Format wie in den Blocklisten (parseLine): nur Sperr-Adressen, ein Name
 			if hostsIgnore[strings.ToLower(f[1])] {
 				return Rule{}, "", nil
 			}
-			if r.Allow {
+			if r.Allow || !isSinkIP(f[0]) || len(f) > 2 { // "192.168.1.10 nas.lan" ist eine Zuordnung, keine Sperre
 				return Rule{}, tok, ErrInvalidDomain
 			}
 			s = f[1]

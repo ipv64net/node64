@@ -302,6 +302,9 @@ func (s *Sender) announce(p *ipv6.PacketConn, n string) {
 		setErr("no_addr", "no IPv6 address for DNS")
 		return
 	}
+	if hostRouter(n, st.joined) { // vor jedem RA, auch dem ersten nach dem Start (sein RA kaeme erst spaeter)
+		s.selfRouter(n)
+	}
 	s.mu.Lock()
 	selfAt, selfRouter := s.selfRtr[n]
 	s.mu.Unlock()
@@ -335,8 +338,13 @@ func (s *Sender) withdraw(p *ipv6.PacketConn) {
 		if st.index == 0 || len(st.dns) == 0 {
 			continue
 		}
-		m, o := s.flags(n)
-		_ = s.write(p, n, st.index, Ad{Managed: m, Other: o, Withdraw: st.dns, Domains: s.Domains, MAC: st.mac}.Marshal())
+		s.mu.Lock()
+		selfAt, selfRouter := s.selfRtr[n]
+		s.mu.Unlock()
+		if !(selfRouter && time.Since(selfAt) < routerKeep) && !hostRouter(n, st.joined) { // sonst naehme auch das die Route
+			m, o := s.flags(n)
+			_ = s.write(p, n, st.index, Ad{Managed: m, Other: o, Withdraw: st.dns, Domains: s.Domains, MAC: st.mac}.Marshal())
+		}
 		s.mu.Lock()
 		s.state[n].dns = nil
 		s.mu.Unlock()
@@ -359,7 +367,7 @@ func (s *Sender) read(p *ipv6.PacketConn, rs chan<- string) {
 		}
 		name := s.ifaceName(cm.IfIndex)
 		ip := srcAddr(src)
-		if name == "" || !ip.IsValid() || !ip.IsLinkLocalUnicast() { // RA/RS kommen von Link-Local (RFC 4861 6.1.2)
+		if name == "" || !ip.IsValid() || !fromLink(buf[:n], ip) {
 			continue
 		}
 		if own(cm.IfIndex, ip) {
@@ -367,15 +375,7 @@ func (s *Sender) read(p *ipv6.PacketConn, rs chan<- string) {
 			// Default-Route wuerden unsere RAs (Lifetime 0) bei den Geraeten loeschen: dann nicht senden.
 			if buf[0] == typeRA {
 				if r, ok := Parse(buf[:n]); ok && (r.Lifetime > 0 || len(r.Prefixes) > 0) {
-					s.mu.Lock()
-					if s.selfRtr == nil {
-						s.selfRtr = map[string]time.Time{}
-					}
-					if _, known := s.selfRtr[name]; !known && s.Log != nil {
-						s.Log.Warn("ra: router service on this host announces on the interface - not sending own RAs", "iface", name)
-					}
-					s.selfRtr[name] = time.Now()
-					s.mu.Unlock()
+					s.selfRouter(name)
 				}
 			}
 			continue
@@ -405,6 +405,36 @@ func (s *Sender) read(p *ipv6.PacketConn, rs chan<- string) {
 			}
 		}
 	}
+}
+
+// selfRouter merkt einen Router-Dienst auf diesem Host fuer die Schnittstelle (keine eigenen RAs, routerKeep lang).
+func (s *Sender) selfRouter(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.selfRtr == nil {
+		s.selfRtr = map[string]time.Time{}
+	}
+	if _, known := s.selfRtr[name]; !known && s.Log != nil {
+		s.Log.Warn("ra: router service on this host announces on the interface - not sending own RAs", "iface", name)
+	}
+	s.selfRtr[name] = time.Now()
+}
+
+// fromLink: RA und RS kommen von Link-Local (RFC 4861 6.1.2), eine RS auch von "::" (Geraet noch ohne Adresse,
+// 6.1.1) - dann ohne Link-Layer-Option der Quelle.
+func fromLink(b []byte, ip netip.Addr) bool {
+	if ip.IsLinkLocalUnicast() {
+		return true
+	}
+	if !ip.IsUnspecified() || len(b) < 8 || b[0] != typeRS {
+		return false
+	}
+	for o := b[8:]; len(o) >= 2 && o[1] > 0 && int(o[1])*8 <= len(o); o = o[int(o[1])*8:] {
+		if o[0] == optSLLA {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Sender) ifaceName(index int) string {

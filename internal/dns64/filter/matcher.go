@@ -21,6 +21,7 @@ type Matcher struct {
 	// allowExact: Ausnahmen nur fuer genau diesen Namen (@@|example.com^)
 	allowExact map[uint64]struct{}
 	names      []string
+	skipped    []int // je Liste: Zeilen mit Inhalt ohne DNS-Regel (nicht erkannt)
 }
 
 // MaxLists is the number of lists one matcher can tell apart (bits of the mask).
@@ -45,6 +46,21 @@ func newMatcherSize(names []string, hint int) *Matcher {
 
 func (m *Matcher) hash(s string) uint64 { return maphash.String(m.seed, s) }
 
+func (m *Matcher) skip(idx int) {
+	if len(m.skipped) <= idx {
+		m.skipped = append(m.skipped, make([]int, idx+1-len(m.skipped))...)
+	}
+	m.skipped[idx]++
+}
+
+// Skipped: Zeilen der Liste idx, die keine DNS-Regel ergaben (ohne Kommentare und Leerzeilen).
+func (m *Matcher) Skipped(idx int) int {
+	if m == nil || idx >= len(m.skipped) {
+		return 0
+	}
+	return m.skipped[idx]
+}
+
 // load reads one list (index idx < MaxLists) into the matcher and returns the number of rules no list
 // before it had.
 func (m *Matcher) load(idx int, r io.Reader) (int, error) { return m.loadAs(idx, r, false) }
@@ -59,6 +75,9 @@ func (m *Matcher) loadAs(idx int, r io.Reader, release bool) (int, error) {
 	for sc.Scan() {
 		domain, kind := parseLine(sc.Text())
 		if kind == ruleNone {
+			if t := strings.TrimSpace(sc.Text()); t != "" && t[0] != '#' && t[0] != '!' && t[0] != '[' {
+				m.skip(idx)
+			}
 			continue
 		}
 		if release {

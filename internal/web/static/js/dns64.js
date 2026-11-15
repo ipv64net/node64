@@ -458,7 +458,9 @@
 			var tr = Array.prototype.find.call(document.querySelectorAll("tr[" + attr + "]"), function (x) { return x.getAttribute(attr) === l.url; });
 			if (!tr || l.enabled === false) { return; } // ausgeschaltete Freigabe-Liste: Abzeichen "aus" bleibt
 			var loaded = l.updatedAt && l.updatedAt.indexOf("0001") !== 0;
-			tr.querySelector(".l-rules").textContent = nf.format(l.rules);
+			var rules = tr.querySelector(".l-rules");
+			rules.textContent = nf.format(l.rules);
+			if (l.skipped > 0) { rules.title = t("list_skipped", { n: nf.format(l.skipped) }); } else { rules.removeAttribute("title"); } // nicht erkannte Zeilen
 			var upd = tr.querySelector(".l-updated");
 			upd.textContent = loaded ? ago(new Date(l.updatedAt)) : "–";
 			if (loaded) { upd.setAttribute("data-sort", String(new Date(l.updatedAt).getTime())); } else { upd.removeAttribute("data-sort"); } // "vor 5 min" nach Zeit sortieren (#80)

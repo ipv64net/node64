@@ -11,6 +11,14 @@
 ### Fixed
 - Upstreams: Mullvad is no longer a preset – Mullvad shut down its public encrypted DNS. If Mullvad is switched on, it stays as an own upstream until removed (better switch to Quad9 or another server); switched-off Mullvad presets disappear (#162).
 - Blocklists: if a list contains IP addresses instead of domains (e.g. the ipv64.net honeypot list, meant for firewalls), the list shows a hint instead of a bare "0" entries. DNS64 blocks names; IP lists belong in PROXY64 → Blocklists (#164).
+- IPv6 DNS via RA: if a router service runs on the same host (radvd, odhcpd, dnsmasq), DNS64 no longer sends an own RA even right after a restart. Before, the first RA (router lifetime 0, same source address) could take the IPv6 default route away from devices until the router service sent again. The service is now detected at once by its router membership on the interface; the withdrawal on stop is skipped then as well.
+- IPv6 DNS via RA: router solicitations from devices without an address yet (source "::") are answered.
+- Device names: if the neighbour table knows a device only by IPv6, its IPv4 DHCP lease counts again – otherwise the name had no A record.
+- Own block list and allow list: a hosts line added by hand with a tab ("0.0.0.0<tab>ads.example.com") is read instead of being removed from the file at the next save.
+- Custom filter rules read hosts lines like the blocklists: "192.168.1.10 nas.lan" (a mapping, not a block) and lines with several names are reported as invalid instead of blocking nas.lan or only the first name.
+- Blocklists: plain IP addresses no longer count as a domain entry. How many lines of a list gave no DNS rule (e.g. browser rules) is shown as a hint on the number of entries (API `skipped`).
+- Docker bridge network: a Docker network attached later no longer counts as a query from outside in the "port published" check.
+- DHCP in a cluster: the reserve node checks the primary node in the background instead of in the packet path – during failover the DHCP server no longer stalls up to one second per primary node and packet.
 
 ## 1.40.1 – 2026-11-14
 
