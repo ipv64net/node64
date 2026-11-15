@@ -475,7 +475,9 @@ Modul laufen (gespeicherte Fallen-Dienste sind dafür nicht nötig):
   `proxy64/unknown-host`. Gemeldet wird wie bei echten Logs nur IP, Art und Anzahl.
 - **Sofort-Sperre:** Fällt eine IP auf (Login-/Exploit-Versuch, Port-Scan, Regel aus PROXY64), sperrt PROXY64 sie
   lokal für die eingestellte Dauer (Standard 24 h) – ohne auf die v64 Blocklist zu warten. Private Adressen, Trusted
-  Proxies und Ausnahmen werden nie gesperrt.
+  Proxies und Ausnahmen werden nie gesperrt. Nicht sofort gesperrt werden Quellen, die sich ohne Verbindungsaufbau
+  fälschen lassen (UDP-Fallen, verworfene Pakete aus Firewall-Logs, IPsec), und Meldungen aus Syslog; sie gehen nur in
+  die Meldung an ipv64.
 
 ## Frühwarnung
 

@@ -50,7 +50,7 @@ func TestNFTIntegration(t *testing.T) {
 	t.Log("\n" + out)
 	for _, want := range []string{"table inet node64", "set blocklist_v4", "type ipv4_addr", "flags interval", "set blocklist_v6", "type ipv6_addr",
 		"1.2.3.0/24", "9.9.9.9", "2a01:4f8::/32", "chain input", "type filter hook input priority filter - 10; policy accept;",
-		"chain forward", "type filter hook forward priority filter - 10; policy accept;", "ip saddr @blocklist_v4", "ip6 saddr @blocklist_v6", "drop"} {
+		"chain forward", "type filter hook forward priority filter - 10; policy accept;", "ct state established,related accept", "ip saddr @blocklist_v4", "ip6 saddr @blocklist_v6", "drop"} {
 		if !ok || !strings.Contains(out, want) {
 			t.Errorf("nft output lacks %q", want)
 		}

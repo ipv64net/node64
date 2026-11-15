@@ -161,6 +161,20 @@ func newTestHelper(t *testing.T, ls *listServer, be Backend, mod func(*Config)) 
 	return h
 }
 
+// Eigene IPv6-Adresse: das ganze /64 bleibt frei (die v64 Blocklist sperrt IPv6 je /64).
+func TestOwnIPv6Prefix(t *testing.T) {
+	ls := newListServer(t)
+	ls.set("ipv64_blocklist_v64.txt", "2a01:4f8:0:5::/64\n2a01:4f8:0:6::/64\n")
+	be := &fakeNFT{}
+	h := newTestHelper(t, ls, be, func(c *Config) {
+		c.HostAddrs = func() []netip.Addr { return []netip.Addr{netip.MustParseAddr("2a01:4f8:0:5::10")} }
+	})
+	if !h.Refresh(context.Background()) {
+		t.Fatal(h.Status())
+	}
+	eqRanges(t, be.v6, rs(t, "2a01:4f8:0:6::-2a01:4f8:0:6:ffff:ffff:ffff:ffff"))
+}
+
 func TestNewValidates(t *testing.T) {
 	be := &fakeNFT{}
 	if _, err := New(Config{Mode: "iptables", Backend: be}); err == nil {

@@ -1,5 +1,12 @@
 # Änderungen – Honeypot64
 
+## 0.23.1 – 2026-11-15
+
+### Sicherheit
+- Gefälschte Absender führen nicht mehr zu Sperren: Ereignisse, deren Quelle sich ohne Verbindungsaufbau fälschen lässt (UDP-Fallen, verworfene Pakete aus Firewall-Logs, IPsec), und Syslog-Meldungen sperren nicht mehr sofort in PROXY64; gemeldet werden sie weiter.
+- Syslog-Empfänger: Standard-Absender sind nur noch private Netze und localhost, nicht mehr 100.64.0.0/10 (Tailscale, CGNAT) – bei Bedarf unter „Erlaubte Absender“ eintragen.
+- Firewall-Helfer: Das eigene IPv6-/64 des Hosts wird nie gesperrt (bisher nur die eigene Adresse); bestehende Verbindungen des Hosts laufen weiter, gesperrt werden neue Verbindungen.
+
 ## 0.23.0 – 2026-11-14
 
 ### Neu

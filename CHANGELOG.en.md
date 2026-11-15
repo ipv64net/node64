@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Honeypot64 (security): forged senders no longer lead to blocks; syslog accepts only private networks by default (no longer 100.64.0.0/10); the firewall helper never blocks its own IPv6 /64 and keeps existing connections.
 - Security: "Read only" no longer sees the code for linking to ipv64.net (page and API); the self-update accepts only manifests of the "Stable" channel in that channel.
 - Monitor64 agent 0.1.8 (security): a key restricted to addresses (`from=`) keeps its restriction on a key change – if you use `from=` with cluster keys, add the addresses of the other nodes.
 - Health checks: the message "private or reserved address" no longer names the resolved IP; stricter checks of node data on the ipv64 servers (with their update).

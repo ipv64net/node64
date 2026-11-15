@@ -188,18 +188,36 @@ func (b *bridgeBlocker) check(e Event) {
 
 // bridgeBlockKind: Arten, die sofort sperren (Login-Versuche, Exploits, Port-Scan, Scanner-UA) sowie alle Ereignisse
 // der Regeln proxy64/* (die liegen schon ueber ihren Schwellen). generic:probe, http:scan und scanner:research einzeln
-// sind zu schwach. Nie sperren die UDP-Fallen (SNMP, SIP): die Quelle eines UDP-Pakets ist ohne Handshake beliebig
-// faelschbar, sonst koennte jeder fremde IPs sperren lassen (gemeldet werden sie weiter, ipv64 bewertet zentral).
+// sind zu schwach. Nie sperren faelschbare Quellen (spoofable), sonst koennte jeder fremde IPs sperren lassen, und
+// Syslog (die IP steht im Text, den jedes Geraet im erlaubten Netz schicken kann); beides meldet weiter an ipv64.
 func bridgeBlockKind(e Event) bool {
 	k := e.Kind
 	switch {
-	case k == KindSNMPBrute, k == KindSIPBrute, k == KindSIPScan:
+	case spoofable(e), e.Source == SrcSyslog:
 		return false
 	case strings.HasSuffix(k, "bruteforce"), strings.HasPrefix(k, KindHTTPExploit), strings.HasPrefix(k, KindDBExploit),
 		k == KindPortScan, k == KindBadUA:
 		return true
 	}
 	return strings.HasPrefix(e.Rule, "proxy64/")
+}
+
+// spoofRules: Regeln aus Firewall-Logs, deren Quelle ohne Handshake beliebig faelschbar ist (verworfene Pakete, IKE ueber
+// UDP). Gleiche Liste im Portal (honeypot_score.php, HPS_SPOOF_RULES).
+var spoofRules = []string{"opnsense/portscan@", "pfsense/portscan@", "fortigate/ipsec@"}
+
+// spoofable: die Quelle ist ohne Handshake faelschbar (UDP-Fallen SNMP, SIP, BACnet und spoofRules). Solche Ereignisse
+// sperren nie sofort; gemeldet werden sie weiter, ipv64 zaehlt sie nicht fuer die Schwelle der v64 Blocklist.
+func spoofable(e Event) bool {
+	if ProtoUDP(e.Service) {
+		return true
+	}
+	for _, r := range spoofRules {
+		if strings.HasPrefix(e.Rule, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // bridgeView ist der Stand der Verbindung fuer die Uebersicht.

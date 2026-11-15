@@ -59,13 +59,12 @@ const (
 	syslogMaxNoted = 32 // abgewiesene Absender, die einmal im Log erscheinen
 )
 
-// syslogDefaultAllow sind die Absender bei leerem allow: private Netze (RFC 1918, fc00::/7), Link-Local (fe80::/10),
-// CGNAT (100.64.0.0/10) und localhost.
+// syslogDefaultAllow sind die Absender bei leerem allow: private Netze (RFC 1918, fc00::/7), Link-Local (fe80::/10)
+// und localhost. Nicht CGNAT/Tailscale (100.64.0.0/10): dort stehen fremde Geraete, bei Bedarf ausdruecklich freigeben.
 var syslogDefaultAllow = []netip.Prefix{
 	netip.MustParsePrefix("10.0.0.0/8"),
 	netip.MustParsePrefix("172.16.0.0/12"),
 	netip.MustParsePrefix("192.168.0.0/16"),
-	netip.MustParsePrefix("100.64.0.0/10"),
 	netip.MustParsePrefix("127.0.0.0/8"),
 	netip.MustParsePrefix("::1/128"),
 	netip.MustParsePrefix("fc00::/7"),

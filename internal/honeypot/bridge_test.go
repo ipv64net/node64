@@ -216,6 +216,9 @@ func TestBridgeBlocks(t *testing.T) {
 	ev := func(ip, kind, rule string) Event {
 		return Event{Src: netip.MustParseAddr(ip), Kind: kind, Rule: rule}
 	}
+	udp := func(ip, svc, kind string) Event {
+		return Event{Src: netip.MustParseAddr(ip), Service: svc, Kind: kind}
+	}
 	cases := []struct {
 		e    Event
 		want bool
@@ -226,9 +229,15 @@ func TestBridgeBlocks(t *testing.T) {
 		{ev("8.8.8.10", KindDBExploit, ""), true},
 		{ev("8.8.8.11", KindPortScan, ""), true},
 		{ev("8.8.8.12", KindBadUA, ""), true},
-		{ev("8.8.8.13", KindSIPScan, ""), false}, // UDP: Quelle faelschbar, keine Sofort-Sperre
-		{ev("8.8.8.13", KindSIPBrute, ""), false},
-		{ev("8.8.8.13", KindSNMPBrute, ""), false},
+		{udp("8.8.8.13", SvcSIP, KindSIPScan), false}, // UDP: Quelle faelschbar, keine Sofort-Sperre
+		{udp("8.8.8.13", SvcSIP, KindSIPBrute), false},
+		{udp("8.8.8.13", SvcSNMP, KindSNMPBrute), false},
+		{udp("8.8.8.13", SvcBACnet, KindICSExploit), false},
+		{ev("8.8.8.13", KindPortScan, "opnsense/portscan@1"), false}, // verworfene Pakete aus Firewall-Logs
+		{ev("8.8.8.13", KindPortScan, "pfsense/portscan@1"), false},
+		{ev("8.8.8.13", KindVPNBrute, "fortigate/ipsec@1"), false}, // IKE ueber UDP
+		{ev("8.8.8.20", KindVPNBrute, "fortigate/vpn@1"), true},    // SSL-VPN ueber TCP (Log-Datei)
+		{Event{Src: netip.MustParseAddr("8.8.8.21"), Kind: KindSSHBrute, Source: SrcSyslog, Rule: "mikrotik/login-ssh@1"}, false}, // IP aus Syslog-Text
 		{ev("8.8.8.14", KindMailBrute, "postfix/sasl-bruteforce@1"), true},
 		{ev("8.8.8.15", KindProbe, ""), false},
 		{ev("8.8.8.16", KindHTTPScan, ""), false},

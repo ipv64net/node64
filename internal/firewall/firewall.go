@@ -279,13 +279,17 @@ func (h *Helper) Refresh(ctx context.Context) bool {
 	return ok
 }
 
-// exclusions: Reserved, Ausnahmen und die eigenen Adressen des Hosts.
+// exclusions: Reserved, Ausnahmen und die eigenen Adressen des Hosts (IPv6 als ganzes /64: so sperrt die v64 Blocklist,
+// das eigene Netz bliebe sonst bis auf die eine Adresse gesperrt).
 func (h *Helper) exclusions() []netip.Prefix {
 	ex := slices.Concat(Reserved, h.cfg.Allow)
 	for _, a := range h.cfg.HostAddrs() {
 		a = a.Unmap()
-		if a.IsValid() {
-			ex = append(ex, netip.PrefixFrom(a, a.BitLen()))
+		if a.Is4() {
+			ex = append(ex, netip.PrefixFrom(a, 32))
+		} else if a.Is6() {
+			p, _ := a.WithZone("").Prefix(64)
+			ex = append(ex, p)
 		}
 	}
 	return ex

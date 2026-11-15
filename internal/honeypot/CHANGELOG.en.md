@@ -1,5 +1,12 @@
 # Changes – Honeypot64
 
+## 0.23.1 – 2026-11-15
+
+### Security
+- Forged senders no longer lead to blocks: events whose source can be forged without a handshake (UDP traps, dropped packets from firewall logs, IPsec) and syslog messages no longer block immediately in PROXY64; they are still reported.
+- Syslog receiver: default senders are now only private networks and localhost, no longer 100.64.0.0/10 (Tailscale, CGNAT) – add it under "Allowed senders" if needed.
+- Firewall helper: the host's own IPv6 /64 is never blocked (so far only its own address); existing connections of the host keep working, new connections are blocked.
+
 ## 0.23.0 – 2026-11-14
 
 ### New

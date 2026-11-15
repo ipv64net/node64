@@ -211,7 +211,7 @@ func trunc(s string) string {
 func TestSyslogAllowed(t *testing.T) {
 	def := NewSyslogServer(sensorTestLog(), 514, nil, nil)
 	for ip, want := range map[string]bool{
-		"10.1.2.3": true, "172.16.0.1": true, "172.32.0.1": false, "192.168.178.1": true, "100.64.1.1": true,
+		"10.1.2.3": true, "172.16.0.1": true, "172.32.0.1": false, "192.168.178.1": true, "100.64.1.1": false,
 		"127.0.0.1": true, "::1": true, "fd00::1": true, "fe80::1": true, "198.51.100.7": false, "2001:db8::1": false,
 		"8.8.8.8": false,
 	} {

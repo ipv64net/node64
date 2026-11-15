@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/google/nftables"
+	"github.com/google/nftables/binaryutil"
 	"github.com/google/nftables/expr"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
@@ -19,6 +20,7 @@ import (
 //		set blocklist_v4 { type ipv4_addr; flags interval; }
 //		set blocklist_v6 { type ipv6_addr; flags interval; }
 //		chain input { type filter hook input priority filter - 10; policy accept;
+//			ct state established,related accept
 //			ip saddr @blocklist_v4 counter drop
 //			ip6 saddr @blocklist_v6 counter drop }
 //		chain forward { type filter hook forward priority filter - 10; policy accept; … wie input }
@@ -99,6 +101,19 @@ func rule(ch *nftables.Chain, s *nftables.Set, v6 bool) *nftables.Rule {
 	}}
 }
 
+// established: "ct state established,related accept" vor den Sperren - eigene Verbindungen des Hosts zu gelisteten
+// Adressen (und deren Antworten) laufen weiter, gesperrt werden neue Verbindungen von dort.
+func established(ch *nftables.Chain) *nftables.Rule {
+	return &nftables.Rule{Table: nftTable, Chain: ch, Exprs: []expr.Any{
+		&expr.Ct{Register: 1, Key: expr.CtKeySTATE},
+		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: 4,
+			Mask: binaryutil.NativeEndian.PutUint32(expr.CtStateBitESTABLISHED | expr.CtStateBitRELATED),
+			Xor:  binaryutil.NativeEndian.PutUint32(0)},
+		&expr.Cmp{Op: expr.CmpOpNeq, Register: 1, Data: []byte{0, 0, 0, 0}},
+		&expr.Verdict{Kind: expr.VerdictAccept},
+	}}
+}
+
 func (b nftBackend) Apply(v4, v6 []Range) error {
 	c, err := b.conn(2 * (len(v4) + len(v6)))
 	if err != nil {
@@ -128,6 +143,7 @@ func (b nftBackend) Apply(v4, v6 []Range) error {
 	}{{"input", nftables.ChainHookInput}, {"forward", nftables.ChainHookForward}} {
 		ch := c.AddChain(&nftables.Chain{Name: hook.name, Table: nftTable, Type: nftables.ChainTypeFilter, Hooknum: hook.hook,
 			Priority: nftables.ChainPriorityRef(Priority), Policy: &accept})
+		c.AddRule(established(ch))
 		c.AddRule(rule(ch, s4, false))
 		c.AddRule(rule(ch, s6, true))
 	}
