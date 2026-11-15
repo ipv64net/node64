@@ -15,7 +15,9 @@ func TestImport(t *testing.T) {
 	m, _, _ := modTest(t)
 	ctx := context.Background()
 	f := newFake()
-	m.SetDNS64(f.hooks())
+	h, batches := f.hooks(), 0
+	h.Batch = func(ctx context.Context, fn func(context.Context) error) error { batches++; return fn(ctx) }
+	m.SetDNS64(h)
 	if _, err := m.ParseImport(ctx, []byte("foo,bar\n1,2\n")); !errors.Is(err, ErrImport) {
 		t.Fatalf("no columns: %v", err)
 	}
@@ -52,8 +54,8 @@ func TestImport(t *testing.T) {
 		t.Fatalf("errors: %v / %v", rows[3].Err, rows[4].Err)
 	}
 	n, failed := m.ApplyImport(ctx, rows, "t", func(e error) string { return e.Error() })
-	if n != 3 || len(failed) != 0 {
-		t.Fatalf("apply addresses: %d %+v", n, failed)
+	if n != 3 || len(failed) != 0 || batches != 2 { // je Import ein Stapel in DNS64
+		t.Fatalf("apply addresses: %d %+v batches=%d", n, failed, batches)
 	}
 	nas, _ := m.AddressByIP(ctx, "192.168.1.10")
 	if nas == nil || f.res[nas.UID].MAC != "00:11:32:aa:10:10" || f.recs[nas.UID][0].Name != "nas.home.lan" {

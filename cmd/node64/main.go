@@ -396,6 +396,23 @@ func run() error {
 	}
 	// Monitor64 ueber den Cluster - vor dem Start: sonst laeuft es die ersten Runden "ohne Cluster" und meldet doppelt
 	m64cluster.Register(peerMgr, m64Module, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") })
+	// IPAM64 ueber den Cluster - vor dem Start (Hooks und Quellen werden nicht nachtraeglich gesetzt); Mitglieder als Quelle
+	ipamcluster.Register(peerMgr, ipamModule)
+	ipamModule.SetSource(ipam64.SrcCluster, func(ctx context.Context) []ipam64.Sighting {
+		list, err := peerMgr.Members(ctx)
+		if err != nil {
+			return nil
+		}
+		out := make([]ipam64.Sighting, 0, len(list))
+		for _, x := range list {
+			s := ipam64.Sighting{Addr: x.URL, Name: x.Name, NoteKey: "ipam64.note.cluster"}
+			if x.Online() {
+				s.Seen = x.LastSeen
+			}
+			out = append(out, s)
+		}
+		return out
+	})
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
 	hcModule.Store().OnAnyChange = peerMgr.LogChange
@@ -439,7 +456,6 @@ func run() error {
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
 	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
 	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster
-	ipamcluster.Register(peerMgr, ipamModule)                                                                                  // IPAM64 ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

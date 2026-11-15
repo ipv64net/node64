@@ -38,7 +38,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.5.0"
+	version = "0.5.1"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -64,6 +64,7 @@ const (
 	SrcMonitor64    = "monitor64"
 	SrcProxy        = "proxy"
 	SrcScan         = "scan"
+	SrcCluster      = "cluster"
 )
 
 // Arten eines Eintrags.
@@ -76,12 +77,13 @@ const (
 
 // Sighting ist ein Hinweis einer Quelle auf eine belegte Adresse.
 type Sighting struct {
-	Addr string    // IP, Name, "host:port" oder URL; Namen werden ueber bekannte Namen einer IP zugeordnet
-	MAC  string    // der Adresse zugewiesene MAC (DHCP), leer = unbekannt
-	Name string    // Name des Geraets bzw. des Eintrags in der Quelle
-	Note string    // kurzer Zusatz unter dem Namen
-	Kind string    // KindDHCP, KindFixed oder leer
-	Seen time.Time // zuletzt sicher erreichbar (Null = unbekannt)
+	Addr    string    // IP, Name, "host:port" oder URL; Namen werden ueber bekannte Namen einer IP zugeordnet
+	MAC     string    // der Adresse zugewiesene MAC (DHCP), leer = unbekannt
+	Name    string    // Name des Geraets bzw. des Eintrags in der Quelle
+	Note    string    // kurzer Zusatz unter dem Namen
+	NoteKey string    // statt Note: i18n-Schluessel (z. B. Cluster-Mitglied)
+	Kind    string    // KindDHCP, KindFixed oder leer
+	Seen    time.Time // zuletzt sicher erreichbar (Null = unbekannt)
 }
 
 // NetHint ist ein Netz aus einer Quelle (DHCP-Netze aus DNS64).

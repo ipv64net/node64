@@ -423,6 +423,9 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 			}
 			a.source(src.key)
 			a.name(s.Name, s.Note)
+			if s.NoteKey != "" && a.e.Note == "" && a.e.NoteKey == "" {
+				a.e.NoteKey = s.NoteKey
+			}
 			a.seen(s.Seen)
 			a.assign(s.MAC)
 			if s.Kind == KindFixed || (s.Kind == KindDHCP && a.e.Kind == "") {
@@ -582,4 +585,14 @@ func poolSize(a, b netip.Addr) int {
 		return 0
 	}
 	return int(u32(b)-u32(a)) + 1
+}
+
+// netView liefert nur die Praefixe ohne Belegung (fuer den Schreibweg nach DNS64 und den Abgleich): so wird nicht bei
+// jeder gespeicherten Adresse alles neu zusammengefuehrt (Import Tausender Zeilen).
+func (m *Module) netView(ctx context.Context) (*Snapshot, error) {
+	nets, err := m.nets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Snapshot{Nets: nets, entries: map[netip.Prefix][]Entry{}, At: m.now()}, nil
 }

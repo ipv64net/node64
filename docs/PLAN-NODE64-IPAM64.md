@@ -357,3 +357,43 @@ IPAM64 0.5.0, im selben Zweig; Import und Metriken auf der Testnode geprüft:
 - Doku: `docs/IPAM64.md`, Abschnitt im README. Die Doku auf node64.de zieht die Sitzung „Node64 Webseite“ nach,
   sobald der Zweig in `main` ist (Hash dann schicken).
 - Offen: I7 Praxistest (echtes Netz, DHCP-Failover, Präfixwechsel, 20.000 Adressen, „Nur lesen“, beide Designs).
+
+## Stand I7 – Praxistest im Labor (2026-11-15)
+
+Abgeschottetes Testnetz auf der agentbox: zwei Nodes (labA, labB) im Cluster an einem macvlan auf einer Dummy-
+Schnittstelle (10.77.0.0/24, 2001:db8:77:10::/64), dazu DHCP-Clients und feste Geräte als Container. Nichts davon
+hängt am echten Netz.
+
+Bestanden:
+
+- DHCP vergibt die Reservierung aus IPAM64, der Pool überspringt die Ausnahme; A, AAAA und PTR (v4/v6) auf beiden
+  Nodes gleich. Ausfall von labA: labB übernimmt nach etwa 4 Minuten, vergibt die Reservierung, kennt Leases und
+  Ausnahme aus dem Abgleich.
+- Scan mit Herstellern, Hinweis „fest eingestellt im DHCP-Adressbereich“.
+- IPv6-Präfixwechsel: Präfixe, Adresse, AAAA und PTR ziehen nach, labB bekommt den Wechsel über den Cluster und
+  bleibt (nach dem Anker-Fix) stabil; Rückwechsel funktioniert ebenso.
+- 40.000 Adressen (vier Importe à 10.000 in zwei /16): Import mit DNS-Eintrag 34 s, ohne 35 s; Übersicht 2–3 ms,
+  Präfix-Seite 20–35 ms (272 KB, seitenweise), API Adressen 2 ms, Export 3 MB in 17 ms, Metriken 4 ms; labB hat
+  sofort alle Adressen; Speicher je Node 290–390 MB.
+- Rolle „Nur lesen“: alle Seiten lesbar, alle 15 ändernden Wege (Oberfläche und API) liefern 403, Formulare grau.
+- Beide Designs (neu, klassisch): alle Seiten von IPAM64 und die DHCP-Seite ohne Fehler.
+
+Behoben (IPAM64 0.5.1):
+
+- Ping-Pong beim IPv6-Wechsel im Cluster: Node mit Adresse im alten Präfix nummerierte zurück. Jetzt Anker je Node
+  (`ipam64.dyn_anchor`): umnummeriert wird nur, wenn die Node selbst im aktuellen Wert lag.
+- Import quadratisch langsam (10.000 Adressen mit DNS: 362 s, Browser brach nach 60 s ab): DNS64 baute nach jedem
+  Eintrag Tabelle und Cluster-Stand neu. Jetzt Stapel `IPAMBatch` (Import, Assistent, Umnummerieren, Abgleich) und
+  längeres Zeitlimit für die Antwort des Imports.
+- Reserve-Node sah keine Leases (DHCP-Server aus): Leases aus der Datenbank.
+- Nodes des Clusters galten als unbekannte Geräte: eigene Quelle „Cluster“.
+- Cluster-Anmeldung von IPAM64 lief nach dem Start der Module (Wettlauf): vorgezogen.
+- Import baute je Zeile die ganze Übersicht: nur noch die Netze (`netView`).
+
+Bekannte Grenzen:
+
+- Doppelte IP über die Nachbartabelle nur erkennbar, wenn beide Geräte abwechselnd antworten (ARP-Tabelle hält eine
+  MAC); sicher ginge es nur mit eigener ARP-Probe, die alle Antworten sammelt (später).
+- Ein echter Präfixwechsel beim Provider ist nicht getestet (im Labor von Hand nachgestellt).
+- Die Seite „Lokaler DNS“ von DNS64 listet alle Einträge ohne Seiten: bei 20.000 Einträgen 15 MB, 0,4 s – für
+  große Umgebungen in DNS64 seitenweise anzeigen (eigene Aufgabe).

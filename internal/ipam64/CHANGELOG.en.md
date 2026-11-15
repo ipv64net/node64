@@ -1,5 +1,15 @@
 # IPAM64 – Changes
 
+## 0.5.1 – unreleased
+
+Fixed (practical lab test):
+
+- IPv6 from the provider in a cluster: a node that receives the prefix change via the cluster and still has an address in the old prefix no longer renumbers back. Renumbering only happens if the node itself was inside the previous prefix.
+- Cluster nodes show up as known devices (source "Cluster") instead of unknown.
+- The DHCP standby node sees the leases (from the cluster sync) even while its DHCP server is not serving.
+- Large CSV imports about ten times faster (10,000 addresses with DNS record in just over 30 s instead of 6 minutes): DNS64 rebuilds DHCP and local records only once at the end for import, setup assistant, IPv6 change and reconciliation, and the browser waits for the result instead of timing out.
+- IPAM64 cluster sync right from node start.
+
 ## 0.5.0 – unreleased
 
 New:

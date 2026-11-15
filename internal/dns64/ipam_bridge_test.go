@@ -7,6 +7,7 @@ import (
 	"errors"
 	"html/template"
 	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -174,6 +175,25 @@ func TestIPAMBridgeRecords(t *testing.T) {
 	}
 	if err := m.DeleteRecord(ctx, pi.ID); err != nil {
 		t.Fatalf("delete after release: %v", err)
+	}
+	// Stapel: Eintraege stehen sofort in der Tabelle, der DNS antwortet erst nach dem Stapel (ein Neuaufbau)
+	err := m.IPAMBatch(ctx, func(ctx context.Context) error {
+		for i := 1; i <= 50; i++ {
+			ip := netip.AddrFrom4([4]byte{192, 168, 60, byte(i)})
+			if err := m.PutIPAMRecords(ctx, "b"+ip.String(), "h"+strconv.Itoa(i)+".home.lan", []netip.Addr{ip}, true); err != nil {
+				return err
+			}
+		}
+		if _, ok := m.Lookup("h1.home.lan", dns.TypeA); ok {
+			t.Error("answered inside batch")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rrs, ok := m.Lookup("h50.home.lan", dns.TypeA); !ok || len(rrs) != 1 {
+		t.Fatalf("after batch: %v", rrs)
 	}
 }
 

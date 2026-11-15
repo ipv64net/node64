@@ -1,5 +1,15 @@
 # IPAM64 – Änderungen
 
+## 0.5.1 – unveröffentlicht
+
+Behoben (Praxistest im Labor):
+
+- IPv6 vom Provider im Cluster: Eine Node, die den Präfixwechsel über den Cluster bekommt und noch eine Adresse im alten Präfix hat, nummeriert nicht mehr zurück. Umnummeriert wird nur, wenn die Node selbst im bisherigen Präfix lag.
+- Nodes des Clusters erscheinen als bekannte Geräte (Quelle „Cluster“) statt als unbekannt.
+- Die Reserve-Node des DHCP sieht die Leases (aus dem Cluster-Abgleich), auch solange ihr DHCP-Server nicht vergibt.
+- Großer CSV-Import rund zehnmal schneller (10.000 Adressen mit DNS-Eintrag in gut 30 s statt 6 Minuten): DNS64 baut DHCP und lokale Einträge bei Import, Assistent, IPv6-Wechsel und Abgleich nur einmal am Ende neu auf, und der Browser wartet auf das Ergebnis, statt abzubrechen.
+- Cluster-Abgleich von IPAM64 gleich ab dem Start der Node.
+
 ## 0.5.0 – unveröffentlicht
 
 Neu:

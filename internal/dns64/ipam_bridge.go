@@ -76,11 +76,16 @@ func (m *Module) lockedRow(ctx context.Context, table string, id int64) error {
 	return nil
 }
 
-// DHCPLeases liefert die Vergaben des laufenden DHCP-Servers (nil = DHCP aus). Aus dem Entwurf von UlrichSchwarz.
-func (m *Module) DHCPLeases() []dhcp.Lease {
+// DHCPLeases liefert die Vergaben des laufenden DHCP-Servers (aus dem Entwurf von UlrichSchwarz); laeuft hier keiner
+// (Reserve-Node, andere Node vergibt, Probelauf aus), die aktiven Vergaben aus node64.db - sie kommen ueber den Cluster.
+func (m *Module) DHCPLeases(ctx context.Context) []dhcp.Lease {
 	s := m.dhcpSrv.Load()
 	if s == nil {
-		return nil
+		list, err := m.dhcpActiveLeases(ctx, time.Now())
+		if err != nil {
+			return nil
+		}
+		return list
 	}
 	var out []dhcp.Lease
 	for _, sv := range s.Snapshot().Scopes {
@@ -180,10 +185,47 @@ func (m *Module) dhcpScopeFor(ctx context.Context, ip netip.Addr) (DHCPScope, er
 	return best, nil
 }
 
-// ipamDHCPChanged startet den DHCP-Server neu und meldet Netze und feste Adressen an den Cluster.
+// ipamDHCPChanged startet den DHCP-Server neu und meldet Netze und feste Adressen an den Cluster (im Stapel erst am
+// Ende, siehe IPAMBatch).
 func (m *Module) ipamDHCPChanged(ctx context.Context) {
+	if b, ok := ctx.Value(ipamBatchKey{}).(*ipamBatch); ok {
+		b.dhcp = true
+		return
+	}
 	m.dhcpApply(ctx)
 	m.dhcpSynced(ctx)
+}
+
+// ipamRecordsChanged baut die Momentaufnahme der Eintraege neu und meldet sie an den Cluster (im Stapel erst am Ende).
+func (m *Module) ipamRecordsChanged(ctx context.Context) error {
+	if b, ok := ctx.Value(ipamBatchKey{}).(*ipamBatch); ok {
+		b.records = true
+		return nil
+	}
+	return m.loadRecords(ctx)
+}
+
+type ipamBatchKey struct{}
+
+type ipamBatch struct{ records, dhcp bool }
+
+// IPAMBatch fuehrt fn als Stapel aus: DHCP-Server und Momentaufnahme der Eintraege werden einmal am Ende neu aufgebaut
+// und an den Cluster gemeldet statt je Eintrag (CSV-Import, Assistent, Umnummerieren, Abgleich mit tausenden
+// Adressen). Die Tabellen sind sofort geschrieben; nur DHCP und DNS uebernehmen sie erst am Ende.
+func (m *Module) IPAMBatch(ctx context.Context, fn func(context.Context) error) error {
+	if _, ok := ctx.Value(ipamBatchKey{}).(*ipamBatch); ok { // geschachtelt: aeusserer Stapel baut neu auf
+		return fn(ctx)
+	}
+	b := &ipamBatch{}
+	err := fn(context.WithValue(ctx, ipamBatchKey{}, b))
+	ctx = context.WithoutCancel(ctx) // neu aufbauen auch nach Abbruch, die Tabellen sind ja geschrieben
+	if b.dhcp {
+		m.ipamDHCPChanged(ctx)
+	}
+	if b.records {
+		err = errors.Join(err, m.loadRecords(ctx))
+	}
+	return err
 }
 
 // PutIPAMReservation legt die DHCP-Reservierung einer Adresse aus IPAM64 an bzw. ersetzt sie (MAC oder IP neu). Das
@@ -415,7 +457,7 @@ func (m *Module) PutIPAMRecords(ctx context.Context, ref, name string, addrs []n
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return m.loadRecords(ctx)
+	return m.ipamRecordsChanged(ctx)
 }
 
 // DeleteIPAMRecords loescht die A/AAAA-Eintraege einer Adresse aus IPAM64 (keine = kein Fehler).
@@ -425,7 +467,7 @@ func (m *Module) DeleteIPAMRecords(ctx context.Context, ref string) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
-		return m.loadRecords(ctx)
+		return m.ipamRecordsChanged(ctx)
 	}
 	return nil
 }
@@ -453,7 +495,7 @@ func (m *Module) ReleaseIPAM(ctx context.Context, ref string) (int64, error) {
 		m.ipamDHCPChanged(ctx)
 	}
 	if total > dhcpN {
-		return total, m.loadRecords(ctx)
+		return total, m.ipamRecordsChanged(ctx)
 	}
 	return total, nil
 }

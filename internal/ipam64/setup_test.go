@@ -146,6 +146,31 @@ func TestDynamicPrefix(t *testing.T) {
 	if st := m.StaleTargets(ctx, "2001:db8:4f2a:e700::/56"); len(st) != 1 {
 		t.Fatalf("stale: %v", st)
 	}
+	// zweite Node im Cluster: lag zuletzt im alten Wert, bekommt den Wechsel ueber den Cluster und hat noch eine
+	// Adresse im alten Praefix - sie nummeriert nicht zurueck (Anker)
+	if err := m.core.SetSetting(ctx, setDynAnchor, `{"`+root.UID+`":"2001:db8:4f2a:e700::/56"}`); err != nil {
+		t.Fatal(err)
+	}
+	fn.locals = []netip.Prefix{netip.MustParsePrefix("2001:db8:4f2a:e710::3/64")}
+	if ch, err := m.CheckDynamic(ctx); err != nil || len(ch) != 0 {
+		t.Fatalf("ping-pong: %+v %v", ch, err)
+	}
+	// ohne Anker (Node lag nie in der Wurzel) ebenso nicht
+	if err := m.core.SetSetting(ctx, setDynAnchor, "{}"); err != nil {
+		t.Fatal(err)
+	}
+	if ch, _ := m.CheckDynamic(ctx); len(ch) != 0 {
+		t.Fatalf("no anchor: %+v", ch)
+	}
+	// liegt die Node wieder im aktuellen Wert, setzt sie den Anker; ein echter Wechsel nummeriert dann um
+	fn.locals = []netip.Prefix{netip.MustParsePrefix("2001:db8:4f2a:c110::2/64")}
+	if ch, _ := m.CheckDynamic(ctx); len(ch) != 0 {
+		t.Fatalf("anchor set: %+v", ch)
+	}
+	fn.locals = []netip.Prefix{netip.MustParsePrefix("2001:db8:4f2a:e710::2/64")}
+	if ch, _ := m.CheckDynamic(ctx); len(ch) != 1 || ch[0].To != "2001:db8:4f2a:e700::/56" {
+		t.Fatalf("change back: %+v", ch)
+	}
 	if got := replaceTop(netip.MustParseAddr("2001:db8:4f2a:e7ff::1"), netip.MustParsePrefix("2001:db8:1:200::/55")).String(); got != "2001:db8:1:3ff::1" {
 		t.Fatalf("replaceTop: %s", got)
 	}

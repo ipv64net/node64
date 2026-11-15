@@ -17,11 +17,17 @@ import (
 // und Adressen bekommen den neuen oberen Teil, die AAAA-Eintraege in DNS64 folgen (gleicher Bezug). Der letzte Wechsel
 // steht in der Uebersicht, samt Zielen anderer Module (PROXY64, Monitor64, Healthchecks), die noch auf das alte Praefix
 // zeigen - die passt IPAM64 nicht selbst an (Hinweis, Empfehlung: Ziele per DNS-Name).
+// Anker: Jede Node merkt sich (lokal, nicht im Cluster), in welchem Wert einer Wurzel sie zuletzt lag. Umnummeriert
+// wird nur, wenn die Node selbst im aktuellen Wert lag. Kam der Wechsel ueber den Cluster und hat die Node noch eine
+// Adresse im alten Praefix, nummeriert sie so nicht zurueck (kein Hin und Her zwischen den Nodes).
 
 // DynAuto: Praefix wechselt mit dem Provider, Quelle sind die Adressen der Node.
 const DynAuto = "auto"
 
-const setDynLast = "ipam64.dyn_last" // letzter Wechsel (JSON DynChange)
+const (
+	setDynLast   = "ipam64.dyn_last"   // letzter Wechsel (JSON DynChange)
+	setDynAnchor = "ipam64.dyn_anchor" // je Node: Wurzel-UID -> Wert, in dem die Node zuletzt lag (JSON)
+)
 
 // ErrDyn: dynamisch geht nur fuer globale IPv6-Praefixe.
 var ErrDyn = errors.New("ipam64: dynamic only for global ipv6 prefixes")
@@ -119,6 +125,21 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 			locals = append(locals, a)
 		}
 	}
+	anchor := map[string]string{}
+	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setDynAnchor, "{}")), &anchor)
+	dirty := false
+	setAnchor := func(uid, v string) {
+		if anchor[uid] != v {
+			anchor[uid], dirty = v, true
+		}
+	}
+	defer func() {
+		if dirty {
+			if b, err := json.Marshal(anchor); err == nil {
+				_ = m.core.SetSetting(ctx, setDynAnchor, string(b))
+			}
+		}
+	}()
 	var out []DynChange
 	for _, r := range all {
 		root, err := netip.ParsePrefix(r.Prefix)
@@ -129,7 +150,10 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 		for _, a := range locals {
 			in = in || root.Contains(a)
 		}
-		if in || len(locals) == 0 {
+		if in {
+			setAnchor(r.UID, root.String())
+		}
+		if in || len(locals) == 0 || anchor[r.UID] != root.String() {
 			continue
 		}
 		var children []netip.Prefix // Kinder bis /64: legen fest, wo die Node darin liegen muss
@@ -165,6 +189,7 @@ func (m *Module) CheckDynamic(ctx context.Context) ([]DynChange, error) {
 			if err != nil {
 				return out, err
 			}
+			setAnchor(r.UID, nr.String())
 			out = append(out, c)
 		}
 	}
@@ -226,12 +251,15 @@ func (m *Module) renumber(ctx context.Context, oldRoot, newRoot netip.Prefix) (D
 		moved = append(moved, a)
 		c.Addresses++
 	}
-	if snap, err := m.Snapshot(ctx); err == nil {
-		for _, a := range moved {
-			if err := m.write(ctx, snap, a); err != nil {
-				m.log.Warn("ipam64: dynamic prefix dns64", "address", a.Address, "err", err)
+	if snap, err := m.netView(ctx); err == nil {
+		_ = m.batch(ctx, func(ctx context.Context) error {
+			for _, a := range moved {
+				if err := m.write(ctx, snap, a); err != nil {
+					m.log.Warn("ipam64: dynamic prefix dns64", "address", a.Address, "err", err)
+				}
 			}
-		}
+			return nil
+		})
 	}
 	if b, err := json.Marshal(c); err == nil {
 		_ = m.core.SetSetting(ctx, setDynLast, string(b))

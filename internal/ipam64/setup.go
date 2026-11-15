@@ -208,15 +208,18 @@ func (m *Module) ApplySetup(ctx context.Context, keys []string, actor string, er
 			return res, err
 		}
 	}
-	for _, sa := range plan.Addresses {
-		if !slices.Contains(keys, sa.Key) {
-			continue
+	_ = m.batch(ctx, func(ctx context.Context) error {
+		for _, sa := range plan.Addresses {
+			if !slices.Contains(keys, sa.Key) {
+				continue
+			}
+			if _, err := m.ApplyAddress(ctx, sa.Address, actor); err != nil {
+				res.Failed = append(res.Failed, SetupSkip{What: sa.Address.Address, Reason: errText(err)})
+				continue
+			}
+			res.Addresses++
 		}
-		if _, err := m.ApplyAddress(ctx, sa.Address, actor); err != nil {
-			res.Failed = append(res.Failed, SetupSkip{What: sa.Address.Address, Reason: errText(err)})
-			continue
-		}
-		res.Addresses++
-	}
+		return nil
+	})
 	return res, nil
 }

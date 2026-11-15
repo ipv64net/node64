@@ -225,15 +225,18 @@ func (m *Module) ApplyImport(ctx context.Context, rows []ImportRow, actor string
 		}
 		n++
 	}
-	for _, r := range rows {
-		if r.Err != nil || r.Kind != "address" {
-			continue
+	_ = m.batch(ctx, func(ctx context.Context) error {
+		for _, r := range rows {
+			if r.Err != nil || r.Kind != "address" {
+				continue
+			}
+			if _, err := m.ApplyAddress(ctx, r.Address, actor); err != nil {
+				failed = append(failed, SetupSkip{What: r.Key, Reason: errText(err)})
+				continue
+			}
+			n++
 		}
-		if _, err := m.ApplyAddress(ctx, r.Address, actor); err != nil {
-			failed = append(failed, SetupSkip{What: r.Key, Reason: errText(err)})
-			continue
-		}
-		n++
-	}
+		return nil
+	})
 	return n, failed
 }

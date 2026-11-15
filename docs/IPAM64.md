@@ -61,6 +61,7 @@ Healthchecks, die noch auf das alte Präfix zeigen, nennt die Übersicht – bes
 - **CSV-Export** (Übersicht oder je Präfix) und **CSV-Import** mit Vorschau. Spalten Adressen: `ip, name, mac, status,
   role, description, tags, dns, dns_zone, ptr, dhcp`; Präfixe (ohne `ip`): `prefix, name, status, vlan, role,
   description, tags, dns_zone, scan, dynamic`. Komma oder Semikolon; der eigene Export lässt sich wieder einlesen.
+  Höchstens 10.000 Zeilen (2 MB) je Datei; 10.000 Adressen mit DNS-Eintrag dauern etwa eine halbe Minute.
 - **API** `/api/ipam64/…`: Präfixe, Adressbereiche, Adressen (seitenweise), freie Adressen und Vergabe am Stück
   (`POST /api/ipam64/available`), Konflikte, Scan. Beschreibung unter *API* in der Node.
 - **Prometheus** `/api/metrics`: `node64_ipam64_*` (Belegung und Auslastung je Präfix, Konflikte, unbekannte Geräte).

@@ -789,6 +789,8 @@ func (m *Module) postImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.PostFormValue("action") == "apply" {
+		// tausende Zeilen brauchen laenger als das Zeitlimit des Servers fuer die Antwort
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Minute))
 		n, failed := m.ApplyImport(r.Context(), rows, m.g.Actor(r), func(e error) string { return m.errText(r, e) })
 		m.g.Audit(r, "ipam64.import", Name, strconv.Itoa(n))
 		kind, msg := "success", m.g.T(r, "ipam64.flash.imported", "n", n)
@@ -818,7 +820,7 @@ func (m *Module) postImport(w http.ResponseWriter, r *http.Request) {
 
 // effectText beschreibt die Wirkung einer Adresse in DNS64 fuer das Audit-Log.
 func (m *Module) effectText(ctx context.Context, a Address) string {
-	snap, err := m.Snapshot(ctx)
+	snap, err := m.netView(ctx)
 	if err != nil {
 		return a.Name
 	}

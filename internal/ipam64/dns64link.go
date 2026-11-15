@@ -61,6 +61,17 @@ type DNS64 struct {
 	Entries           func(ctx context.Context) (Owned, error)
 	Unowned           func(ctx context.Context) (Owned, error) // Eintraege von Hand (Assistent; Ref leer)
 	ErrKey            func(err error) string                   // i18n-Schluessel eines Fehlers aus DNS64 ("" = keiner)
+	// Batch fuehrt fn als Stapel aus: DNS64 baut DHCP und Eintraege einmal am Ende neu auf (nil = je Eintrag)
+	Batch func(ctx context.Context, fn func(context.Context) error) error
+}
+
+// batch fuehrt fn als Stapel in DNS64 aus (Import, Assistent, Umnummerieren, Abgleich: tausende Adressen ohne
+// Neuaufbau je Adresse).
+func (m *Module) batch(ctx context.Context, fn func(context.Context) error) error {
+	if m.dns.Batch == nil {
+		return fn(ctx)
+	}
+	return m.dns.Batch(ctx, fn)
 }
 
 // SetDNS64 haengt DNS64 an (vor dem Start).
@@ -137,7 +148,7 @@ func (w want) effects() []Effect {
 
 // Effects liefert die Wirkung einer Adresse in DNS64 mit Abgleich gegen den Ist-Stand (State: ok | missing | off).
 func (m *Module) Effects(ctx context.Context, a Address) ([]Effect, bool, error) {
-	snap, err := m.Snapshot(ctx)
+	snap, err := m.netView(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -281,7 +292,7 @@ func (m *Module) ApplyAddress(ctx context.Context, a Address, actor string) (Add
 	if err != nil {
 		return saved, err
 	}
-	snap, err := m.Snapshot(ctx)
+	snap, err := m.netView(ctx)
 	if err == nil {
 		err = m.write(ctx, snap, saved)
 	}
@@ -302,7 +313,7 @@ func (m *Module) ApplyAddress(ctx context.Context, a Address, actor string) (Add
 		m.log.Warn("ipam64: rollback", "err", werr)
 	}
 	m.changed(ctx, ClusterItemAddresses, old.UID, false)
-	if snap, serr := m.Snapshot(ctx); serr == nil {
+	if snap, serr := m.netView(ctx); serr == nil {
 		if werr := m.write(ctx, snap, *old); werr != nil {
 			m.log.Warn("ipam64: rollback dns64", "err", werr)
 		}
@@ -337,28 +348,31 @@ func (m *Module) reconcile(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	snap, err := m.Snapshot(ctx)
+	snap, err := m.netView(ctx)
 	if err != nil {
 		return 0, err
 	}
 	now := m.now()
 	fixed := 0
 	known := map[string]bool{}
-	for _, a := range list {
-		known[a.UID] = true
-		if now.Sub(a.Updated) < settleFor {
-			continue
+	_ = m.batch(ctx, func(ctx context.Context) error {
+		for _, a := range list {
+			known[a.UID] = true
+			if now.Sub(a.Updated) < settleFor {
+				continue
+			}
+			w := desired(snap, a)
+			if w.zoneErr || ownedFor(own, a.UID).matches(w) {
+				continue
+			}
+			if err := m.write(ctx, snap, a); err != nil {
+				m.log.Warn("ipam64: reconcile", "address", a.Address, "err", err)
+				continue
+			}
+			fixed++
 		}
-		w := desired(snap, a)
-		if w.zoneErr || ownedFor(own, a.UID).matches(w) {
-			continue
-		}
-		if err := m.write(ctx, snap, a); err != nil {
-			m.log.Warn("ipam64: reconcile", "address", a.Address, "err", err)
-			continue
-		}
-		fixed++
-	}
+		return nil
+	})
 	var orphans []string
 	for _, r := range own.Reservations {
 		orphans = append(orphans, r.Ref)

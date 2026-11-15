@@ -5811,6 +5811,7 @@
       "conflict": "conflict"
     },
     "src": {
+      "cluster": "Cluster",
       "ipam": "IPAM64",
       "node": "this node",
       "dhcp": "DHCP",
@@ -5861,6 +5862,7 @@
       "anycast": "Anycast"
     },
     "note": {
+      "cluster": "cluster member",
       "conflict_dup": "Conflict – two devices",
       "conflict_mac": "Conflict – foreign MAC",
       "conflict_lease": "Conflict – lease versus fixed address",
