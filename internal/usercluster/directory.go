@@ -65,21 +65,9 @@ func (c *Cluster) applyDirectory(ctx context.Context, data json.RawMessage, dele
 	if in.BindPassword != "" && c.box != nil {
 		in.LDAP.BindPasswordEnc = c.box.Encrypt(in.BindPassword)
 	}
-	b, err := json.Marshal(in.LDAP)
-	if err != nil {
+	if err := authcfg.ApplyDirectory(ctx, c.st, in.LDAP, in.TwoFARequired); err != nil {
 		return err
 	}
-	if err := c.st.SetSetting(ctx, authcfg.SetLDAP, string(b)); err != nil {
-		return err
-	}
-	v := "0"
-	if in.TwoFARequired {
-		v = "1"
-	}
-	if err := c.st.SetSetting(ctx, authcfg.Set2FARequired, v); err != nil {
-		return err
-	}
-	c.st.LoginChanged(ctx, ItemDirectory, authcfg.DirectoryID, false)
 	c.audit(ctx, "auth.cluster.directory", "", "ldap="+strconv.FormatBool(in.LDAP.Enabled)+" 2fa_required="+strconv.FormatBool(in.TwoFARequired))
 	return nil
 }

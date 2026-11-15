@@ -16,6 +16,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Monitor64: Proxmox-Cluster – migrierte VMs und Container gelten nicht mehr als verschwunden; sie ziehen samt Einstellungen und Verlauf zum Host der neuen Node um bzw. werden weitergeführt, wenn die Node nicht eingetragen ist. Bei HA-Ressourcen gilt der Soll-Zustand aus der HA-Konfiguration (#165).
 - DynDNS: IPv6 „nur Präfix“ und „Präfix + Interface-ID“ können das Präfix von einem bestimmten Interface nehmen statt von der von außen gesehenen IPv6, z. B. bei zwei Anschlüssen (#154).
 - Benutzerverwaltung: „Nur lesen“ ändert mit der eigenen Zeitzone nicht mehr die Zeitzone der Node (die setzen nur Administratoren) und sieht bei Sync-Konflikten mit ipv64.net nur noch Name, Art, Zeit und Grund, nicht mehr beide Fassungen (darin stehen Check-Parameter und Einstellungen der Kanäle; API: `local`/`server` sind `null`).
+- Benutzerverwaltung: Zwei gleichzeitige Änderungen (auch über den Cluster) können nicht mehr beide den letzten aktiven lokalen Administrator sperren, herabstufen oder löschen.
+- Cluster: Ein Code der Authenticator-App gilt im Benutzer-Abgleich nur noch einmal im ganzen Cluster. Die Wahl der eigenen Benutzerversion, deren 2FA-Geheimnis sich auf der Node nicht entschlüsseln lässt, wird abgelehnt, statt die 2FA auf allen Nodes unbrauchbar zu machen.
 
 ## 1.7.0 – 2026-11-14
 

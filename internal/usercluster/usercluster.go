@@ -162,6 +162,11 @@ type clusterUser struct {
 	GroupUIDs    []string `json:"group_uids,omitempty"`
 	ExtGroupUIDs []string `json:"ext_group_uids,omitempty"`
 	MustChange   bool     `json:"must_change,omitempty"`
+	// zuletzt geprueft (Gruppen aus LDAP/SSO) bzw. verbrauchter TOTP-Zeitschritt; aeltere Nodes senden sie nicht. Es
+	// gilt der neuere Zeitpunkt samt seinen ext_group_uids bzw. der hoechste Schritt (write), beide zaehlen nicht zum
+	// Inhalt (same).
+	ExtCheckedAt string `json:"ext_checked_at,omitempty"`
+	TOTPStep     int64  `json:"totp_last_step,omitempty"`
 }
 
 // legacy: Stand einer aelteren Node ohne Benutzerverwaltung (sendet keine Rolle).
@@ -188,8 +193,8 @@ func (u clusterUser) adminOf(l clusterUser) clusterUser {
 
 // adminSame: Rolle, Sperre und Gruppen gleich (sonst enden die Sitzungen).
 func (u clusterUser) adminSame(o clusterUser) bool {
-	return u.Role == o.Role && u.Disabled == o.Disabled && slices.Equal(normList(u.GroupUIDs), normList(o.GroupUIDs)) &&
-		slices.Equal(normList(u.ExtGroupUIDs), normList(o.ExtGroupUIDs))
+	return u.Role == o.Role && u.Disabled == o.Disabled && slices.Equal(store.NormList(u.GroupUIDs), store.NormList(o.GroupUIDs)) &&
+		slices.Equal(store.NormList(u.ExtGroupUIDs), store.NormList(o.ExtGroupUIDs))
 }
 
 // same: exakt gleicher Benutzer (ohne Kennung, Anlegezeit und Wahl). Beide Seiten mit norm.
@@ -227,26 +232,15 @@ func splitList(s string) []string {
 	return out
 }
 
-// normList: sortiert, ohne Leere und Doppelte (wie store.joinList).
-func normList(l []string) []string {
-	out := []string{}
-	for _, x := range l {
-		if x = strings.TrimSpace(x); x != "" && !slices.Contains(out, x) {
-			out = append(out, x)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
 // load liefert einen Benutzer (where mit einem Parameter) samt SSO-Konten; nil = gibt es nicht.
 func (c *Cluster) load(ctx context.Context, where string, arg any) (*localUser, error) {
 	var l localUser
 	var repl, groups, ext string
 	err := c.st.Reader().QueryRowContext(ctx, `SELECT id, uid, username, password_hash, totp_secret, totp_recovery, lang, timezone, created_at,
-		cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change FROM users WHERE `+where, arg).Scan(
+		cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at, totp_last_step
+		FROM users WHERE `+where, arg).Scan(
 		&l.id, &l.uid, &l.u.Username, &l.u.Password, &l.u.TOTP, &l.u.Recovery, &l.u.Lang, &l.u.Timezone, &l.u.CreatedAt, &repl, &l.u.ChosenAt,
-		&l.u.Role, &l.u.Disabled, &l.u.Source, &l.u.Email, &groups, &ext, &l.u.MustChange)
+		&l.u.Role, &l.u.Disabled, &l.u.Source, &l.u.Email, &groups, &ext, &l.u.MustChange, &l.u.ExtCheckedAt, &l.u.TOTPStep)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -254,7 +248,7 @@ func (c *Cluster) load(ctx context.Context, where string, arg any) (*localUser, 
 		return nil, err
 	}
 	l.u.Replaces = splitList(repl)
-	l.u.GroupUIDs, l.u.ExtGroupUIDs = normList(splitList(groups)), normList(splitList(ext))
+	l.u.GroupUIDs, l.u.ExtGroupUIDs = store.NormList(splitList(groups)), store.NormList(splitList(ext))
 	if !store.ValidRole(l.u.Role) {
 		l.u.Role = store.RoleRead
 	}
@@ -459,10 +453,7 @@ func (c *Cluster) applyUser(ctx context.Context, uid string, data json.RawMessag
 			c.audit(ctx, "user.cluster.keep_last", cur.u.Username, "")
 			return ErrLastUser
 		}
-		if err := c.keepLastAdmin(ctx, cur, nil, "delete"); err != nil {
-			return err
-		}
-		if _, err := c.st.DeleteUser(ctx, cur.id); err != nil {
+		if err := c.deleteUser(ctx, cur); err != nil {
 			return err
 		}
 		c.audit(ctx, "user.cluster.delete", cur.u.Username, "")
@@ -496,10 +487,7 @@ func (c *Cluster) applyUser(ctx context.Context, uid string, data json.RawMessag
 			if c.userCount(ctx) <= 1 {
 				return ErrLastUser
 			}
-			if err := c.keepLastAdmin(ctx, cur, nil, "delete"); err != nil {
-				return err
-			}
-			if _, err := c.st.DeleteUser(ctx, cur.id); err != nil {
+			if err := c.deleteUser(ctx, cur); err != nil {
 				return err
 			}
 		}
@@ -555,81 +543,51 @@ func (c *Cluster) check(ctx context.Context, in *clusterUser) error {
 	return nil
 }
 
-// keepLastAdmin: nimmt die Aenderung von l (to nil = Loeschen) der Node den letzten aktiven lokalen Administrator,
-// bleibt l, wie er ist (Audit user.cluster.keep_last, ErrLastAdmin; der Cluster versucht es spaeter erneut).
-func (c *Cluster) keepLastAdmin(ctx context.Context, l *localUser, to *clusterUser, what string) error {
-	var hyp *store.User
-	if to != nil {
-		hyp = &store.User{ID: l.id, Role: to.Role, Disabled: to.Disabled, Source: to.Source, GroupUIDs: to.GroupUIDs, ExtGroupUIDs: to.ExtGroupUIDs}
-	}
-	lose, err := c.losesLastAdmin(ctx, func(u *store.User) *store.User {
-		if u.ID == l.id {
-			return hyp
-		}
-		return u
-	}, nil)
-	if err != nil || !lose {
+// guard fuehrt write unter der Schutzregel „letzter aktiver lokaler Administrator“ aus (store.GuardLastAdmin, dieselbe
+// Fassung wie Oberflaeche und API, unter derselben Sperre). Naehme die Aenderung der Node den letzten, bleibt alles, wie
+// es ist (Audit user.cluster.keep_last mit der Aenderung what, ErrLastAdmin; der Cluster versucht es spaeter erneut).
+func (c *Cluster) guard(ctx context.Context, name, what string, ch store.AdminChange, write func() error) error {
+	err := c.st.GuardLastAdmin(ctx, ch, write)
+	if !errors.Is(err, store.ErrLastAdmin) {
 		return err
 	}
-	c.log.Warn("cluster: last active local administrator of this node is kept", "user", l.u.Username, "change", what)
+	c.log.Warn("cluster: last active local administrator of this node is kept", "target", name, "change", what)
 	if _, _, ok := peer.ClusterOrigin(ctx); ok {
-		c.audit(ctx, "user.cluster.keep_last", l.u.Username, what)
+		c.audit(ctx, "user.cluster.keep_last", name, what)
 	}
 	return ErrLastAdmin
 }
 
-// losesLastAdmin: die gedachte Aenderung nimmt der Node den letzten aktiven lokalen Administrator (vorher mindestens
-// einer, danach keiner; wie store.ActiveLocalAdmins). user aendert eine Kopie jedes Benutzers (nil zurueck = weg),
-// roles die Gruppenrollen (Kennung -> Rolle); beide nil = keine Aenderung.
-func (c *Cluster) losesLastAdmin(ctx context.Context, user func(*store.User) *store.User, roles func(map[string]string)) (bool, error) {
-	users, err := c.st.Users(ctx)
-	if err != nil {
-		return false, err
-	}
-	groups, err := c.st.Groups(ctx)
-	if err != nil {
-		return false, err
-	}
-	r := map[string]string{}
-	for _, g := range groups {
-		r[g.UID] = g.Role
-	}
-	if countAdmins(users, r) == 0 {
-		return false, nil // schon ohne (z. B. nur Administratoren aus LDAP): nichts zu schuetzen
-	}
-	if roles != nil {
-		roles(r)
-	}
-	var after []*store.User
-	for _, u := range users {
-		if user != nil {
-			cp := *u
-			if u = user(&cp); u == nil {
-				continue
-			}
+// userChange: der Benutzer l wird zu to (nil = geloescht), fuer guard.
+func userChange(l *localUser, to *clusterUser) store.AdminChange {
+	return store.AdminChange{User: func(u *store.User) *store.User {
+		if u.ID != l.id {
+			return u
 		}
-		after = append(after, u)
-	}
-	return countAdmins(after, r) == 0, nil
+		if to == nil {
+			return nil
+		}
+		u.Role, u.Disabled, u.Source, u.GroupUIDs, u.ExtGroupUIDs = to.Role, to.Disabled, to.Source, to.GroupUIDs, to.ExtGroupUIDs
+		u.ExtCheckedAt = store.ParseTime(to.ExtCheckedAt)
+		return u
+	}}
 }
 
-// countAdmins: nicht gesperrte lokale Benutzer mit wirksamer Rolle Administrator (eigene Rolle oder eine Gruppe).
-func countAdmins(users []*store.User, roles map[string]string) int {
-	n := 0
-	for _, u := range users {
-		if u.Disabled || u.Source != store.SourceLocal {
-			continue
-		}
-		admin := store.IsAdmin(u.Role)
-		for _, g := range append(append([]string{}, u.GroupUIDs...), u.ExtGroupUIDs...) {
-			admin = admin || store.IsAdmin(roles[g])
-		}
-		if admin {
-			n++
-		}
-	}
-	return n
+// deleteUser loescht l, ausser er ist der letzte aktive lokale Administrator der Node (guard).
+func (c *Cluster) deleteUser(ctx context.Context, l *localUser) error {
+	return c.guard(ctx, l.u.Username, "delete", userChange(l, nil), func() error {
+		_, err := c.st.DeleteUser(ctx, l.id)
+		return err
+	})
 }
+
+// keptError: die Uebernahme ist gespeichert, aber mit hier neueren Gruppen aus LDAP/SSO bzw. einem hoeheren
+// TOTP-Schritt; dieser zusammengefuehrte Stand ist neu gemeldet (peer: kein Fehler, kein Eintrag des fremden Stands),
+// damit die anderen Nodes ihn bekommen. Die Gegenstelle nimmt ihn ohne erneute Meldung (bei ihr ist nichts neuer).
+type keptError struct{}
+
+func (keptError) Error() string    { return "newer own directory groups or totp step kept and announced" }
+func (keptError) Superseded() bool { return true }
 
 // laterChoice: die Wahl von in (Kennung uid) ist juenger als die von l (Gleichstand: kleinere Kennung).
 func laterChoice(in clusterUser, uid string, l *localUser) bool {
@@ -648,45 +606,94 @@ func short(uid string) string {
 // aelteren Node (keine Rolle), bleiben Rolle, Sperre, Herkunft, E-Mail und Gruppen von l (neu: Standard). Naehme die
 // Aenderung der Node den letzten aktiven lokalen Administrator, bleibt l (ErrLastAdmin). Aendern sich Passwort, 2FA,
 // Rolle, Sperre oder Gruppen, enden seine Sitzungen hier (ausser keep; gesperrt: alle). Meldet die Aenderung an den
-// Cluster und ins Audit (action "" = kein Audit).
+// Cluster und ins Audit (action "" = kein Audit). Ist das 2FA-Geheimnis von l hier nicht lesbar und bliebe es, wird
+// nichts geschrieben (l.totpErr). Gruppen aus LDAP/SSO mit neuerem Pruefzeitpunkt und einen hoeheren TOTP-Schritt
+// behaelt l; dann geht der zusammengefuehrte Stand neu hinaus (keptError).
 func (c *Cluster) write(ctx context.Context, l *localUser, uid string, in clusterUser, keep, action string) error {
+	if l != nil && l.totpErr != nil && in.TOTP == l.u.TOTP { // sonst stuende der Chiffretext als Geheimnis da
+		return l.totpErr
+	}
 	if in.legacy() && l != nil {
 		in = in.adminOf(l.u)
 	}
 	in = in.norm()
+	kept := false
+	if l != nil {
+		if store.ParseTime(in.ExtCheckedAt).Before(store.ParseTime(l.u.ExtCheckedAt)) {
+			kept = in.ExtCheckedAt != "" || !slices.Equal(store.NormList(in.ExtGroupUIDs), l.u.ExtGroupUIDs)
+			in.ExtGroupUIDs, in.ExtCheckedAt = l.u.ExtGroupUIDs, l.u.ExtCheckedAt
+		}
+		if in.TOTPStep < l.u.TOTPStep {
+			kept = kept || in.TOTPStep > 0 // 0: aeltere Node oder nie verwendet
+			in.TOTPStep = l.u.TOTPStep
+		}
+	}
+	var details string
+	do := func() (err error) {
+		details, err = c.writeTx(ctx, l, uid, in, keep)
+		return err
+	}
+	var err error
 	if l != nil && adminChange(l.u, in) != "" {
-		if err := c.keepLastAdmin(ctx, l, &in, adminChange(l.u, in)); err != nil {
+		err = c.guard(ctx, l.u.Username, adminChange(l.u, in), userChange(l, &in), do)
+	} else {
+		err = do()
+	}
+	if err != nil {
+		return err
+	}
+	c.st.LoginChanged(ctx, ItemAccounts, uid, false)
+	if len(in.Replaces) > 0 { // durch die Wahl erledigte Abweichungen
+		if err := c.dropConflicts(ctx, func(x conflict) bool { return slices.Contains(in.Replaces, x.UID) }); err != nil {
 			return err
 		}
 	}
+	if action == "user.cluster.update" && l != nil && details == "" && l.u.same(in) {
+		action = "" // nur TOTP-Schritt bzw. Pruefzeitpunkt der Gruppen: kein Eintrag
+	}
+	if action != "" {
+		c.audit(ctx, action, in.Username, details)
+	}
+	if _, _, ok := peer.ClusterOrigin(ctx); ok && kept {
+		c.st.LoginChanged(context.Background(), ItemAccounts, uid, false) // ohne Herkunft: als eigene, neuere Aenderung
+		return keptError{}
+	}
+	return nil
+}
+
+// writeTx schreibt in fuer write in einer Transaktion (Benutzer, Sitzungsende, SSO-Konten); liefert die Aenderungen
+// fuers Audit.
+func (c *Cluster) writeTx(ctx context.Context, l *localUser, uid string, in clusterUser, keep string) (string, error) {
 	created := in.CreatedAt
 	if store.ParseTime(created).IsZero() {
 		created = store.Now()
 	}
 	tx, err := c.st.Writer().BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
 	var id int64
+	groups, ext := strings.Join(store.NormList(in.GroupUIDs), ","), strings.Join(store.NormList(in.ExtGroupUIDs), ",")
 	details := ""
-	groups, ext := strings.Join(normList(in.GroupUIDs), ","), strings.Join(normList(in.ExtGroupUIDs), ",")
 	if l == nil {
 		res, err := tx.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, totp_secret, totp_recovery, lang, timezone, created_at,
-			cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at, totp_last_step)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			uid, in.Username, in.Password, c.st.EncodeTOTP(in.TOTP), in.Recovery, in.Lang, in.Timezone, created, strings.Join(in.Replaces, ","), in.ChosenAt,
-			in.Role, in.Disabled, in.Source, in.Email, groups, ext, in.MustChange)
+			in.Role, in.Disabled, in.Source, in.Email, groups, ext, in.MustChange, in.ExtCheckedAt, max(in.TOTPStep, 0))
 		if err != nil {
-			return err
+			return "", err
 		}
 		id, _ = res.LastInsertId()
 	} else {
 		id = l.id
 		if _, err := tx.ExecContext(ctx, `UPDATE users SET uid = ?, username = ?, password_hash = ?, totp_secret = ?, totp_recovery = ?, lang = ?,
 			timezone = ?, cluster_replaces = ?, cluster_chosen_at = ?, role = ?, disabled = ?, source = ?, email = ?, group_uids = ?, ext_group_uids = ?,
-			must_change = ? WHERE id = ?`, uid, in.Username, in.Password, c.st.EncodeTOTP(in.TOTP), in.Recovery, in.Lang, in.Timezone,
-			strings.Join(in.Replaces, ","), in.ChosenAt, in.Role, in.Disabled, in.Source, in.Email, groups, ext, in.MustChange, id); err != nil {
-			return err
+			must_change = ?, ext_checked_at = ?, totp_last_step = MAX(totp_last_step, ?) WHERE id = ?`, uid, in.Username, in.Password,
+			c.st.EncodeTOTP(in.TOTP), in.Recovery, in.Lang, in.Timezone, strings.Join(in.Replaces, ","), in.ChosenAt, in.Role, in.Disabled, in.Source,
+			in.Email, groups, ext, in.MustChange, in.ExtCheckedAt, in.TOTPStep, id); err != nil {
+			return "", err
 		}
 		var ch []string
 		if l.u.Password != in.Password {
@@ -704,7 +711,7 @@ func (c *Cluster) write(ctx context.Context, l *localUser, uid string, in cluste
 				k = ""
 			}
 			if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND id != ?`, id, k); err != nil {
-				return err
+				return "", err
 			}
 		}
 		if l.u.Recovery != in.Recovery && l.u.TOTP == in.TOTP {
@@ -728,21 +735,9 @@ func (c *Cluster) write(ctx context.Context, l *localUser, uid string, in cluste
 		details = strings.Join(ch, " ")
 	}
 	if err := c.setIdentities(ctx, tx, id, in.Identities); err != nil {
-		return err
+		return "", err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	c.st.LoginChanged(ctx, ItemAccounts, uid, false)
-	if len(in.Replaces) > 0 { // durch die Wahl erledigte Abweichungen
-		if err := c.dropConflicts(ctx, func(x conflict) bool { return slices.Contains(in.Replaces, x.UID) }); err != nil {
-			return err
-		}
-	}
-	if action != "" {
-		c.audit(ctx, action, in.Username, details)
-	}
-	return nil
+	return details, tx.Commit()
 }
 
 // adminChange beschreibt geaenderte Rolle, Sperre, Herkunft und Gruppen fuers Audit ("" = gleich; sonst enden die
@@ -762,7 +757,7 @@ func adminChange(a, b clusterUser) string {
 			ch = append(ch, "enabled")
 		}
 	}
-	if !slices.Equal(normList(a.GroupUIDs), normList(b.GroupUIDs)) || !slices.Equal(normList(a.ExtGroupUIDs), normList(b.ExtGroupUIDs)) {
+	if !slices.Equal(store.NormList(a.GroupUIDs), store.NormList(b.GroupUIDs)) || !slices.Equal(store.NormList(a.ExtGroupUIDs), store.NormList(b.ExtGroupUIDs)) {
 		ch = append(ch, "groups")
 	}
 	return strings.Join(ch, " ")

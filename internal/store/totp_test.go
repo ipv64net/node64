@@ -78,3 +78,23 @@ func TestTOTPCodec(t *testing.T) {
 		t.Fatal("decode with the wrong key must fail")
 	}
 }
+
+// EncodeTOTP verschluesselt einen schon verschluesselten Wert nicht noch einmal (sonst ergaebe das Entschluesseln den
+// Chiffretext als vermeintliches Geheimnis).
+func TestEncodeTOTPNoDouble(t *testing.T) {
+	st := openTest(t)
+	box, _ := secrets.Load(filepath.Join(t.TempDir(), "secret.key"))
+	other, _ := secrets.Load(filepath.Join(t.TempDir(), "other.key"))
+	st.SetTOTPCodec(box.Encrypt, box.Decrypt)
+	enc := st.EncodeTOTP("GEHEIM")
+	if !secrets.IsEncrypted(enc) {
+		t.Fatalf("encrypted: %q", enc)
+	}
+	if again := st.EncodeTOTP(enc); again != enc {
+		t.Fatalf("encrypted twice: %q", again)
+	}
+	foreign := other.Encrypt("FREMD")
+	if again := st.EncodeTOTP(foreign); again != foreign {
+		t.Fatalf("foreign ciphertext encrypted again: %q", again)
+	}
+}

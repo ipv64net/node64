@@ -41,10 +41,10 @@ func splitList(s string) []string {
 	return out
 }
 
-// joinList: Liste sortiert und ohne Doppelte als Komma-Liste.
-func joinList(l []string) string {
+// NormList: Liste getrimmt, sortiert und ohne Leere und Doppelte (nie nil). Eine Fassung fuer Store und Cluster.
+func NormList(l []string) []string {
 	seen := map[string]bool{}
-	var out []string
+	out := []string{}
 	for _, p := range l {
 		if p = strings.TrimSpace(p); p != "" && !seen[p] {
 			seen[p] = true
@@ -52,8 +52,11 @@ func joinList(l []string) string {
 		}
 	}
 	sort.Strings(out)
-	return strings.Join(out, ",")
+	return out
 }
+
+// joinList: NormList als Komma-Liste.
+func joinList(l []string) string { return strings.Join(NormList(l), ",") }
 
 // NewUser sind die Angaben fuer CreateUserWith (UID leer = zufaellig; Role/Source leer = admin/local).
 type NewUser struct {
@@ -71,7 +74,7 @@ type NewUser struct {
 }
 
 // CreateUserWith legt einen Benutzer mit Rolle, Herkunft und Gruppen an (Benutzerverwaltung, Anlage beim ersten
-// Anmelden ueber LDAP/SSO mit fester UID).
+// Anmelden ueber LDAP/SSO mit fester UID; mitgegebene Gruppen von dort gelten als eben geprueft).
 func (s *Store) CreateUserWith(ctx context.Context, n NewUser) (*User, error) {
 	if n.UID == "" {
 		b := make([]byte, 16)
@@ -84,9 +87,13 @@ func (s *Store) CreateUserWith(ctx context.Context, n NewUser) (*User, error) {
 	if n.Source == "" {
 		n.Source = SourceLocal
 	}
-	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at, role, source, email, group_uids, ext_group_uids, must_change)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.UID, n.Username, n.PasswordHash, n.Lang, n.Timezone, Now(), n.Role, n.Source, n.Email, joinList(n.GroupUIDs), joinList(n.ExtGroupUIDs), n.MustChange)
+	checked := ""
+	if len(n.ExtGroupUIDs) > 0 {
+		checked = Now()
+	}
+	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at, role, source, email, group_uids, ext_group_uids, must_change, ext_checked_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.UID, n.Username, n.PasswordHash, n.Lang, n.Timezone, Now(), n.Role, n.Source, n.Email, joinList(n.GroupUIDs), joinList(n.ExtGroupUIDs), n.MustChange, checked)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +120,7 @@ type UserAdmin struct {
 }
 
 // UpdateUserAdmin aendert Rolle, Sperre, E-Mail und Gruppen. Die Schutzregel „letzter lokaler Administrator“ prueft
-// der Aufrufer (ActiveLocalAdmins).
+// der Aufrufer (GuardLastAdmin).
 func (s *Store) UpdateUserAdmin(ctx context.Context, id int64, a UserAdmin) error {
 	if !ValidRole(a.Role) {
 		return errors.New("invalid role")
@@ -126,14 +133,30 @@ func (s *Store) UpdateUserAdmin(ctx context.Context, id int64, a UserAdmin) erro
 	return err
 }
 
-// SetUserExtGroups merkt die beim Anmelden ueber LDAP/SSO ermittelten Gruppen (nur bei Aenderung, dann Cluster).
+// Gruppen aus LDAP/SSO zaehlen nur, solange ihre letzte Pruefung (ext_checked_at) frisch ist (EffectiveRole); an den
+// Cluster geht eine Pruefung ohne Aenderung hoechstens einmal je extNotifyEvery.
+const (
+	ExtMaxAgeLDAP  = 24 * time.Hour
+	ExtMaxAgeOIDC  = 7 * 24 * time.Hour
+	extNotifyEvery = time.Hour
+)
+
+// SetUserExtGroups merkt die beim Anmelden bzw. Abgleich ueber LDAP/SSO ermittelten Gruppen und den Zeitpunkt der
+// Pruefung (bei jedem Aufruf, auch mit leerer Liste). An den Cluster nur bei geaenderten Gruppen oder wenn die
+// gespeicherte Pruefung aelter als extNotifyEvery ist (Drossel).
 func (s *Store) SetUserExtGroups(ctx context.Context, id int64, groups []string) error {
-	v := joinList(groups)
-	res, err := s.w.ExecContext(ctx, `UPDATE users SET ext_group_uids = ? WHERE id = ? AND ext_group_uids <> ?`, v, id, v)
-	if err != nil {
+	v, now := joinList(groups), time.Now()
+	var old, at string
+	if err := s.w.QueryRowContext(ctx, `SELECT ext_group_uids, ext_checked_at FROM users WHERE id = ?`, id).Scan(&old, &at); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		return err
 	}
-	if n, _ := res.RowsAffected(); n > 0 {
+	if _, err := s.w.ExecContext(ctx, `UPDATE users SET ext_group_uids = ?, ext_checked_at = ? WHERE id = ?`, v, FormatTime(now), id); err != nil {
+		return err
+	}
+	if old != v || now.Sub(ParseTime(at)) >= extNotifyEvery {
 		s.userChanged(ctx, id)
 	}
 	return nil
@@ -148,42 +171,122 @@ func (s *Store) SetUserMustChange(ctx context.Context, id int64, on bool) error 
 	return err
 }
 
-// EffectiveRole: hoechste Rolle aus eigener Rolle und allen Gruppen (von Hand und von LDAP/SSO).
-func (s *Store) EffectiveRole(ctx context.Context, u *User) string {
+// extGroups: die Gruppen aus LDAP/SSO, wenn ihre letzte Pruefung frisch ist (LDAP ExtMaxAgeLDAP, SSO ExtMaxAgeOIDC);
+// sonst keine. Lokale Benutzer: immer.
+func (u *User) extGroups() []string {
+	age := time.Since(u.ExtCheckedAt)
+	switch {
+	case u.Source == SourceLDAP && age >= ExtMaxAgeLDAP, u.Source == SourceOIDC && age >= ExtMaxAgeOIDC:
+		return nil
+	}
+	return u.ExtGroupUIDs
+}
+
+// RoleIn: wirksame Rolle bei den Gruppenrollen roles (Kennung -> Rolle; GroupRoles), also die hoechste aus eigener
+// Rolle, den Gruppen von Hand und den frischen Gruppen aus LDAP/SSO. Gleiche Regel wie EffectiveRole, ohne Datenbank.
+func RoleIn(u *User, roles map[string]string) string {
 	if u == nil {
 		return ""
 	}
 	if IsAdmin(u.Role) {
 		return RoleAdmin
 	}
-	uids := append(append([]string{}, u.GroupUIDs...), u.ExtGroupUIDs...)
-	if len(uids) > 0 {
-		groups, _ := s.Groups(ctx)
-		for _, g := range groups {
-			for _, id := range uids {
-				if g.UID == id && IsAdmin(g.Role) {
-					return RoleAdmin
-				}
+	for _, l := range [][]string{u.GroupUIDs, u.extGroups()} {
+		for _, id := range l {
+			if IsAdmin(roles[id]) {
+				return RoleAdmin
 			}
 		}
 	}
 	return RoleRead
 }
 
-// ActiveLocalAdmins zaehlt die nicht gesperrten lokalen Benutzer mit wirksamer Rolle Administrator (ohne exclude).
-// Schutzregel: davon muss immer mindestens einer bleiben (LDAP/SSO koennen ausfallen).
-func (s *Store) ActiveLocalAdmins(ctx context.Context, exclude int64) (int, error) {
+// GroupRoles: Rolle je Gruppe (Kennung -> Rolle).
+func (s *Store) GroupRoles(ctx context.Context) (map[string]string, error) {
+	groups, err := s.Groups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(groups))
+	for _, g := range groups {
+		out[g.UID] = g.Role
+	}
+	return out, nil
+}
+
+// EffectiveRole: hoechste Rolle aus eigener Rolle und allen Gruppen (von Hand und - solange frisch - von LDAP/SSO).
+func (s *Store) EffectiveRole(ctx context.Context, u *User) string {
+	if u == nil {
+		return ""
+	}
+	if IsAdmin(u.Role) || len(u.GroupUIDs)+len(u.ExtGroupUIDs) == 0 {
+		return RoleIn(u, nil)
+	}
+	roles, _ := s.GroupRoles(ctx)
+	return RoleIn(u, roles)
+}
+
+// ActiveLocalAdmin: zaehlt fuer die Schutzregel „letzter aktiver lokaler Administrator“ - nicht gesperrt, Herkunft
+// lokal, wirksame Rolle Administrator (eigene Rolle oder Gruppe). LDAP/SSO-Administratoren zaehlen nicht (das
+// Verzeichnis kann ausfallen).
+func ActiveLocalAdmin(u *User, roles map[string]string) bool {
+	return u != nil && !u.Disabled && u.Source == SourceLocal && RoleIn(u, roles) == RoleAdmin
+}
+
+// ErrLastAdmin: die Aenderung naehme der Node den letzten aktiven lokalen Administrator.
+var ErrLastAdmin = errors.New("the last active local administrator cannot be disabled, demoted or deleted")
+
+// AdminChange beschreibt eine gedachte Aenderung fuer GuardLastAdmin: User aendert eine Kopie jedes Benutzers (nil
+// zurueck = geloescht), Roles die Gruppenrollen (Kennung -> Rolle, Eintrag geloescht = Gruppe weg). nil = unveraendert.
+type AdminChange struct {
+	User  func(u *User) *User
+	Roles func(roles map[string]string)
+}
+
+// GuardLastAdmin ist die eine Fassung der Schutzregel „letzter aktiver lokaler Administrator“ (Oberflaeche, API und
+// Cluster): write laeuft nur, wenn die beschriebene Aenderung der Node nicht ihren letzten aktiven lokalen
+// Administrator nimmt (vorher mindestens einer, danach keiner); sonst ErrLastAdmin und nichts wird geschrieben. Gibt es
+// schon keinen mehr, greift die Regel nicht. Pruefen und Schreiben laufen unter einer Sperre, damit zwei gleichzeitige
+// Aenderungen nicht beide den Stand vor der anderen sehen. write darf GuardLastAdmin nicht erneut aufrufen.
+func (s *Store) GuardLastAdmin(ctx context.Context, ch AdminChange, write func() error) error {
+	s.adminMu.Lock()
+	defer s.adminMu.Unlock()
 	users, err := s.Users(ctx)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	n := 0
-	for _, u := range users {
-		if u.ID != exclude && !u.Disabled && u.Source == SourceLocal && s.EffectiveRole(ctx, u) == RoleAdmin {
-			n++
+	roles, err := s.GroupRoles(ctx)
+	if err != nil {
+		return err
+	}
+	count := func(list []*User, r map[string]string) int {
+		n := 0
+		for _, u := range list {
+			if ActiveLocalAdmin(u, r) {
+				n++
+			}
+		}
+		return n
+	}
+	if count(users, roles) > 0 {
+		after := users
+		if ch.User != nil {
+			after = nil
+			for _, u := range users {
+				cp := *u
+				if x := ch.User(&cp); x != nil {
+					after = append(after, x)
+				}
+			}
+		}
+		if ch.Roles != nil {
+			ch.Roles(roles)
+		}
+		if count(after, roles) == 0 {
+			return ErrLastAdmin
 		}
 	}
-	return n, nil
+	return write()
 }
 
 // ---------------------------------------------------------------- Gruppen

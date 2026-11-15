@@ -157,14 +157,15 @@ func (s *Server) deleteOtherUser(r *http.Request, id int64) (*store.User, error)
 	case u.ID == currentUser(r).ID:
 		return nil, errUserSelf
 	}
-	if s.activeLocalAdmin(r.Context(), u) {
-		if n, err := s.Store.ActiveLocalAdmins(r.Context(), u.ID); err != nil {
-			return nil, err
-		} else if n == 0 {
-			return nil, errLastAdmin
+	if err := s.Store.GuardLastAdmin(r.Context(), store.AdminChange{User: func(x *store.User) *store.User {
+		if x.ID == u.ID {
+			return nil
 		}
-	}
-	if _, err := s.Store.DeleteUser(r.Context(), u.ID); err != nil {
+		return x
+	}}, func() error {
+		_, err := s.Store.DeleteUser(r.Context(), u.ID)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	s.audit(r, "user.delete", u.Username, "")

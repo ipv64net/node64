@@ -86,7 +86,7 @@ func groupRefs(l []string, alias map[string]string) []string {
 			out = append(out, resolve(alias, x))
 		}
 	}
-	return normList(out)
+	return store.NormList(out)
 }
 
 // remap ersetzt from durch to in einer Liste von Gruppen-Kennungen.
@@ -98,7 +98,7 @@ func remap(l []string, from, to string) []string {
 		}
 		out = append(out, x)
 	}
-	return normList(out)
+	return store.NormList(out)
 }
 
 // getGroup liefert eine Gruppe bzw. die Umleitung einer aufgegangenen Kennung.
@@ -119,13 +119,6 @@ func (c *Cluster) getGroup(ctx context.Context, uid string) (json.RawMessage, bo
 	return b, err == nil, err
 }
 
-// keepLastGroup: die Gruppenaenderung naehme der Node den letzten aktiven lokalen Administrator (sie bleibt).
-func (c *Cluster) keepLastGroup(ctx context.Context, name string) error {
-	c.log.Warn("cluster: group change would leave this node without an active local administrator, kept", "group", name)
-	c.audit(ctx, "user.cluster.keep_last", name, "group")
-	return ErrLastAdmin
-}
-
 // applyGroup uebernimmt eine Gruppe einer anderen Node.
 func (c *Cluster) applyGroup(ctx context.Context, uid string, data json.RawMessage, deleted bool) error {
 	cur, err := c.st.GroupByUID(ctx, uid)
@@ -136,12 +129,10 @@ func (c *Cluster) applyGroup(ctx context.Context, uid string, data json.RawMessa
 		if cur == nil {
 			return nil
 		}
-		if lose, err := c.losesLastAdmin(ctx, nil, func(r map[string]string) { delete(r, uid) }); err != nil {
+		if err := c.guard(ctx, cur.Name, "group", store.AdminChange{Roles: func(r map[string]string) { delete(r, uid) }}, func() error {
+			_, err := c.st.DeleteGroup(ctx, uid)
 			return err
-		} else if lose {
-			return c.keepLastGroup(ctx, cur.Name)
-		}
-		if _, err := c.st.DeleteGroup(ctx, uid); err != nil {
+		}); err != nil {
 			return err
 		}
 		c.audit(ctx, "group.cluster.delete", cur.Name, "")
@@ -181,19 +172,35 @@ func (c *Cluster) applyGroup(ctx context.Context, uid string, data json.RawMessa
 	if other != nil {
 		from = other.UID
 	}
-	if lose, err := c.losesLastAdmin(ctx, func(u *store.User) *store.User {
+	if err := c.guard(ctx, in.Name, "group", store.AdminChange{User: func(u *store.User) *store.User {
 		if from != "" {
 			u.GroupUIDs, u.ExtGroupUIDs = remap(u.GroupUIDs, from, uid), remap(u.ExtGroupUIDs, from, uid)
 		}
 		return u
-	}, func(r map[string]string) {
+	}, Roles: func(r map[string]string) {
 		delete(r, from)
 		r[uid] = in.Role
-	}); err != nil {
+	}}, func() error { return c.writeGroup(ctx, uid, from, cur != nil, in) }); err != nil {
 		return err
-	} else if lose {
-		return c.keepLastGroup(ctx, in.Name)
 	}
+	c.st.LoginChanged(ctx, ItemGroups, uid, false)
+	switch {
+	case from != "":
+		if err := c.addAlias(ctx, from, uid); err != nil {
+			return err
+		}
+		c.audit(ctx, "group.cluster.merge", in.Name, "uid="+short(from)+"->"+short(uid))
+	case cur == nil:
+		c.audit(ctx, "group.cluster.create", in.Name, "role="+in.Role)
+	default:
+		c.audit(ctx, "group.cluster.update", in.Name, "role="+in.Role)
+	}
+	return nil
+}
+
+// writeGroup schreibt die Gruppe uid fuer applyGroup (from: gleichnamige Gruppe hier, die in uid aufgeht; exists: uid
+// gibt es hier schon).
+func (c *Cluster) writeGroup(ctx context.Context, uid, from string, exists bool, in clusterGroup) error {
 	created := in.CreatedAt
 	if store.ParseTime(created).IsZero() {
 		created = store.Now()
@@ -206,7 +213,7 @@ func (c *Cluster) applyGroup(ctx context.Context, uid string, data json.RawMessa
 	if from != "" {
 		q := `UPDATE user_groups SET uid = ? WHERE uid = ?`
 		args := []any{uid, from}
-		if cur != nil {
+		if exists {
 			q, args = `DELETE FROM user_groups WHERE uid = ?`, []any{from}
 		}
 		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
@@ -223,22 +230,7 @@ func (c *Cluster) applyGroup(ctx context.Context, uid string, data json.RawMessa
 		uid, in.Name, in.Role, strings.TrimSpace(in.Description), strings.Join(in.LDAPGroups, "\n"), strings.Join(in.OIDCGroups, "\n"), created, store.Now()); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	c.st.LoginChanged(ctx, ItemGroups, uid, false)
-	switch {
-	case from != "":
-		if err := c.addAlias(ctx, from, uid); err != nil {
-			return err
-		}
-		c.audit(ctx, "group.cluster.merge", in.Name, "uid="+short(from)+"->"+short(uid))
-	case cur == nil:
-		c.audit(ctx, "group.cluster.create", in.Name, "role="+in.Role)
-	default:
-		c.audit(ctx, "group.cluster.update", in.Name, "role="+in.Role)
-	}
-	return nil
+	return tx.Commit()
 }
 
 // redirectGroup: die Gruppe from (falls hier vorhanden) geht in to auf - an Ort und Stelle umbenannt, wenn es to hier
@@ -257,38 +249,35 @@ func (c *Cluster) redirectGroup(ctx context.Context, from, to string) error {
 	if cur != nil {
 		name = cur.Name
 	}
-	if lose, err := c.losesLastAdmin(ctx, func(u *store.User) *store.User {
+	if err := c.guard(ctx, name, "group", store.AdminChange{User: func(u *store.User) *store.User {
 		u.GroupUIDs, u.ExtGroupUIDs = remap(u.GroupUIDs, from, to), remap(u.ExtGroupUIDs, from, to)
 		return u
-	}, func(r map[string]string) {
+	}, Roles: func(r map[string]string) {
 		if cur != nil && target == nil {
 			r[to] = cur.Role
 		}
 		delete(r, from)
-	}); err != nil {
-		return err
-	} else if lose {
-		return c.keepLastGroup(ctx, name)
-	}
-	tx, err := c.st.Writer().BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if cur != nil {
-		q := `UPDATE user_groups SET uid = ? WHERE uid = ?`
-		args := []any{to, from}
-		if target != nil {
-			q, args = `DELETE FROM user_groups WHERE uid = ?`, []any{from}
-		}
-		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+	}}, func() error {
+		tx, err := c.st.Writer().BeginTx(ctx, nil)
+		if err != nil {
 			return err
 		}
-	}
-	if err := rewriteRefs(ctx, tx, from, to); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+		defer tx.Rollback()
+		if cur != nil {
+			q := `UPDATE user_groups SET uid = ? WHERE uid = ?`
+			args := []any{to, from}
+			if target != nil {
+				q, args = `DELETE FROM user_groups WHERE uid = ?`, []any{from}
+			}
+			if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+				return err
+			}
+		}
+		if err := rewriteRefs(ctx, tx, from, to); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}); err != nil {
 		return err
 	}
 	if err := c.addAlias(ctx, from, to); err != nil {

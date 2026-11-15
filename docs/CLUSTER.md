@@ -134,7 +134,7 @@ Bereiche sind ohne Einstellung aus (Schalter je Bereich auf `/cluster`).
 
 | Was | Abgeglichen | Bleibt je Node |
 |---|---|---|
-| Benutzer (`accounts`, Kennung `users.uid`) | Name, Passwort-Hash, App-2FA-Geheimnis, gehashte Wiederherstellungscodes (ein verbrauchter Code gilt danach überall nicht mehr), Sprache, Zeitzone, Anlagedatum, verknüpfte SSO-Konten (Anbieter, Subject, Anzeige), Rolle, Sperre, Herkunft, E-Mail, Gruppen (von Hand `group_uids` und aus LDAP/SSO `ext_group_uids`), „Passwort beim nächsten Anmelden setzen“ | lokale Nummer, Passkeys (an Hostnamen/RP-ID gebunden), Sitzungen, letzte Anmeldung, API- und MCP-Keys, Sperren nach Fehlversuchen |
+| Benutzer (`accounts`, Kennung `users.uid`) | Name, Passwort-Hash, App-2FA-Geheimnis, gehashte Wiederherstellungscodes (ein verbrauchter Code gilt danach überall nicht mehr), Sprache, Zeitzone, Anlagedatum, verknüpfte SSO-Konten (Anbieter, Subject, Anzeige), Rolle, Sperre, Herkunft, E-Mail, Gruppen (von Hand `group_uids` und aus LDAP/SSO `ext_group_uids` samt Prüfzeitpunkt `ext_checked_at`), „Passwort beim nächsten Anmelden setzen“, zuletzt verbrauchter Zeitschritt der App-2FA (`totp_last_step`) | lokale Nummer, Passkeys (an Hostnamen/RP-ID gebunden), Sitzungen, letzte Anmeldung, API- und MCP-Keys, Sperren nach Fehlversuchen |
 | Gruppen (`groups`, Kennung `user_groups.uid`) | Name, Rolle, Beschreibung, Zuordnungen nach außen (LDAP-Gruppen, OIDC-Gruppen) | – |
 | SSO (`sso`, ein Eintrag `oidc`) | Issuer, Client-ID, Client-Secret, Beschriftung, Scopes, „Benutzer über Gruppen anlegen“ (`auth.oidc.jit`) und Claim-Name (`auth.oidc.group_claim`); „SSO entfernen“ entfernt es überall | feste Rückleit-Adresse (`auth.oidc.base_url`, enthält den eigenen Hostnamen) |
 | Verzeichnis (`directory`, ein Eintrag `auth`) | AD/LDAP-Anbindung (`auth.ldap` samt Bind-Passwort) und „2FA für alle Pflicht“ (`auth.2fa_required`), damit jede Node dieselbe Regel hat | – |
@@ -151,7 +151,29 @@ als `incomplete` hinaus und wird drüben nicht übernommen (die anderen behalten
 `SetTOTPCodec`, verdrahtet in `cmd/node64`). Beim Start werden noch im Klartext gespeicherte Geheimnisse einmal
 verschlüsselt (`EncryptTOTPSecrets`, keine Meldung an den Cluster – der Inhalt bleibt gleich); gelesen wird
 transparent im Klartext. Verglichen (exaktes Doppel, Sitzungsende) wird der Klartext. Lässt sich ein Geheimnis nicht
-entschlüsseln (falscher `secret.key`), bleibt 2FA an und kein Code passt; Abhilfe `reset-password -disable-2fa`.
+entschlüsseln (falscher `secret.key`), bleibt 2FA an und kein Code passt; Abhilfe `reset-password -disable-2fa`. Ein
+solcher Benutzer wird weder hinausgegeben noch beim Abgleich mit dem unlesbaren Wert neu geschrieben; die Wahl der
+eigenen Version wird dann abgelehnt (`Store.EncodeTOTP` verschlüsselt einen schon verschlüsselten Wert nie doppelt).
+Ein neues Geheimnis von einer anderen Node ersetzt ihn.
+
+**App-2FA-Code nur einmal im Cluster:** Der zuletzt verbrauchte Zeitschritt (`totp_last_step`) geht mit dem Benutzer;
+jede Anmeldung mit Code meldet ihn (`UseTOTPStep`). Beim Übernehmen gilt der **höchste** Schritt, ein älterer Stand
+senkt ihn nie; ein Schritt allein steht nicht im Audit. Hat die Node selbst schon einen höheren Schritt, speichert sie
+den Stand mit ihrem Schritt und meldet ihn neu (siehe unten, „Neueres behalten“). Zwischen zwei Abgleichen (in der
+Regel Sekunden) kann derselbe Code auf zwei Nodes noch je einmal gelten.
+
+**Gruppen aus LDAP/SSO und ihr Prüfzeitpunkt:** `ext_checked_at` ist die letzte erfolgreiche Prüfung der Gruppen aus
+dem Verzeichnis bzw. dem SSO-Claim (`SetUserExtGroups`, auch mit leerer Liste; an den Cluster nur bei geänderten
+Gruppen oder höchstens stündlich). Sie zählen für die wirksame Rolle nur, solange die Prüfung frisch ist (LDAP 24 h,
+SSO 7 Tage; Gruppen von Hand und die eigene Rolle immer). Beim Übernehmen gewinnt der **neuere Prüfzeitpunkt samt
+seinen Gruppen**, unabhängig davon, welche Änderung sonst gewinnt.
+
+**Neueres behalten:** Behält eine Node beim Übernehmen ihre neueren Gruppen aus LDAP/SSO oder ihren höheren
+2FA-Schritt, speichert sie den zusammengeführten Stand und meldet ihn als eigene Änderung neu (für `peer` „bewusst
+nicht übernommen“, kein Fehler). Die Gegenstelle übernimmt ihn, ohne erneut zu melden – bei ihr ist dann nichts
+neuer, es entsteht keine Schleife. Eine Node ohne die Felder (bis Node64 1.7.0) sendet keinen Prüfzeitpunkt: ihre
+Gruppen ersetzen einen geprüften Stand hier nicht (ein neu angelegter Benutzer bekommt sie ohne Prüfzeitpunkt, bei
+LDAP/SSO zählen sie dann bis zur nächsten Anmeldung nicht).
 
 **Identität und Konflikte:**
 
@@ -193,7 +215,12 @@ das exakte Doppel zählt ein solcher Stand als „Administrator, lokal, nicht ge
 `groups` und `directory` und die neuen SSO-Felder kennt eine ältere Node nicht (sie meldet sie nicht im Ping bzw.
 lässt die Felder weg – dann bleiben sie hier). Grenze: Solange eine Node die Benutzerverwaltung noch nicht hat, gelten
 Rolle und Sperre dort nicht (alle Benutzer sind dort Administratoren); nach dem Update aller Nodes greift alles.
-Benutzer aus LDAP/SSO (ohne Passwort) weist eine ältere Node ab.
+Benutzer aus LDAP/SSO (ohne Passwort) weist eine ältere Node ab. Bewusst hingenommen: Benutzer mit „Nur lesen“ oder
+Sperre einer älteren Node gar nicht zu schicken, ginge nur über `peer` (Abholen je Mitglied filtern) – die Version der
+Gegenstelle kennt der Abgleich dort nicht, und die eingeschalteten Bereiche taugen nicht als Erkennung (`groups` und
+`directory` lassen sich auch auf neuen Nodes einzeln ausschalten). Ein „nicht gefunden“ als Ersatz wäre auf der
+älteren Node ein Löschen, das sie an dritte Nodes weiterreichen würde. Daher: im gemischten Cluster zuerst alle Nodes
+aktualisieren, dann Rollen und Sperren vergeben.
 
 **Schutzregeln:**
 
@@ -204,7 +231,10 @@ Benutzer aus LDAP/SSO (ohne Passwort) weist eine ältere Node ab.
    Rolle oder das Löschen einer Gruppe –, wird für diesen Benutzer bzw. diese Gruppe nicht übernommen (Audit
    `user.cluster.keep_last` mit der Änderung, Warnung im Log, der Cluster versucht es später erneut). Jede Node prüft
    das bei sich; LDAP/SSO-Administratoren zählen nicht (Verzeichnis kann ausfallen). Gibt es schon keinen lokalen
-   Administrator mehr, greift die Regel nicht.
+   Administrator mehr, greift die Regel nicht. Es gibt dafür genau eine Fassung, `Store.GuardLastAdmin`, die
+   Oberfläche, API und Cluster gemeinsam nutzen: Prüfen und Schreiben laufen unter einer Sperre, sodass zwei
+   gleichzeitige Änderungen (z. B. zwei Administratoren sperren je den anderen, oder eine Änderung hier und eine
+   Übernahme) nie beide durchkommen.
 3. Weder Abgleich noch Wahl löschen einen Benutzer, um einen anderen einzusetzen: die Wahl ersetzt den Inhalt an Ort
    und Stelle, die Sitzung der Person, die wählt, bleibt.
 4. Den eigenen Benutzer kann man auf der Seite Anmeldung nicht löschen (die Liste „Benutzer dieser Node“ erscheint ab

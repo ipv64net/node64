@@ -80,14 +80,18 @@ func (s *Store) UseTOTPRecovery(ctx context.Context, id int64, read, rest string
 }
 
 // UseTOTPStep verbraucht den Zeitschritt eines Einmalcodes: nur, wenn er groesser ist als der zuletzt verbrauchte
-// (in einer Anweisung). false = derselbe oder ein spaeterer Schritt wurde schon verwendet.
+// (in einer Anweisung). false = derselbe oder ein spaeterer Schritt wurde schon verwendet. Der Schritt geht an den
+// Cluster (Bereich accounts, der hoechste gilt), damit derselbe Code auch auf keiner anderen Node noch einmal gilt.
 func (s *Store) UseTOTPStep(ctx context.Context, id, step int64) (bool, error) {
 	res, err := s.w.ExecContext(ctx, `UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?`, step, id, step)
 	if err != nil {
 		return false, err
 	}
-	n, _ := res.RowsAffected()
-	return n == 1, nil
+	if n, _ := res.RowsAffected(); n != 1 {
+		return false, nil
+	}
+	s.userChanged(ctx, id)
+	return true, nil
 }
 
 // ---------------------------------------------------------------- API-Keys

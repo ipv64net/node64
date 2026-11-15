@@ -161,7 +161,8 @@ bleibt Pflicht; Altgeräte ohne TLS beim LDAP → Klartext nur per Schalter.
   ext_group_uids|must_change`, Tabelle `user_groups` (uid, name, role, description, ldap_groups, oidc_groups).
 - **Store** `internal/store/users.go`: `RoleAdmin/RoleRead`, `SourceLocal/LDAP/OIDC`, `CreateUserWith(NewUser)`,
   `UserByUID`, `UpdateUserAdmin(UserAdmin)`, `SetUserExtGroups`, `SetUserMustChange`, `EffectiveRole`,
-  `ActiveLocalAdmins(exclude)`, Gruppen `Groups/GroupByUID/SaveGroup/DeleteGroup` (meldet `LoginChanged("groups")`).
+  `ActiveLocalAdmins(exclude)` (heute `GuardLastAdmin`, eine Fassung der Schutzregel unter Sperre), Gruppen
+  `Groups/GroupByUID/SaveGroup/DeleteGroup` (meldet `LoginChanged("groups")`).
 - **Einstellungen** `internal/authcfg`: `LDAPConfig` (`auth.ldap`, Bind-Passwort mit `secret.key` verschlüsselt),
   `auth.2fa_required`, `auth.oidc.jit`, `auth.oidc.group_claim`; Speichern meldet `LoginChanged("directory","auth")`.
 

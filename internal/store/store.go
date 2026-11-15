@@ -56,6 +56,8 @@ type Store struct {
 
 	totpEnc func(string) string          // TOTP-Geheimnis verschluesseln (secret.key; nil = Klartext), core.go
 	totpDec func(string) (string, error) // und entschluesseln (Klartext kommt unveraendert zurueck)
+
+	adminMu sync.Mutex // Schutzregel „letzter aktiver lokaler Administrator“: Pruefen und Schreiben (GuardLastAdmin)
 }
 
 // Open oeffnet oder erzeugt die Datenbank.

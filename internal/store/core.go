@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 // ---------------------------------------------------------------- Settings
@@ -79,25 +81,26 @@ type User struct {
 	CreatedAt    time.Time
 	LastLoginAt  time.Time
 	// Benutzerverwaltung (users.go)
-	Role         string   // RoleAdmin oder RoleRead (eigene Rolle; wirksam: EffectiveRole)
-	Disabled     bool     // gesperrt: keine Anmeldung, Sitzungen und API-Keys gelten nicht
-	Source       string   // SourceLocal, SourceLDAP, SourceOIDC
-	Email        string   // nur Anzeige und Zuordnung
-	GroupUIDs    []string // von Hand zugeordnete Gruppen
-	ExtGroupUIDs []string // beim letzten Anmelden ueber LDAP/SSO ermittelte Gruppen
-	MustChange   bool     // Passwort beim naechsten Anmelden setzen
+	Role         string    // RoleAdmin oder RoleRead (eigene Rolle; wirksam: EffectiveRole)
+	Disabled     bool      // gesperrt: keine Anmeldung, Sitzungen und API-Keys gelten nicht
+	Source       string    // SourceLocal, SourceLDAP, SourceOIDC
+	Email        string    // nur Anzeige und Zuordnung
+	GroupUIDs    []string  // von Hand zugeordnete Gruppen
+	ExtGroupUIDs []string  // beim letzten Anmelden ueber LDAP/SSO ermittelte Gruppen
+	MustChange   bool      // Passwort beim naechsten Anmelden setzen
+	ExtCheckedAt time.Time // letzte erfolgreiche Pruefung der Gruppen aus LDAP/SSO (Null = nie)
 }
 
-const userCols = `id, uid, username, password_hash, totp_secret, lang, timezone, created_at, last_login_at, role, disabled, source, email, group_uids, ext_group_uids, must_change`
+const userCols = `id, uid, username, password_hash, totp_secret, lang, timezone, created_at, last_login_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	var created, last, groups, ext string
+	var created, last, groups, ext, checked string
 	if err := row.Scan(&u.ID, &u.UID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.Lang, &u.Timezone, &created, &last,
-		&u.Role, &u.Disabled, &u.Source, &u.Email, &groups, &ext, &u.MustChange); err != nil {
+		&u.Role, &u.Disabled, &u.Source, &u.Email, &groups, &ext, &u.MustChange, &checked); err != nil {
 		return nil, err
 	}
-	u.CreatedAt, u.LastLoginAt = ParseTime(created), ParseTime(last)
+	u.CreatedAt, u.LastLoginAt, u.ExtCheckedAt = ParseTime(created), ParseTime(last), ParseTime(checked)
 	u.GroupUIDs, u.ExtGroupUIDs = splitList(groups), splitList(ext)
 	return &u, nil
 }
@@ -108,9 +111,10 @@ func (s *Store) SetTOTPCodec(enc func(string) string, dec func(string) (string, 
 	s.totpEnc, s.totpDec = enc, dec
 }
 
-// EncodeTOTP: Geheimnis so, wie es in users.totp_secret steht (leer bleibt leer).
+// EncodeTOTP: Geheimnis so, wie es in users.totp_secret steht (leer bleibt leer). Ein schon verschluesselter Wert
+// (z. B. ein hier nicht entschluesselbarer) bleibt, wie er ist - nie doppelt verschluesselt.
 func (s *Store) EncodeTOTP(plain string) string {
-	if plain == "" || s.totpEnc == nil {
+	if plain == "" || s.totpEnc == nil || secrets.IsEncrypted(plain) {
 		return plain
 	}
 	return s.totpEnc(plain)

@@ -51,7 +51,7 @@ func (s *Server) userAdminRoutes() {
 
 var (
 	errUserName       = errors.New("username invalid or already taken")
-	errLastAdmin      = errors.New("the last active local administrator cannot be disabled, demoted or deleted")
+	errLastAdmin      = store.ErrLastAdmin // Schutzregel GuardLastAdmin
 	errUserSelfChange = errors.New("you cannot disable or demote yourself")
 	errUserNotLocal   = errors.New("password is managed by the directory or SSO provider")
 	errRoleInvalid    = errors.New("role must be admin or read")
@@ -137,11 +137,6 @@ func (s *Server) uaCreate(r *http.Request, in newUserIn) (u *store.User, otp str
 	return u, otp, nil
 }
 
-// activeLocalAdmin: zaehlt fuer die Schutzregel „letzter aktiver lokaler Administrator“.
-func (s *Server) activeLocalAdmin(ctx context.Context, u *store.User) bool {
-	return !u.Disabled && u.Source == store.SourceLocal && s.Store.EffectiveRole(ctx, u) == store.RoleAdmin
-}
-
 // uaUpdate aendert Rolle, Gruppen, E-Mail und Sperre. Schutz: nie den letzten aktiven lokalen Administrator sperren
 // oder herabstufen, sich selbst nie. Sperre und geaenderte wirksame Rolle beenden die Sitzungen des Benutzers.
 func (s *Server) uaUpdate(r *http.Request, u *store.User, a store.UserAdmin) error {
@@ -156,14 +151,12 @@ func (s *Server) uaUpdate(r *http.Request, u *store.User, a store.UserAdmin) err
 	if u.ID == currentUser(r).ID && (a.Disabled || now != store.RoleAdmin) {
 		return errUserSelfChange
 	}
-	if s.activeLocalAdmin(ctx, u) && !s.activeLocalAdmin(ctx, &after) {
-		if n, err := s.Store.ActiveLocalAdmins(ctx, u.ID); err != nil {
-			return err
-		} else if n == 0 {
-			return errLastAdmin
+	if err := s.Store.GuardLastAdmin(ctx, store.AdminChange{User: func(x *store.User) *store.User {
+		if x.ID == u.ID {
+			x.Role, x.Disabled, x.GroupUIDs = a.Role, a.Disabled, a.GroupUIDs
 		}
-	}
-	if err := s.Store.UpdateUserAdmin(ctx, u.ID, a); err != nil {
+		return x
+	}}, func() error { return s.Store.UpdateUserAdmin(ctx, u.ID, a) }); err != nil {
 		return err
 	}
 	if a.Disabled != u.Disabled || before != now {
@@ -258,15 +251,21 @@ func (s *Server) groupSave(r *http.Request, g *store.Group) error {
 		return errRoleInvalid
 	}
 	isNew := g.UID == ""
-	if !isNew && g.Role != store.RoleAdmin {
-		if old, _ := s.Store.GroupByUID(ctx, g.UID); old != nil && old.Role == store.RoleAdmin {
-			if err := s.groupDemoteOK(ctx, r, g.UID); err != nil {
+	save := func() error { return s.Store.SaveGroup(ctx, g) }
+	if isNew {
+		if err := save(); err != nil {
+			return err
+		}
+	} else {
+		if g.Role != store.RoleAdmin {
+			if err := s.groupSelfOK(ctx, r, g.UID); err != nil {
 				return err
 			}
 		}
-	}
-	if err := s.Store.SaveGroup(ctx, g); err != nil {
-		return err
+		uid, role := g.UID, g.Role
+		if err := s.Store.GuardLastAdmin(ctx, store.AdminChange{Roles: func(m map[string]string) { m[uid] = role }}, save); err != nil {
+			return err
+		}
 	}
 	action := "group.update"
 	if isNew {
@@ -276,42 +275,22 @@ func (s *Server) groupSave(r *http.Request, g *store.Group) error {
 	return nil
 }
 
-// groupDemoteOK: nimmt man der Gruppe die Rolle Administrator (bzw. loescht sie), bleibt dann noch ein aktiver
-// lokaler Administrator, und der angemeldete Benutzer bleibt selbst Administrator?
-func (s *Server) groupDemoteOK(ctx context.Context, r *http.Request, uid string) error {
-	users, err := s.Store.Users(ctx)
+// groupSelfOK: nimmt man der Gruppe die Rolle Administrator (bzw. loescht sie), bleibt der angemeldete Benutzer
+// selbst Administrator? (Den letzten aktiven lokalen Administrator schuetzt GuardLastAdmin.)
+func (s *Server) groupSelfOK(ctx context.Context, r *http.Request, uid string) error {
+	me, err := s.Store.UserByID(ctx, currentUser(r).ID)
+	if err != nil || me == nil {
+		return err
+	}
+	roles, err := s.Store.GroupRoles(ctx)
 	if err != nil {
 		return err
 	}
-	without := func(u *store.User) *store.User {
-		x := *u
-		x.GroupUIDs, x.ExtGroupUIDs = dropID(u.GroupUIDs, uid), dropID(u.ExtGroupUIDs, uid)
-		return &x
-	}
-	n := 0
-	for _, u := range users {
-		x := without(u)
-		if u.ID == currentUser(r).ID && s.Store.EffectiveRole(ctx, x) != store.RoleAdmin {
-			return errUserSelfChange
-		}
-		if s.activeLocalAdmin(ctx, x) {
-			n++
-		}
-	}
-	if n == 0 {
-		return errLastAdmin
+	delete(roles, uid)
+	if store.RoleIn(me, roles) != store.RoleAdmin {
+		return errUserSelfChange
 	}
 	return nil
-}
-
-func dropID(l []string, id string) []string {
-	var out []string
-	for _, x := range l {
-		if x != id {
-			out = append(out, x)
-		}
-	}
-	return out
 }
 
 // groupDelete loescht eine Gruppe (mit derselben Schutzregel wie das Herabstufen).
@@ -322,11 +301,14 @@ func (s *Server) groupDelete(r *http.Request, uid string) (*store.Group, error) 
 		return nil, err
 	}
 	if g.Role == store.RoleAdmin {
-		if err := s.groupDemoteOK(ctx, r, uid); err != nil {
+		if err := s.groupSelfOK(ctx, r, uid); err != nil {
 			return nil, err
 		}
 	}
-	if _, err := s.Store.DeleteGroup(ctx, uid); err != nil {
+	if err := s.Store.GuardLastAdmin(ctx, store.AdminChange{Roles: func(m map[string]string) { delete(m, uid) }}, func() error {
+		_, err := s.Store.DeleteGroup(ctx, uid)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	s.audit(r, "group.delete", g.Name, "")

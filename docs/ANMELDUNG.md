@@ -145,6 +145,8 @@ Sitzungen, API-Keys, die feste Rückleit-Adresse für SSO und Forward-Auth.
   Administrator einer Node entfernt, sperrt oder stuft der Cluster aber nie herab.
 - Ändern sich Passwort, 2FA, Rolle, Sperre oder Gruppen über den Cluster, enden die Sitzungen dieses Benutzers auf den
   anderen Nodes.
+- Ein Code der Authenticator-App gilt im Cluster nur einmal: wer ihn auf einer Node verwendet hat, kann ihn auf den
+  anderen nicht noch einmal nutzen (sobald der Abgleich gelaufen ist, in der Regel nach Sekunden).
 
 Technische Einzelheiten: [CLUSTER.md](CLUSTER.md#benutzer--anmeldung-users).
 
