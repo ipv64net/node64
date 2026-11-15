@@ -7,9 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/netip"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 )
 
 // #132: HTTP/2 legt Verbindungen fuer alle Namen zusammen, die das Zertifikat abdeckt (Safari mit Wildcard-Zertifikat).
@@ -127,5 +131,36 @@ func TestNoSNITLSRules(t *testing.T) {
 	}
 	if code := do("plain.example.test", tls.VersionTLS12); code != 200 {
 		t.Fatalf("no SNI, host without rules: %d", code)
+	}
+}
+
+// WE-3: Im Docker-Bridge-Netz ist die Adresse des Gateways keine Herkunft - Allow der Route bekommt eine leere
+// Adresse (z. B. "nur Heimnetz" der Oberflaeche lehnt dann ab).
+func TestAllowMaskedGateway(t *testing.T) {
+	e, _ := newEdge(t, nil)
+	var got []netip.Addr
+	lan := func(ip netip.Addr) bool { got = append(got, ip); return ip.IsLoopback() || ip.IsPrivate() }
+	if err := e.Set("ui", []Route{{Names: []string{"app.test"}, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ui")
+	}), Allow: lan}}); err != nil {
+		t.Fatal(err)
+	}
+	do := func() int {
+		req := httptest.NewRequest(http.MethodGet, "https://app.test/", nil)
+		req.RemoteAddr = "172.17.0.1:40000"
+		rec := httptest.NewRecorder()
+		e.serveHTTPS(rec, req)
+		return rec.Code
+	}
+	if code := do(); code != 200 {
+		t.Fatalf("private address without bridge: %d", code)
+	}
+	restore := localnet.OriginForTest(true, netip.MustParseAddr("172.17.0.1"))
+	defer restore()
+	if code := do(); code == 200 {
+		t.Fatalf("docker gateway counted as home network: %d", code)
+	}
+	if last := got[len(got)-1]; last.IsValid() {
+		t.Fatalf("allow got %v, want unknown origin", last)
 	}
 }

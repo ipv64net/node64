@@ -229,6 +229,13 @@ type listData struct {
 	LocalOn   bool          // DNS64 laeuft (Knopf "lokal eintragen")
 	LocalV4   string        // vorgeschlagene Adressen des Reverse-Proxys
 	LocalV6   string
+	GwMasked  bool // Anfragen kamen in den letzten 24 h ueber das Docker-Gateway (Herkunft unbekannt)
+}
+
+// gwMasked: in den letzten 24 h kam eine Anfrage mit der Adresse des Docker-Gateways an (localnet.MaskedGateway).
+func (m *Module) gwMasked() bool {
+	t := m.gwSeen.Load()
+	return t != 0 && time.Since(time.Unix(0, t)) < 24*time.Hour
 }
 
 func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
@@ -316,7 +323,8 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		return
 	}
 	d := listData{Kind: kind, Tabs: m.tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), Pub: m.published(r.Context()), StatsOn: m.stats2.Load() != nil,
-		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
+		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled,
+		GwMasked: m.gwMasked()}
 	if d.LocalOn = m.ldns() != nil; d.LocalOn {
 		d.LocalV4, d.LocalV6 = m.localAddrs(r)
 	}

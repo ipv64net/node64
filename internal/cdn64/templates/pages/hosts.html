@@ -37,6 +37,7 @@
 	<div class="input-group input-group-sm my-2"><input class="form-control font-monospace" id="pub-run" value="{{$d.Pub.RunArgs}}" readonly aria-label="docker run -p">
 		<button class="btn btn-outline-secondary" type="button" data-copy-target="#pub-run" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
 	<a href="/settings/ports#published" class="alert-link">{{.T "cdn64.pub_more"}}</a></div>{{end}}
+{{if $d.GwMasked}}<div class="alert alert-warning small" data-gw-masked><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.gw_masked"}} <a href="/settings/ports#published" class="alert-link">{{.T "cdn64.pub_more"}}</a></div>{{end}}
 {{if $d.EdgeErr}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.edge_error"}} <span class="font-monospace">{{$d.EdgeErr}}</span> · <a href="/settings/ports#edge">{{.T "cdn64.edge_settings"}}</a></div>{{end}}
 <div class="card">
 	{{if not $d.Rows}}

@@ -31,6 +31,7 @@ import (
 
 	"github.com/quic-go/quic-go/http3"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/ports"
 )
 
@@ -880,7 +881,7 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		e.unknown(w, r)
 		return
 	}
-	if rt.Allow != nil && !rt.Allow(peerIP(r)) {
+	if rt.Allow != nil && !rt.Allow(localnet.Origin(peerIP(r))) {
 		notFound(w)
 		return
 	}
@@ -960,7 +961,7 @@ func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		e.unknown(w, r)
 		return
 	}
-	if rt.Allow != nil && !rt.Allow(peerIP(r)) {
+	if rt.Allow != nil && !rt.Allow(localnet.Origin(peerIP(r))) {
 		notFound(w)
 		return
 	}
@@ -987,7 +988,7 @@ func (e *Edge) serveFallbackHTTP(t *table, w http.ResponseWriter, r *http.Reques
 		if rt.HTTP == nil || rt.NoHTTP || !pathMatches(rt.Path, r.URL.Path) {
 			continue
 		}
-		if rt.Allow != nil && !rt.Allow(peerIP(r)) {
+		if rt.Allow != nil && !rt.Allow(localnet.Origin(peerIP(r))) {
 			continue
 		}
 		rt.HTTP.ServeHTTP(w, r)

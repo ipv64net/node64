@@ -50,7 +50,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.56.5"
+	Version = "1.56.6"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -85,6 +85,7 @@ type Module struct {
 	acl        map[int64]*guard
 	authFail   *failLimiter
 	loginKey   atomic.Pointer[[]byte] // Schluessel der Sitzungs-Cookies der Login-Seite (access_login.go)
+	gwSeen     atomic.Int64           // letzte Anfrage mit der Adresse des Docker-Gateways (Unix-ns; Hinweis)
 	loginKeyMu sync.Mutex
 	hostTr     map[int64]idleCloser
 	checks     CheckCreator    // Healthcheck anlegen (nil = nicht verfuegbar)

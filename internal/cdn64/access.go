@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/shield"
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -107,7 +108,7 @@ func parsePrefix(s string) (netip.Prefix, error) {
 func (a *AccessList) ipAllowed(ip netip.Addr) bool { return a.ipAllowedDyn(ip, nil) }
 
 func (a *AccessList) ipAllowedDyn(ip netip.Addr, d *dynAddrs) bool {
-	ip = ip.Unmap()
+	ip = localnet.Origin(ip.Unmap()) // Docker-Gateway: Herkunft unbekannt - trifft nur "all", keine privaten Netze
 	for _, r := range a.Rules {
 		if r.dyn != "" {
 			hit, known := d.match(r.dyn, r.CIDR, ip)

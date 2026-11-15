@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.56.6 – 2026-11-15
+
+### Changed
+- Security (Docker bridge network): requests arriving with the address of the Docker gateway (userland proxy, IPv6 without ip6tables, some NAS systems, access from the Docker host) have an unknown origin – they may also come from the internet. PROXY64 no longer treats them as home network: entries with private networks in access lists, "own network only" of the web interface under its own name and the "home network" exemption of the limits do not apply; a country block "allow only" rejects them. The Proxy hosts page then shows a hint. Fix: start the container with `network_mode: host` – with Docker's userland proxy (e.g. on some NAS systems) this otherwise affects all devices in the home network.
+
 ## 1.56.5 – 2026-11-15
 
 ### Fixed

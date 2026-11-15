@@ -539,6 +539,7 @@
     "edge_error": "Der gemeinsame Eingang kann einen Port nicht öffnen:",
     "pub_missing": "Docker-Bridge-Netz: PROXY64 lauscht im Container, aber Port {ports} ist auf dem Docker-Host nicht veröffentlicht – von außen kommt hier nichts an. Beim Start des Containers ergänzen:",
     "pub_more": "Beispiel für docker compose und Host-Netz",
+    "gw_masked": "Docker-Bridge-Netz: Anfragen kamen mit der Adresse des Docker-Gateways an – ihre echte Herkunft ist unbekannt, sie können auch aus dem Internet stammen (Userland-Proxy, IPv6 ohne ip6tables, manche NAS, Zugriffe vom Docker-Host). PROXY64 wertet sie deshalb nicht als Heimnetz: Einträge mit privaten Netzen in Zugriffslisten und die Ausnahme „Heimnetz“ der Limits greifen nicht, eine Ländersperre „nur zulassen“ weist sie ab. Läuft Docker mit Userland-Proxy (z. B. auf manchen NAS), kommen so alle Geräte im Heimnetz an. Abhilfe: Container mit network_mode: host starten.",
     "edge_settings": "Ports einstellen",
     "f": {
       "names": "Domains",

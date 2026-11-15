@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64 1.56.6 (security): requests via the Docker gateway (bridge network) no longer count as home network – access lists with private networks, "own network only" and the home network exemption of the limits do not apply to them; a hint recommends `network_mode: host`.
+
 ## 1.7.3 – 2026-11-15
 
 - DNS64: DNS rebinding protection (on by default; if your own domain points to devices in your home network publicly, add it as an exception in the settings); new home network CAs only cover local and own names, an existing CA can be replaced by a restricted one with a button.

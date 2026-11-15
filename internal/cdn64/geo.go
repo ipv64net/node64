@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/shield"
 )
@@ -125,10 +126,17 @@ func (m *Module) geoBlockedBy(mode string, countries []string, ip netip.Addr) bo
 		return false
 	}
 	ip = ip.Unmap()
-	if !ip.IsValid() || !ip.IsGlobalUnicast() || ip.IsPrivate() || cgnat.Contains(ip) {
+	g := &m.bl.geo
+	if !ip.IsValid() || localnet.MaskedGateway(ip) { // Herkunft unbekannt (Docker-Gateway): "nur zulassen" sperrt
+		if mode == geoAllow {
+			g.blocked.Add(1)
+			return true
+		}
 		return false
 	}
-	g := &m.bl.geo
+	if !ip.IsGlobalUnicast() || ip.IsPrivate() || cgnat.Contains(ip) {
+		return false
+	}
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	for _, p := range g.allow {

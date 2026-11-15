@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 )
 
 // TLS durchreichen: Edge liest auf Port 443 nur die erste Nachricht des Browsers (ClientHello) und den Namen
@@ -165,7 +167,7 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 // passthrough verbindet roh mit dem Ziel und kopiert in beide Richtungen (auf Wunsch mit PROXY-Kopf vorneweg).
 func (e *Edge) passthrough(conn net.Conn, data []byte, rt *Route) {
 	if rt.Allow != nil {
-		if ip := addrIP(conn.RemoteAddr()); !rt.Allow(ip) {
+		if ip := localnet.Origin(addrIP(conn.RemoteAddr())); !rt.Allow(ip) { // Docker-Gateway: Herkunft unbekannt
 			_ = conn.Close()
 			return
 		}

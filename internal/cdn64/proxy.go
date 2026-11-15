@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/httpcompress"
 )
@@ -980,6 +981,9 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		start := time.Now()
 		st.requests.Add(1)
 		client := h.Advanced.clientIP(r)
+		if localnet.MaskedGateway(client) { // Hinweis auf der Seite Proxy-Hosts
+			m.gwSeen.Store(time.Now().UnixNano())
+		}
 		reject, authFail, decoyed := new(string), new(bool), new(bool)
 		ctx := context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject)
 		r = r.WithContext(context.WithValue(context.WithValue(ctx, ctxAuthFailKey{}, authFail), ctxDecoyKey{}, decoyed))

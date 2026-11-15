@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 )
 
 // Schutz vor Ueberlastung (wie stick-tables/maxconn beim HAProxy): Verbindungen und Anfragen je IP, Verbindungen
@@ -144,6 +146,9 @@ func limShow(k netip.Addr) string {
 
 func (l *limiter) exempted(c *Limits, a netip.Addr) bool {
 	a = a.Unmap()
+	if localnet.MaskedGateway(a) { // Docker-Gateway: Herkunft unbekannt, nie als Heimnetz ausnehmen
+		return false
+	}
 	if !a.IsValid() || c.ExemptLAN && (a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || l.lan.has(a)) {
 		return true
 	}

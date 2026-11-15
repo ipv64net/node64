@@ -539,6 +539,7 @@
     "edge_error": "The common entrance cannot open a port:",
     "pub_missing": "Docker bridge network: PROXY64 listens inside the container, but port {ports} is not published on the Docker host – nothing from outside arrives here. Add when starting the container:",
     "pub_more": "Example for docker compose and host network",
+    "gw_masked": "Docker bridge network: requests arrived with the address of the Docker gateway – their real origin is unknown, they may also come from the internet (userland proxy, IPv6 without ip6tables, some NAS systems, access from the Docker host). PROXY64 therefore does not treat them as home network: entries with private networks in access lists and the \"home network\" exemption of the limits do not apply, a country block \"allow only\" rejects them. If Docker runs with the userland proxy (e.g. on some NAS systems), all devices in the home network arrive this way. Fix: start the container with network_mode: host.",
     "edge_settings": "Port settings",
     "f": {
       "names": "Domains",
