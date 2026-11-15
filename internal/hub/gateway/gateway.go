@@ -191,7 +191,8 @@ func (g *Gateway) auth(h http.HandlerFunc) http.Handler {
 		if tok == "" {
 			tok = r.URL.Query().Get("token") // WebSocket aus Browsern o. ae.
 		}
-		if !g.trusted[g.clientIP(r)] && !g.limiter.allow("auth:"+g.clientIP(r), 60, time.Minute) {
+		// Fehlanmeldungen (widerrufene/falsche Tokens) bremsen strenger als gueltige Anmeldungen
+		if !g.trusted[g.clientIP(r)] && (!g.limiter.allow("auth:"+g.clientIP(r), 60, time.Minute) || g.limiter.over("bad:"+g.clientIP(r), 20)) {
 			writeErr(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
@@ -600,6 +601,14 @@ const (
 )
 
 func newIPLimiter() *ipLimiter { return &ipLimiter{m: map[string]*bucket{}} }
+
+// over meldet, ob ein Schluessel sein Limit im laufenden Fenster schon ueberschritten hat (zaehlt nicht mit).
+func (l *ipLimiter) over(key string, limit int) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, ok := l.m[key]
+	return ok && time.Now().Before(b.reset) && b.count > limit
+}
 
 // allow zaehlt einen Zugriff; false, wenn limit im Fenster erreicht.
 func (l *ipLimiter) allow(key string, limit int, window time.Duration) bool {

@@ -126,13 +126,15 @@ func (s *Store) LinkPoll(ctx context.Context, in wire.LinkPoll) (*wire.Linked, e
 	// node_id kommt von der Node: eine aktive Node eines anderen Accounts darf nicht uebernommen werden
 	// (erst dort trennen). Wechselt der Account, gelten alte Tokens nicht mehr.
 	var oldUser int64
-	var oldRevoked sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT userid, revoked_at FROM hc2_nodes WHERE node_id = ? FOR UPDATE`, nodeID).Scan(&oldUser, &oldRevoked)
+	var oldRevoked, oldProxy sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT userid, revoked_at, proxy_via FROM hc2_nodes WHERE node_id = ? FOR UPDATE`, nodeID).Scan(&oldUser, &oldRevoked, &oldProxy)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
 	if err == nil && oldUser != userid.Int64 {
-		if !oldRevoked.Valid {
+		// Ein Stellvertreter-Eintrag (proxy_via, von einer anderen Node gemeldet) ist keine Verknuepfung: sonst koennte
+		// eine Node mit einer fremden node_id deren Verknuepfung dauerhaft verhindern.
+		if !oldRevoked.Valid && !oldProxy.Valid {
 			// Code verbrauchen, damit die Node nicht bis zum Ablauf weiter fragt
 			if _, err := tx.ExecContext(ctx, `UPDATE hc2_link_codes SET consumed_at = ? WHERE code = ?`, nowStr(), strings.ToUpper(strings.ReplaceAll(in.Code, "-", ""))); err != nil {
 				return nil, err

@@ -65,3 +65,29 @@ func TestIngestEventsOwnAndTime(t *testing.T) {
 		t.Errorf("Zustellung in der Zukunft gespeichert: %v", times[0])
 	}
 }
+
+// Sicherheits-Review HC-n1: entityData liefert nur Eintraege des eigenen Accounts.
+func TestEntityDataOwnAccount(t *testing.T) {
+	var queries []string
+	s, _ := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
+		queries = append(queries, q)
+		if strings.HasPrefix(q, "SELECT token, userid FROM hc2_checks") {
+			return fakeResult{cols: []string{"token", "userid"}, rows: [][]driver.Value{{"foreign-token-000000", int64(5)}}}
+		}
+		return fakeResult{cols: []string{"id"}}
+	})
+	ctx := context.Background()
+	if d, err := s.entityData(ctx, "check", "foreign-token-000000", "node-a", 9); err != nil || d != nil {
+		t.Fatalf("fremder Check: %s %v", d, err)
+	}
+	_, _ = s.entityData(ctx, "maintenance", "1", "node-a", 9)
+	_, _ = s.entityData(ctx, "channel", "1", "node-a", 9)
+	for _, q := range queries {
+		if (strings.Contains(q, "FROM hc2_maintenance") || strings.Contains(q, "FROM hc2_channels")) && !strings.Contains(q, "userid = ?") {
+			t.Errorf("ohne userid: %s", q)
+		}
+		if strings.Contains(q, "FROM hc2_checks WHERE token = ?") {
+			t.Errorf("fremder Check gelesen: %s", q)
+		}
+	}
+}

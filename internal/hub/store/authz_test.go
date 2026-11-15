@@ -167,10 +167,13 @@ func TestLinkPollRefusesForeignNode(t *testing.T) {
 		revoked    any
 		want       error
 		wantRevoke bool
+		proxy      any
 	}{
-		{"foreign active", 8, nil, ErrNodeOwned, false},
-		{"foreign revoked", 8, "2026-10-01 00:00:00.000", nil, true},
-		{"same account", 7, nil, nil, false},
+		{"foreign active", 8, nil, ErrNodeOwned, false, nil},
+		{"foreign revoked", 8, "2026-10-01 00:00:00.000", nil, true, nil},
+		{"same account", 7, nil, nil, false, nil},
+		// Sicherheits-Review HC-n1: ein Stellvertreter-Eintrag eines anderen Accounts blockiert die Verknuepfung nicht
+		{"foreign proxy entry", 8, nil, nil, true, "node-x"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, f := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
@@ -178,8 +181,8 @@ func TestLinkPollRefusesForeignNode(t *testing.T) {
 				case strings.HasPrefix(q, "SELECT node_id, node_name"):
 					return fakeResult{cols: []string{"node_id", "node_name", "node_version", "poll_secret", "userid", "location", "remote_mgmt", "consumed_at", "expires_at"},
 						rows: [][]driver.Value{{"n1", "box", "1", "sec", int64(7), "", "full", nil, "2099-01-01 00:00:00.000"}}}
-				case strings.HasPrefix(q, "SELECT userid, revoked_at FROM hc2_nodes"):
-					return fakeResult{cols: []string{"userid", "revoked_at"}, rows: [][]driver.Value{{tc.owner, tc.revoked}}}
+				case strings.HasPrefix(q, "SELECT userid, revoked_at, proxy_via FROM hc2_nodes"):
+					return fakeResult{cols: []string{"userid", "revoked_at", "proxy_via"}, rows: [][]driver.Value{{tc.owner, tc.revoked, tc.proxy}}}
 				case strings.HasPrefix(q, "SELECT"):
 					return fakeResult{err: errors.New("not in test")}
 				}

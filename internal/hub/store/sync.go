@@ -298,6 +298,10 @@ func (s *Store) ConfigSince(ctx context.Context, userID int64, nodeID string, si
 func (s *Store) entityData(ctx context.Context, entity, id, nodeID string, userID int64) (json.RawMessage, error) {
 	switch entity {
 	case "check":
+		// nur Checks des eigenen Accounts (zweite Absicherung zur Besitzpruefung der Aufrufer)
+		if own, err := s.ownedTokens(ctx, userID, []string{id}); err != nil || !own[id] {
+			return nil, err
+		}
 		c, deleted, err := s.WireCheck(ctx, id)
 		if err != nil || c == nil || deleted {
 			return nil, err
@@ -305,7 +309,7 @@ func (s *Store) entityData(ctx context.Context, entity, id, nodeID string, userI
 		c.Owner = ownerOf(c, nodeID)
 		return json.Marshal(c)
 	case "maintenance":
-		m, err := scanWireMaint(s.db.QueryRowContext(ctx, `SELECT id, name, start_at, end_at, `+"`repeat`"+`, repeat_until, tokens, active, revision, node_id FROM hc2_maintenance WHERE id = ? AND deleted_at IS NULL`, id))
+		m, err := scanWireMaint(s.db.QueryRowContext(ctx, `SELECT id, name, start_at, end_at, `+"`repeat`"+`, repeat_until, tokens, active, revision, node_id FROM hc2_maintenance WHERE id = ? AND userid = ? AND deleted_at IS NULL`, id, userID))
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -314,7 +318,7 @@ func (s *Store) entityData(ctx context.Context, entity, id, nodeID string, userI
 		}
 		return json.Marshal(m)
 	case "channel":
-		ch, err := s.scanWireChannel(s.db.QueryRowContext(ctx, `SELECT id, type, name, config_enc, enabled, is_default, lang, notify_down, notify_up, revision, node_id, secret_only_local FROM hc2_channels WHERE id = ? AND deleted_at IS NULL`, id), nodeID)
+		ch, err := s.scanWireChannel(s.db.QueryRowContext(ctx, `SELECT id, type, name, config_enc, enabled, is_default, lang, notify_down, notify_up, revision, node_id, secret_only_local FROM hc2_channels WHERE id = ? AND userid = ? AND deleted_at IS NULL`, id, userID), nodeID)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
