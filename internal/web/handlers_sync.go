@@ -57,6 +57,7 @@ type conflictRow struct {
 	Server   string
 	Deleted  bool // der hub hat den Eintrag nicht (Grund bekannt, keine Server-Fassung)
 	Unknown  bool // alter Konflikt: Server-Stand unbekannt
+	Hidden   bool // Fassungen nur fuer Administratoren (darin stehen Check-Parameter und Kanal-Konfiguration)
 	Error    string
 	Created  time.Time
 	LocalOp  string
@@ -69,8 +70,12 @@ func (s *Server) linkPage(w http.ResponseWriter, r *http.Request) {
 	if s.HC != nil {
 		if list, err := s.HC.Conflicts(r.Context()); err == nil {
 			for _, c := range list {
-				d.Conflicts = append(d.Conflicts, conflictRow{ID: c.ID, Entity: c.Entity, Name: healthchecks.ConflictName(c), Local: pretty(c.LocalPayload), Server: pretty(c.ServerPayload),
-					Deleted: c.ServerPayload == "" && c.Error != "", Unknown: c.ServerPayload == "" && c.Error == "", Error: c.Error, Created: c.CreatedAt, LocalOp: c.LocalOp, Revision: c.ServerRevision})
+				row := conflictRow{ID: c.ID, Entity: c.Entity, Name: healthchecks.ConflictName(c), Local: pretty(c.LocalPayload), Server: pretty(c.ServerPayload),
+					Deleted: c.ServerPayload == "" && c.Error != "", Unknown: c.ServerPayload == "" && c.Error == "", Error: c.Error, Created: c.CreatedAt, LocalOp: c.LocalOp, Revision: c.ServerRevision}
+				if !v.Admin {
+					row.Local, row.Server, row.Hidden = "", "", true
+				}
+				d.Conflicts = append(d.Conflicts, row)
 			}
 		}
 	}

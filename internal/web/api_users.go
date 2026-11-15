@@ -60,8 +60,8 @@ func (s *Server) apiUserMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, s.userJSON(r.Context(), u, u.ID))
 }
 
-// PUT /api/users/me {lang, timezone}: eigene Sprache und Zeitzone (fehlende Felder bleiben; die Zeitzone gilt auch
-// fuer die Node).
+// PUT /api/users/me {lang, timezone}: eigene Sprache und Zeitzone (fehlende Felder bleiben; die Zeitzone gilt bei
+// Administratoren auch fuer die Node).
 func (s *Server) apiUserMePut(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Lang     *string `json:"lang"`

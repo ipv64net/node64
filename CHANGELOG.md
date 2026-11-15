@@ -15,6 +15,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - DNS64: Ein Router-Dienst auf demselben Host (radvd, odhcpd) wird schon vor dem ersten eigenen RA erkannt – nach einem Neustart verlieren die Geräte die IPv6-Default-Route nicht mehr; RS von „::“ werden beantwortet. Dazu: IPv4-Vergabe zählt für Gerätenamen auch neben IPv6-Nachbarn, hosts-Zeilen mit Tab in den eigenen Listen bleiben erhalten, eigene Regeln lesen hosts-Zeilen wie die Blocklisten, IP-Adressen zählen in Blocklisten nicht als Domain, nachträglich angehängte Docker-Netze gelten nicht als „von außen“, die Reserve-Node hält beim DHCP-Failover nicht mehr an.
 - Monitor64: Proxmox-Cluster – migrierte VMs und Container gelten nicht mehr als verschwunden; sie ziehen samt Einstellungen und Verlauf zum Host der neuen Node um bzw. werden weitergeführt, wenn die Node nicht eingetragen ist. Bei HA-Ressourcen gilt der Soll-Zustand aus der HA-Konfiguration (#165).
 - DynDNS: IPv6 „nur Präfix“ und „Präfix + Interface-ID“ können das Präfix von einem bestimmten Interface nehmen statt von der von außen gesehenen IPv6, z. B. bei zwei Anschlüssen (#154).
+- Benutzerverwaltung: „Nur lesen“ ändert mit der eigenen Zeitzone nicht mehr die Zeitzone der Node (die setzen nur Administratoren) und sieht bei Sync-Konflikten mit ipv64.net nur noch Name, Art, Zeit und Grund, nicht mehr beide Fassungen (darin stehen Check-Parameter und Einstellungen der Kanäle; API: `local`/`server` sind `null`).
 
 ## 1.7.0 – 2026-11-14
 

@@ -14,8 +14,6 @@ import (
 // Seiten und GET-APIs, aendert aber nichts ausser dem eigenen Konto (selfService). Geprueft wird zentral in auth
 // (damit auch in Guards.Auth der Module); GETs mit Geheimnissen schuetzt admin bzw. Guards.Admin.
 
-const ctxRole ctxKey = 100 // wirksame Rolle des angemeldeten Benutzers (store.RoleAdmin/RoleRead)
-
 // withUser setzt den angemeldeten Benutzer samt wirksamer Rolle (eigene Rolle und Gruppen) in den Kontext.
 func (s *Server) withUser(ctx context.Context, u *store.User) context.Context {
 	ctx = context.WithValue(ctx, ctxUser, u)

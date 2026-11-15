@@ -15229,10 +15229,18 @@
                         "type": "string"
                       },
                       "local": {
-                        "type": "object"
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "description": "Nur für Administratoren, bei „Nur lesen“ null (enthält Check-Parameter und Kanal-Einstellungen)."
                       },
                       "server": {
-                        "type": "object"
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "description": "Nur für Administratoren, bei „Nur lesen“ null (enthält Check-Parameter und Kanal-Einstellungen)."
                       },
                       "server_revision": {
                         "type": "integer"
@@ -15240,6 +15248,9 @@
                       "created_at": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "error": {
+                        "type": "string"
                       }
                     }
                   }
@@ -17055,7 +17066,7 @@
           "Benutzerverwaltung"
         ],
         "summary": "Eigene Sprache und Zeitzone",
-        "description": "Fehlende Felder bleiben. Die Zeitzone gilt auch für die Node.",
+        "description": "Fehlende Felder bleiben. Die Zeitzone gilt bei Administratoren auch für die Node; bei „Nur lesen“ nur für das eigene Konto.",
         "requestBody": {
           "required": true,
           "content": {

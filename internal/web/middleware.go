@@ -38,6 +38,8 @@ const (
 	ctxCSRF
 	ctxPending // Sitzung wartet auf die zweite Stufe (TOTP)
 	ctxAPIKey  // Anfrage per API-Key authentifiziert
+	ctxRole    // wirksame Rolle des angemeldeten Benutzers (store.RoleAdmin/RoleRead, roles.go)
+	ctxMCPKey  // Aufruf ueber die MCP-Schnittstelle (mcp.Identity, mcp.go)
 )
 
 func randomToken(n int) string {

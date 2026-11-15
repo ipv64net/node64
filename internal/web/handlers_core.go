@@ -622,12 +622,13 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-// saveUserPrefs speichert Sprache und Zeitzone eines Benutzers (Oberflaeche und API); die Zeitzone gilt auch fuer die Node.
+// saveUserPrefs speichert Sprache und Zeitzone eines Benutzers (Oberflaeche und API); die Zeitzone gilt auch fuer die
+// Node, aber nur wenn ein Administrator sie setzt (sie gilt fuer alle und geht in den Cluster).
 func (s *Server) saveUserPrefs(r *http.Request, u *store.User, lang, tz string) error {
 	if err := s.Store.UpdateUserPrefs(r.Context(), u.ID, lang, tz); err != nil {
 		return err
 	}
-	if tz != "" {
+	if tz != "" && s.isAdmin(r) {
 		_ = s.Store.SetSetting(r.Context(), SettingNodeTimezone, tz)
 	}
 	s.audit(r, "settings.user", u.Username, "lang="+lang+" timezone="+tz)

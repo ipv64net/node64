@@ -194,10 +194,15 @@ func (s *Server) apiConflicts(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "database error")
 		return
 	}
+	admin := s.isAdmin(r) // Fassungen (Check-Parameter, Kanal-Konfiguration) nur fuer Administratoren, sonst null
 	out := make([]map[string]any, 0, len(list))
 	for _, c := range list {
+		local, server := orNull(c.LocalPayload), orNull(c.ServerPayload)
+		if !admin {
+			local, server = "null", "null"
+		}
 		out = append(out, map[string]any{"id": c.ID, "entity": c.Entity, "entity_id": c.EntityID, "name": healthchecks.ConflictName(c),
-			"local_op": c.LocalOp, "local": json.RawMessage(orNull(c.LocalPayload)), "server": json.RawMessage(orNull(c.ServerPayload)),
+			"local_op": c.LocalOp, "local": json.RawMessage(local), "server": json.RawMessage(server),
 			"server_revision": c.ServerRevision, "created_at": c.CreatedAt, "error": c.Error})
 	}
 	writeJSON(w, 200, out)

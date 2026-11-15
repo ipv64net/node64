@@ -28,7 +28,6 @@ import (
 const (
 	setMCPEnabled = "mcp.enabled"
 	mcpRate       = 60 // Aufrufe je Minute und Schluessel
-	ctxMCPKey     = ctxKey(100)
 )
 
 func (s *Server) mcpRoutes() {

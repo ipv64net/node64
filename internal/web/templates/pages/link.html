@@ -130,10 +130,11 @@
 	<div class="card-body">
 		{{if .Error}}<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "link.rejected"}} <span class="font-monospace">{{.Error}}</span></div>
 		{{else if .Unknown}}<div class="alert alert-secondary small py-2"><i class="bi bi-info-circle"></i> {{$.T "link.rejected_old"}}</div>{{end}}
+		{{if .Hidden}}<p class="small text-body-secondary mb-0"><i class="bi bi-lock"></i> {{$.T "link.versions_admin_only"}}</p>{{else}}
 		<div class="row g-3">
 			<div class="col-md-6"><div class="small fw-semibold mb-1">{{$.T "link.local_version"}}</div><pre class="small bg-body-tertiary p-2 rounded" style="max-height:260px;overflow:auto">{{.Local}}</pre></div>
 			<div class="col-md-6"><div class="small fw-semibold mb-1">{{$.T "link.server_version"}}</div><pre class="small bg-body-tertiary p-2 rounded" style="max-height:260px;overflow:auto">{{if .Deleted}}{{$.T "link.server_missing"}}{{else if .Unknown}}{{$.T "link.server_unknown"}}{{else}}{{.Server}}{{end}}</pre></div>
-		</div>
+		</div>{{end}}
 		<form method="post" action="/link/conflicts/{{.ID}}" class="d-flex gap-2 mt-2">
 			<input type="hidden" name="_csrf" value="{{$.CSRF}}">
 			{{if .Deleted}}<button class="btn btn-outline-danger btn-sm" name="keep" value="server" data-confirm="{{$.T "link.delete_here_confirm"}}" title="{{$.T "link.delete_here_hint"}}">{{$.T "link.delete_here"}}</button>
