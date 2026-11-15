@@ -56,36 +56,37 @@ func ts(t time.Time) *time.Time {
 
 // targetJSON ist ein Ziel in der API (Token nur als Eingabe).
 type targetJSON struct {
-	ID         int64      `json:"id"`
-	Domain     string     `json:"domain"`
-	Host       string     `json:"host"`
-	FQDN       string     `json:"fqdn"`
-	RecordID   int64      `json:"record_id"`
-	TokenKind  string     `json:"token_kind"`
-	Token      string     `json:"token,omitempty"`
-	TokenHint  string     `json:"token_hint,omitempty"`
-	Mode4      string     `json:"mode4"`
-	Fixed4     string     `json:"fixed4"`
-	Mode6      string     `json:"mode6"`
-	Fixed6     string     `json:"fixed6"`
-	Suffix6    string     `json:"suffix6"`
-	Iface      string     `json:"iface"`
-	Enabled    *bool      `json:"enabled,omitempty"`
-	Paused     string     `json:"paused"`
-	Status     string     `json:"status"`
-	LastIP4    string     `json:"last_ipv4"`
-	LastIP6    string     `json:"last_ipv6"`
-	LastPrefix string     `json:"last_prefix"`
-	LastOKAt   *time.Time `json:"last_ok_at"`
-	LastError  string     `json:"last_error"`
-	LastErrAt  *time.Time `json:"last_error_at"`
-	DNSState   string     `json:"dns_state"` // unknown, ok, differs, redirected
+	ID          int64      `json:"id"`
+	Domain      string     `json:"domain"`
+	Host        string     `json:"host"`
+	FQDN        string     `json:"fqdn"`
+	RecordID    int64      `json:"record_id"`
+	TokenKind   string     `json:"token_kind"`
+	Token       string     `json:"token,omitempty"`
+	TokenHint   string     `json:"token_hint,omitempty"`
+	Mode4       string     `json:"mode4"`
+	Fixed4      string     `json:"fixed4"`
+	Mode6       string     `json:"mode6"`
+	Fixed6      string     `json:"fixed6"`
+	Suffix6     string     `json:"suffix6"`
+	Iface       string     `json:"iface"`
+	PrefixIface string     `json:"prefix_iface"`
+	Enabled     *bool      `json:"enabled,omitempty"`
+	Paused      string     `json:"paused"`
+	Status      string     `json:"status"`
+	LastIP4     string     `json:"last_ipv4"`
+	LastIP6     string     `json:"last_ipv6"`
+	LastPrefix  string     `json:"last_prefix"`
+	LastOKAt    *time.Time `json:"last_ok_at"`
+	LastError   string     `json:"last_error"`
+	LastErrAt   *time.Time `json:"last_error_at"`
+	DNSState    string     `json:"dns_state"` // unknown, ok, differs, redirected
 }
 
 func targetOut(t *Target) targetJSON {
 	on := t.Enabled
 	return targetJSON{ID: t.ID, Domain: t.Domain, Host: t.Host, FQDN: t.FQDN(), RecordID: t.RecordID, TokenKind: t.TokenKind, TokenHint: t.TokenMasked(),
-		Mode4: t.Mode4, Fixed4: t.Fixed4, Mode6: t.Mode6, Fixed6: t.Fixed6, Suffix6: t.Suffix6, Iface: t.Iface, Enabled: &on, Paused: t.Paused, Status: t.Status(),
+		Mode4: t.Mode4, Fixed4: t.Fixed4, Mode6: t.Mode6, Fixed6: t.Fixed6, Suffix6: t.Suffix6, Iface: t.Iface, PrefixIface: t.PrefixIface, Enabled: &on, Paused: t.Paused, Status: t.Status(),
 		LastIP4: t.LastIP4, LastIP6: t.LastIP6, LastPrefix: t.LastPrefix, LastOKAt: ts(t.LastOKAt), LastError: t.LastError, LastErrAt: ts(t.LastErrAt),
 		DNSState: []string{"unknown", "ok", "differs", "redirected"}[min(max(t.DNSState, 0), 3)]}
 }
@@ -93,6 +94,7 @@ func targetOut(t *Target) targetJSON {
 // apply uebertraegt eine Eingabe auf ein Ziel (Token leer = unveraendert).
 func (in targetJSON) apply(t *Target) {
 	t.Domain, t.Host, t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface = in.Domain, in.Host, in.Mode4, in.Fixed4, in.Mode6, in.Fixed6, in.Suffix6, in.Iface
+	t.PrefixIface = in.PrefixIface
 	if in.TokenKind != "" {
 		t.TokenKind = in.TokenKind
 	}

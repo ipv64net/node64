@@ -71,7 +71,8 @@ func trustedAddr(nets []netip.Prefix, a net.Addr) bool {
 type ppListener struct {
 	net.Listener
 	trust func(net.Addr) bool
-	bad   func(net.Addr, error) // unlesbarer Kopf einer vertrauten Quelle (nil = nicht melden)
+	claim func(peer, src net.Addr) bool // darf diese Quelle diese Absenderadresse melden? (nil = ja)
+	bad   func(net.Addr, error)         // unlesbarer Kopf einer vertrauten Quelle (nil = nicht melden)
 	ch    chan net.Conn
 	errc  chan error
 	done  chan struct{}
@@ -120,6 +121,9 @@ func (l *ppListener) loop() {
 				}
 				_ = c.Close()
 				return
+			}
+			if p, ok := pc.(*ppConn); ok && p.remote != nil && l.claim != nil && !l.claim(c.RemoteAddr(), p.remote) {
+				p.remote, p.local = nil, nil // Absender nicht glaubwuerdig: es gilt die echte Adresse der Verbindung
 			}
 			l.deliver(pc)
 		}()

@@ -19,8 +19,10 @@
 				<label class="form-label fw-semibold" for="mode6">IPv6</label>
 				<select class="form-select form-select-sm mb-1" id="mode6" name="mode6" data-mode-select>{{range $d.Modes6}}<option value="{{.}}"{{if eq . $t.Mode6}} selected{{end}}>{{$.T (print "dyn.mode6." .)}}</option>{{end}}</select>
 				<div data-mode-of="mode6" data-modes="suffix"><label class="form-label" for="suffix6">{{.T "dyn.field.suffix6"}}</label><input class="form-control form-control-sm font-monospace mb-1" id="suffix6" name="suffix6" value="{{$t.Suffix6}}" placeholder="::1a2b:3c4d:5e6f:7a8b" maxlength="45"></div>
-				<div data-mode-of="mode6" data-modes="iface prefix suffix"><label class="form-label" for="iface">{{.T "dyn.field.iface"}}</label><input class="form-control form-control-sm mb-1" id="iface" name="iface" value="{{$t.Iface}}" placeholder="eth0" maxlength="15">
-					<div class="form-text" data-mode-of="mode6" data-modes="prefix suffix">{{.T "dyn.edit.iface_prefix"}}</div>
+				<div data-mode-of="mode6" data-modes="iface"><label class="form-label" for="iface">{{.T "dyn.field.iface"}}</label><input class="form-control form-control-sm mb-1" id="iface" name="iface" value="{{$t.Iface}}" placeholder="eth0" maxlength="15">
+					{{if $d.Local}}<div class="form-text">{{.T "dyn.edit.ifaces"}} {{range $d.Local}}{{if not .Temporary}}<code>{{.Iface}}</code> {{end}}{{end}}</div>{{else}}<div class="form-text text-warning">{{.T "dyn.edit.no_ifaces"}}</div>{{end}}</div>
+				<div data-mode-of="mode6" data-modes="prefix suffix"><label class="form-label" for="prefix_iface">{{.T "dyn.field.iface"}}</label><input class="form-control form-control-sm mb-1" id="prefix_iface" name="prefix_iface" value="{{$t.PrefixIface}}" placeholder="eth0" maxlength="15">
+					<div class="form-text">{{.T "dyn.edit.iface_prefix"}}</div>
 					{{if $d.Local}}<div class="form-text">{{.T "dyn.edit.ifaces"}} {{range $d.Local}}{{if not .Temporary}}<code>{{.Iface}}</code> {{end}}{{end}}</div>{{else}}<div class="form-text text-warning">{{.T "dyn.edit.no_ifaces"}}</div>{{end}}</div>
 				<div data-mode-of="mode6" data-modes="fixed"><input class="form-control form-control-sm font-monospace mb-1" name="fixed6" value="{{$t.Fixed6}}" placeholder="2001:db8::10" maxlength="45"></div>
 				<div class="form-text mb-1">{{.T (print "dyn.mode6_hint." $t.Mode6)}}</div>

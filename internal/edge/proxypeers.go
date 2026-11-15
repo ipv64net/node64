@@ -30,7 +30,23 @@ func (e *Edge) proxyListen(ln net.Listener, cfg Config) net.Listener {
 		return ln
 	}
 	peers := cfg.ProxyProtocolPeers
-	return newPPListener(ln, func(a net.Addr) bool { return trustedAddr(nets, a) || (peers && e.clusterAddr(addrIP(a))) }, e.proxyBadHeader)
+	l := newPPListener(ln, func(a net.Addr) bool { return trustedAddr(nets, a) || (peers && e.clusterAddr(addrIP(a))) }, e.proxyBadHeader)
+	l.(*ppListener).claim = func(peer, src net.Addr) bool {
+		return trustedAddr(nets, peer) || peerClaimOK(addrIP(peer), addrIP(src))
+	}
+	return l
+}
+
+// peerClaimOK: Absender aus dem PROXY-Kopf einer Cluster-Node (nur ueber den Schalter vertraut). Steht hinter einer
+// oeffentlichen Adresse der Node ein NAT, kann jedes Geraet dahinter einen Kopf schicken; eine private Absenderadresse
+// (192.168.x, fd00::, Loopback) von dort gilt deshalb nicht - sonst kaeme es an Zugriffslisten "nur Heimnetz" vorbei.
+// Besucher aus dem Internet, die die Node weiterreicht, haben oeffentliche Adressen.
+func peerClaimOK(peer, src netip.Addr) bool {
+	public := func(a netip.Addr) bool {
+		a = a.Unmap()
+		return a.IsGlobalUnicast() && !a.IsPrivate()
+	}
+	return !public(peer) || public(src)
 }
 
 // isProxyHeader: die ersten Bytes einer Verbindung sind ein PROXY-Kopf (v1 oder v2), auch wenn nur ein Teil gelesen ist.
@@ -86,7 +102,8 @@ func (e *Edge) proxyBadHeader(a net.Addr, err error) {
 
 // SetProxyPeers setzt die Quelle der Cluster-Nodes (URLs bzw. Adressen der anderen Nodes, z. B.
 // "https://192.168.1.5:8443"). Mit Config.ProxyProtocolPeers nimmt der Eingang von deren Adressen einen PROXY-Kopf an;
-// Namen werden aufgeloest, die Liste jede Minute neu bestimmt.
+// Namen werden aufgeloest, die Liste jede Minute neu bestimmt. Liefert f nil (Fehler, z. B. Datenbank), bleibt der
+// letzte Stand; leer (nicht nil) heisst keine Nodes.
 func (e *Edge) SetProxyPeers(f func(ctx context.Context) []string) {
 	if f == nil {
 		e.ppSrc.Store(nil)
@@ -153,7 +170,12 @@ func (e *Edge) refreshPeers() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	out := resolvePeers(ctx, (*src)(ctx), e.lookupIP)
+	list := (*src)(ctx)
+	if list == nil {
+		return // Quelle gerade nicht lesbar: letzter Stand bleibt
+	}
+	out, byHost := resolvePeers(ctx, list, e.lookupIP, e.ppHosts)
+	e.ppHosts = byHost
 	if old := e.ppPeers.Load(); old != nil && slices.Equal(*old, out) {
 		return
 	}
@@ -169,9 +191,12 @@ func (e *Edge) lookupIP(ctx context.Context, host string) ([]netip.Addr, error) 
 	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }
 
-// resolvePeers: Adressen aus URLs bzw. Adressen (Namen ueber lookup), ohne Doppelte, sortiert.
-func resolvePeers(ctx context.Context, list []string, lookup func(context.Context, string) ([]netip.Addr, error)) []netip.Addr {
+// resolvePeers: Adressen aus URLs bzw. Adressen (Namen ueber lookup), ohne Doppelte, sortiert. Scheitert die
+// Aufloesung eines Namens (z. B. DNS kurz nicht erreichbar), gelten seine Adressen aus dem letzten Lauf (prev) weiter,
+// statt die Verbindungen dieser Node bis zum naechsten Lauf abzuweisen.
+func resolvePeers(ctx context.Context, list []string, lookup func(context.Context, string) ([]netip.Addr, error), prev map[string][]netip.Addr) ([]netip.Addr, map[string][]netip.Addr) {
 	out := []netip.Addr{}
+	byHost := map[string][]netip.Addr{}
 	add := func(a netip.Addr) {
 		if a = a.Unmap(); a.IsValid() && !a.IsUnspecified() && !slices.Contains(out, a) {
 			out = append(out, a)
@@ -192,12 +217,13 @@ func resolvePeers(ctx context.Context, list []string, lookup func(context.Contex
 		}
 		addrs, err := lookup(ctx, host)
 		if err != nil {
-			continue
+			addrs = prev[host]
 		}
+		byHost[host] = addrs
 		for _, a := range addrs {
 			add(a)
 		}
 	}
 	slices.SortFunc(out, func(a, b netip.Addr) int { return a.Compare(b) })
-	return out
+	return out, byHost
 }

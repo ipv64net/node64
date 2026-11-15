@@ -117,25 +117,26 @@ func (m *Module) targetWhere(ctx context.Context, where string, args ...any) (*T
 
 // clusterTarget ist ein Name im Cluster (Token im Klartext).
 type clusterTarget struct {
-	Domain    string `json:"domain"`
-	Host      string `json:"host"`
-	RecordID  int64  `json:"record_id"`
-	TokenKind string `json:"token_kind"`
-	Token     string `json:"token"`
-	Mode4     string `json:"mode4"`
-	Fixed4    string `json:"fixed4"`
-	Mode6     string `json:"mode6"`
-	Fixed6    string `json:"fixed6"`
-	Suffix6   string `json:"suffix6"`
-	Iface     string `json:"iface"`
-	Enabled   bool   `json:"enabled"`
+	Domain      string `json:"domain"`
+	Host        string `json:"host"`
+	RecordID    int64  `json:"record_id"`
+	TokenKind   string `json:"token_kind"`
+	Token       string `json:"token"`
+	Mode4       string `json:"mode4"`
+	Fixed4      string `json:"fixed4"`
+	Mode6       string `json:"mode6"`
+	Fixed6      string `json:"fixed6"`
+	Suffix6     string `json:"suffix6"`
+	Iface       string `json:"iface"`
+	PrefixIface string `json:"prefix_iface,omitempty"` // aeltere Nodes ignorieren es
+	Enabled     bool   `json:"enabled"`
 	// Token hier nicht lesbar: die anderen behalten ihren Stand
 	Incomplete bool `json:"incomplete,omitempty"`
 }
 
 func toClusterTarget(t *Target) clusterTarget {
 	return clusterTarget{Domain: t.Domain, Host: t.Host, RecordID: t.RecordID, TokenKind: t.TokenKind, Token: t.Token, Mode4: t.Mode4, Fixed4: t.Fixed4,
-		Mode6: t.Mode6, Fixed6: t.Fixed6, Suffix6: t.Suffix6, Iface: t.Iface, Enabled: t.Enabled}
+		Mode6: t.Mode6, Fixed6: t.Fixed6, Suffix6: t.Suffix6, Iface: t.Iface, PrefixIface: t.PrefixIface, Enabled: t.Enabled}
 }
 
 // clusterSettings sind die Einstellungen im Cluster.
@@ -269,7 +270,7 @@ func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.Ra
 		return nil
 	}
 	t := &Target{Domain: in.Domain, Host: in.Host, RecordID: in.RecordID, TokenKind: in.TokenKind, Token: in.Token, Mode4: in.Mode4, Fixed4: in.Fixed4,
-		Mode6: in.Mode6, Fixed6: in.Fixed6, Suffix6: in.Suffix6, Iface: in.Iface, Enabled: in.Enabled, UID: id}
+		Mode6: in.Mode6, Fixed6: in.Fixed6, Suffix6: in.Suffix6, Iface: in.Iface, PrefixIface: in.PrefixIface, Enabled: in.Enabled, UID: id}
 	if err := t.Normalize(); err != nil {
 		return err
 	}

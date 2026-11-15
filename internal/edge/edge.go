@@ -204,6 +204,7 @@ type Edge struct {
 	probes   sync.Map                    // Pruefwerte "auf dem Docker-Host veroeffentlicht?" (published.go) -> angekommen
 	pub      atomic.Pointer[pubCache]
 	ppSrc    atomic.Pointer[func(context.Context) []string] // Cluster-Nodes (SetProxyPeers, proxypeers.go)
+	ppHosts  map[string][]netip.Addr                        // letzte Adressen je Name (nur peerLoop)
 	ppPeers  atomic.Pointer[[]netip.Addr]                   // deren Adressen
 	ppOnce   sync.Once
 	ppKick   chan struct{}

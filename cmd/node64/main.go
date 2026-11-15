@@ -428,7 +428,10 @@ func run() error {
 		return out
 	})
 	edgeSrv.SetProxyPeers(func(ctx context.Context) []string { // PROXY-Kopf von den Cluster-Nodes annehmen (Ports, #138)
-		list, _ := peerMgr.Members(ctx)
+		list, err := peerMgr.Members(ctx)
+		if err != nil {
+			return nil // letzter Stand bleibt (edge.SetProxyPeers)
+		}
 		out := make([]string, 0, len(list))
 		for _, x := range list {
 			if !x.Suspended() {

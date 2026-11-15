@@ -128,11 +128,11 @@ func (m *Module) planFor(t *Target) plan {
 		// Praefix: von aussen gesehen bzw. mit Interface vom Praefix dessen stabiler Adresse (#154)
 		var pfx netip.Prefix
 		switch {
-		case t.Iface != "":
-			if a, ok := m.stableOn(t.Iface); ok {
+		case t.PrefixIface != "":
+			if a, ok := m.stableOn(t.PrefixIface); ok {
 				pfx = prefix64(a)
 			} else {
-				p.Note = "no stable address on " + t.Iface
+				p.Note = "no stable address on " + t.PrefixIface
 			}
 		case v6.IP.IsValid():
 			pfx = prefix64(v6.IP)

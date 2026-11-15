@@ -3,7 +3,7 @@
 ## 1.7.0 – 2026-11-15
 
 ### Neu
-- IPv6 „nur Präfix“ und „Präfix + Interface-ID“: optional ein Interface. Dann kommt das Präfix von der stabilen Adresse dieses Interfaces statt von der von außen gesehenen IPv6 – z. B. bei zwei Anschlüssen auf verschiedenen Interfaces (`network_mode: host`). Ohne Interface wie bisher (#154).
+- IPv6 „nur Präfix“ und „Präfix + Interface-ID“: optional ein Interface. Dann kommt das Präfix von der stabilen Adresse dieses Interfaces statt von der von außen gesehenen IPv6 – z. B. bei zwei Anschlüssen auf verschiedenen Interfaces (`network_mode: host`). Ohne Interface wie bisher; API-Feld `prefix_iface` (#154).
 
 ## 1.6.1 – 2026-11-09
 

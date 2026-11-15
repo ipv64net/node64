@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.56.3 – 2026-11-15
+
+### Behoben
+- Zugriffs-Log als Datei: Mit „Adressen kürzen“ standen direkt nach dem Start bzw. nach dem Einschalten der Datei kurz volle Client-Adressen in `access.log`; jetzt von Anfang an gekürzt.
+- PROXY protocol von den Nodes des eigenen Clusters (#138): Hinter der öffentlichen Adresse einer Node (NAT) kann jedes Gerät einen PROXY-Kopf schicken – eine private Absenderadresse aus so einem Kopf gilt nicht mehr (es zählt die echte Adresse der Verbindung), damit niemand an Zugriffslisten „nur Heimnetz“ vorbeikommt. Kurze DNS- oder Datenbankfehler leeren die Liste der Node-Adressen nicht mehr; es gilt der letzte Stand.
+
 ## 1.56.2 – 2026-11-14
 
 ### Behoben

@@ -3,7 +3,7 @@
 ## 1.7.0 – 2026-11-15
 
 ### New
-- IPv6 "prefix only" and "prefix + interface ID": optionally an interface. The prefix then comes from that interface's stable address instead of the IPv6 seen from outside – e.g. with two uplinks on different interfaces (`network_mode: host`). Without an interface as before (#154).
+- IPv6 "prefix only" and "prefix + interface ID": optionally an interface. The prefix then comes from that interface's stable address instead of the IPv6 seen from outside – e.g. with two uplinks on different interfaces (`network_mode: host`). Without an interface as before; API field `prefix_iface` (#154).
 
 ## 1.6.1 – 2026-11-09
 

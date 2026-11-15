@@ -304,6 +304,7 @@ func (m *Module) pageTargetSave(w http.ResponseWriter, r *http.Request) {
 	}
 	t.Mode4, t.Fixed4 = r.PostFormValue("mode4"), r.PostFormValue("fixed4")
 	t.Mode6, t.Fixed6, t.Suffix6, t.Iface = r.PostFormValue("mode6"), r.PostFormValue("fixed6"), r.PostFormValue("suffix6"), r.PostFormValue("iface")
+	t.PrefixIface = r.PostFormValue("prefix_iface")
 	t.Enabled = r.PostFormValue("enabled") == "on"
 	if t.Enabled {
 		t.Paused = "" // wieder einschalten hebt eine automatische Pause auf

@@ -524,26 +524,40 @@ func TestUpdaterPrefixFromIface(t *testing.T) {
 			{Iface: "eth2", Addr: netip.MustParseAddr("2003:1:2:9c02::20")},
 		}
 	}
-	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, Iface: "eth2"}); p.Prefix != "2003:1:2:9c02::/64" {
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, PrefixIface: "eth2"}); p.Prefix != "2003:1:2:9c02::/64" {
 		t.Fatalf("prefix from eth2: %+v", p)
 	}
-	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Suffix, Suffix6: "::1:2:3:4", Iface: "eth0"}); p.IP6 != "2003:1:2:9c00:1:2:3:4" {
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Suffix, Suffix6: "::1:2:3:4", PrefixIface: "eth0"}); p.IP6 != "2003:1:2:9c00:1:2:3:4" {
 		t.Fatalf("suffix with eth0: %+v", p)
 	}
-	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, Iface: "eth9"}); p.Prefix != "" || p.Note != "no stable address on eth9" {
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, PrefixIface: "eth9"}); p.Prefix != "" || p.Note != "no stable address on eth9" {
 		t.Fatalf("missing iface: %+v", p)
 	}
-	// ohne Interface wie bisher (von aussen gesehen)
-	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix}); p.Prefix == "2003:1:2:9c02::/64" {
-		t.Fatalf("without iface must not use eth2: %+v", p)
+	// ohne Interface wie bisher (von aussen gesehen) - auch mit altem, stehengebliebenem Iface (Review: kam sonst ueber
+	// den Cluster bzw. alte Exporte zurueck und wirkte)
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, Iface: "eth2"}); p.Prefix == "2003:1:2:9c02::/64" {
+		t.Fatalf("without prefix iface must not use eth2: %+v", p)
 	}
-	// Interface wird nur bei iface/prefix/suffix behalten
-	tg := Target{Domain: "example.ipv64.net", TokenKind: "record", Token: strings.Repeat("a", 32), Mode4: Mode4Off, Mode6: Mode6Host, Iface: "eth2"}
-	if err := tg.Normalize(); err != nil || tg.Iface != "" {
-		t.Fatalf("host mode keeps iface: %q %v", tg.Iface, err)
+	tg := Target{Domain: "example.ipv64.net", TokenKind: "record", Token: strings.Repeat("a", 32), Mode4: Mode4Off, Mode6: Mode6Host, Iface: "eth2", PrefixIface: "eth2"}
+	if err := tg.Normalize(); err != nil || tg.Iface != "" || tg.PrefixIface != "" {
+		t.Fatalf("host mode keeps interfaces: %+v %v", tg, err)
 	}
-	tg.Mode6, tg.Iface = Mode6Prefix, "eth 2"
+	tg.Mode6, tg.Iface, tg.PrefixIface = Mode6Prefix, "eth0", "eth2"
+	if err := tg.Normalize(); err != nil || tg.Iface != "" || tg.PrefixIface != "eth2" {
+		t.Fatalf("prefix mode: %+v %v", tg, err)
+	}
+	tg.PrefixIface = "eth 2"
 	if err := tg.Normalize(); err == nil {
 		t.Fatal("invalid iface accepted")
+	}
+	// gespeichert und wieder gelesen (eigene Spalte, Migration 0004)
+	ctx := context.Background()
+	tg.PrefixIface = "eth2"
+	if err := m.InsertTarget(ctx, &tg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.Target(ctx, tg.ID)
+	if err != nil || got.PrefixIface != "eth2" || got.Iface != "" {
+		t.Fatalf("stored: %+v %v", got, err)
 	}
 }

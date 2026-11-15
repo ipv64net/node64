@@ -130,11 +130,37 @@ func TestResolvePeers(t *testing.T) {
 		}
 		return nil, errors.New("not found")
 	}
-	got := resolvePeers(context.Background(), []string{"https://192.168.20.5:8443", "https://node-b.lan:8443/", "https://[fd00::5]:8443",
-		"https://gone.lan", "192.168.20.5", " ", "https://0.0.0.0:1"}, lookup)
+	got, byHost := resolvePeers(context.Background(), []string{"https://192.168.20.5:8443", "https://node-b.lan:8443/", "https://[fd00::5]:8443",
+		"https://gone.lan", "192.168.20.5", " ", "https://0.0.0.0:1"}, lookup, nil)
 	want := "[192.168.20.5 192.168.20.7 fd00::5 fd00::7]"
 	if fmtAddrs(got) != want {
 		t.Fatalf("peers %v", got)
+	}
+	// Review: DNS kurz weg - die Adressen des Namens aus dem letzten Lauf gelten weiter
+	failing := func(context.Context, string) ([]netip.Addr, error) { return nil, errors.New("timeout") }
+	if got, _ := resolvePeers(context.Background(), []string{"https://node-b.lan:8443/"}, failing, byHost); fmtAddrs(got) != "[192.168.20.7 fd00::7]" {
+		t.Fatalf("after DNS error: %v", got)
+	}
+}
+
+// Review: Mit "PROXY von Cluster-Nodes" gilt eine oeffentliche Node-Adresse als vertraut - hinter einem NAT kann aber
+// jedes Geraet einen Kopf schicken. Eine private Absenderadresse von dort zaehlt nicht (Zugriffslisten "nur Heimnetz").
+func TestPeerClaim(t *testing.T) {
+	for _, c := range []struct {
+		peer, src string
+		ok        bool
+	}{
+		{"192.168.1.5", "192.168.1.10", true}, // Node im eigenen Netz
+		{"192.168.1.5", "203.0.113.7", true},
+		{"198.51.100.20", "203.0.113.7", true},   // Node ueber oeffentliche Adresse, Besucher aus dem Internet
+		{"198.51.100.20", "192.168.1.10", false}, // ... aber kein Heimnetz-Absender
+		{"198.51.100.20", "127.0.0.1", false},
+		{"2001:db8::20", "fd00::10", false},
+		{"fd00::20", "fd00::10", true},
+	} {
+		if got := peerClaimOK(netip.MustParseAddr(c.peer), netip.MustParseAddr(c.src)); got != c.ok {
+			t.Errorf("%s -> %s: %v", c.peer, c.src, got)
+		}
 	}
 }
 

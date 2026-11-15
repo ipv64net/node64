@@ -22,7 +22,7 @@ const (
 	Mode6Host   = "host"   // von aussen gesehene IPv6 dieses Hosts
 	Mode6Prefix = "prefix" // nur das /64-Praefix melden (Records mit Interface-ID bei ipv64, wirkt zonenweit)
 	Mode6Suffix = "suffix" // Praefix + eigene Interface-ID, lokal zusammengesetzt (nur dieser Record)
-	Mode6Iface  = "iface"  // stabile Adresse eines Interfaces (Host-Netzwerk); Iface bei prefix/suffix: Praefix von dort
+	Mode6Iface  = "iface"  // stabile Adresse eines Interfaces (Host-Netzwerk); PrefixIface bei prefix/suffix: Praefix von dort
 	Mode6Fixed  = "fixed"
 	Mode6Off    = "off"
 )
@@ -38,31 +38,32 @@ var (
 
 // Target ist ein Name (Domain + Host), den diese Node aktuell haelt.
 type Target struct {
-	ID         int64
-	Domain     string
-	Host       string
-	RecordID   int64
-	TokenKind  string // record, domain
-	Token      string // im Speicher entschluesselt
-	Mode4      string
-	Fixed4     string
-	Mode6      string
-	Fixed6     string
-	Suffix6    string
-	Iface      string
-	Enabled    bool
-	Paused     string
-	LastIP4    string
-	LastIP6    string
-	LastPrefix string
-	LastOKAt   time.Time
-	LastError  string
-	LastErrAt  time.Time
-	DNSState   int
-	DNSAt      time.Time
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	UID        string // Kennung im Cluster (gleich auf allen Nodes, cluster.go)
+	ID          int64
+	Domain      string
+	Host        string
+	RecordID    int64
+	TokenKind   string // record, domain
+	Token       string // im Speicher entschluesselt
+	Mode4       string
+	Fixed4      string
+	Mode6       string
+	Fixed6      string
+	Suffix6     string
+	Iface       string // Modus iface: Interface, dessen Adresse gemeldet wird
+	PrefixIface string // Modi prefix/suffix (optional): Praefix von diesem Interface statt von aussen gesehen (#154)
+	Enabled     bool
+	Paused      string
+	LastIP4     string
+	LastIP6     string
+	LastPrefix  string
+	LastOKAt    time.Time
+	LastError   string
+	LastErrAt   time.Time
+	DNSState    int
+	DNSAt       time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	UID         string // Kennung im Cluster (gleich auf allen Nodes, cluster.go)
 }
 
 // FQDN ist der volle Name.
@@ -116,6 +117,7 @@ func (t *Target) Normalize() error {
 	}
 	t.Token = strings.TrimSpace(t.Token)
 	t.Fixed4, t.Fixed6, t.Suffix6, t.Iface = strings.TrimSpace(t.Fixed4), strings.TrimSpace(t.Fixed6), strings.TrimSpace(t.Suffix6), strings.TrimSpace(t.Iface)
+	t.PrefixIface = strings.TrimSpace(t.PrefixIface)
 	if !domainRe.MatchString(t.Domain) || len(t.Domain) > 253 {
 		return errors.New("domain")
 	}
@@ -155,17 +157,21 @@ func (t *Target) Normalize() error {
 		}
 		t.Suffix6 = s
 	}
-	switch t.Mode6 {
-	case Mode6Iface:
+	// Eigenes Feld fuer das Praefix-Interface: Iface blieb frueher nach einem Moduswechsel stehen (und kommt so auch
+	// aus dem Cluster bzw. alten Exporten) - es darf in den Praefix-Modi nichts bewirken.
+	if t.Mode6 == Mode6Iface {
 		if !ifaceRe.MatchString(t.Iface) {
 			return errors.New("iface")
 		}
-	case Mode6Prefix, Mode6Suffix: // Interface optional: Praefix von dort statt von aussen gesehen (#154)
-		if t.Iface != "" && !ifaceRe.MatchString(t.Iface) {
+	} else {
+		t.Iface = ""
+	}
+	if t.Mode6 == Mode6Prefix || t.Mode6 == Mode6Suffix {
+		if t.PrefixIface != "" && !ifaceRe.MatchString(t.PrefixIface) {
 			return errors.New("iface")
 		}
-	default:
-		t.Iface = "" // sonst ungenutzt; bliebe es stehen, wirkte es beim Wechsel auf Praefix-Modi
+	} else {
+		t.PrefixIface = ""
 	}
 	return nil
 }
@@ -215,14 +221,14 @@ func in(s string, list []string) bool {
 // ---------------------------------------------------------------- Speicher
 
 const targetCols = `id, domain, host, record_id, token_kind, token, mode4, fixed4, mode6, fixed6, suffix6, iface, enabled, paused,
-	last_ip4, last_ip6, last_prefix, last_ok_at, last_error, last_err_at, dns_state, dns_at, created_at, updated_at, uid`
+	last_ip4, last_ip6, last_prefix, last_ok_at, last_error, last_err_at, dns_state, dns_at, created_at, updated_at, uid, prefix_iface`
 
 func (m *Module) scanTarget(row interface{ Scan(...any) error }) (*Target, error) {
 	var t Target
 	var enabled int
 	var okAt, errAt, dnsAt, created, updated string
 	if err := row.Scan(&t.ID, &t.Domain, &t.Host, &t.RecordID, &t.TokenKind, &t.Token, &t.Mode4, &t.Fixed4, &t.Mode6, &t.Fixed6, &t.Suffix6, &t.Iface, &enabled, &t.Paused,
-		&t.LastIP4, &t.LastIP6, &t.LastPrefix, &okAt, &t.LastError, &errAt, &t.DNSState, &dnsAt, &created, &updated, &t.UID); err != nil {
+		&t.LastIP4, &t.LastIP6, &t.LastPrefix, &okAt, &t.LastError, &errAt, &t.DNSState, &dnsAt, &created, &updated, &t.UID, &t.PrefixIface); err != nil {
 		return nil, err
 	}
 	t.Enabled = enabled == 1
@@ -287,8 +293,8 @@ func (m *Module) InsertTarget(ctx context.Context, t *Target) error {
 	if t.UID == "" { // neu hier: eigene Kennung (aus dem Cluster: die der anderen Node)
 		t.UID = newClusterUID()
 	}
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dyn_targets (domain, host, record_id, token_kind, token, mode4, fixed4, mode6, fixed6, suffix6, iface, enabled, created_at, updated_at, uid)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, t.Domain, t.Host, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface, b2i(t.Enabled), now, now, t.UID)
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dyn_targets (domain, host, record_id, token_kind, token, mode4, fixed4, mode6, fixed6, suffix6, iface, enabled, created_at, updated_at, uid, prefix_iface)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, t.Domain, t.Host, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface, b2i(t.Enabled), now, now, t.UID, t.PrefixIface)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return ErrExists
@@ -306,7 +312,8 @@ func (m *Module) UpdateTarget(ctx context.Context, t *Target) error {
 		return err
 	}
 	_, err := m.core.Writer().ExecContext(ctx, `UPDATE dyn_targets SET record_id = ?, token_kind = ?, token = ?, mode4 = ?, fixed4 = ?, mode6 = ?, fixed6 = ?, suffix6 = ?, iface = ?,
-		enabled = ?, paused = ?, updated_at = ? WHERE id = ?`, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface, b2i(t.Enabled), t.Paused, store.Now(), t.ID)
+		prefix_iface = ?, enabled = ?, paused = ?, updated_at = ? WHERE id = ?`, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface,
+		t.PrefixIface, b2i(t.Enabled), t.Paused, store.Now(), t.ID)
 	if err == nil {
 		m.clusterChanged(ctx, m.uidOf(ctx, t.ID), false)
 	}

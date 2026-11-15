@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.56.3 – 2026-11-15
+
+### Fixed
+- Access log as file: with "Shorten addresses", full client addresses were written to `access.log` for a moment right after start or after switching the file on; now shortened from the start.
+- PROXY protocol from the nodes of the own cluster (#138): behind a node's public address (NAT) any device can send a PROXY header – a private source address from such a header no longer counts (the real address of the connection applies), so nobody gets past "home network only" access lists. Short DNS or database errors no longer empty the list of node addresses; the last state applies.
+
 ## 1.56.2 – 2026-11-14
 
 ### Fixed

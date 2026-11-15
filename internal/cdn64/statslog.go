@@ -215,17 +215,16 @@ func (s *statsDB) writer() {
 	lastRej := map[string]time.Time{} // Bremse fuer abgewiesene im Log
 	var rejMinute time.Time
 	rejN := 0
-	fileAnon := false // Kuerzen der Adressen auch in der Datei (bei jedem Schreiben neu gelesen)
-	if s.afOn.Load() {
-		fileAnon = s.anon()
-	}
+	// Kuerzen der Adressen auch in der Datei: gleich beim Start und bei jedem Schreiben gelesen - auch solange die Datei
+	// aus ist, sonst standen nach dem Einschalten bis zum naechsten Takt volle Adressen darin
+	fileAnon := s.anon()
 	flush := func() {
 		if s.afOn.Load() {
 			s.af.flush()
-			fileAnon = s.anon()
 		} else {
 			s.af.close()
 		}
+		fileAnon = s.anon()
 		if len(agg) == 0 && len(logs) == 0 {
 			return
 		}
