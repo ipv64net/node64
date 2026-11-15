@@ -974,19 +974,10 @@ func (m *Module) effectText(ctx context.Context, a Address) string {
 
 // ---- CSV ----
 
-// csvSafe entschaerft Werte, die eine Tabellenkalkulation als Formel lesen wuerde (aus dem Entwurf von UlrichSchwarz;
-// gleiche Regel wie csvCell in Monitor64). Gilt fuer jede Zelle des Exports.
-func csvSafe(s string) string {
-	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
-		return "'" + s
-	}
-	return s
-}
-
 // csvRow schuetzt alle Zellen einer Zeile.
 func csvRow(cells ...string) []string {
 	for i := range cells {
-		cells[i] = csvSafe(cells[i])
+		cells[i] = module.CSVCell(cells[i])
 	}
 	return cells
 }

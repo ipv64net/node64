@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/monitor64/eval"
 	"github.com/ipv64net/node64/internal/monitor64/model"
 	"github.com/ipv64net/node64/internal/monitor64/tsdb"
@@ -884,14 +885,6 @@ func (m *Module) txReq(r *http.Request, s string) string {
 	return model.Translate(s, func(key string, args ...any) string { return m.g.T(r, key, args...) })
 }
 
-// csvCell schuetzt vor Formel-Einschleusung (Tabellenprogramme werten = + - @ am Anfang aus).
-func csvCell(s string) string {
-	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
-		return "'" + s
-	}
-	return s
-}
-
 // apiProblemsCSV: GET Probleme als CSV (Filter wie die Liste; Semikolon, UTF-8 mit BOM fuer Tabellenprogramme).
 func (m *Module) apiProblemsCSV(w http.ResponseWriter, r *http.Request) {
 	out, err := m.problems(r)
@@ -948,7 +941,7 @@ func (m *Module) apiProblemsCSV(w http.ResponseWriter, r *http.Request) {
 		}
 		row := []string{p.State, p.Worst, p.Host, firstNonEmpty(m.txReq(r, p.Name), "-"), tm(p.Opened), tm(p.Closed), strconv.FormatInt(p.Duration/60, 10), p.How, closedBy, ackBy, ackC, strings.Join(p.Channels, ", ")}
 		for i := range row {
-			row[i] = csvCell(row[i])
+			row[i] = module.CSVCell(row[i])
 		}
 		_ = cw.Write(row)
 	}

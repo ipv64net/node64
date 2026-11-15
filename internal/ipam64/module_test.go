@@ -546,8 +546,8 @@ func TestHelpers(t *testing.T) {
 	if lastAddr(netip.MustParsePrefix("192.168.1.0/24")).String() != "192.168.1.255" || lastAddr(netip.MustParsePrefix("fd00::/120")).String() != "fd00::ff" {
 		t.Fatal("lastAddr")
 	}
-	if csvSafe("=1+1") != "'=1+1" || csvSafe("nas") != "nas" {
-		t.Fatal("csvSafe")
+	if r := csvRow("=1+1", "nas", "-x"); r[0] != "'=1+1" || r[1] != "nas" || r[2] != "'-x" {
+		t.Fatal("csvRow", r)
 	}
 	if hostCount(netip.MustParsePrefix("10.0.0.0/31")) != 2 || hostCount(netip.MustParsePrefix("10.0.0.0/24")) != 254 {
 		t.Fatal("hostCount")

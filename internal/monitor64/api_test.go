@@ -300,9 +300,6 @@ func TestAPIProblems(t *testing.T) {
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/csv") || !strings.Contains(csv, `'=HYPERLINK`) || strings.Contains(csv, ";=HYPERLINK") || !strings.Contains(csv, "Platte bestellt") {
 		t.Fatalf("csv: %d %q", rec.Code, csv)
 	}
-	if csvCell("-1+1") != "'-1+1" || csvCell("@x") != "'@x" || csvCell("ok") != "ok" {
-		t.Fatal("csvCell")
-	}
 	// als geloest markieren
 	if rec := e.do("POST", "/api/monitor64/problems/action", map[string]any{"host": h.UID, "key": "fs:/", "action": "resolve", "comment": "erledigt"}); rec.Code != 200 {
 		t.Fatalf("resolve: %d", rec.Code)
