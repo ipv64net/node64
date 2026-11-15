@@ -5,6 +5,8 @@
 Sicherheit:
 
 - **Agent 0.1.8:** Ein auf Adressen beschränkter Node-Schlüssel (`from=` in der Datei `keys`) behält seine Einschränkung beim Schlüsselwechsel; neue Zeilen ohne `from=` bekommen die Einschränkung des anfragenden Schlüssels, Zeilen mit anderer Einschränkung lehnt der Agent ab. Vorher ging ein von Hand gesetztes `from=` beim Wechsel still verloren. Wer `from=` nutzt und Cluster-Schlüssel verwendet, trägt die Adressen der anderen Nodes in `from=` ein.
+- **Agent-Installation:** Der Befehl im Assistenten nennt die Prüfsumme der Datei `SHA256SUMS` aus dem signierten Verzeichnis der Node (`--sums-sha256` bzw. `-SumsSha256`); das Skript startet das Programm nur, wenn beides passt. Ohne diese Angabe prüft `install.sh` die neue Signatur `SHA256SUMS.sig` mit OpenSSL ab 3.0 (ungültig = Abbruch). Vorher kamen Programm und Prüfsummen ohne Signatur aus derselben Quelle – wer beide austauschte, kam durch (ab dem Agent-Release 0.1.8).
+- **Agent 0.1.8:** Verbindungen ohne Anmeldung von unbekannten Adressen haben nur noch 3 Sekunden für den Handshake (statt 10), Adressen aus `from=`-Mustern der Datei `keys` einen eigenen Topf – viele stille Verbindungen aus fremden Netzen blockieren die Erstanmeldung einer Node nicht mehr.
 
 ## 0.1.19 – 2026-11-15
 

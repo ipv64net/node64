@@ -2673,14 +2673,16 @@ function agentNodeURL(v) {
 function agentBase(s) { return s.mode === 'node' ? agentNodeURL(s.node) + '/monitor64/agent/' : (AG.internet || 'https://ipv64.net/node64/agent/'); }
 function agentHost(u) { var m = /^https?:\/\/([^\/]+)/i.exec(u || ''); return m ? m[1] : (u || ''); }
 // agentCmd: Installationsbefehl je System (linux, windows, freebsd). base = Ordner mit den Dateien (Schraegstrich am
-// Ende), push = token@node:port im Push-Betrieb. Skript und Dateien kommen immer aus demselben Ordner (--base).
+// Ende), push = token@node:port im Push-Betrieb. Skript und Dateien kommen immer aus demselben Ordner (--base). Die
+// Pruefsumme von SHA256SUMS aus dem signierten Verzeichnis der Node sichert den Download ab (AG-2).
 function agentCmd(os, base, key, push) {
+	var sums = /^[0-9a-f]{64}$/.test(AG.sums_sha256 || '') ? AG.sums_sha256 : '';
 	if (os === 'windows') {
 		// TLS 1.2 einschalten, bevor irm laedt (Server 2016 bietet sonst nur TLS 1.0/1.1 an)
 		return '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; ' +
-			'& ([scriptblock]::Create((irm ' + base + 'install.ps1))) -Base "' + base + '" -Key "' + key + '"' + (push ? ' -Connect "' + push + '" -NoListen' : '');
+			'& ([scriptblock]::Create((irm ' + base + 'install.ps1))) -Base "' + base + '" -Key "' + key + '"' + (sums ? ' -SumsSha256 ' + sums : '') + (push ? ' -Connect "' + push + '" -NoListen' : '');
 	}
-	var opts = ' \\\n  --base ' + base + ' \\\n  --key "' + key + '"' + (push ? ' \\\n  --connect \'' + push + '\' --no-listen' : '');
+	var opts = ' \\\n  --base ' + base + ' \\\n  --key "' + key + '"' + (sums ? ' \\\n  --sums-sha256 ' + sums : '') + (push ? ' \\\n  --connect \'' + push + '\' --no-listen' : '');
 	if (os === 'freebsd') { return 'fetch -o /tmp/install.sh ' + base + 'install.sh && sh /tmp/install.sh' + opts; }
 	return 'curl -fsSL ' + base + 'install.sh | sudo sh -s --' + opts;
 }

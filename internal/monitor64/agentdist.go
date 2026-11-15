@@ -3,6 +3,8 @@ package monitor64
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -220,6 +222,10 @@ type agentCmdInfo struct {
 	Internet string `json:"internet"`  // Ordner im Internet (mit Schraegstrich am Ende)
 	HTTPPort int    `json:"http_port"` // HTTP-Port der Node (0 = aus), fuer den Hinweis bei eigenem Zertifikat
 	Port     int    `json:"port"`      // Port des Agents
+	// SumsSHA256: SHA-256 von SHA256SUMS aus dem signierten Verzeichnis dieser Node ("" = noch keins). Steht im
+	// Installationsbefehl (--sums-sha256): das Skript traut SHA256SUMS - und damit der Programmdatei - nur, wenn sie
+	// dazu passt, auch beim Laden aus dem Internet (AG-2)
+	SumsSHA256 string `json:"sums_sha256,omitempty"`
 }
 
 // agentView sind die Daten der Seite Agent.
@@ -251,12 +257,23 @@ func nodeHTTPPort() int {
 	return n
 }
 
+// sumsOptionSince: ab dieser Agent-Version kennen install.sh und install.ps1 --sums-sha256 bzw. -SumsSha256.
+const sumsOptionSince = "0.1.8"
+
 func (m *Module) agentCmdInfo() agentCmdInfo {
 	bases, _ := agentBases()
 	if m.ad.bases != nil {
 		bases = m.ad.bases
 	}
-	return agentCmdInfo{Internet: bases[0] + "/", HTTPPort: nodeHTTPPort(), Port: m64proto.DefaultPort}
+	info := agentCmdInfo{Internet: bases[0] + "/", HTTPPort: nodeHTTPPort(), Port: m64proto.DefaultPort}
+	if m.scheduler() != nil {
+		// erst ab dem Release, dessen Skripte die Option kennen (aeltere brechen mit "unknown option" ab)
+		if ix := m.agents().dist.Index(); ix != nil && !update.Newer(sumsOptionSince, ix.Version) {
+			sum := sha256.Sum256(ix.Sums())
+			info.SumsSHA256 = hex.EncodeToString(sum[:])
+		}
+	}
+	return info
 }
 
 // agentAccesses: alle Agent-Zugaenge (auch ausgeschaltete).

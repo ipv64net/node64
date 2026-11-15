@@ -142,6 +142,8 @@ jobs:
             go run ./cmd/node64-release sign dist/manifest.json
             go run ./cmd/node64-release agent-sign -version "$AGENT_VERSION" dist/agent/$AGENT_VERSION/monitor64-agent-*
             go run ./cmd/node64-release sign dist/agent/agents.json
+            # Signatur fuer install.sh (prueft sie ohne --sums-sha256 mit OpenSSL, AG-2)
+            go run ./cmd/node64-release sign-file dist/agent/SHA256SUMS "dist/agent/$AGENT_VERSION/SHA256SUMS"
           else
             echo "no signing key - manifest and agent files not signed"
           fi

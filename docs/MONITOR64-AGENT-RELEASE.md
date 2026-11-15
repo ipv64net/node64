@@ -24,8 +24,8 @@ agents.json                 Verzeichnis: Version und Dateien je Plattform mit Gr
 agents.json.sig             Signatur (base64 ed25519 über die Datei – wie manifest.json.sig der Selbst-Updates)
 <version>/monitor64-agent-<os>-<arch>[.exe]               Programm
 <version>/monitor64-agent-<os>-<arch>[.exe].update.json   signierte Kopfzeile für die Anfrage „update“
-<version>/install.sh, install.ps1, SHA256SUMS             Installationsskripte und Prüfsummen der Programme
-monitor64-agent-*, install.sh, install.ps1, SHA256SUMS    aktueller Stand zusätzlich direkt im Ordner
+<version>/install.sh, install.ps1, SHA256SUMS(.sig)        Installationsskripte, Prüfsummen der Programme und Signatur
+monitor64-agent-*, install.sh, install.ps1, SHA256SUMS(.sig)  aktueller Stand zusätzlich direkt im Ordner
 ```
 
 Plattformen: `linux-amd64`, `linux-arm64`, `linux-armv7` (GOARCH `arm`, GOARM 6 – eine Datei für 32-Bit-ARM, läuft auch auf ARMv6 wie Raspberry Pi Zero/Pi 1; der Name bleibt wegen der Auto-Updates), `windows-amd64` (`.exe`),
@@ -60,6 +60,15 @@ Standard in `cmd/monitor64-agent/main.go` `ReleaseKeys`; privat nur als GitHub-S
 - `agents.json.sig`: `node64-release sign agents.json` (dieselbe Funktion wie beim Manifest der Selbst-Updates).
 - `<datei>.update.json`: `node64-release agent-sign` – ed25519 über Version, Plattform und SHA-256
   (`m64proto.SignedMessage`). Diese Kopfzeile prüft die Node beim Laden **und** der Agent beim Update.
+- `SHA256SUMS.sig` (ab Agent 0.1.8): `node64-release sign-file SHA256SUMS` – base64 ed25519 über die Datei. Die
+  Erstinstallation sichert `SHA256SUMS` (und damit das Programm) ab, **bevor** etwas startet (AG-2): `install.sh`
+  bzw. `install.ps1` vergleichen `SHA256SUMS` mit `--sums-sha256` bzw. `-SumsSha256` aus dem Befehl des Node-
+  Assistenten (die Node kennt sie aus ihrem signierten Verzeichnis, `sha256(ix.Sums())`; erst wenn das Verzeichnis
+  mindestens 0.1.8 nennt). Ohne die Option prüft `install.sh` `SHA256SUMS.sig` mit OpenSSL ab 3.0
+  (`pkeyutl -verify -rawin`, öffentlicher Schlüssel im Skript, Test: gleicher Schlüssel wie `ReleaseKeys`); eine
+  ungültige Signatur bricht ab, fehlt Signatur oder OpenSSL 3, gibt es nur eine Warnung. Windows PowerShell kann
+  ed25519 nicht prüfen: dort schützt ohne `-SumsSha256` nur HTTPS. Eine Selbstprüfung im heruntergeladenen Programm
+  hilft nicht (ein ausgetauschtes Programm ließe sie weg) und gibt es daher nicht.
 
 ## Release
 
@@ -69,8 +78,8 @@ der Selbst-Updates `dist/agent/` ins Artefakt `node64-release-<tag>`:
 1. `cmd/monitor64-agent/VERSION` erhöhen (wenn sich der Agent geändert hat), committen, Tag setzen.
 2. Der Job baut die sechs Dateien (`CGO_ENABLED=0`, `-trimpath -ldflags "-s -w -X main.Version=<VERSION>"`), kopiert
    `install.sh`/`install.ps1`, schreibt mit `node64-release agent-index` `agents.json` und `SHA256SUMS` und signiert
-   mit `agent-sign` und `sign`. Ohne das Secret entstehen weder `agents.json.sig` noch `*.update.json` – so ein Stand
-   wird von keiner Node angenommen.
+   mit `agent-sign`, `sign` und `sign-file` (`SHA256SUMS.sig`). Ohne das Secret entstehen weder `agents.json.sig`
+   noch `*.update.json` noch `SHA256SUMS.sig` – so ein Stand wird von keiner Node angenommen.
 3. Inhalt von `dist/agent/` nach `ipv64.net/node64/agent/` **und** `node64.de/agent/` hochladen: erst den Ordner
    `<version>/`, dann die Dateien direkt im Ordner, **zuletzt** `agents.json.sig` und `agents.json`. Alte
    Versions-Ordner können danach weg.
@@ -85,7 +94,8 @@ cp cmd/monitor64-agent/install.sh cmd/monitor64-agent/install.ps1 $out/
 go run ./cmd/node64-release agent-index -version $AV -out dist/agent/agents.json $out
 go run ./cmd/node64-release agent-sign -key <schlüsseldatei> -version $AV $out/monitor64-agent-*
 go run ./cmd/node64-release sign -key <schlüsseldatei> dist/agent/agents.json
-cp $out/monitor64-agent-* $out/install.sh $out/install.ps1 $out/SHA256SUMS dist/agent/ && rm -f dist/agent/*.update.json
+go run ./cmd/node64-release sign-file -key <schlüsseldatei> $out/SHA256SUMS
+cp $out/monitor64-agent-* $out/install.sh $out/install.ps1 $out/SHA256SUMS $out/SHA256SUMS.sig dist/agent/ && rm -f dist/agent/*.update.json
 ```
 
 ## Was die Node damit tut
@@ -102,7 +112,9 @@ cp $out/monitor64-agent-* $out/install.sh $out/install.ps1 $out/SHA256SUMS dist/
   `SHA256SUMS`, `monitor64-agent-<os>-<arch>[.exe]` – nur diese Namen aus dem Verzeichnis, kein Pfad. Damit
   funktionieren `install.sh --base http(s)://<node>/monitor64/agent/` und `install.ps1 -Base …`.
   **Grenze:** Über HTTP kann jemand im Netz zwischen Host und Node Skript, Datei und `SHA256SUMS` gemeinsam
-  austauschen (die Prüfsumme schützt nur vor defekten Downloads). Über HTTPS muss der Host dem Zertifikat der Node
+  austauschen – die Prüfsumme von `SHA256SUMS` im Befehl des Assistenten (`--sums-sha256`) deckt das ab, solange der
+  Befehl selbst unverändert ankommt (er stammt aus der angemeldeten Oberfläche); das Skript selbst kann über HTTP
+  aber ausgetauscht werden. Über HTTPS muss der Host dem Zertifikat der Node
   vertrauen; mit einem selbst signierten Zertifikat bricht der Download ab. Die Seite „Agent“ sagt das beim Befehl.
 - **Automatische Updates:** Die Node merkt je Agent-Zugang Version und Plattform (`info`, stündlich). Ist das
   Verzeichnis neuer und „Agent automatisch aktualisieren“ am Host an, schiebt sie Kopfzeile und Datei über die

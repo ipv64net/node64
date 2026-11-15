@@ -9,11 +9,15 @@
 #
 # Optionen: -Key "<oeffentlicher Schluessel>" (Pflicht), -Port 6465, -Base <URL> (Ordner mit den Dateien, Standard
 # https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
+# -SumsSha256 <hex>: Pruefsumme von SHA256SUMS, wie sie die Node aus ihrem signierten Verzeichnis kennt (steht im
+# Befehl des Assistenten). Windows PowerShell kann ed25519-Signaturen nicht pruefen: ohne -SumsSha256 schuetzt nur
+# HTTPS (Warnung, AG-2).
 # Push-Betrieb (Host hinter NAT, VPS): -Connect "token@node[:6466]" (auch mehrere, durch Komma) baut die Verbindung
 # zur Node selbst auf; -NoListen zusaetzlich, wenn der Agent nicht lauschen soll (dann auch keine Firewall-Regel).
 # -NoTray: kein Symbol im Infobereich der Taskleiste (sonst zeigt der Dienst es jedem angemeldeten Benutzer:
 # laeuft, Version, letzte Abfrage, Update verfuegbar).
-# Die Datei monitor64-agent-windows-amd64.exe wird gegen SHA256SUMS aus demselben Ordner geprueft und ruft dann
+# Die Datei monitor64-agent-windows-amd64.exe wird gegen SHA256SUMS aus demselben Ordner geprueft (SHA256SUMS gegen
+# -SumsSha256) und ruft dann
 # "monitor64-agent install" auf (Datei, Schluessel, Dienst, Firewall-Regel, Fingerabdruck des Hostschluessels).
 # Entfernen: & "$env:ProgramFiles\monitor64-agent\monitor64-agent.exe" uninstall
 #
@@ -24,7 +28,8 @@ param(
     [string]$Base = 'https://node64.de/agent/',
     [string[]]$Connect = @(),
     [switch]$NoListen,
-    [switch]$NoTray
+    [switch]$NoTray,
+    [string]$SumsSha256 = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +43,8 @@ if ($Port -lt 0 -or $Port -gt 65535) { throw "monitor64-agent: invalid port: $Po
 foreach ($c in $Connect) {
     if ($c -notmatch '^[a-z0-9]{16,64}@[A-Za-z0-9.:_\[\]-]+$') { throw "monitor64-agent: invalid -Connect value: $c (token@host[:port])" }
 }
+$SumsSha256 = $SumsSha256.Trim().ToLower()
+if ($SumsSha256 -and $SumsSha256 -notmatch '^[0-9a-f]{64}$') { throw 'monitor64-agent: invalid -SumsSha256 (64 hex digits)' }
 if ($NoListen -and $Connect.Count -eq 0) { throw 'monitor64-agent: -NoListen needs -Connect "token@node[:port]"' }
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -59,7 +66,7 @@ if ($Base -like 'https://*') {
     $https = $true
 } elseif ($Base -like 'http://*') {
     $https = $false
-    Say 'WARNING: downloading over plain HTTP - the checksum only protects against broken downloads, not against tampering. Use HTTPS if possible.'
+    if (-not $SumsSha256) { Say 'WARNING: downloading over plain HTTP - without -SumsSha256 the checksum only protects against broken downloads, not against tampering. Use HTTPS if possible.' }
 } else {
     throw 'monitor64-agent: -Base must start with https:// or http://'
 }
@@ -117,6 +124,15 @@ try {
     Say "downloading $Base$File"
     Fetch ($Base + $File) $exe
     Fetch ($Base + 'SHA256SUMS') $sums
+    # SHA256SUMS absichern: mit der Pruefsumme aus dem Befehl der Node (sie kennt das signierte Verzeichnis, AG-2)
+    if ($SumsSha256) {
+        if ((Get-FileHash -Algorithm SHA256 -Path $sums).Hash.ToLower() -ne $SumsSha256) {
+            throw 'monitor64-agent: SHA256SUMS does not match the checksum from the node (-SumsSha256). Files may have been tampered with - or the node knows another release: reload the page in Node64 and copy the command again.'
+        }
+        Say 'SHA256SUMS confirmed by the node'
+    } else {
+        Say 'WARNING: without -SumsSha256 (command from the Node64 assistant) only the transport protects the download'
+    }
 
     $want = $null
     foreach ($line in [IO.File]::ReadAllLines($sums)) {

@@ -5,6 +5,8 @@
 Security:
 
 - **Agent 0.1.8:** a node key restricted to addresses (`from=` in the `keys` file) keeps its restriction on a key change; new lines without `from=` get the restriction of the requesting key, lines with a different restriction are refused. Before, a manually set `from=` was silently lost on a key change. If you use `from=` together with cluster keys, add the addresses of the other nodes to `from=`.
+- **Agent installation:** the command in the assistant names the checksum of the `SHA256SUMS` file from the node's signed index (`--sums-sha256` or `-SumsSha256`); the script only starts the program if both match. Without it, `install.sh` checks the new signature `SHA256SUMS.sig` with OpenSSL 3.0 or newer (invalid = abort). Before, program and checksums came from the same source without a signature – whoever replaced both got through (from agent release 0.1.8).
+- **Agent 0.1.8:** connections without sign-in from unknown addresses only get 3 seconds for the handshake (instead of 10), addresses from `from=` patterns in the `keys` file get a pot of their own – many silent connections from foreign networks no longer block the first sign-in of a node.
 
 ## 0.1.19 – 2026-11-15
 

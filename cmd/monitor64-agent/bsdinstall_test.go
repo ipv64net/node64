@@ -148,7 +148,7 @@ func fakeTools(t *testing.T, scripts map[string]string) string {
 	if err := os.Mkdir(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range []string{"sh", "mkdir", "chmod", "mktemp", "rm", "awk", "grep", "cp", "cat"} {
+	for _, tool := range append([]string{"sh", "mkdir", "chmod", "mktemp", "rm", "awk", "grep", "cp", "cat"}, installExtraTools...) {
 		p, err := exec.LookPath(tool)
 		if err != nil {
 			t.Skipf("%s fehlt: %v", tool, err)
@@ -205,6 +205,12 @@ func runInstallSh(t *testing.T, osName, machine, file string, tools map[string]s
 	if err := os.WriteFile(filepath.Join(src, "SHA256SUMS"), []byte(sums), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if installSumsHook != nil { // AG-2: Signatur bzw. Pruefsumme der Node zu SHA256SUMS
+		installSumsHook(src, []byte(sums))
+	}
+	if installSumsArgs != nil { // AG-2: Argumente, die vom Inhalt von SHA256SUMS abhaengen (--sums-sha256)
+		args = append(args, installSumsArgs([]byte(sums))...)
+	}
 	scripts := map[string]string{
 		"uname": `case "$1" in -s) echo ` + osName + ` ;; -m) echo ` + machine + ` ;; esac`,
 		"id":    "echo 0",
@@ -225,13 +231,22 @@ func runInstallSh(t *testing.T, osName, machine, file string, tools map[string]s
 		scripts[name] = body
 	}
 	bin := fakeTools(t, scripts)
-	cmd := exec.Command(filepath.Join(bin, "sh"), append([]string{"install.sh"}, args...)...)
+	cmd := exec.Command(filepath.Join(bin, "sh"), append([]string{installScript}, args...)...)
 	cmd.Env = []string{"PATH=" + bin, "TMPDIR=" + dir}
 	b, err := cmd.CombinedOutput()
 	a, _ := os.ReadFile(filepath.Join(dir, "args"))
 	dl, _ := os.ReadFile(filepath.Join(dir, "downloads"))
 	return string(b) + string(dl), string(a), err
 }
+
+// Haken fuer die AG-2-Tests (agsums_test.go): anderes Skript (mit Test-Schluessel), weitere Programme im PATH,
+// zusaetzliche Dateien neben SHA256SUMS.
+var (
+	installScript     = "install.sh"
+	installExtraTools []string
+	installSumsHook   func(dir string, sums []byte)
+	installSumsArgs   func(sums []byte) []string
+)
 
 // install.sh unter FreeBSD: fetch und sha256 aus dem Grundsystem, Datei monitor64-agent-freebsd-<arch>, danach
 // "monitor64-agent install" mit denselben Optionen wie unter Linux.

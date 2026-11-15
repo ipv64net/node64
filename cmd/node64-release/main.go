@@ -10,6 +10,9 @@
 //	                                                        Update des Monitor64-Agents signieren -> <datei>.update.json
 //	                                                        (Kopfzeile fuer die Anfrage "update"; ohne -key wie sign;
 //	                                                        ohne -os/-arch aus dem Dateinamen, dann auch mehrere Dateien)
+//	node64-release sign-file -key <datei> <datei> ...       beliebige Dateien signieren -> <datei>.sig (base64
+//	                                                        ed25519 ueber den Inhalt; z. B. SHA256SUMS der
+//	                                                        Agent-Dateien fuer install.sh, AG-2)
 //	node64-release agent-index -version V -out agents.json <ordner>
 //	                                                        Verzeichnis der Agent-Dateien aus dem Ordner bauen
 //	                                                        (monitor64-agent-<os>-<arch>[.exe], install.sh, install.ps1),
@@ -39,7 +42,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: node64-release keygen|manifest|sign|agent-sign|agent-index ...")
+		fmt.Fprintln(os.Stderr, "usage: node64-release keygen|manifest|sign|sign-file|agent-sign|agent-index ...")
 		os.Exit(2)
 	}
 	var err error
@@ -54,6 +57,8 @@ func main() {
 		err = manifest(os.Args[2:])
 	case "sign":
 		err = sign(os.Args[2:])
+	case "sign-file":
+		err = signFile(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}
@@ -222,6 +227,36 @@ func agentHeader(path, version, goos, arch string, key ed25519.PrivateKey) (m64p
 	h := m64proto.UpdateHeader{Version: version, OS: goos, Arch: arch, Size: int64(len(b)), SHA256: hex.EncodeToString(sum[:])}
 	h.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(key, m64proto.SignedMessage(h.Version, h.OS, h.Arch, h.SHA256)))
 	return h, nil
+}
+
+// signFile signiert beliebige Dateien (<datei>.sig, Format wie manifest.json.sig) und prueft die Signatur gleich
+// nach. install.sh prueft SHA256SUMS.sig mit OpenSSL (pkeyutl -rawin) gegen den Release-Schluessel (AG-2).
+func signFile(args []string) error {
+	fs := flag.NewFlagSet("sign-file", flag.ExitOnError)
+	keyFile := fs.String("key", "", "private key file (default: env NODE64_SIGNING_KEY)")
+	_ = fs.Parse(args)
+	if fs.NArg() == 0 {
+		return errors.New("usage: sign-file -key <file> <file> ...")
+	}
+	key, err := signingKey(*keyFile)
+	if err != nil {
+		return err
+	}
+	for _, p := range fs.Args() {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		sig := selfupdate.Sign(b, key)
+		raw, _ := base64.StdEncoding.DecodeString(string(sig))
+		if !ed25519.Verify(key.Public().(ed25519.PublicKey), b, raw) {
+			return fmt.Errorf("%s: signature check failed", p)
+		}
+		if err := os.WriteFile(p+".sig", append(sig, '\n'), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func sign(args []string) error {

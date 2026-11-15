@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,6 +38,9 @@ const (
 	updateTimeout       = 10 * time.Minute
 	maxExecCommandBytes = 1024
 )
+
+// unknownHandshakeTimeout: Frist fuer Adressen ohne Anmeldung und ohne from=-Treffer (AG-4; in Tests kuerzer).
+var unknownHandshakeTimeout = 3 * time.Second
 
 // ErrServerClosed liefert Serve nach Close.
 var ErrServerClosed = errors.New("monitor64-agent: server closed")
@@ -204,7 +208,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		// Bis zur Anmeldung zaehlt die Verbindung nur gegen die kleineren Grenzen fuer Verbindungen ohne Anmeldung.
 		// Abgewiesen ist kein Fehlversuch (volle Plaetze kann ein Angreifer verursachen); seine eigenen Verbindungen
 		// zaehlen ueber das Zeitlimit des Handshakes.
-		slot := s.gate.acquire(p, s.lim.known(p.ip, now), c, now)
+		slot, hs := s.admit(p, c, now)
 		if slot == nil {
 			s.log.Debug("monitor64-agent: too many connections without login", "remote", c.RemoteAddr().String())
 			_ = c.Close()
@@ -220,9 +224,26 @@ func (s *Server) Serve(ln net.Listener) error {
 			defer s.wg.Done()
 			defer s.track(c, false)
 			defer c.Close()
-			s.handleConn(c, p, slot, false)
+			s.handleConn(c, p, slot, false, hs)
 		}()
 	}
+}
+
+// admit waehlt den Topf fuer eine neue Verbindung ohne Anmeldung und ihre Handshake-Frist: bekannte Adressen (dort
+// hat sich schon eine Node angemeldet) und Adressen aus from=-Mustern der Schluesselliste mit der vollen Frist, alle
+// anderen im kleinen Topf mit kurzer Frist - stille Verbindungen aus fremden Netzen halten die Plaetze so nur kurz
+// (AG-4). Passt eine Adresse zu from=, ist ihr Topf aber voll, versucht sie den allgemeinen.
+func (s *Server) admit(p peer, c net.Conn, now time.Time) (*preAuthSlot, time.Duration) {
+	full := s.cfg.HandshakeTimeout
+	if s.lim.known(p.ip, now) {
+		return s.gate.acquire(p, true, c, now), full
+	}
+	if ip, err := netip.ParseAddr(p.ip); err == nil && s.keys.listed(ip) {
+		if sl := s.gate.acquireListed(p, c, now); sl != nil {
+			return sl, full
+		}
+	}
+	return s.gate.acquire(p, false, c, now), min(full, unknownHandshakeTimeout)
 }
 
 // startSweepLocked startet die Pruefung offener Verbindungen gegen die Schluesselliste (einmal; s.mu gehalten).
@@ -299,9 +320,12 @@ func (s *Server) sshConfig(rejected *atomic.Bool) *ssh.ServerConfig {
 // handleConn bedient eine Verbindung; liefert, ob sich die Node angemeldet hat. push: die Verbindung hat der Agent
 // selbst aufgebaut (push.go) - Fehlversuche zaehlen dann nicht im Limiter (die Wartezeit des Push-Betriebs bremst),
 // und ein Keepalive erkennt tote Verbindungen.
-func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot, push bool) bool {
+func (s *Server) handleConn(c net.Conn, p peer, slot *preAuthSlot, push bool, handshake time.Duration) bool {
 	remote := c.RemoteAddr().String()
-	_ = c.SetDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
+	if handshake <= 0 {
+		handshake = s.cfg.HandshakeTimeout
+	}
+	_ = c.SetDeadline(time.Now().Add(handshake))
 	var rejected atomic.Bool
 	sc, chans, reqs, err := ssh.NewServerConn(c, s.sshConfig(&rejected))
 	s.gate.release(slot)

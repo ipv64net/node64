@@ -333,7 +333,7 @@ func (s *Server) pushOnce(t PushTarget) (pushResult, error) {
 		return pushFailed, errors.New("node sent an unexpected answer")
 	}
 	_ = c.SetDeadline(time.Time{})
-	if !s.handleConn(c, peerOf(c.RemoteAddr()), nil, true) {
+	if !s.handleConn(c, peerOf(c.RemoteAddr()), nil, true, 0) {
 		if s.closed.Load() {
 			return pushFailed, nil
 		}
