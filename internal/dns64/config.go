@@ -171,9 +171,16 @@ func (m *Module) loadConfig(ctx context.Context) config {
 	return c
 }
 
-// mergeUpstreams ergaenzt fehlende Vorlagen; ohne gespeicherten Stand gelten die Standard-Upstreams.
+// mergeUpstreams ergaenzt fehlende Vorlagen; ohne gespeicherten Stand gelten die Standard-Upstreams. Entfernte
+// Vorlagen (upstream.Retired) fallen weg; eingeschaltet bleiben sie als eigener Upstream, bis man sie entfernt.
 func mergeUpstreams(saved []upstreamSetting) []upstreamSetting {
 	fresh := len(saved) == 0
+	saved = slices.DeleteFunc(saved, func(s upstreamSetting) bool { return !s.Custom && upstream.Retired[s.URL] && !s.Enabled })
+	for i := range saved {
+		if upstream.Retired[saved[i].URL] {
+			saved[i].Custom = true
+		}
+	}
 	have := map[string]bool{}
 	for _, s := range saved {
 		have[s.URL] = true

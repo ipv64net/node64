@@ -8,6 +8,10 @@
 - Cluster: Kennzeichen und Ausnahmen werden mit den festen Adressen bzw. Einträgen abgeglichen.
 - DHCP: Läuft IPAM64, legt „fest machen“ an einer Vergabe die feste Adresse in IPAM64 an (mit DNS-Eintrag und Reservierung).
 
+### Behoben
+- Upstreams: Mullvad ist keine Vorlage mehr – Mullvad hat sein öffentliches verschlüsseltes DNS eingestellt. Wer Mullvad eingeschaltet hat, behält den Eintrag als eigenen Upstream, bis er ihn entfernt (besser auf Quad9 oder einen anderen Server umstellen); ausgeschaltete Mullvad-Vorlagen verschwinden (#162).
+- Blocklisten: Enthält eine Liste IP-Adressen statt Domains (z. B. die Honeypot-Liste von ipv64.net, gedacht für Firewalls), steht an der Liste ein Hinweis statt kommentarlos „0“ Einträge. DNS64 sperrt Namen; IP-Listen gehören in PROXY64 → Blocklisten (#164).
+
 ## 1.40.1 – 2026-11-14
 
 ### Geändert

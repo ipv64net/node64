@@ -4296,6 +4296,7 @@
       "entries": "Einträge {from}–{to} von {total}",
       "page": "Seite {n} von {of}",
       "live_paused": "Live pausiert (nur Seite 1)",
+      "list_ip": "Enthält IP-Adressen statt Domains – DNS64 sperrt Namen. IP-Listen gehören in PROXY64 → Blocklisten bzw. die Firewall.",
       "flush_confirm": "Cache leeren? Die nächsten Anfragen gehen dann wieder an die Upstream-Server.",
       "flushed": "Cache geleert ({n} Einträge).",
       "error": "Fehler",

@@ -33,7 +33,7 @@ type checkPath struct {
 // defaultPaths: DoH bei mehreren Betreibern (feste IPs), dazu klassisch ueber Port 53, falls 443 gesperrt ist.
 func defaultPaths() []checkPath {
 	var out []checkPath
-	for _, name := range []string{"Cloudflare", "Quad9", "Google", "DNS4EU", "dnsforge", "AdGuard", "Mullvad"} {
+	for _, name := range []string{"Cloudflare", "Quad9", "Google", "DNS4EU", "dnsforge", "AdGuard"} {
 		for _, s := range upstream.Presets {
 			if s.Name == name && upstream.Proto(s.URL) == "doh" {
 				out = append(out, checkPath{Name: name + " (DoH)", srv: s})

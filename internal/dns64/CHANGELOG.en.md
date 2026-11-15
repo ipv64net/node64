@@ -8,6 +8,10 @@
 - Cluster: labels and exclusions are synced with the fixed addresses and records.
 - DHCP: while IPAM64 runs, "make fixed" on a lease creates the fixed address in IPAM64 (with DNS record and reservation).
 
+### Fixed
+- Upstreams: Mullvad is no longer a preset – Mullvad shut down its public encrypted DNS. If Mullvad is switched on, it stays as an own upstream until removed (better switch to Quad9 or another server); switched-off Mullvad presets disappear (#162).
+- Blocklists: if a list contains IP addresses instead of domains (e.g. the ipv64.net honeypot list, meant for firewalls), the list shows a hint instead of a bare "0" entries. DNS64 blocks names; IP lists belong in PROXY64 → Blocklists (#164).
+
 ## 1.40.1 – 2026-11-14
 
 ### Changed

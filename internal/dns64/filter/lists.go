@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -9,9 +10,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -113,8 +116,13 @@ type ListStatus struct {
 	Rules     int       `json:"rules"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	Error     string    `json:"error,omitempty"`
-	Failures  int       `json:"failures"` // Fehlversuche hintereinander
+	Failures  int       `json:"failures"`       // Fehlversuche hintereinander
+	Hint      string    `json:"hint,omitempty"` // HintIPList: geladen, aber nur IP-Adressen statt Namen (#164)
 }
+
+// HintIPList: die Liste enthaelt IP-Adressen bzw. Netze statt Domains (z. B. Honeypot- oder Firewall-Listen). DNS64
+// sperrt Namen; solche Listen gehoeren in PROXY64 (Blocklisten) bzw. die Firewall.
+const HintIPList = "ip_list"
 
 // Manager downloads the blocklists, keeps them cached on disk and publishes
 // a fresh Matcher after every update without interrupting DNS traffic.
@@ -435,6 +443,7 @@ func (m *Manager) rebuild() {
 	}
 	mt := newMatcherSize(names, hint)
 	counts := make([]int, len(m.lists))
+	hints := make([]string, len(m.lists))
 	mtimes := make([]time.Time, len(m.lists))
 	for i := range m.lists {
 		f, err := os.Open(m.path(i))
@@ -445,16 +454,20 @@ func (m *Manager) rebuild() {
 			mtimes[i] = fi.ModTime()
 		}
 		counts[i], err = mt.loadAs(i, f, m.release)
-		f.Close()
 		if err != nil {
 			m.log.Warn("blocklist parse error", "list", m.lists[i].Name, "err", err)
 		}
+		if _, err := f.Seek(0, io.SeekStart); err == nil && ipList(f) {
+			hints[i] = HintIPList
+		}
+		f.Close()
 	}
 	old := m.cur.Swap(mt)
 
 	m.mu.Lock()
 	for i := range m.status {
 		m.status[i].Rules = counts[i]
+		m.status[i].Hint = hints[i]
 		m.status[i].UpdatedAt = mtimes[i]
 	}
 	m.updated = time.Now()
@@ -469,4 +482,33 @@ func (m *Manager) rebuild() {
 		return
 	}
 	m.log.Info("blocklists loaded", "domains", mt.Size(), "took", time.Since(start).Round(time.Millisecond))
+}
+
+// ipList meldet, ob eine Liste aus IP-Adressen bzw. Netzen besteht: unter den ersten 200 Zeilen mit Inhalt mindestens
+// eine und mehr als die Haelfte, die nur eine IP-Adresse oder ein Netz enthalten (hosts-Zeilen "0.0.0.0 name" nicht).
+func ipList(r io.Reader) bool {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 4096), 1<<16)
+	n, ips := 0, 0
+	for sc.Scan() && n < 200 {
+		ln := strings.TrimSpace(sc.Text())
+		if ln == "" || ln[0] == '#' || ln[0] == ';' || ln[0] == '!' {
+			continue
+		}
+		if i := strings.IndexByte(ln, '#'); i > 0 {
+			ln = strings.TrimSpace(ln[:i])
+		}
+		n++
+		fs := strings.Fields(ln)
+		if len(fs) != 1 {
+			continue
+		}
+		f := fs[0]
+		if _, err := netip.ParseAddr(f); err == nil {
+			ips++
+		} else if _, err := netip.ParsePrefix(f); err == nil {
+			ips++
+		}
+	}
+	return ips > 0 && ips*2 > n
 }

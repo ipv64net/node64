@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -147,5 +148,39 @@ func TestRetiredLists(t *testing.T) {
 	got = mergeLists([]listSetting{{List: filter.List{Name: "Phishing Army", URL: pa}, Enabled: true, Custom: true}})
 	if got[0].URL != pa || !got[0].Enabled {
 		t.Fatal("own list removed")
+	}
+}
+
+// #162: Mullvad hat sein oeffentliches DNS eingestellt. Ausgeschaltete Vorlagen fallen weg; eingeschaltete bleiben
+// als eigener Upstream (laeuft weiter, laesst sich entfernen), statt still zu verschwinden.
+func TestRetiredUpstreams(t *testing.T) {
+	saved := []upstreamSetting{
+		{Server: upstream.Server{Name: "Mullvad", URL: "https://dns.mullvad.net/dns-query"}, Enabled: true},
+		{Server: upstream.Server{Name: "Mullvad", URL: "tls://dns.mullvad.net"}},
+	}
+	got := mergeUpstreams(saved)
+	var mull []upstreamSetting
+	for _, u := range got {
+		if strings.Contains(u.URL, "mullvad") {
+			mull = append(mull, u)
+		}
+	}
+	if len(mull) != 1 || mull[0].URL != "https://dns.mullvad.net/dns-query" || !mull[0].Enabled || !mull[0].Custom {
+		t.Fatalf("mullvad after merge: %+v", mull)
+	}
+	if len(got) != len(upstream.Presets)+1 {
+		t.Fatalf("upstreams: %d, presets %d", len(got), len(upstream.Presets))
+	}
+	for _, p := range upstream.Presets {
+		if upstream.Retired[p.URL] {
+			t.Fatalf("retired preset still offered: %s", p.URL)
+		}
+	}
+	names := []string{}
+	for _, d := range upstream.DefaultServers {
+		names = append(names, d.Name+" "+d.URL)
+	}
+	if strings.Join(names, ", ") != "Cloudflare https://cloudflare-dns.com/dns-query, Quad9 https://dns.quad9.net/dns-query, dnsforge quic://blank.dnsforge.de, dnsforge https://blank.dnsforge.de/dns-query" {
+		t.Fatalf("defaults: %v", names)
 	}
 }

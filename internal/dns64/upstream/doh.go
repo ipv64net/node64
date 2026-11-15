@@ -29,7 +29,25 @@ type Server struct {
 }
 
 // Default: Cloudflare and Quad9 (DoH) plus dnsforge (DoQ and DoH, servers in Germany).
-var DefaultServers = []Server{Presets[0], Presets[1], Presets[16], Presets[12]}
+var DefaultServers = []Server{preset("https://cloudflare-dns.com/dns-query"), preset("https://dns.quad9.net/dns-query"),
+	preset("quic://blank.dnsforge.de"), preset("https://blank.dnsforge.de/dns-query")}
+
+// Retired are presets that were removed (Mullvad shut its public DNS down, #162): saved settings drop them unless
+// they are switched on - then they stay as an own upstream until the user removes them.
+var Retired = map[string]bool{
+	"https://dns.mullvad.net/dns-query": true,
+	"tls://dns.mullvad.net":             true,
+}
+
+// preset is the preset with this URL (panics at start-up if the list and the defaults disagree).
+func preset(url string) Server {
+	for _, p := range Presets {
+		if p.URL == url {
+			return p
+		}
+	}
+	panic("upstream: no preset " + url)
+}
 
 // Presets are the public resolvers offered in the settings (IPv4 first: without IPv6 the v6 addresses fail fast).
 var Presets = []Server{
@@ -37,13 +55,11 @@ var Presets = []Server{
 	{Name: "Quad9", URL: "https://dns.quad9.net/dns-query", IPs: []string{"9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"}},
 	{Name: "Google", URL: "https://dns.google/dns-query", IPs: []string{"8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"}},
 	{Name: "AdGuard", URL: "https://dns.adguard-dns.com/dns-query", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
-	{Name: "Mullvad", URL: "https://dns.mullvad.net/dns-query", IPs: []string{"194.242.2.2", "2a07:e340::2"}},
 	{Name: "Cloudflare", URL: "tls://one.one.one.one", IPs: []string{"1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"}},
 	{Name: "Quad9", URL: "tls://dns.quad9.net", IPs: []string{"9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"}},
 	{Name: "Google", URL: "tls://dns.google", IPs: []string{"8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"}},
 	{Name: "AdGuard", URL: "tls://dns.adguard-dns.com", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
 	{Name: "AdGuard", URL: "quic://dns.adguard-dns.com", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
-	{Name: "Mullvad", URL: "tls://dns.mullvad.net", IPs: []string{"194.242.2.2", "2a07:e340::2"}},
 	// European resolvers, unfiltered variants (DNS64 filters itself): DNS4EU (Whalebone, CZ, EU-funded),
 	// dnsforge "Blank" (adminForge, DE), Freifunk München (DE, PoP in Vienna), Digitalcourage (DE, DoT only).
 	{Name: "DNS4EU", URL: "https://unfiltered.joindns4.eu/dns-query", IPs: []string{"86.54.11.100", "86.54.11.200", "2a13:1001::86:54:11:100", "2a13:1001::86:54:11:200"}},

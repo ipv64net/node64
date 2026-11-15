@@ -4296,6 +4296,7 @@
       "entries": "Entries {from}–{to} of {total}",
       "page": "Page {n} of {of}",
       "live_paused": "Live paused (page 1 only)",
+      "list_ip": "Contains IP addresses instead of domains – DNS64 blocks names. IP lists belong in PROXY64 → Blocklists or the firewall.",
       "flush_confirm": "Flush the cache? The next queries go to the upstream servers again.",
       "flushed": "Cache flushed ({n} entries).",
       "error": "Error",
