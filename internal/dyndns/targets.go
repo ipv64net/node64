@@ -22,7 +22,7 @@ const (
 	Mode6Host   = "host"   // von aussen gesehene IPv6 dieses Hosts
 	Mode6Prefix = "prefix" // nur das /64-Praefix melden (Records mit Interface-ID bei ipv64, wirkt zonenweit)
 	Mode6Suffix = "suffix" // Praefix + eigene Interface-ID, lokal zusammengesetzt (nur dieser Record)
-	Mode6Iface  = "iface"  // stabile Adresse eines Interfaces (Host-Netzwerk)
+	Mode6Iface  = "iface"  // stabile Adresse eines Interfaces (Host-Netzwerk); Iface bei prefix/suffix: Praefix von dort
 	Mode6Fixed  = "fixed"
 	Mode6Off    = "off"
 )
@@ -155,8 +155,17 @@ func (t *Target) Normalize() error {
 		}
 		t.Suffix6 = s
 	}
-	if t.Mode6 == Mode6Iface && !ifaceRe.MatchString(t.Iface) {
-		return errors.New("iface")
+	switch t.Mode6 {
+	case Mode6Iface:
+		if !ifaceRe.MatchString(t.Iface) {
+			return errors.New("iface")
+		}
+	case Mode6Prefix, Mode6Suffix: // Interface optional: Praefix von dort statt von aussen gesehen (#154)
+		if t.Iface != "" && !ifaceRe.MatchString(t.Iface) {
+			return errors.New("iface")
+		}
+	default:
+		t.Iface = "" // sonst ungenutzt; bliebe es stehen, wirkte es beim Wechsel auf Praefix-Modi
 	}
 	return nil
 }

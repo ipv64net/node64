@@ -124,28 +124,33 @@ func (m *Module) planFor(t *Target) plan {
 		} else {
 			p.Note = "ipv6 unknown"
 		}
-	case Mode6Prefix:
-		if v6.IP.IsValid() {
-			p.Prefix = prefix64(v6.IP).String()
-		} else {
+	case Mode6Prefix, Mode6Suffix:
+		// Praefix: von aussen gesehen bzw. mit Interface vom Praefix dessen stabiler Adresse (#154)
+		var pfx netip.Prefix
+		switch {
+		case t.Iface != "":
+			if a, ok := m.stableOn(t.Iface); ok {
+				pfx = prefix64(a)
+			} else {
+				p.Note = "no stable address on " + t.Iface
+			}
+		case v6.IP.IsValid():
+			pfx = prefix64(v6.IP)
+		default:
 			p.Note = "ipv6 unknown"
 		}
-	case Mode6Suffix:
-		if v6.IP.IsValid() {
-			if a, err := withSuffix(prefix64(v6.IP), t.Suffix6); err == nil {
-				p.IP6 = a.String()
-			}
-		} else {
-			p.Note = "ipv6 unknown"
+		if !pfx.IsValid() {
+			break
+		}
+		if t.Mode6 == Mode6Prefix {
+			p.Prefix = pfx.String()
+		} else if a, err := withSuffix(pfx, t.Suffix6); err == nil {
+			p.IP6 = a.String()
 		}
 	case Mode6Iface:
-		for _, l := range m.local() {
-			if l.Iface == t.Iface && !l.Temporary && !l.Deprecated {
-				p.IP6 = l.Addr.String()
-				break
-			}
-		}
-		if p.IP6 == "" {
+		if a, ok := m.stableOn(t.Iface); ok {
+			p.IP6 = a.String()
+		} else {
 			p.Note = "no stable address on " + t.Iface
 		}
 	case Mode6Fixed:
@@ -155,6 +160,16 @@ func (m *Module) planFor(t *Target) plan {
 		}
 	}
 	return p
+}
+
+// stableOn liefert die erste stabile globale IPv6 eines Interfaces (keine temporaere, keine veraltete).
+func (m *Module) stableOn(iface string) (netip.Addr, bool) {
+	for _, l := range m.local() {
+		if l.Iface == iface && !l.Temporary && !l.Deprecated {
+			return l.Addr, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 // stableFor ersetzt eine temporaere Privacy-Adresse dieses Hosts durch eine stabile aus demselben /64

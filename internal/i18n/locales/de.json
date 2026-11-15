@@ -2334,8 +2334,8 @@
     "mode4_hint": "Automatisch meldet die öffentliche IPv4 des Anschlusses (die des Routers). Bei CGNAT/DS-Lite ist die IPv4 von außen nicht erreichbar, dann IPv4 auf „aus“ stellen.",
     "mode6_hint": {
       "host": "Meldet die von außen gesehene IPv6 dieser Node. Passt mit network_mode: host; temporäre Privacy-Adressen wechseln regelmäßig.",
-      "prefix": "Meldet nur das /64-Präfix. ipv64 setzt es bei allen AAAA-Records der Zone ein, die nur eine Interface-ID tragen (::1:2:3:4). Wirkt auf die ganze Zone.",
-      "suffix": "Setzt das aktuelle /64-Präfix und die hier eingetragene Interface-ID zur vollen Adresse zusammen und meldet sie nur für diesen Record. Gut für Geräte im LAN mit fester Interface-ID.",
+      "prefix": "Meldet nur das /64-Präfix. ipv64 setzt es bei allen AAAA-Records der Zone ein, die nur eine Interface-ID tragen (::1:2:3:4). Wirkt auf die ganze Zone. Optional mit Interface: Präfix von diesem Interface statt der von außen gesehenen IPv6.",
+      "suffix": "Setzt das aktuelle /64-Präfix und die hier eingetragene Interface-ID zur vollen Adresse zusammen und meldet sie nur für diesen Record. Gut für Geräte im LAN mit fester Interface-ID. Optional mit Interface: Präfix von diesem Interface statt der von außen gesehenen IPv6.",
       "iface": "Nimmt die stabile globale Adresse eines Netzwerk-Interfaces (temporäre Adressen werden übersprungen). Nur mit network_mode: host.",
       "fixed": "Meldet immer diese Adresse.",
       "off": "IPv6 wird für diesen Namen nicht aktualisiert."
@@ -2391,6 +2391,7 @@
     },
     "edit": {
       "ifaces": "Gefundene Interfaces:",
+      "iface_prefix": "Optional: Präfix von diesem Interface statt der von außen gesehenen IPv6 (z. B. bei zwei Anschlüssen auf verschiedenen Interfaces; nur mit network_mode: host). Leer = wie bisher.",
       "no_ifaces": "Keine globalen IPv6-Adressen sichtbar. Der Modus braucht network_mode: host.",
       "modes_help": "Was bedeuten die IPv6-Modi?",
       "token_manual": "Token von Hand ändern",

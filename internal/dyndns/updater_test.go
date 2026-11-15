@@ -513,3 +513,37 @@ func TestUpdaterRecoveryAlert(t *testing.T) {
 		t.Fatalf("alerts: %v", kinds)
 	}
 }
+
+// #154: Praefix-Modi mit Interface nehmen das Praefix dieses Interfaces statt der von aussen gesehenen IPv6.
+func TestUpdaterPrefixFromIface(t *testing.T) {
+	m, _, _ := setupUpdater(t)
+	m.local = func() []ifAddr {
+		return []ifAddr{
+			{Iface: "eth0", Addr: netip.MustParseAddr("2003:1:2:9c00::10")},
+			{Iface: "eth2", Addr: netip.MustParseAddr("2003:1:2:9c02:aaaa:bbbb:cccc:dddd"), Temporary: true},
+			{Iface: "eth2", Addr: netip.MustParseAddr("2003:1:2:9c02::20")},
+		}
+	}
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, Iface: "eth2"}); p.Prefix != "2003:1:2:9c02::/64" {
+		t.Fatalf("prefix from eth2: %+v", p)
+	}
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Suffix, Suffix6: "::1:2:3:4", Iface: "eth0"}); p.IP6 != "2003:1:2:9c00:1:2:3:4" {
+		t.Fatalf("suffix with eth0: %+v", p)
+	}
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix, Iface: "eth9"}); p.Prefix != "" || p.Note != "no stable address on eth9" {
+		t.Fatalf("missing iface: %+v", p)
+	}
+	// ohne Interface wie bisher (von aussen gesehen)
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Prefix}); p.Prefix == "2003:1:2:9c02::/64" {
+		t.Fatalf("without iface must not use eth2: %+v", p)
+	}
+	// Interface wird nur bei iface/prefix/suffix behalten
+	tg := Target{Domain: "example.ipv64.net", TokenKind: "record", Token: strings.Repeat("a", 32), Mode4: Mode4Off, Mode6: Mode6Host, Iface: "eth2"}
+	if err := tg.Normalize(); err != nil || tg.Iface != "" {
+		t.Fatalf("host mode keeps iface: %q %v", tg.Iface, err)
+	}
+	tg.Mode6, tg.Iface = Mode6Prefix, "eth 2"
+	if err := tg.Normalize(); err == nil {
+		t.Fatal("invalid iface accepted")
+	}
+}

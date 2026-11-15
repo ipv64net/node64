@@ -2334,8 +2334,8 @@
     "mode4_hint": "Automatic reports the public IPv4 of the connection (the router's). Behind CGNAT/DS-Lite the IPv4 cannot be reached from outside, then set IPv4 to \"off\".",
     "mode6_hint": {
       "host": "Reports the IPv6 address of this node as seen from outside. Fits with network_mode: host; temporary privacy addresses change regularly.",
-      "prefix": "Reports only the /64 prefix. ipv64 applies it to all AAAA records of the zone that only carry an interface ID (::1:2:3:4). Affects the whole zone.",
-      "suffix": "Combines the current /64 prefix with the interface ID entered here and reports the full address for this record only. Good for LAN devices with a fixed interface ID.",
+      "prefix": "Reports only the /64 prefix. ipv64 applies it to all AAAA records of the zone that only carry an interface ID (::1:2:3:4). Affects the whole zone. Optionally with an interface: prefix of that interface instead of the IPv6 seen from outside.",
+      "suffix": "Combines the current /64 prefix with the interface ID entered here and reports the full address for this record only. Good for LAN devices with a fixed interface ID. Optionally with an interface: prefix of that interface instead of the IPv6 seen from outside.",
       "iface": "Uses the stable global address of a network interface (temporary addresses are skipped). Only with network_mode: host.",
       "fixed": "Always reports this address.",
       "off": "IPv6 is not updated for this name."
@@ -2391,6 +2391,7 @@
     },
     "edit": {
       "ifaces": "Interfaces found:",
+      "iface_prefix": "Optional: prefix of this interface instead of the IPv6 seen from outside (e.g. two uplinks on different interfaces; network_mode: host only). Empty = as before.",
       "no_ifaces": "No global IPv6 addresses visible. This mode needs network_mode: host.",
       "modes_help": "What do the IPv6 modes mean?",
       "token_manual": "Change token manually",

@@ -739,7 +739,8 @@
             "description": "Interface-ID, z. B. ::1a2b:3c4d:5e6f:7a8b"
           },
           "iface": {
-            "type": "string"
+            "type": "string",
+            "description": "Interface (z. B. eth0): Pflicht bei mode6 iface; optional bei prefix und suffix (Präfix von diesem Interface statt der von außen gesehenen IPv6); bei anderen Modi leer"
           },
           "enabled": {
             "type": "boolean"
@@ -859,7 +860,8 @@
             "type": "string"
           },
           "iface": {
-            "type": "string"
+            "type": "string",
+            "description": "Interface (z. B. eth0): Pflicht bei mode6 iface; optional bei prefix und suffix (Präfix von diesem Interface statt der von außen gesehenen IPv6); bei anderen Modi leer"
           },
           "enabled": {
             "type": "boolean",
