@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -490,6 +491,38 @@ func TestExportImport(t *testing.T) {
 	}
 }
 
+// Blockuebersicht grosser Praefixe: IPv4 /16 je /24, eigenes Praefix, Belegung, Treffer; IPv6 8 Bit tiefer.
+func TestBlockMap(t *testing.T) {
+	p := netip.MustParsePrefix("10.80.0.0/16")
+	n := Net{CIDR: p.String(), Prefix: p, Family: 4}
+	s := &Snapshot{Nets: []Net{n, {CIDR: "10.80.5.0/24", Prefix: netip.MustParsePrefix("10.80.5.0/24"), Family: 4, Parent: p.String()}}, entries: map[netip.Prefix][]Entry{}}
+	for i := 1; i <= 200; i++ {
+		s.entries[p] = append(s.entries[p], Entry{ip: netip.AddrFrom4([4]byte{10, 80, 7, byte(i)}), Name: "h" + strconv.Itoa(i)})
+	}
+	s.entries[p] = append(s.entries[p], Entry{ip: netip.MustParseAddr("10.80.255.9"), Name: "nas"})
+	for i := 1; i <= 254; i++ {
+		s.entries[p] = append(s.entries[p], Entry{ip: netip.AddrFrom4([4]byte{10, 80, 9, byte(i)})})
+	}
+	if mapBits(&n) != 24 {
+		t.Fatalf("mapBits v4: %d", mapBits(&n))
+	}
+	cells := s.blockMap(&n, 24, func(e *Entry) bool { return e.Name == "nas" })
+	if len(cells) != 256 || cells[7].Count != 200 || cells[7].Level != "mid" || cells[7].Label != "7" || cells[255].Level != "low" || cells[255].Hits != 1 ||
+		cells[5].Level != "child" || cells[9].Level != "full" || cells[0].Level != "empty" || cells[255].CIDR != "10.80.255.0/24" {
+		t.Fatalf("v4 map: %+v %+v %+v", cells[7], cells[255], cells[5])
+	}
+	v6 := netip.MustParsePrefix("2001:db8:1::/48")
+	n6 := Net{CIDR: v6.String(), Prefix: v6, Family: 6}
+	s.entries[v6] = []Entry{{ip: netip.MustParseAddr("2001:db8:1:a510::1")}}
+	if mapBits(&n6) != 56 {
+		t.Fatalf("mapBits v6: %d", mapBits(&n6))
+	}
+	cells = s.blockMap(&n6, 56, nil)
+	if len(cells) != 256 || cells[0xa5].Level != "used" || cells[0xa5].Label != "a5" || cells[0xa5].CIDR != "2001:db8:1:a500::/56" || bitsAt(netip.MustParseAddr("10.80.7.1"), 16, 24) != 7 {
+		t.Fatalf("v6 map: %+v", cells[0xa5])
+	}
+}
+
 func TestHelpers(t *testing.T) {
 	if vlanOf("eth0.20") != 20 || vlanOf("br-vlan30") != 30 || vlanOf("eth0") != 0 || vlanOf("eth0.5000") != 0 {
 		t.Fatal("vlanOf")
@@ -511,6 +544,11 @@ func TestHelpers(t *testing.T) {
 }
 
 // Seiten, Formulare, CSV und API ueber den echten Webserver (Modul aus = 404).
+// untranslated meldet einen i18n-Schluessel ipam64.* in einer Seite (das Skript ipam64.js zaehlt nicht).
+func untranslated(body string) bool {
+	return strings.Contains(strings.ReplaceAll(body, "ipam64.js", ""), "ipam64.")
+}
+
 func TestPagesRender(t *testing.T) {
 	m, f, dir := modTest(t)
 	st := m.core
@@ -582,7 +620,7 @@ func TestPagesRender(t *testing.T) {
 	}
 	csrfTok = csrfRe.FindStringSubmatch(body)[1]
 	code, body := get("/ipam64")
-	if code != 200 || !strings.Contains(body, `id="ipam-suggest"`) || !strings.Contains(body, "192.168.20.0/24") || strings.Contains(body, "ipam64.") {
+	if code != 200 || !strings.Contains(body, `id="ipam-suggest"`) || !strings.Contains(body, "192.168.20.0/24") || untranslated(body) {
 		t.Fatalf("overview start: %d\n%s", code, body)
 	}
 	if code, body = post("/ipam64/prefix", url.Values{"prefix": {"192.168.1.0/33"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, `id="ipam-form-error"`) {
@@ -624,7 +662,7 @@ func TestPagesRender(t *testing.T) {
 		}
 	}
 	code, body = get("/ipam64/prefix?p=192.168.1.0/24")
-	for _, want := range []string{`id="ipam-grid"`, `class="ipam-cell ipam-conflict"`, `class="ipam-cell ipam-reserved"`, `id="ipam-next"`, `id="ipam-scan"`} {
+	for _, want := range []string{`id="ipam-grid"`, `id="ipam-list"`, `id="ip-192.168.1.40"`, `class="ipam-cell ipam-conflict"`, `class="ipam-cell ipam-reserved"`, `id="ipam-next"`, `id="ipam-scan"`, "ipam64.js"} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("prefix grid: %d, missing %q\n%s", code, want, body)
 		}
@@ -635,17 +673,26 @@ func TestPagesRender(t *testing.T) {
 			t.Fatalf("prefix list: %d, missing %q\n%s", code, want, body)
 		}
 	}
-	if strings.Contains(body, "ipam64.") || strings.Contains(body, "<b>hole") {
+	if untranslated(body) || strings.Contains(body, "<b>hole") {
 		t.Fatalf("untranslated key or unescaped name\n%s", body)
 	}
-	if code, body = get("/ipam64/prefix?p=192.168.1.0/24&view=list&kind=conflict"); code != 200 || !strings.Contains(body, "switch-keller") || strings.Contains(body, `id="ip-192.168.1.3"`) {
-		t.Fatalf("filter: %d", code)
+	if code, body = get("/ipam64/prefix?p=192.168.1.0/24&view=list&kind=conflict"); code != 200 || !strings.Contains(body, "switch-keller") || strings.Contains(body, `id="ip-192.168.1.3"`) ||
+		!strings.Contains(body, "ipam-grid ipam-marking") || !strings.Contains(body, `ipam-conflict ipam-match" data-ip="192.168.1.40"`) || strings.Contains(body, `ipam-static ipam-match`) {
+		t.Fatalf("filter: %d\n%s", code, body)
 	}
-	if code, body = get("/ipam64/prefix?p=192.168.1.0/24&view=ranges"); code != 200 || !strings.Contains(body, "192.168.1.200 – 192.168.1.210") || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64/prefix?p=192.168.1.0/24&view=ranges"); code != 200 || !strings.Contains(body, "192.168.1.200 – 192.168.1.210") || untranslated(body) {
 		t.Fatalf("ranges: %d\n%s", code, body)
 	}
-	if code, body = get("/ipam64/prefix?p=fd00:10::/64"); code != 200 || strings.Contains(body, `id="ipam-grid"`) || !strings.Contains(body, `id="ipam-list"`) || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64/prefix?p=fd00:10::/64"); code != 200 || strings.Contains(body, `id="ipam-grid"`) || !strings.Contains(body, `id="ipam-list"`) ||
+		!strings.Contains(body, `id="ipam-map"`) || strings.Count(body, `<a class="ipam-cell ipam-lvl-`) != 256 || untranslated(body) {
 		t.Fatalf("v6 prefix: %d\n%s", code, body)
+	}
+	// Blockuebersicht: Feld waehlen schraenkt die Liste ein, falsches Teilnetz wird ignoriert
+	if code, body = get("/ipam64/prefix?p=fd00:10::/64&part=fd00:10::/72"); code != 200 || !strings.Contains(body, "ipam-active") || !strings.Contains(body, `id="ipam-map-all"`) {
+		t.Fatalf("v6 part: %d\n%s", code, body)
+	}
+	if code, body = get("/ipam64/prefix?p=fd00:10::/64&part=fd00:10::/70"); code != 200 || strings.Contains(body, "ipam-active") {
+		t.Fatalf("v6 bad part: %d", code)
 	}
 	if code, body = get("/ipam64/prefix?p=192.168.20.0/24"); code != 200 || !strings.Contains(body, "aus DNS64") {
 		t.Fatalf("dhcp-only prefix: %d", code)
@@ -653,7 +700,7 @@ func TestPagesRender(t *testing.T) {
 	if code, _ = get("/ipam64/prefix?p=10.0.0.0/8"); code != http.StatusSeeOther {
 		t.Fatalf("unknown prefix: %d", code)
 	}
-	if code, body = get("/ipam64/address?ip=192.168.1.3"); code != 200 || !strings.Contains(body, `name="address" value="192.168.1.3"`) || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64/address?ip=192.168.1.3"); code != 200 || !strings.Contains(body, `name="address" value="192.168.1.3"`) || untranslated(body) {
 		t.Fatalf("address page: %d\n%s", code, body)
 	}
 	if code, body = get("/ipam64/address?ip=192.168.1.40"); code != 200 || !strings.Contains(body, `id="ipam-conflict"`) || !strings.Contains(body, `value="switch-keller"`) {
@@ -711,7 +758,7 @@ func TestPagesRender(t *testing.T) {
 	if code, body = get("/"); code != 200 || !strings.Contains(body, `href="/ipam64"`) {
 		t.Fatalf("dashboard: %d", code)
 	}
-	if code, body = get("/ipam64/conflicts"); code != 200 || !strings.Contains(body, `id="ipam-findings"`) || !strings.Contains(body, "Fremdes Gerät an 192.168.1.40") || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64/conflicts"); code != 200 || !strings.Contains(body, `id="ipam-findings"`) || !strings.Contains(body, "Fremdes Gerät an 192.168.1.40") || untranslated(body) {
 		t.Fatalf("conflicts: %d\n%s", code, body)
 	}
 	if code, _ = post("/ipam64/notify", url.Values{"conflicts": {"1"}}); code != http.StatusSeeOther {
@@ -720,11 +767,11 @@ func TestPagesRender(t *testing.T) {
 	if code, body = get("/api/ipam64/conflicts"); code != 200 || !strings.Contains(body, `"kind":"mac"`) {
 		t.Fatalf("api conflicts: %d %s", code, body)
 	}
-	if code, body = get("/ipam64/import"); code != 200 || !strings.Contains(body, `id="ipam-import-form"`) || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64/import"); code != 200 || !strings.Contains(body, `id="ipam-import-form"`) || untranslated(body) {
 		t.Fatalf("import page: %d\n%s", code, body)
 	}
 	if code, body = post("/ipam64/import", url.Values{"action": {"preview"}, "csv": {"ip;name\n192.168.1.77;csvtest\n10.99.0.1;fremd\n"}}); code != 200 ||
-		!strings.Contains(body, `id="ipam-import-preview"`) || !strings.Contains(body, "csvtest") || strings.Contains(body, "ipam64.") {
+		!strings.Contains(body, `id="ipam-import-preview"`) || !strings.Contains(body, "csvtest") || untranslated(body) {
 		t.Fatalf("import preview: %d\n%s", code, body)
 	}
 	if code, _ = post("/ipam64/import", url.Values{"action": {"apply"}, "csv": {"ip;name\n192.168.1.77;csvtest\n"}}); code != http.StatusSeeOther {
@@ -733,13 +780,13 @@ func TestPagesRender(t *testing.T) {
 	if code, body = get("/api/ipam64/addresses?q=csvtest"); code != 200 || !strings.Contains(body, `"total":1`) {
 		t.Fatalf("imported: %d %s", code, body)
 	}
-	if code, body = get("/ipam64/setup"); code != 200 || !strings.Contains(body, `id="ipam-setup-form"`) || !strings.Contains(body, "192.168.20.0/24") || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64/setup"); code != 200 || !strings.Contains(body, `id="ipam-setup-form"`) || !strings.Contains(body, "192.168.20.0/24") || untranslated(body) {
 		t.Fatalf("setup: %d\n%s", code, body)
 	}
 	if code, _ = post("/ipam64/setup", url.Values{"take": {"p:192.168.20.0/24"}}); code != http.StatusSeeOther {
 		t.Fatalf("setup apply: %d", code)
 	}
-	if code, body = get("/ipam64"); code != 200 || strings.Contains(body, "aus DNS64") || strings.Contains(body, "ipam64.") {
+	if code, body = get("/ipam64"); code != 200 || strings.Contains(body, "aus DNS64") || untranslated(body) {
 		t.Fatalf("after setup: %d\n%s", code, body)
 	}
 	if code, body = get("/audit?area=ipam64"); code != 200 || !strings.Contains(body, "IPAM64: Präfix gespeichert") {

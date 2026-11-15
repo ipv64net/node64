@@ -5711,6 +5711,21 @@
     "free_pool": "im DHCP-Adressbereich, vergibt DNS64",
     "take_free": "{ip} vergeben",
     "list_empty": "Keine Einträge.",
+    "grid_hint": "Klick markiert die Adresse in der Liste, freie Felder öffnen das Formular.",
+    "map_hint": "ein Feld je /{bits}, Klick zeigt nur diesen Block in der Liste",
+    "map_all": "Alle Blöcke",
+    "search_hint": "Filtert beim Tippen die Zeilen dieser Seite; Enter sucht im ganzen Präfix.",
+    "live_none": "Keine Treffer auf dieser Seite – Enter sucht im ganzen Präfix.",
+    "hits": "{n} Treffer",
+    "level": {
+      "empty": "leer",
+      "low": "unter 50 %",
+      "mid": "50–79 %",
+      "high": "80–99 %",
+      "full": "voll",
+      "used": "belegt",
+      "child": "eigenes Präfix"
+    },
     "prefix": {
       "dynamic": "IPv6 vom Provider (wechselt)",
       "dynamic_hint": "Wechselt das Präfix, zieht IPAM64 die Präfixe darin, die Adressen und ihre AAAA-Einträge nach. Erkannt über die Adressen dieser Node.",
@@ -5781,6 +5796,8 @@
       "off": "Aus"
     },
     "view": {
+      "addresses": "Adressen",
+      "map": "Blockübersicht",
       "grid": "Raster",
       "list": "Liste",
       "ranges": "Adressbereiche"

@@ -5711,6 +5711,21 @@
     "free_pool": "in the DHCP range, assigned by DNS64",
     "take_free": "assign {ip}",
     "list_empty": "No entries.",
+    "grid_hint": "Click marks the address in the list, free fields open the form.",
+    "map_hint": "one field per /{bits}, click shows only this block in the list",
+    "map_all": "All blocks",
+    "search_hint": "Filters the rows on this page while typing; Enter searches the whole prefix.",
+    "live_none": "No matches on this page – press Enter to search the whole prefix.",
+    "hits": "{n} matches",
+    "level": {
+      "empty": "empty",
+      "low": "below 50 %",
+      "mid": "50–79 %",
+      "high": "80–99 %",
+      "full": "full",
+      "used": "in use",
+      "child": "own prefix"
+    },
     "prefix": {
       "dynamic": "IPv6 from the provider (changes)",
       "dynamic_hint": "When the prefix changes, IPAM64 moves the prefixes in it, the addresses and their AAAA records. Detected via this node's addresses.",
@@ -5781,6 +5796,8 @@
       "off": "Off"
     },
     "view": {
+      "addresses": "Addresses",
+      "map": "Block overview",
       "grid": "Grid",
       "list": "List",
       "ranges": "Ranges"

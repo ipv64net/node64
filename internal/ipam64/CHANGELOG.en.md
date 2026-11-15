@@ -1,5 +1,12 @@
 # IPAM64 – Changes
 
+## 0.6.0 – unreleased
+
+New:
+
+- Prefix page: grid and list on one page (tab "Addresses"), ranges as a separate tab. Clicking a used field marks the row in the list, hovering a row highlights its field; filter and search highlight the matches in the grid, the search filters while typing.
+- Large networks (IPv4 larger than /22, IPv6): block overview with at most 256 fields (IPv4 per /24, otherwise 8 bits deeper), coloured by usage; a click shows only that block in the list, own prefixes inside lead to their page. For /22 and /23 the list shows the selected section of the grid.
+
 ## 0.5.1 – unreleased
 
 Fixed (practical lab test):

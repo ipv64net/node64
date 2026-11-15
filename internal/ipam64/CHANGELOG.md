@@ -1,5 +1,12 @@
 # IPAM64 – Änderungen
 
+## 0.6.0 – unveröffentlicht
+
+Neu:
+
+- Präfix-Seite: Raster und Liste auf einer Seite (Reiter „Adressen“), Adressbereiche als eigener Reiter. Klick auf ein belegtes Feld markiert die Zeile in der Liste, Zeigen auf eine Zeile hebt ihr Feld hervor; Filter und Suche heben die Treffer im Raster hervor, die Suche filtert schon beim Tippen.
+- Große Netze (IPv4 größer als /22, IPv6): Blockübersicht mit höchstens 256 Feldern (IPv4 je /24, sonst 8 Bit tiefer), eingefärbt nach Belegung; Klick zeigt nur diesen Block in der Liste, eigene Präfixe darin führen zu ihrer Seite. Bei /22 und /23 zeigt die Liste den gewählten Abschnitt des Rasters.
+
 ## 0.5.1 – unveröffentlicht
 
 Behoben (Praxistest im Labor):

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -188,12 +189,23 @@ type Cell struct {
 	Last  string // letzte Stelle(n) als Beschriftung
 	Class string // dhcp | fixed | static | conflict | pool | reserved | free | na
 	Name  string
+	Match bool // Treffer von Filter/Suche der Liste
+}
+
+// MapCell ist ein Feld der Blockuebersicht grosser Praefixe (ein Teilnetz, hoechstens 256 Felder).
+type MapCell struct {
+	CIDR   string
+	Label  string
+	Count  int    // Eintraege im Teilnetz
+	Level  string // empty | low | mid | high | full (IPv4) bzw. empty | used (IPv6) | child (eigenes Praefix)
+	Hits   int    // Treffer von Filter/Suche
+	Active bool   // Liste zeigt nur dieses Teilnetz
 }
 
 type prefixData struct {
 	Net       *Net
 	Prefix    *Prefix // Eintrag in IPAM64 (nil = nur DHCP-Netz)
-	View      string  // grid | list | ranges
+	View      string  // addresses (Raster und Liste) | ranges
 	Entries   []Entry
 	Rows      []listRow
 	Total     int
@@ -205,6 +217,10 @@ type prefixData struct {
 	Grid      [][]Cell
 	Blocks    []string // Abschnitte des Rasters (/22, /23)
 	Block     int
+	MapRows   [][]MapCell // Blockuebersicht (IPv4 groesser /22, IPv6) in Zeilen zu 32 Feldern
+	MapBits   int         // Laenge der Teilnetze der Blockuebersicht
+	Part      string      // gewaehltes Teilnetz der Blockuebersicht ("" = ganzes Praefix)
+	Marking   bool        // Filter oder Suche aktiv: Treffer im Raster hervorheben
 	Ranges    []Range
 	Children  []Net
 	Next      string // naechste freie Adresse
@@ -227,8 +243,14 @@ type listRow struct {
 // URL baut den Link der Seite mit geaenderten Parametern.
 func (d *prefixData) URL(kv ...string) string {
 	q := []string{"view", d.View, "kind", d.Filter, "q", d.Query}
+	if d.View == "addresses" {
+		q[1] = "" // Standard
+	}
 	if d.Block > 0 {
 		q = append(q, "block", strconv.Itoa(d.Block))
+	}
+	if d.Part != "" {
+		q = append(q, "part", d.Part)
 	}
 	for i := 0; i+1 < len(kv); i += 2 {
 		found := false
@@ -258,6 +280,82 @@ func matches(e Entry, q string) bool {
 
 // gridable: Raster fuer IPv4 bis /22 (in Abschnitten zu 256 Adressen).
 func gridable(n *Net) bool { return n.IsV4() && n.Prefix.Bits() >= 22 && !n.Container() }
+
+// mapBits liefert die Laenge der Teilnetze der Blockuebersicht: IPv4 ab /16 je /24, sonst 8 Bit tiefer (256 Felder).
+func mapBits(n *Net) int {
+	if n.IsV4() && n.Prefix.Bits() >= 16 {
+		return 24
+	}
+	return min(n.Prefix.Addr().BitLen(), n.Prefix.Bits()+8)
+}
+
+// bitsAt liefert die Bits [from, to) einer Adresse als Zahl (hoechstens 8 Bit).
+func bitsAt(a netip.Addr, from, to int) int {
+	b := a.AsSlice()
+	v := 0
+	for i := from; i < to; i++ {
+		v = v<<1 | int(b[i/8]>>(7-i%8)&1)
+	}
+	return v
+}
+
+// blockMap baut die Blockuebersicht eines grossen Praefixes; hit meldet Treffer von Filter/Suche (nil = keine).
+func (s *Snapshot) blockMap(n *Net, mb int, hit func(*Entry) bool) []MapCell {
+	sub := mb - n.Prefix.Bits()
+	cells := make([]MapCell, 1<<sub)
+	base := n.Prefix.Masked().Addr().AsSlice()
+	for i := range cells {
+		a := make([]byte, len(base))
+		copy(a, base)
+		for k := 0; k < sub; k++ { // Index in die Bits hinter dem Praefix schreiben
+			if bit := n.Prefix.Bits() + k; i>>(sub-1-k)&1 == 1 {
+				a[bit/8] |= 1 << (7 - bit%8)
+			}
+		}
+		addr, _ := netip.AddrFromSlice(a)
+		c := MapCell{CIDR: netip.PrefixFrom(addr, mb).String(), Level: "empty"}
+		if n.IsV4() {
+			c.Label = strconv.Itoa(int(a[(mb-1)/8]))
+		} else {
+			c.Label = fmt.Sprintf("%02x", i)
+		}
+		for _, k := range s.Nets {
+			if k.Parent == n.CIDR && k.Prefix.Bits() <= mb && k.Prefix.Contains(addr) {
+				c.Level = "child"
+			}
+		}
+		cells[i] = c
+	}
+	list := s.entries[n.Prefix]
+	for i := range list {
+		c := &cells[bitsAt(list[i].ip, n.Prefix.Bits(), mb)]
+		c.Count++
+		if hit != nil && hit(&list[i]) {
+			c.Hits++
+		}
+	}
+	size := 1 << max(0, min(30, n.Prefix.Addr().BitLen()-mb))
+	if size >= 4 {
+		size -= 2 // wie gewohnt: ein /24 ist mit 254 Adressen voll
+	}
+	for i := range cells {
+		c := &cells[i]
+		switch pct := c.Count * 100 / size; {
+		case c.Level == "child" || c.Count == 0:
+		case !n.IsV4():
+			c.Level = "used"
+		case pct >= 100:
+			c.Level = "full"
+		case pct >= 80:
+			c.Level = "high"
+		case pct >= 50:
+			c.Level = "mid"
+		default:
+			c.Level = "low"
+		}
+	}
+	return cells
+}
 
 func addrAt(p netip.Prefix, i int) netip.Addr {
 	v := u32(p.Masked().Addr()) + uint32(i)
@@ -333,33 +431,23 @@ func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
 	if free, _ := snap.free(n, "", 1); len(free) > 0 {
 		d.Next = free[0].String()
 	}
-	switch v := q.Get("view"); {
-	case v == "list" || v == "ranges":
-		d.View = v
-	case gridable(n):
-		d.View = "grid"
-	default:
-		d.View = "list"
-	}
-	if d.View == "grid" && !gridable(n) {
-		d.View = "list"
+	d.View = "addresses" // Raster und Liste auf einer Seite (frueher view=grid bzw. list)
+	if q.Get("view") == "ranges" {
+		d.View = "ranges"
 	}
 	all := snap.Entries(n.Prefix)
 	d.Total = len(all)
-	for _, e := range all {
-		d.Counts[e.Kind]++
-	}
 	switch f := q.Get("kind"); f {
 	case KindDHCP, KindFixed, KindStatic, KindConflict:
 		d.Filter = f
 	}
 	lq := strings.ToLower(d.Query)
-	for i := range all {
-		if (d.Filter == "" || all[i].Kind == d.Filter) && matches(all[i], lq) {
-			d.Entries = append(d.Entries, all[i])
-		}
-	}
-	if d.View == "grid" {
+	d.Marking = d.Filter != "" || d.Query != ""
+	hit := func(e *Entry) bool { return (d.Filter == "" || e.Kind == d.Filter) && matches(*e, lq) }
+	var lo, hi netip.Addr // Ausschnitt der Liste: Abschnitt des Rasters bzw. Feld der Blockuebersicht (leer = alles)
+	switch {
+	case n.Container():
+	case gridable(n):
 		blocks := max(1, (1<<(32-n.Prefix.Bits()))/256)
 		if b, _ := strconv.Atoi(q.Get("block")); b > 0 && b < blocks {
 			d.Block = b
@@ -369,13 +457,63 @@ func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
 				a := addrAt(n.Prefix, i*256).As4()
 				d.Blocks = append(d.Blocks, strconv.Itoa(int(a[0]))+"."+strconv.Itoa(int(a[1]))+"."+strconv.Itoa(int(a[2]))+".x")
 			}
+			lo, hi = addrAt(n.Prefix, d.Block*256), addrAt(n.Prefix, d.Block*256+255)
 		}
 		d.Grid = snap.grid(n, d.Block)
+		if d.Marking {
+			for i := range d.Grid {
+				for j := range d.Grid[i] {
+					if e := snap.Entry(netip.MustParseAddr(d.Grid[i][j].IP)); e != nil && hit(e) {
+						d.Grid[i][j].Match = true
+					}
+				}
+			}
+		}
+	default:
+		d.MapBits = mapBits(n)
+		var h func(*Entry) bool
+		if d.Marking {
+			h = hit
+		}
+		cells := snap.blockMap(n, d.MapBits, h)
+		if p, err := netip.ParsePrefix(q.Get("part")); err == nil && p.Bits() == d.MapBits && p == p.Masked() && n.Prefix.Contains(p.Addr()) {
+			d.Part, lo, hi = p.String(), p.Addr(), lastAddr(p)
+			cells[bitsAt(p.Addr(), n.Prefix.Bits(), d.MapBits)].Active = true
+		}
+		for i := 0; i < len(cells); i += mapRow {
+			d.MapRows = append(d.MapRows, cells[i:min(i+mapRow, len(cells))])
+		}
 	}
-	if d.View == "list" {
+	in := func(ip netip.Addr) bool { return !lo.IsValid() || (!ip.Less(lo) && !hi.Less(ip)) }
+	for i := range all {
+		if !in(all[i].ip) {
+			continue
+		}
+		d.Counts[all[i].Kind]++
+		if hit(&all[i]) {
+			d.Entries = append(d.Entries, all[i])
+		}
+	}
+	if d.View == "addresses" {
 		var rows []listRow
 		if d.Filter == "" && d.Query == "" { // Luecken nur in der vollstaendigen Liste
-			free := snap.FreeBlocks(n)
+			var free []FreeBlock
+			for _, b := range snap.FreeBlocks(n) { // auf den Ausschnitt zuschneiden
+				if lo.IsValid() {
+					if b.Last.Less(lo) || hi.Less(b.First) {
+						continue
+					}
+					if b.First.Less(lo) {
+						b.First = lo
+					}
+					if hi.Less(b.Last) {
+						b.Last = hi
+					}
+					b.Count = int64(u32(b.Last)-u32(b.First)) + 1
+					b.Pool = n.inPool(b.First) && n.inPool(b.Last)
+				}
+				free = append(free, b)
+			}
 			fi := 0
 			for i := range d.Entries {
 				for fi < len(free) && free[fi].First.Less(d.Entries[i].ip) {

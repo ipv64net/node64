@@ -328,4 +328,17 @@ a.ipam-cell:hover, a.ipam-cell:focus-visible { outline: 2px solid var(--bs-body-
 .ipam-reserved { background: var(--bs-warning-bg-subtle); border-color: var(--bs-warning-border-subtle); }
 .ipam-na { background: var(--bs-tertiary-bg); border-color: transparent; opacity: .55; }
 .ipam-free-row td { color: var(--bs-secondary-color); font-size: .85rem; border-style: dashed; }
+/* Raster und Liste auf einer Seite: Treffer von Filter/Suche, markierte Zeile, Blockuebersicht grosser Praefixe */
+.ipam-marking a.ipam-cell:not(.ipam-match) { opacity: .28; }
+.ipam-marking a.ipam-cell.ipam-match { box-shadow: 0 0 0 2px var(--bs-primary); }
+a.ipam-cell.ipam-selected, a.ipam-cell.ipam-hover, a.ipam-cell.ipam-active { outline: 2px solid var(--bs-body-color); outline-offset: 1px; opacity: 1; }
+tr.ipam-hit > * { --bs-table-bg-state: var(--bs-primary-bg-subtle); }
+.ipam-lvl-empty { background: var(--bs-body-bg); }
+.ipam-lvl-low { background: rgba(var(--n64-chart-1-rgb), .25); border-color: rgba(var(--n64-chart-1-rgb), .4); }
+.ipam-lvl-mid { background: rgba(var(--n64-chart-1-rgb), .55); border-color: rgba(var(--n64-chart-1-rgb), .7); }
+.ipam-lvl-high, .ipam-lvl-used { background: rgba(var(--n64-chart-1-rgb), .85); border-color: var(--n64-chart-1); }
+.ipam-lvl-full { background: var(--n64-chart-1); border-color: var(--n64-chart-1); }
+.ipam-row .ipam-lvl-high, .ipam-row .ipam-lvl-used, .ipam-row .ipam-lvl-full { color: #fff; }
+.ipam-lvl-child { background: repeating-linear-gradient(45deg, var(--bs-tertiary-bg) 0 3px, var(--bs-secondary-bg) 3px 6px); }
+.ipam-map .ipam-cell { text-decoration: none; }
 @media (max-width: 767.98px) { .ipam-row { grid-template-columns: repeat(16, minmax(0, 1fr)); } .ipam-row .ipam-cell { font-size: .55rem; } }
