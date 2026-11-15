@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/firewall"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/ipv64api"
@@ -193,6 +194,15 @@ func TestHPInfoAccess(t *testing.T) {
 			t.Errorf("%s: %d, want 403", remote, w.Code)
 		}
 	}
+	// Docker-Gateway im Bridge-Netz: Herkunft unbekannt, nicht lokal (WE-3)
+	restore := localnet.OriginForTest(true, netip.MustParseAddr("172.17.0.1"))
+	if w := hpDo(h, "GET", "/", "172.17.0.1:40000", nil); w.Code != http.StatusForbidden {
+		t.Errorf("docker gateway: %d, want 403", w.Code)
+	}
+	if w := hpDo(h, "GET", "/", "172.17.0.5:40000", nil); w.Code != http.StatusOK {
+		t.Errorf("other bridge address: %d", w.Code)
+	}
+	restore()
 	// ohne eingestelltes Token hilft auch ein Token nicht
 	if w := hpDo(h, "GET", "/?token=", "203.0.113.5:1", map[string]string{"Authorization": "Bearer "}); w.Code != http.StatusForbidden {
 		t.Errorf("empty token: %d", w.Code)

@@ -9,11 +9,14 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 )
 
 // SyslogServer nimmt Syslog per UDP und TCP auf einem Port an (RFC 3164 und RFC 5424, TCP mit Zeilenende oder
@@ -192,6 +195,10 @@ func (s *SyslogServer) Status() SyslogStatus {
 func (s *SyslogServer) allowed(a netip.Addr) bool {
 	if !a.IsValid() {
 		return false
+	}
+	// Docker-Gateway im Bridge-Netz: echte Herkunft unbekannt (auch Internet), nur ausdruecklich als einzelne Adresse
+	if localnet.MaskedGateway(a) {
+		return slices.Contains(s.allow, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
 	}
 	for _, p := range s.allow {
 		if p.Contains(a) {

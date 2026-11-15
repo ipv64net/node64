@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 )
 
 func TestParseSyslog3164(t *testing.T) {
@@ -222,6 +224,18 @@ func TestSyslogAllowed(t *testing.T) {
 	if def.allowed(netip.Addr{}) {
 		t.Error("ungueltige Adresse erlaubt")
 	}
+	// Docker-Gateway im Bridge-Netz: Herkunft unbekannt - nicht im Standard, nicht ueber ein Netz, nur als einzelne Adresse
+	restore := localnet.OriginForTest(true, netip.MustParseAddr("172.17.0.1"))
+	if def.allowed(netip.MustParseAddr("172.17.0.1")) || !def.allowed(netip.MustParseAddr("172.17.0.5")) {
+		t.Error("Gateway im Standard erlaubt oder anderer Absender abgewiesen")
+	}
+	if NewSyslogServer(sensorTestLog(), 514, []netip.Prefix{netip.MustParsePrefix("172.16.0.0/12")}, nil).allowed(netip.MustParseAddr("172.17.0.1")) {
+		t.Error("Gateway ueber ein Netz erlaubt")
+	}
+	if !NewSyslogServer(sensorTestLog(), 514, []netip.Prefix{netip.MustParsePrefix("172.17.0.1/32")}, nil).allowed(netip.MustParseAddr("172.17.0.1")) {
+		t.Error("Gateway als einzelne Adresse abgewiesen")
+	}
+	restore()
 	own := NewSyslogServer(sensorTestLog(), 514, []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24"), netip.MustParsePrefix("::ffff:203.0.113.0/120"), {}}, nil)
 	for ip, want := range map[string]bool{"198.51.100.7": true, "203.0.113.9": true, "192.168.1.1": false, "127.0.0.1": false, "198.51.101.1": false} {
 		if got := own.allowed(netip.MustParseAddr(ip)); got != want {

@@ -4972,7 +4972,7 @@
       "suggest": "Suggestions (adds a row):",
       "syslog_port": "Syslog port",
       "syslog_allow": "Allowed senders",
-      "syslog_hint": "UDP and TCP on the same port, empty = off (usually 514). Senders as IP or network; empty = private networks only. Don’t expose the port to the internet.",
+      "syslog_hint": "UDP and TCP on the same port, empty = off (usually 514). Senders as IP or network; empty = private networks only. In a Docker bridge network the gateway address (e.g. 172.17.0.1) only counts if listed on its own. Don’t expose the port to the internet.",
       "status": "State of log sensor and syslog",
       "no_files": "No log files configured.",
       "lines": "Lines",

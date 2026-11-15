@@ -4972,7 +4972,7 @@
       "suggest": "Vorschläge (fügt eine Zeile hinzu):",
       "syslog_port": "Syslog-Port",
       "syslog_allow": "Erlaubte Absender",
-      "syslog_hint": "UDP und TCP auf demselben Port, leer = aus (üblich 514). Absender als IP oder Netz; leer = nur private Netze. Den Port nicht ins Internet freigeben.",
+      "syslog_hint": "UDP und TCP auf demselben Port, leer = aus (üblich 514). Absender als IP oder Netz; leer = nur private Netze. Im Docker-Bridge-Netz gilt die Gateway-Adresse (z. B. 172.17.0.1) nur einzeln eingetragen. Den Port nicht ins Internet freigeben.",
       "status": "Zustand Log-Sensor und Syslog",
       "no_files": "Keine Log-Dateien eingestellt.",
       "lines": "Zeilen",

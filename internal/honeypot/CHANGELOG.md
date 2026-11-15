@@ -1,5 +1,10 @@
 # Änderungen – Honeypot64
 
+## 0.23.2 – 2026-11-15
+
+### Sicherheit
+- Docker-Bridge-Netz: Die Adresse des Gateways (z. B. 172.17.0.1) gilt nicht mehr als lokal – Docker setzt sie je nach Einrichtung auch für Zugriffe aus dem Internet ein. Info-Seite und `/metrics` brauchen dann das Token; der Syslog-Empfänger nimmt sie nur an, wenn sie unter „Erlaubte Absender“ einzeln eingetragen ist.
+
 ## 0.23.1 – 2026-11-15
 
 ### Sicherheit

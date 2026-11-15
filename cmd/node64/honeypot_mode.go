@@ -30,6 +30,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/caps"
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/firewall"
 	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/honeypot"
@@ -723,13 +724,13 @@ func newHPInfo(hc *hpModeConfig, sensor hpSensor, hpStore *honeypot.Store, db *s
 var hpCGNAT = netip.MustParsePrefix("100.64.0.0/10")
 
 // hpLocalAddr: privat (RFC 1918, ULA fc00::/7), CGNAT, Loopback, Link-Local. Nur RemoteAddr zaehlt, keine
-// Weiterleitungs-Kopfzeilen.
+// Weiterleitungs-Kopfzeilen. Das Docker-Gateway im Bridge-Netz gilt nicht als lokal (Herkunft unbekannt, localnet.Origin).
 func hpLocalAddr(remote string) bool {
 	ap, err := netip.ParseAddrPort(remote)
 	if err != nil {
 		return false
 	}
-	a := ap.Addr().Unmap()
+	a := localnet.Origin(ap.Addr().Unmap())
 	return a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || hpCGNAT.Contains(a)
 }
 

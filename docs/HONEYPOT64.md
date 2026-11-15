@@ -198,7 +198,8 @@ Auf dem Info-Port (getrennt von den Fallen) antwortet ein kleiner Server, nur `G
 
 **Zugriff:** ohne Token nur aus privaten Netzen (10/8, 172.16/12, 192.168/16, fc00::/7), CGNAT (100.64/10, z. B.
 Tailscale), Loopback und Link-Local. Maßgeblich ist allein die Absender-Adresse der Verbindung; Kopfzeilen wie
-`X-Forwarded-For` werden nicht beachtet. Mit `NODE64_HONEYPOT_INFO_TOKEN` ist sie zusätzlich von überall erreichbar,
+`X-Forwarded-For` werden nicht beachtet. Im Docker-Bridge-Netz gilt die Adresse des Gateways (z. B. 172.17.0.1) nicht als
+lokal: Docker setzt sie je nach Einrichtung auch für Zugriffe aus dem Internet ein. Mit `NODE64_HONEYPOT_INFO_TOKEN` ist sie zusätzlich von überall erreichbar,
 mit `?token=<Token>` oder `Authorization: Bearer <Token>`; alles andere bekommt `403`. Die Seite schickt strenge
 Kopfzeilen (Content-Security-Policy ohne Skripte, `nosniff`, `no-referrer`, `X-Frame-Options: DENY`, `no-store`).
 
@@ -425,7 +426,9 @@ Zeilenende oder Octet-Counting). Unter 1024 öffnet Node64 den Port wie die Fall
 Modul prüft die Port-Verwaltung, dass kein anderer Teil (z. B. DNS64, Streams) den Port für UDP oder TCP nutzt.
 
 **Absender:** Standard sind nur private Netze und localhost; mit „Erlaubte Absender“ bzw.
-`NODE64_HONEYPOT_SYSLOG_ALLOW` genau festlegen (IP oder CIDR). Andere Absender werden verworfen und gezählt
+`NODE64_HONEYPOT_SYSLOG_ALLOW` genau festlegen (IP oder CIDR). Kommt im Docker-Bridge-Netz alles von der Adresse des
+Gateways (z. B. 172.17.0.1), ist die echte Herkunft unbekannt: diese Adresse gilt nur, wenn sie einzeln eingetragen ist
+(besser Host-Netz oder `ports` mit fester Absender-IP). Andere Absender werden verworfen und gezählt
 (`node64_honeypot_syslog_denied_total`). UDP-Absender lassen sich fälschen – den Syslog-Port **nie** ins Internet
 freigeben.
 
