@@ -119,9 +119,9 @@ type yamuxSession struct {
 func newYamux(c net.Conn, server bool) (*yamuxSession, error) {
 	var s *yamux.Session
 	var err error
-	if server { // die Node oeffnet nur den Steuer-Stream: kleiner Rueckstau (yamux-Standard) statt 1024 x 256 KB vor der Anmeldung
+	if server { // die Node oeffnet nur den Steuer-Stream: kleiner Rueckstau statt 1024 x 256 KB vor der Anmeldung
 		conf := yamuxConfig()
-		conf.AcceptBacklog = 256
+		conf.AcceptBacklog = 4
 		s, err = yamux.Server(c, conf)
 	} else {
 		s, err = yamux.Client(c, yamuxConfig())

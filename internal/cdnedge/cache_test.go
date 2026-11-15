@@ -139,3 +139,18 @@ func TestEdgeCacheEncodings(t *testing.T) {
 		}
 	}
 }
+
+// Cache-Schluessel trennt HTTP (Port 80, "serve") von HTTPS: das Ziel antwortet je nach X-Forwarded-Proto anders.
+func TestCacheKeyScheme(t *testing.T) {
+	plain := httptest.NewRequest("GET", "http://c.test/app.css", nil)
+	tls := httptest.NewRequest("GET", "https://c.test/app.css", nil)
+	if plain.TLS != nil || tls.TLS == nil {
+		t.Fatal("test requests without the expected TLS state")
+	}
+	if cacheKey(plain) == cacheKey(tls) {
+		t.Fatal("http and https share a cache key")
+	}
+	if cacheKey(tls) != cacheKey(httptest.NewRequest("GET", "https://c.test/app.css", nil)) {
+		t.Fatal("same request, different key")
+	}
+}

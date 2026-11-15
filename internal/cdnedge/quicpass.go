@@ -23,7 +23,10 @@ import (
 // Die Adresse eines Besuchers kann gefaelscht sein, bis er auf eine Antwort der Node reagiert: sein Paket traegt dann
 // die Verbindungs-ID, die die Node gewaehlt hat (Source Connection ID ihrer langen Pakete) - die kennt nur, wer die
 // Antwort bekommen hat. Bis dahin zaehlt der Fluss nur im UDP-Budget (guard.admitUDP), die Node darf ihm hoechstens
-// qpFree + qpAmp x Eingang schicken (keine Reflexion) und nach qpProveIn ist Schluss. Ruhig ist ein Fluss nach den
+// qpFree + qpAmp x Eingang schicken (keine Reflexion) und nach qpProveIn ist Schluss. Danach gilt qpAmpProven x
+// Eingang: eine Node kann den Nachweis mit einem Helfer, der Absender faelscht, selbst erbringen. (Nur lange Pakete
+// vor dem Nachweis taugt nicht: Clients wie quic-go wechseln gleich nach dem Handshake auf eine neue, verschluesselt
+// mitgeteilte ID und schicken ihre letzten Handshake-Pakete schon an diese.) Ruhig ist ein Fluss nach den
 // Paketen des Besuchers (die Node haelt ihn nicht offen).
 
 const (
@@ -37,6 +40,10 @@ const (
 	qpMinCID    = 4                // kuerzere IDs der Node taugen nicht als Nachweis
 	qpAmp       = 3                // vor dem Nachweis: Node -> Besucher hoechstens qpFree + 3 x Eingang (wie RFC 9000 8.1)
 	qpFree      = 1500
+	// Nach dem Nachweis: hoechstens das 1024-Fache des Eingangs. Den Nachweis kann eine Node mit einem Helfer, der
+	// Absender faelscht, selbst erbringen (sie waehlt die ID); ein echter Besucher bestaetigt mit ACKs laufend (ein
+	// HTTP/3-Download braucht etwa das 50-Fache), ein gefaelschter muesste dauerhaft mitsenden.
+	qpAmpProven = 1024
 )
 
 // quicDemux ist die PacketConn fuer quic-go (ReadFrom ruft nur eine Goroutine von quic-go).
@@ -388,6 +395,8 @@ func (f *qflow) fromNode(p []byte, re *route, counted bool) bool {
 		if f.out.Load()+int64(n) > qpFree+qpAmp*f.in.Load() {
 			return true
 		}
+	} else if f.out.Load()+int64(n) > qpFree+qpAmpProven*f.in.Load() {
+		return true // Besucher sendet kaum noch: verwerfen (QUIC wiederholt, sobald wieder ACKs kommen)
 	}
 	if _, err := f.d.c.WriteToUDPAddrPort(p, f.addr); err != nil && errors.Is(err, net.ErrClosed) {
 		return false

@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.56.4 – 2026-11-15
+
+### Behoben
+- Sicherheit: Über CDN64 (Modus 1) mit HTTP/3 durchgereichte Verbindungen beantworten nur noch Anfragen für den Namen, für den sie durchgereicht werden – wie schon über TCP. Andere, z. B. nur im Heimnetz veröffentlichte Hosts sind darüber nicht erreichbar, auch wenn das Zertifikat sie mit abdeckt.
+- Sicherheit: Auch Verbindungen ohne SNI müssen die TLS-Vorgaben des angefragten Proxy-Hosts erfüllen (Mindestversion, BSI, nur HTTP/1.1, HTTP/3), sonst `421 Misdirected Request`.
+
 ## 1.56.3 – 2026-11-15
 
 ### Behoben

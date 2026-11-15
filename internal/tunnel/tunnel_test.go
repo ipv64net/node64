@@ -241,3 +241,52 @@ func TestHeader(t *testing.T) {
 		t.Fatal("bad magic")
 	}
 }
+
+// Laufende Anmeldungen je Adresse begrenzt: weitere Verbindungen ohne Anmeldung werden sofort getrennt, nach dem
+// Ende (Frist) ist wieder Platz.
+func TestTunnelPendingPerIP(t *testing.T) {
+	old := pendPerIP
+	pendPerIP = 3
+	defer func() { pendPerIP = old }()
+	conf, _ := testCert(t)
+	srv := &Server{Name: "e1", TLS: conf, auth: 500 * time.Millisecond}
+	addr, err := srv.ServeTCP("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	closedFast := func(c net.Conn) bool {
+		_ = c.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
+		_, err := c.Read(make([]byte, 1))
+		var ne net.Error
+		return !(errors.As(err, &ne) && ne.Timeout()) // EOF/Reset statt Frist: der Server hat getrennt
+	}
+	var held []net.Conn
+	for i := 0; i < 3; i++ { // ohne TLS-Handshake: haengen bis zur Frist
+		c, err := net.Dial("tcp", addr.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		held = append(held, c)
+	}
+	time.Sleep(100 * time.Millisecond) // Accept hat alle drei gezaehlt
+	c, err := net.Dial("tcp", addr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if !closedFast(c) {
+		t.Fatal("4th pending connection from one address not refused")
+	}
+	for _, h := range held {
+		_ = h.Close()
+	}
+	time.Sleep(800 * time.Millisecond) // Frist der Anmeldung vorbei: Plaetze frei
+	srv.pmu.Lock()
+	n := srv.pendN
+	srv.pmu.Unlock()
+	if n != 0 {
+		t.Fatalf("pending slots left: %d", n)
+	}
+}

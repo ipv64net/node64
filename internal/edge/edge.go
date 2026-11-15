@@ -847,12 +847,26 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		}
 		H3Body(r) // GET ohne Inhalt nicht als Anfrage mit Inhalt unbekannter Laenge weiterreichen (#157)
 	}
+	if !routedOK(r) { // aus dem Tunnel: nur der Name, fuer den der CDN64-Server durchreicht (TCP und HTTP/3)
+		if r.ProtoMajor == 3 { // HTTP/3 kennt kein Connection: close
+			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
+		} else {
+			misdirected(w)
+		}
+		return
+	}
 	t := e.table.Load()
 	host := hostOf(r.Host)
 	key, routes := t.lookup(host)
 	if r.TLS != nil && r.TLS.ServerName != "" { // Host muss zum Namen der Verbindung gehoeren
 		sni, _ := NormalizeName(r.TLS.ServerName)
 		if skey, sroutes := t.lookup(sni); skey != key && !e.coalesced(r, sni, sroutes, routes) {
+			e.watched(peerIP(r), host, r.Method, r.URL.RequestURI(), http.StatusMisdirectedRequest, WatchMisdirected)
+			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
+			return
+		}
+	} else if r.TLS != nil && key != "" { // ohne SNI (Ersatz-Konfiguration): TLS-Vorgaben des Namens trotzdem einhalten
+		if trt := tlsRoute(routes); trt != nil && !tlsMeets(r, trt, tlsRoute(t.fallback)) {
 			e.watched(peerIP(r), host, r.Method, r.URL.RequestURI(), http.StatusMisdirectedRequest, WatchMisdirected)
 			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
 			return
@@ -891,7 +905,7 @@ func (e *Edge) coalesced(r *http.Request, sni string, sroutes, routes []*Route) 
 	if rt == nil || srt == nil || rt.Passthrough != "" || srt.GetCert != nil {
 		return false
 	}
-	if r.TLS.Version < max(rt.MinTLS, tls.VersionTLS12) || (rt.BSI && !srt.BSI) || (rt.NoHTTP2 && r.ProtoMajor == 2) || (r.ProtoMajor == 3 && !rt.HTTP3) {
+	if !tlsMeets(r, rt, srt) {
 		return false
 	}
 	crt := e.certFor(srt, sni)
@@ -906,6 +920,13 @@ func (e *Edge) coalesced(r *http.Request, sni string, sroutes, routes []*Route) 
 		}
 	}
 	return leaf.VerifyHostname(hostOf(r.Host)) == nil
+}
+
+// tlsMeets: Die Verbindung erfuellt die TLS-Vorgaben der Route rt (Mindestversion, BSI, nur HTTP/1.1, HTTP/3); srt
+// ist die Route, deren Einstellungen beim Handshake galten (nil = keine, dann ohne BSI).
+func tlsMeets(r *http.Request, rt, srt *Route) bool {
+	return r.TLS.Version >= max(rt.MinTLS, tls.VersionTLS12) && (!rt.BSI || (srt != nil && srt.BSI)) &&
+		!(rt.NoHTTP2 && r.ProtoMajor == 2) && !(r.ProtoMajor == 3 && !rt.HTTP3)
 }
 
 // serveHTTP: Port 80 (ACME-Pruefungen, Weiterleitung auf HTTPS, reine HTTP-Abnehmer).

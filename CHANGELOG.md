@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64 1.56.4 (Sicherheit): Über CDN64 mit HTTP/3 durchgereichte Verbindungen gelten nur noch für ihren Namen (wie über TCP); Verbindungen ohne SNI halten die TLS-Vorgaben des Proxy-Hosts ein.
+- CDN64-Server (mit deren Update): Der Portmapper in Modus 3 leitet UDP nicht mehr zu bekannten Verstärker-Diensten weiter (z. B. DNS, NTP, memcached); strengere Grenzen für UDP-Antworten, durchgereichtes HTTP/3 und Anmeldungen am Tunnel-Port; der Cache trennt HTTP und HTTPS.
 - Honeypot64 (Sicherheit): Gefälschte Absender führen nicht mehr zu Sperren; Syslog nimmt standardmäßig nur noch private Netze an (nicht mehr 100.64.0.0/10); der Firewall-Helfer sperrt nie das eigene IPv6-/64 und lässt bestehende Verbindungen weiterlaufen.
 - Sicherheit: „Nur lesen“ sieht den Code zur ipv64.net-Verknüpfung nicht mehr (Seite und API); das Selbst-Update nimmt im Kanal „Stabil“ nur noch Manifeste dieses Kanals an.
 - Monitor64-Agent 0.1.8 (Sicherheit): Ein auf Adressen beschränkter Schlüssel (`from=`) behält seine Einschränkung beim Schlüsselwechsel – wer `from=` mit Cluster-Schlüsseln nutzt, trägt die Adressen der anderen Nodes ein.

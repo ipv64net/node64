@@ -178,3 +178,38 @@ func slowQUIC(qc *quic.Config) *quic.Config {
 	c.HandshakeIdleTimeout, c.MaxIdleTimeout = 20*time.Second, 30*time.Second
 	return c
 }
+
+// Durchreichen vor und nach dem Adressnachweis: vorher hoechstens qpFree + qpAmp x Eingang, danach hoechstens
+// qpAmpProven x Eingang - auch eine Node, die den Nachweis mit einem Helfer selbst erbringt, macht die Server nicht zum
+// offenen UDP-Relay (der Helfer muesste dauerhaft mitsenden).
+func TestQUICPassFromNodeLimits(t *testing.T) {
+	out, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+	visitor, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer visitor.Close()
+	d := &quicDemux{c: out, flows: map[netip.AddrPort]*qflow{}}
+	f := &qflow{d: d, addr: visitor.LocalAddr().(*net.UDPAddr).AddrPort(), done: make(chan struct{})}
+	pkt := make([]byte, 100) // kurzer Kopf: beliebige Daten
+	pkt[0] = 0x40
+	f.in.Store(100)
+	for i := 0; i < 30; i++ { // 3000 Bytes, erlaubt qpFree + 3 x 100 = 1800
+		f.fromNode(pkt, nil, false)
+	}
+	if n := f.out.Load(); n == 0 || n > qpFree+qpAmp*100 { // f.out zaehlt, was wirklich an den Besucher ging
+		t.Fatalf("before proof: %d bytes (limit %d)", n, qpFree+qpAmp*100)
+	}
+	f.proven.Store(true) // Nachweis, z. B. vom Helfer der Node mit der ID aus ihrem Paket
+	f.out.Store(0)
+	for i := 0; i < 1100; i++ { // 110000 Bytes, erlaubt qpFree + 1024 x 100 = 103900
+		f.fromNode(pkt, nil, false)
+	}
+	if n := f.out.Load(); n > qpFree+qpAmpProven*100 || n < qpFree+qpAmpProven*100-100 {
+		t.Fatalf("after proof: %d bytes (limit %d)", n, qpFree+qpAmpProven*100)
+	}
+}

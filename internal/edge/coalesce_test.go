@@ -81,3 +81,51 @@ func TestCoalescedHost(t *testing.T) {
 		t.Fatalf("unknown: %d", code)
 	}
 }
+
+// TLS ohne SNI bekommt die Ersatz-Konfiguration; eine Anfrage fuer einen Namen muss trotzdem dessen TLS-Vorgaben
+// erfuellen (hier mindestens TLS 1.3), sonst 421.
+func TestNoSNITLSRules(t *testing.T) {
+	hp, hsp := freePort(t), freePort(t)
+	for hsp == hp {
+		hsp = freePort(t)
+	}
+	cfg := Config{Bind: "127.0.0.1", HTTPPort: hp, HTTPSPort: hsp, Default: DefaultNotFound}
+	crt := selfSigned(t, "strict.example.test", "plain.example.test")
+	e, err := New(cfg, fakeCerts{crt: map[string]*tls.Certificate{"strict.example.test": crt, "plain.example.test": crt}}, nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { e.Close(context.Background()) })
+	answer := func(s string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, s) })
+	}
+	if err := e.Set("cdn64", []Route{{Names: []string{"strict.example.test"}, Handler: answer("strict"), MinTLS: tls.VersionTLS13},
+		{Names: []string{"plain.example.test"}, Handler: answer("plain")}}); err != nil {
+		t.Fatal(err)
+	}
+	do := func(host string, maxTLS uint16) int {
+		t.Helper()
+		// Ziel per IP: der Client schickt kein SNI
+		tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MaxVersion: maxTLS}} //nolint:gosec // Test
+		defer tr.CloseIdleConnections()
+		c := &http.Client{Transport: tr, Timeout: 5 * time.Second}
+		req, _ := http.NewRequest(http.MethodGet, "https://127.0.0.1:"+strconv.Itoa(cfg.HTTPSPort)+"/", nil)
+		req.Host = host
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := do("strict.example.test", tls.VersionTLS12); code != http.StatusMisdirectedRequest {
+		t.Fatalf("no SNI, TLS 1.2, MinTLS 1.3 host: %d", code)
+	}
+	if code := do("strict.example.test", tls.VersionTLS13); code != 200 {
+		t.Fatalf("no SNI, TLS 1.3: %d", code)
+	}
+	if code := do("plain.example.test", tls.VersionTLS12); code != 200 {
+		t.Fatalf("no SNI, host without rules: %d", code)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -134,6 +135,53 @@ func TestPortmapUDPAmplification(t *testing.T) {
 	}
 	if got == 0 || got > udpFree+udpAmp*1 {
 		t.Fatalf("visitor got %d bytes for 1 byte sent (limit %d)", got, udpFree+udpAmp)
+	}
+}
+
+// Modus 3: UDP zu einem bekannten Verstaerker-Dienst (DNS, NTP, memcached ...) wird nicht weitergeleitet - das Ziel
+// bekommt nichts, der Besucher keine Antwort.
+func TestPortmapUDPReflectPort(t *testing.T) {
+	back, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer back.Close()
+	bport := port(back.LocalAddr().String())
+	udpReflectPorts[bport] = true // im Test steht der Dienst auf einem freien Port statt auf 53/123/...
+	t.Cleanup(func() { delete(udpReflectPorts, bport) })
+	var hits atomic.Int32
+	go func() {
+		b := make([]byte, 2048)
+		for {
+			_, from, err := back.ReadFromUDP(b)
+			if err != nil {
+				return
+			}
+			hits.Add(1)
+			_, _ = back.WriteToUDP(make([]byte, 1000), from)
+		}
+	}()
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	s := startEdge(t, &Config{Name: "A", ListenHTTP: freeAddr(t), TLSCert: cf, TLSKey: kf, DataDir: t.TempDir(), PortRange: "1024-65535"}, pool)
+	s.targetOK = func(a netip.Addr) bool { return a.IsLoopback() }
+	listen := freeListenPort(t, "udp")
+	s.applyConfig(&apiConfig{Hosts: []apiHost{{ID: 1, Name: "a.test", Mode: 3, UserID: 1,
+		Target:   &apiTarget{Addrs: []string{"127.0.0.1"}, Port: 80, Scheme: "http"},
+		Mappings: []apiMapping{{Listen: listen, Transport: "udp", Port: bport}}}}})
+	c, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: listen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for i := 0; i < 3; i++ {
+		_, _ = c.Write([]byte("x"))
+	}
+	_ = c.SetReadDeadline(time.Now().Add(700 * time.Millisecond))
+	if n, err := c.Read(make([]byte, 2048)); err == nil {
+		t.Fatalf("answer from a reflector port: %d bytes", n)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("reflector target got %d datagrams", hits.Load())
 	}
 }
 

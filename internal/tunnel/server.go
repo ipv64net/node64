@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/netip"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -58,6 +59,58 @@ type Server struct {
 	tl    []net.Listener
 	conf  func() *quic.Config // Tests: eigene Einstellungen
 	auth  time.Duration       // Zeit fuer die Anmeldung (Standard 5 s, G7)
+
+	pmu   sync.Mutex
+	pend  map[netip.Addr]int // laufende Anmeldungen je Adresse (IPv6 je /64)
+	pendN int
+}
+
+// Laufende Anmeldungen (TLS bzw. QUIC-Handshake bis zum Welcome): Der Tunnel-Port hat keinen guard wie der
+// Besucher-Eingang - so belegt eine Adresse vor der Anmeldung nicht beliebig viele Verbindungen samt Puffern.
+var (
+	pendPerIP = 32 // grosszuegig: hinter CGNAT teilen sich viele Nodes eine IPv4, nach einem Server-Neustart verbinden alle neu
+	pendMax   = 1024
+)
+
+func pendKey(a net.Addr) netip.Addr {
+	var ip netip.Addr
+	switch v := a.(type) {
+	case *net.TCPAddr:
+		ip, _ = netip.AddrFromSlice(v.IP)
+	case *net.UDPAddr:
+		ip, _ = netip.AddrFromSlice(v.IP)
+	}
+	ip = ip.Unmap()
+	if ip.Is6() {
+		p, _ := ip.Prefix(64)
+		return p.Addr()
+	}
+	return ip
+}
+
+// reserve: Platz fuer eine laufende Anmeldung; release gibt ihn frei (mehrfach aufrufbar). false = Grenze erreicht.
+func (s *Server) reserve(a net.Addr) (func(), bool) {
+	ip := pendKey(a)
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	if s.pend == nil {
+		s.pend = map[netip.Addr]int{}
+	}
+	if s.pendN >= pendMax || s.pend[ip] >= pendPerIP {
+		return nil, false
+	}
+	s.pend[ip]++
+	s.pendN++
+	return sync.OnceFunc(func() {
+		s.pmu.Lock()
+		defer s.pmu.Unlock()
+		if s.pend[ip] <= 1 {
+			delete(s.pend, ip)
+		} else {
+			s.pend[ip]--
+		}
+		s.pendN--
+	}), true
 }
 
 func (s *Server) log() *slog.Logger {
@@ -95,7 +148,12 @@ func (s *Server) ServeQUIC(addr string) (net.Addr, error) {
 			if err != nil {
 				return
 			}
-			go s.handshake(&quicSession{c: c})
+			rel, ok := s.reserve(c.RemoteAddr())
+			if !ok {
+				_ = c.CloseWithError(0, "busy")
+				continue
+			}
+			go s.handshake(&quicSession{c: c}, rel)
 		}
 	}()
 	return ln.Addr(), nil
@@ -122,7 +180,12 @@ func (s *Server) ServeTCP(addr string) (net.Addr, error) {
 				time.Sleep(50 * time.Millisecond)
 				continue
 			}
-			go s.serveTLS(c.(*tls.Conn))
+			rel, ok := s.reserve(c.RemoteAddr())
+			if !ok {
+				_ = c.Close()
+				continue
+			}
+			go s.serveTLS(c.(*tls.Conn), rel)
 		}
 	}()
 	return ln.Addr(), nil
@@ -130,29 +193,47 @@ func (s *Server) ServeTCP(addr string) (net.Addr, error) {
 
 // ServeTCPConn nimmt eine schon angenommene TCP-Verbindung als Tunnel an (G1: Port 443, nach dem SNI-Namen des
 // Servers vom Besucher-Eingang getrennt). Blockiert bis zum Ende der Sitzung.
-func (s *Server) ServeTCPConn(c net.Conn) { s.serveTLS(tls.Server(c, tlsConfigFor(s.TLS))) }
+func (s *Server) ServeTCPConn(c net.Conn) {
+	rel, ok := s.reserve(c.RemoteAddr())
+	if !ok {
+		_ = c.Close()
+		return
+	}
+	s.serveTLS(tls.Server(c, tlsConfigFor(s.TLS)), rel)
+}
 
 // ServeQUICConn nimmt eine QUIC-Verbindung mit der ALPN des Tunnels an, die ein gemeinsamer Listener angenommen hat
 // (G1: UDP 443 neben HTTP/3). Kehrt sofort zurueck.
-func (s *Server) ServeQUICConn(c *quic.Conn) { go s.handshake(&quicSession{c: c}) }
+func (s *Server) ServeQUICConn(c *quic.Conn) {
+	rel, ok := s.reserve(c.RemoteAddr())
+	if !ok {
+		_ = c.CloseWithError(0, "busy")
+		return
+	}
+	go s.handshake(&quicSession{c: c}, rel)
+}
 
-func (s *Server) serveTLS(tc *tls.Conn) {
+func (s *Server) serveTLS(tc *tls.Conn, rel func()) {
 	_ = tc.SetDeadline(time.Now().Add(s.authTimeout()))
 	if err := tc.Handshake(); err != nil || tc.ConnectionState().NegotiatedProtocol != ALPN {
 		_ = tc.Close()
+		rel()
 		return
 	}
 	_ = tc.SetDeadline(time.Time{})
 	ys, err := newYamux(tc, true)
 	if err != nil {
 		_ = tc.Close()
+		rel()
 		return
 	}
-	s.handshake(ys)
+	s.handshake(ys, rel)
 }
 
 // handshake: Steuer-Stream der Node annehmen, Hello pruefen, Welcome senden, dann bis zum Ende Steuer-Stream lesen.
-func (s *Server) handshake(sess Session) {
+// rel gibt den Platz der laufenden Anmeldung frei (nach dem Welcome bzw. bei Abweisung).
+func (s *Server) handshake(sess Session, rel func()) {
+	defer rel()
 	ctx, cancel := context.WithTimeout(context.Background(), s.authTimeout())
 	ctrl, err := sess.AcceptStream(ctx)
 	cancel()
@@ -196,6 +277,7 @@ func (s *Server) handshake(sess Session) {
 		return
 	}
 	_ = ctrl.SetDeadline(time.Time{})
+	rel() // angemeldet: zaehlt nicht mehr als laufende Anmeldung
 	p := &Peer{Tunnel: h.Tunnel, Node: h.Node, Version: h.NodeVersion, Caps: h.Caps, Slot: h.Slot, Since: time.Now(), Session: sess, ctrl: ctrl}
 	// Je Tunnel und Slot hoechstens eine Verbindung: eine neue (Neuverbindung, alte noch nicht als tot erkannt)
 	// ersetzt die alte - so bleiben es nie mehr Verbindungen als die Grenze der Klasse.

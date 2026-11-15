@@ -99,10 +99,17 @@ func (e *Edge) virtualQUIC() *virtQUIC {
 				return e.quicConfig(h)
 			}},
 			ConnContext: func(ctx context.Context, qc *quic.Conn) context.Context {
+				// wie mark in virtualServers: Name der Durchreichung (Anfragen fuer andere Hosts bekommen 421) und
+				// Herkunft Tunnel; ohne bekannten Fluss passt die Verbindung zu keinem Namen
+				host := "!"
 				if f := pc.flow(qc.RemoteAddr()); f != nil {
+					host = f.host
 					go e.admitQUIC(qc, f)
 				}
-				return ctx
+				if host != "" {
+					ctx = context.WithValue(ctx, routedKey{}, host)
+				}
+				return context.WithValue(ctx, virtualKey{}, true)
 			}}
 		go func() { _ = srv.Serve(pc) }()
 		e.vq = &virtQUIC{pc: pc, srv: srv}

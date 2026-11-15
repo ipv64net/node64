@@ -56,11 +56,16 @@ func newRespCache(dir string, maxMB int) *respCache {
 	return &respCache{dir: dir, max: int64(maxMB) << 20, hosts: map[int]*hostCache{}}
 }
 
-// cacheKey: Name, Pfad und Abfrage, dazu das Verfahren, das der Server waehlen wuerde, und die Komprimierungen, die der
-// Browser annimmt (fuer Ziele, die selbst komprimieren; httpcompress.CacheVariant) - statt der ganzen
-// Accept-Encoding-Zeile (zu viele Fassungen).
+// cacheKey: Schema, Name, Pfad und Abfrage, dazu das Verfahren, das der Server waehlen wuerde, und die Komprimierungen,
+// die der Browser annimmt (fuer Ziele, die selbst komprimieren; httpcompress.CacheVariant) - statt der ganzen
+// Accept-Encoding-Zeile (zu viele Fassungen). Das Schema trennt HTTP (Port 80, "serve") von HTTPS: das Ziel bekommt
+// X-Forwarded-Proto und antwortet je nachdem anders (Links, Umleitungen).
 func cacheKey(r *http.Request) string {
-	h := sha256.Sum256([]byte(hostOnly(r.Host) + " " + r.URL.RequestURI() + " " + httpcompress.CacheVariant(r.Header.Get("Accept-Encoding"))))
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	h := sha256.Sum256([]byte(scheme + " " + hostOnly(r.Host) + " " + r.URL.RequestURI() + " " + httpcompress.CacheVariant(r.Header.Get("Accept-Encoding"))))
 	return hex.EncodeToString(h[:])
 }
 

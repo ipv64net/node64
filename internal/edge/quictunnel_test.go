@@ -128,6 +128,42 @@ func TestServeQUICStreamFor(t *testing.T) {
 	}
 }
 
+// HTTP/3 ueber den Tunnel mit passendem SNI, aber anderem Host: auch wenn das Zertifikat (SAN) den anderen Namen
+// abdeckt, gilt die Verbindung nur fuer den durchgereichten Namen (421 statt eines nur intern veroeffentlichten Hosts).
+func TestServeQUICRoutedHost(t *testing.T) {
+	e, _ := newEdge(t, nil) // Zertifikat fuer app.test und dns.test
+	answer := func(s string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, s) })
+	}
+	if err := e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: answer("app"), HTTP3: true},
+		{Names: []string{"dns.test"}, Handler: answer("intern"), HTTP3: true}}); err != nil {
+		t.Fatal(err)
+	}
+	addr, _ := quicBridge(t, e, "203.0.113.30:5000", "app.test")
+	h3 := &http3.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, ServerName: "app.test"}} //nolint:gosec // Test
+	defer h3.Close()
+	get := func(host string) (int, string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+addr+"/", nil)
+		req.Host = host
+		resp, err := h3.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode, string(b)
+	}
+	if code, body := get("app.test"); code != 200 || body != "app" {
+		t.Fatalf("routed name: %d %q", code, body)
+	}
+	if code, body := get("dns.test"); code != http.StatusMisdirectedRequest {
+		t.Fatalf("other host over the routed connection: %d %q", code, body)
+	}
+}
+
 // Grenzen fuer Streams ohne fertigen Handshake: je Adresse und insgesamt.
 func TestQUICPending(t *testing.T) {
 	p := newVirtPacketConn()
