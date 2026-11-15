@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -52,6 +51,8 @@ var (
 	ErrLocked = errors.New("user is locked")
 	// ErrMember: anfragende Node unbekannt oder ausgesetzt.
 	ErrMember = errors.New("node is not an active cluster member")
+	// ErrLoginOff: Bereich environment/login hier (oder bei der anfragenden Node) aus.
+	ErrLoginOff = errors.New("environment sign-in is off for that node")
 
 	uidRe = regexp.MustCompile(`^[0-9a-f]{16,64}$`) // wie usercluster
 )
@@ -90,7 +91,11 @@ type Ticket struct {
 	FromNode string
 	FromName string
 	Back     string
-	expires  time.Time
+	// Trusted: der Rueckweg ist eine dieser Node bekannte Adresse der oeffnenden Node (Cluster-Adresse des Mitglieds).
+	// Sonst kommt der Host aus der Anfrage an die oeffnende Node und ist frei waehlbar - die Web-Schicht laesst die
+	// Anmeldung dann erst bestaetigen (Login-CSRF).
+	Trusted bool
+	expires time.Time
 }
 
 // Origin merkt sich eine ueber Environment entstandene Sitzung.
@@ -132,6 +137,8 @@ type Deps struct {
 	PublicKey func() string
 	Version   string
 	Change    func(ctx context.Context, module, item, id string, deleted bool)
+	// StatusTTL: wie lange der Status hinzugefuegter Nodes frisch gilt (0 = 30 s, < 0 = nie gemerkt; Tests)
+	StatusTTL time.Duration
 }
 
 // Service stellt Tickets aus, loest sie ein und merkt sich die Sitzungen.
@@ -139,7 +146,8 @@ type Service struct {
 	d       Deps
 	mu      sync.Mutex
 	tickets map[string]*Ticket
-	nc      nonces // gebundene Anfragen (remote.go)
+	nc      *peer.NonceCache // gebundene Anfragen (remote.go)
+	sc      statusCache      // Status hinzugefuegter Nodes (status.go)
 }
 
 // New baut den Dienst.
@@ -150,7 +158,7 @@ func New(d Deps) *Service {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &Service{d: d, tickets: map[string]*Ticket{}}
+	return &Service{d: d, tickets: map[string]*Ticket{}, nc: &peer.NonceCache{TTL: 2 * timeSkew, Max: 10000}}
 }
 
 // moduleInfo: Bereiche environment/login (nur Schalter) und environment/nodes (hinzugefuegte Nodes, nodes.go).
@@ -263,6 +271,10 @@ func (s *Service) issue(ctx context.Context, from string, req TicketRequest) (st
 	if s.d.AreaOn == nil || !hasMember(s.d.AreaOn(ctx, "users", "accounts"), from) {
 		return "", ErrNoUserSync
 	}
+	// Schalter environment/login auch hier pruefen (nicht nur auf der anfragenden Node): aus = kein Ticket
+	if !hasMember(s.d.AreaOn(ctx, ModuleID, ItemLogin), from) {
+		return "", ErrLoginOff
+	}
 	if !uidRe.MatchString(req.UID) {
 		return "", ErrUnknownUser
 	}
@@ -276,11 +288,16 @@ func (s *Service) issue(ctx context.Context, from string, req TicketRequest) (st
 	if u.Disabled {
 		return "", ErrLocked
 	}
-	back := ""
-	if p, err := url.Parse(req.Back); err == nil && (p.Scheme == "https" || p.Scheme == "http") && p.Host != "" && len(req.Back) <= 512 {
-		back = p.String()
-	}
-	return s.addTicket(&Ticket{UID: u.UID, Role: MinRole(req.Role, s.d.Store.EffectiveRole(ctx, u)), FromNode: from, FromName: m.Name, Back: back})
+	back := cleanBack(req.Back)
+	return s.addTicket(&Ticket{UID: u.UID, Role: MinRole(req.Role, s.d.Store.EffectiveRole(ctx, u)), FromNode: from, FromName: m.Name, Back: back,
+		Trusted: back != "" && SameHost(back, m.URL)})
+}
+
+// Hold legt ein eingeloestes Ticket, das auf dieser Node noch bestaetigt werden muss, erneut ab (60 s, einmal).
+func (s *Service) Hold(t *Ticket) (string, error) {
+	c := *t
+	c.Trusted = false
+	return s.addTicket(&c)
 }
 
 // addTicket legt ein Ticket (60 s gueltig) an und liefert es.

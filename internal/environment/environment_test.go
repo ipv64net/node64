@@ -88,6 +88,11 @@ func TestTicket(t *testing.T) {
 		t.Fatalf("user sync off: %v", err)
 	}
 	fc.areas["users/accounts"] = true
+	// Schalter environment/login hier aus: kein Ticket, auch wenn die anfragende Node ihn fuer an haelt
+	if _, err := ticketFor(t, s, "node-a", req); !errors.Is(err, ErrLoginOff) {
+		t.Fatalf("login area off here: %v", err)
+	}
+	fc.areas[ModuleID+"/"+ItemLogin] = true
 	if _, err := ticketFor(t, s, "node-x", req); !errors.Is(err, ErrMember) {
 		t.Fatalf("unknown member: %v", err)
 	}
@@ -106,8 +111,24 @@ func TestTicket(t *testing.T) {
 	if !ok || got.UID != u.UID || got.Role != store.RoleAdmin || got.FromName != "Node A" || got.FromNode != "node-a" || got.Back != req.Back {
 		t.Fatalf("redeem: %+v %v", got, ok)
 	}
+	if !got.Trusted {
+		t.Fatal("back at the member address should be trusted")
+	}
 	if _, ok := s.Redeem(tok); ok {
 		t.Fatal("ticket used twice")
+	}
+	// Rueckweg aus einem frei gewaehlten Host-Header: nicht vertrauenswuerdig (B laesst bestaetigen); mit Pfad,
+	// Abfrage oder Zugangsdaten gar kein Rueckweg
+	for back, want := range map[string]string{"https://evil.example/environment": "https://evil.example/environment",
+		"https://a:8443/x": "", "https://u:p@a:8443/environment": "", "https://a:8443/environment?x=1": "", "javascript:alert(1)": ""} {
+		tok, err := ticketFor(t, s, "node-a", TicketRequest{UID: u.UID, Role: store.RoleAdmin, Back: back})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := s.Redeem(tok)
+		if got.Back != want || got.Trusted {
+			t.Fatalf("back %q: %+v", back, got)
+		}
 	}
 	if _, ok := s.Redeem(""); ok {
 		t.Fatal("empty ticket accepted")

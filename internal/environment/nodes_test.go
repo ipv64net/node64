@@ -251,7 +251,7 @@ func TestRemoteAccess(t *testing.T) {
 	bind := bytes.Repeat([]byte{7}, 32)
 	body, _ := json.Marshal(remoteTicketReq{Role: store.RoleAdmin, Back: "https://a.lan:8443/environment", FromNode: "node-a-000001", FromName: "Node A"})
 	call := func(path string, h http.Header, nonce string, b []byte, bd []byte) RemoteResult {
-		return s.HandleRemote(ctx, path, h, nonce, b, bd, "192.0.2.1")
+		return s.HandleRemote(ctx, path, h, nonce, b, bd, "192.0.2.1", false)
 	}
 	n := 0
 	nonce := func() string { n++; return "nonce-" + strconv.Itoa(1000000000+n) }

@@ -295,6 +295,9 @@ func (s *Server) auth(h http.HandlerFunc) http.Handler {
 			s.forbidRole(w, r)
 			return
 		}
+		if s.envForbidden(w, r) { // ueber Environment geoeffnet: keine Zugangsdaten anlegen oder aendern (environment.go)
+			return
+		}
 		h(w, r)
 	})
 }

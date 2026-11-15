@@ -181,7 +181,7 @@ func (s *Service) AddNode(ctx context.Context, in NodeInput, ownerUID string) (*
 	if k != nil {
 		n.NodeID, n.nodePub, n.sealed, n.OwnerUID = k.NodeID, k.PubKey, s.seal(k.Secret), ownerUID
 	}
-	now := s.d.Now().UTC()
+	now := s.d.Now().UTC().Truncate(time.Second) // wie gespeichert (RFC 3339)
 	n.CreatedAt, n.UpdatedAt = now, now
 	if err := s.writeNode(ctx, n); err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (s *Service) UpdateNode(ctx context.Context, uid string, in NodeInput, owne
 		return nil, ErrHTTPSRequired
 	}
 	n.Name, n.URL, n.BrowserURL, n.Description = in.Name, in.URL, in.BrowserURL, in.Description
-	n.UpdatedAt = s.d.Now().UTC()
+	n.UpdatedAt = s.d.Now().UTC().Truncate(time.Second)
 	if err := s.writeNode(ctx, n); err != nil {
 		return nil, err
 	}
@@ -361,7 +361,7 @@ func (p provider) ClusterApply(ctx context.Context, item, id string, data json.R
 		}
 		n.NodeID, n.nodePub, n.sealed, n.OwnerUID = k.NodeID, k.PubKey, p.s.seal(k.Secret), c.OwnerUID
 	}
-	now := p.s.d.Now().UTC()
+	now := p.s.d.Now().UTC().Truncate(time.Second)
 	n.CreatedAt, n.UpdatedAt = now, now
 	if t, err := time.Parse(time.RFC3339, c.CreatedAt); err == nil {
 		n.CreatedAt = t

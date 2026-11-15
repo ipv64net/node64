@@ -318,8 +318,8 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 		v.Admin = s.isAdmin(r)
 		v.ReadOnly = !v.Admin
 		v.Nav = s.nav(r)
-		if s.Env != nil {
-			v.EnvFrom, _ = s.Env.SessionOrigin(r.Context(), sessionID(r))
+		if o := envOrigin(r); o != nil && o.FromNode != "" { // aus envCap, einmal je Anfrage gelesen
+			v.EnvFrom = o
 		}
 	}
 	if c, err := r.Cookie(flashCookie); err == nil && c.Value != "" {

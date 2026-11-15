@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/environment"
 	"github.com/ipv64net/node64/internal/peer"
@@ -25,7 +27,7 @@ type keyNode struct {
 	tls *httptest.Server
 }
 
-func newKeyNode(t *testing.T, id, name string) *keyNode {
+func newKeyNode(t *testing.T, id, name string, ttl time.Duration) *keyNode {
 	t.Helper()
 	ctx := context.Background()
 	n := &keyNode{}
@@ -43,7 +45,7 @@ func newKeyNode(t *testing.T, id, name string) *keyNode {
 		}
 		d.Peer = pm
 		n.env = environment.New(environment.Deps{Store: d.Store, Version: "test", NodeName: func() string { return name },
-			NodeID: pm.NodeID, PublicKey: pm.PublicKey})
+			NodeID: pm.NodeID, PublicKey: pm.PublicKey, StatusTTL: ttl})
 		d.Env = n.env
 	})
 	n.tls = httptest.NewTLSServer(n.app.srv.Config.Handler)
@@ -64,13 +66,30 @@ var (
 	envTicketRe2 = regexp.MustCompile(`name="ticket" value="([^"]+)"`)
 )
 
-// enterWith loest ein Ticket im Browser bei B ein (Formular kommt von A: Origin = A).
-func enterWith(t *testing.T, c *http.Client, b *keyNode, origin, ticket string) *http.Response {
+// enterWith loest ein Ticket im Browser bei B ein (Formular kommt von A: Origin = A) und liefert Antwort und Seite.
+func enterWith(t *testing.T, c *http.Client, b *keyNode, origin, ticket string) (*http.Response, string) {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, b.tls.URL+envEnterPath, strings.NewReader(url.Values{"ticket": {ticket}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", origin)
 	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp, string(body)
+}
+
+// enterConfirmed loest ein Ticket ein, fuer das B eine Bestaetigung verlangt (Rueckweg nicht als Adresse von A
+// bekannt), und bestaetigt auf B (Formular von B mit dessen CSRF-Token).
+func enterConfirmed(t *testing.T, c *http.Client, b *keyNode, origin, ticket string) *http.Response {
+	t.Helper()
+	resp, page := enterWith(t, c, b, origin, ticket)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(page, `id="env-confirm"`) || !strings.Contains(page, `action="/environment/confirm"`) {
+		t.Fatalf("confirmation page: %d", resp.StatusCode)
+	}
+	resp, err := c.PostForm(b.tls.URL+"/environment/confirm", url.Values{"_csrf": {csrfOf(t, page)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +121,7 @@ func getWith(t *testing.T, c *http.Client, u string) string {
 // Fehlversuche werden gebremst.
 func TestEnvironmentAddedNodes(t *testing.T) {
 	ctx := context.Background()
-	a, b := newKeyNode(t, "node-a-000001", "Node A"), newKeyNode(t, "node-b-000001", "Node B")
+	a, b := newKeyNode(t, "node-a-000001", "Node A", -1), newKeyNode(t, "node-b-000001", "Node B", -1)
 	me := loginAs(t, a.app, "admin", "sehr geheimes passwort")
 	bAdmin := loginAs(t, b.app, "admin", "sehr geheimes passwort")
 
@@ -162,7 +181,12 @@ func TestEnvironmentAddedNodes(t *testing.T) {
 		t.Fatal("no ticket via access key")
 	}
 	bb := browser(t)
-	if resp := enterWith(t, bb, b, a.app.srv.URL, tok); resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
+	// ohne Bestaetigung keine Sitzung (B kennt die Adresse von A nicht)
+	if _, page := enterWith(t, browser(t), b, a.app.srv.URL, tok); !strings.Contains(page, "Als „admin“ anmelden?") || !strings.Contains(page, "Node A") {
+		t.Fatal("confirmation text")
+	}
+	tok, _ = open()
+	if resp := enterConfirmed(t, bb, b, a.app.srv.URL, tok); resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
 		t.Fatalf("enter: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	if page := getWith(t, bb, b.tls.URL+"/"); !strings.Contains(page, "Geöffnet über Environment von Node A") {
@@ -176,7 +200,7 @@ func TestEnvironmentAddedNodes(t *testing.T) {
 	_ = a.app.store.UpdateUserAdmin(ctx, me.ID, store.UserAdmin{Role: store.RoleRead})
 	tok, _ = open()
 	bb2 := browser(t)
-	enterWith(t, bb2, b, a.app.srv.URL, tok)
+	enterConfirmed(t, bb2, b, a.app.srv.URL, tok)
 	if page := getWith(t, bb2, b.tls.URL+"/settings"); !strings.Contains(page, "nur lesen") {
 		t.Fatal("read-only session on B")
 	}
@@ -280,7 +304,7 @@ func TestEnvironmentAddedNodes(t *testing.T) {
 // anlegen und keine Zugaenge sehen.
 func TestEnvironmentAddedNodesAPI(t *testing.T) {
 	ctx := context.Background()
-	a, b := newKeyNode(t, "node-a-000001", "Node A"), newKeyNode(t, "node-b-000001", "Node B")
+	a, b := newKeyNode(t, "node-a-000001", "Node A", -1), newKeyNode(t, "node-b-000001", "Node B", -1)
 	me := loginAs(t, a.app, "admin", "sehr geheimes passwort")
 	key, _, err := a.app.store.NewAPIKey(ctx, me.ID, "test")
 	if err != nil {

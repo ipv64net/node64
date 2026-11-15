@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ipv64net/node64/internal/peer"
@@ -119,6 +119,7 @@ type AddedStatus struct {
 	Update  string
 	KeyOK   bool   // Schluessel gilt (Zugang vorhanden, Benutzer nicht gesperrt)
 	KeyErr  string // warum nicht ("" = kein Schluessel oder gilt)
+	Denied  bool   // die andere Node hat den Schluessel abgelehnt (status.go fragt dann eine Weile nicht neu)
 }
 
 // Status fragt eine hinzugefuegte Node ab (Zeitlimit 3 s): mit Schluessel ueber /peer/v2/env/status, sonst
@@ -136,6 +137,7 @@ func (s *Service) Status(ctx context.Context, n *AddedNode) AddedStatus {
 			return AddedStatus{Online: true, Name: rs.Name, Version: rs.Version, Update: rs.Update, KeyOK: true}
 		case errors.As(err, &re):
 			st.Online, st.KeyErr = true, re.Msg // erreichbar und echt, aber Zugang abgelehnt
+			st.Denied = re.Status == http.StatusForbidden || re.Status == http.StatusUnauthorized
 		default:
 			st.KeyErr = err.Error()
 		}
@@ -192,6 +194,10 @@ func (s *Service) RequestRemoteTicket(ctx context.Context, n *AddedNode, uid, ro
 	}
 	var out TicketResponse
 	if err := s.remotePost(ctx, n, PathTicket, req, &out); err != nil {
+		var re *RemoteError
+		if errors.As(err, &re) && (re.Status == http.StatusForbidden || re.Status == http.StatusUnauthorized) {
+			s.markDenied(n, re.Msg)
+		}
 		return "", err
 	}
 	if len(out.Ticket) < 40 {
@@ -211,12 +217,25 @@ func deny(status int, msg string, authFailed bool) RemoteResult {
 	return RemoteResult{Status: status, Body: map[string]string{"error": msg}, AuthFailed: authFailed}
 }
 
+// KeyID ist der Pruefwert, mit dem sich eine gebundene Anfrage ausweist (fuer die Drosselung je Schluessel).
+func KeyID(h http.Header) string {
+	k := h.Get(hdrKey)
+	if len(k) > 64 {
+		k = k[:64]
+	}
+	return k
+}
+
 // HandleRemote beantwortet eine gebundene Anfrage einer hinzugefuegten Node (path: PathStatus oder PathTicket, bind:
-// Exporter der eigenen TLS-Verbindung, ip fuer Audit-Log).
-func (s *Service) HandleRemote(ctx context.Context, path string, h http.Header, nonce string, bind, body []byte, ip string) RemoteResult {
+// Exporter der eigenen TLS-Verbindung, ip fuer Audit-Log; quiet: abgelehnte Schluessel nicht mehr protokollieren,
+// weil von dieser IP schon viele kamen).
+func (s *Service) HandleRemote(ctx context.Context, path string, h http.Header, nonce string, bind, body []byte, ip string, quiet bool) RemoteResult {
 	a, err := s.verifyRemote(ctx, path, h, nonce, bind, body)
 	if err != nil {
 		if errors.Is(err, ErrAccessDenied) {
+			if quiet {
+				return deny(http.StatusForbidden, ErrAccessDenied.Error(), true)
+			}
 			s.d.Log.Warn("environment access denied", "path", path, "ip", ip)
 			s.auditRemote(ctx, "-", "environment.ticket_denied", "", "access key unknown, revoked or signature invalid", ip)
 			return deny(http.StatusForbidden, ErrAccessDenied.Error(), true)
@@ -298,32 +317,8 @@ func (s *Service) verifyRemote(ctx context.Context, path string, h http.Header, 
 	return a, nil
 }
 
-// nonces merkt sich Nonces gebundener Anfragen, solange ihr Zeitstempel gilt (Wiederholung abgelehnt).
-type nonces struct {
-	mu   sync.Mutex
-	seen map[string]time.Time
-}
-
-func (s *Service) nonceFresh(n string) bool {
-	s.nc.mu.Lock()
-	defer s.nc.mu.Unlock()
-	now := s.d.Now()
-	if s.nc.seen == nil {
-		s.nc.seen = map[string]time.Time{}
-	}
-	if len(s.nc.seen) > 1000 {
-		for k, t := range s.nc.seen {
-			if now.Sub(t) > 2*timeSkew {
-				delete(s.nc.seen, k)
-			}
-		}
-	}
-	if _, ok := s.nc.seen[n]; ok {
-		return false
-	}
-	s.nc.seen[n] = now
-	return true
-}
+// nonceFresh: Nonce noch nicht gesehen (gemeinsamer, hart begrenzter Speicher aus peer).
+func (s *Service) nonceFresh(n string) bool { return s.nc.Fresh(n, s.d.Now()) }
 
 func (s *Service) auditRemote(ctx context.Context, actor, action, target, details, ip string) {
 	if err := s.d.Store.Audit(context.WithoutCancel(ctx), store.AuditEntry{Actor: actor, Action: action, Target: target, Details: details, IP: ip, Origin: "peer"}); err != nil {
@@ -331,13 +326,23 @@ func (s *Service) auditRemote(ctx context.Context, actor, action, target, detail
 	}
 }
 
-// cleanBack: Rueckweg nur als http(s)-Adresse bis 512 Zeichen ("" sonst).
+// cleanBack: Rueckweg nur als Ursprung der oeffnenden Node plus /environment (http(s), ohne Zugangsdaten, Abfrage
+// oder anderen Pfad; "" sonst).
 func cleanBack(raw string) string {
-	if len(raw) > 512 || !(strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "http://")) {
+	if len(raw) > 512 || !strings.HasSuffix(raw, "/environment") {
 		return ""
 	}
-	if _, err := NormURL(strings.TrimSuffix(raw, "/environment")); err != nil {
+	o, err := NormURL(strings.TrimSuffix(raw, "/environment"))
+	if err != nil || !strings.Contains(raw, "://") || o+"/environment" != raw {
 		return ""
 	}
 	return raw
+}
+
+// SameHost: gleicher Host samt Port (das Schema zaehlt nicht: hinter einem Proxy mit TLS bildet die oeffnende Node
+// ihre Adresse mit http://, der Browser schickt https://).
+func SameHost(a, b string) bool {
+	pa, err1 := url.Parse(a)
+	pb, err2 := url.Parse(b)
+	return err1 == nil && err2 == nil && pa.Host != "" && strings.EqualFold(pa.Host, pb.Host)
 }

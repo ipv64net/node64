@@ -164,6 +164,24 @@ Abweichungen vom Entwurf, bewusst:
 - Zugänge liegen unter Environment → „Zugänge für andere Nodes“ (nicht in den Einstellungen), Anlegen und Bearbeiten
   von Nodes unter Environment → „Node hinzufügen“ bzw. Stift in der Liste; beides nur für Administratoren.
 
+**Nachträge aus dem Code-Review (2026-11-15, nach 1.7.0):**
+- In einer über Environment geöffneten Sitzung (auch mit Rolle Administrator) sind alle Routen gesperrt, die
+  Zugangsdaten anlegen, ändern oder entfernen (`envCredentials` in `internal/web/environment.go`: Passwort, 2FA,
+  Passkeys, SSO-Verknüpfung, API- und MCP-Keys). Sonst entstünde z. B. ein API-Key mit der vollen Rolle des Benutzers
+  auf B. Stehen auf B Pflichten aus (Passwort beim ersten Anmelden, 2FA einrichten), gibt es keine
+  Environment-Anmeldung, sondern die Anmeldeseite.
+- Der Rückweg im Ticket kommt aus dem Host der Anfrage an A und ist frei wählbar. B legt die Sitzung deshalb nur
+  sofort an, wenn der Rückweg die Cluster-Adresse des Mitglieds ist (`Ticket.Trusted`); sonst – anderer Name, Port,
+  hinzugefügte Nodes – zeigt B eine Bestätigung („Als … anmelden?“) mit eigenem CSRF-Token (`POST
+  /environment/confirm`, Ticket im Cookie, keine Einbettung wegen `frame-ancestors 'none'`). Der Rückweg ist immer nur
+  Ursprung plus `/environment` (`cleanBack`).
+- B prüft den Bereich `environment/login` selbst (`ErrLoginOff`), nicht nur über den Ping.
+- Fehlversuche an `/peer/v2/env/*` bremst ein Topf je Schlüssel; je IP zählen sie nur noch für Log und Audit-Log.
+  A merkt sich eine Ablehnung (10 min) und fragt den Status hinzugefügter Nodes nur alle 30 s (älter: gemerkter Stand,
+  Abfrage im Hintergrund; `internal/environment/status.go`).
+- Nonces gebundener Anfragen in einem gemeinsamen, hart begrenzten Speicher (`peer.NonceCache`).
+- Die Herkunft einer Environment-Sitzung wird einmal je Anfrage gelesen (`envCap` legt sie in den Kontext).
+
 **Risiken:** Ein Zugangsschlüssel ist so viel wert wie eine Anmeldung als dieser Benutzer → nur einmal angezeigt,
 nur als Hash gespeichert, widerrufbar, Rolle begrenzt. Browser-Zertifikatswarnung bei IP-Adressen ist unschön, aber
 ehrlich (eigene Browser-Adresse je Eintrag als Ausweg).

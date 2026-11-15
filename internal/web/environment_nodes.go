@@ -69,16 +69,19 @@ func (s *Server) environmentNodeRoutes() {
 // envRemote beantwortet eine gebundene Anfrage einer anderen Node; Fehlversuche je IP begrenzt wie die Anmeldung.
 func (s *Server) envRemote(path string) func(w http.ResponseWriter, r *http.Request, bind, body []byte) {
 	return func(w http.ResponseWriter, r *http.Request, bind, body []byte) {
+		// Fehlversuche je Schluessel gebremst (ein widerrufener Schluessel bremst nur sich, nicht gueltige Schluessel
+		// derselben Node); je IP zaehlen sie nur fuer Log und Audit-Log (wechselnde Schluessel fuellen sie nicht).
+		// Eigene Toepfe: Fehlversuche anderer Nodes sperren nicht die Anmeldeseite.
 		ip := s.clientIP(r)
-		key := "env:" + ipKey(ip) // eigener Topf: Fehlversuche anderer Nodes sperren nicht die Anmeldeseite
-		if wait := s.limiter.retryAfter(key); wait > 0 {
+		keyK, keyIP := "envkey:"+environment.KeyID(r.Header), "env:"+ipKey(ip)
+		if wait := s.limiter.retryAfter(keyK); wait > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 			writeErr(w, http.StatusTooManyRequests, "too many failed attempts")
 			return
 		}
-		res := s.Env.HandleRemote(r.Context(), path, r.Header, peer.BoundNonce(r), bind, body, ip)
+		res := s.Env.HandleRemote(r.Context(), path, r.Header, peer.BoundNonce(r), bind, body, ip, s.limiter.retryAfter(keyIP) > 0)
 		if res.AuthFailed {
-			s.limiter.fail(key)
+			s.limiter.fail(keyK, keyIP)
 		}
 		writeJSON(w, res.Status, res.Body)
 	}
@@ -108,7 +111,7 @@ func (s *Server) envAddedRows(ctx context.Context, u *store.User, members []envi
 		wg.Add(1)
 		go func(row *envAddedRow) {
 			defer wg.Done()
-			row.Status = s.Env.Status(ctx, &row.AddedNode)
+			row.Status = s.Env.CachedStatus(ctx, &row.AddedNode)
 		}(&rows[i])
 	}
 	wg.Wait()

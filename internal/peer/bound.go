@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
+	"time"
 )
 
 // Gebundene Anfragen an Nodes ausserhalb des Clusters (Environment, hinzugefuegte Nodes mit Zugangsschluessel): gleiche
@@ -104,3 +106,36 @@ func (m *Manager) HandleBound(h func(w http.ResponseWriter, r *http.Request, bin
 
 // NodeID ist die Kennung dieser Node.
 func (m *Manager) NodeID() string { return m.d.NodeID() }
+
+// NonceCache merkt sich Nonces gebundener Anfragen, solange ihr Zeitstempel gilt (Wiederholung abgelehnt). Hart
+// begrenzt: ist er nach dem Aufraeumen voll, wird abgelehnt (lieber eine echte Anfrage spaeter als unbegrenzt Speicher).
+type NonceCache struct {
+	TTL time.Duration // so lange gilt eine Anfrage (Zeitstempel +/- Toleranz)
+	Max int           // hoechstens so viele Eintraege
+	mu  sync.Mutex
+	m   map[string]time.Time
+}
+
+// Fresh merkt sich n (false = schon gesehen oder voll).
+func (c *NonceCache) Fresh(n string, now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil {
+		c.m = map[string]time.Time{}
+	}
+	if _, seen := c.m[n]; seen {
+		return false
+	}
+	if len(c.m) >= c.Max/2 {
+		for k, t := range c.m {
+			if now.Sub(t) > c.TTL {
+				delete(c.m, k)
+			}
+		}
+	}
+	if len(c.m) >= c.Max {
+		return false
+	}
+	c.m[n] = now
+	return true
+}

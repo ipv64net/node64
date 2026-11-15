@@ -15,7 +15,11 @@ import (
 // bei der anderen Node ein Anmelde-Ticket und schickt es per Formular direkt an deren /environment/enter (der
 // Browser spricht immer selbst mit der anderen Node, kein Ticket in URL oder Verlauf).
 
-const envEnterPath = "/environment/enter" // ohne CSRF-Pruefung (middleware.go), das Ticket ist die Berechtigung
+const (
+	envEnterPath     = "/environment/enter" // ohne CSRF-Pruefung (middleware.go), das Ticket ist die Berechtigung
+	envConfirmCookie = "n64_envconfirm"     // Ticket, das auf dieser Node noch bestaetigt werden muss
+	ctxEnvOrigin     = ctxKey(110)          // Herkunft einer ueber Environment geoeffneten Sitzung (*environment.Origin)
+)
 
 type envData struct {
 	SelfName    string
@@ -39,6 +43,7 @@ func (s *Server) environmentRoutes() {
 	s.mux.Handle("GET /environment", s.auth(s.environmentPage))
 	s.mux.Handle("POST /environment/open/{id}", s.auth(s.environmentOpen))
 	s.mux.HandleFunc("POST "+envEnterPath, s.environmentEnter)
+	s.mux.HandleFunc("POST /environment/confirm", s.environmentConfirm)
 	s.environmentNodeRoutes()
 }
 
@@ -127,28 +132,94 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 	}
 	// Login-CSRF: das Formular muss von der oeffnenden Node kommen (Ursprung wie der Rueckweg im Ticket), sonst koennte
 	// eine fremde Seite ein eigenes Ticket unterschieben und den Browser mit fremdem Benutzer anmelden
-	if !sameHost(sourceOrigin(r), t.Back) {
+	if !environment.SameHost(sourceOrigin(r), t.Back) {
 		deny("-", "ticket not sent from "+t.FromName)
 		return
 	}
+	u := s.envUser(w, r, t, deny)
+	if u == nil {
+		return
+	}
+	// Login-CSRF: kommt der Rueckweg aus dem (frei waehlbaren) Host der Anfrage an die oeffnende Node statt aus einer
+	// hier bekannten Adresse, erst auf dieser Node bestaetigen lassen (eigenes CSRF-Token, keine Einbettung moeglich)
+	if !t.Trusted {
+		tok, err := s.Env.Hold(t)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		s.setCookie(w, r, envConfirmCookie, tok, int(environment.TicketTTL.Seconds()))
+		d := map[string]string{"Username": u.Username, "From": t.FromName}
+		if !store.IsAdmin(environment.MinRole(t.Role, s.Store.EffectiveRole(ctx, u))) {
+			d["ReadOnly"] = "1"
+		}
+		v := s.view(r, "environment.confirm_title")
+		v.Data = d
+		v.User, v.Nav = nil, nil
+		w.Header().Set("Cache-Control", "no-store")
+		s.render(w, r, http.StatusOK, "environment_confirm", v)
+		return
+	}
+	s.envLogin(w, r, t, u)
+}
+
+// environmentConfirm: Anmeldung ueber Environment auf dieser Node bestaetigt (Formular dieser Node mit CSRF).
+func (s *Server) environmentConfirm(w http.ResponseWriter, r *http.Request) {
+	ip := s.clientIP(r)
+	deny := func(actor, why string) {
+		s.log.Warn("environment ticket rejected", "reason", why, "ip", ip)
+		s.auditEntry(r.Context(), store.AuditEntry{Actor: actor, Action: "login.environment_failed", Details: why, IP: ip})
+		http.Redirect(w, r, "/login?env=1", http.StatusSeeOther)
+	}
+	tok := ""
+	if c, err := cookie(r, envConfirmCookie); err == nil {
+		tok = c.Value
+	}
+	s.clearCookie(w, r, envConfirmCookie)
+	t, ok := s.Env.Redeem(tok)
+	if !ok {
+		deny("-", "confirmation expired")
+		return
+	}
+	if u := s.envUser(w, r, t, deny); u != nil {
+		s.envLogin(w, r, t, u)
+	}
+}
+
+// envUser prueft den Benutzer eines Tickets (nil = beantwortet): unbekannt oder gesperrt, ein anderer Benutzer schon
+// angemeldet, oder auf dieser Node stehen Pflichten aus (Passwort beim ersten Anmelden, 2FA einrichten) - die gehen
+// nur mit eigener Anmeldung hier, denn in einer Environment-Sitzung lassen sich keine Zugangsdaten aendern.
+func (s *Server) envUser(w http.ResponseWriter, r *http.Request, t *environment.Ticket, deny func(actor, why string)) *store.User {
+	ctx := r.Context()
 	u, err := s.Store.UserByUID(ctx, t.UID)
 	if err != nil {
 		s.fail(w, r, err)
-		return
+		return nil
 	}
 	if u == nil || u.Disabled {
 		deny("-", "user unknown or locked (from "+t.FromName+")")
-		return
+		return nil
 	}
 	// eine bestehende Anmeldung eines anderen Benutzers nicht stillschweigend ersetzen
 	if cur := currentUser(r); cur != nil && cur.ID != u.ID {
-		s.log.Warn("environment ticket rejected", "reason", "other user signed in", "ip", ip)
+		s.log.Warn("environment ticket rejected", "reason", "other user signed in", "ip", s.clientIP(r))
 		s.auditEntry(ctx, store.AuditEntry{Actor: cur.Username, Action: "login.environment_failed", Target: t.FromName,
-			Details: "other user signed in (ticket for " + u.Username + ")", IP: ip})
+			Details: "other user signed in (ticket for " + u.Username + ")", IP: s.clientIP(r)})
 		s.flash(w, r, "warning", s.tr(r, "environment.other_user", "name", t.FromName))
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+		return nil
 	}
+	if (u.MustChange && u.Source == store.SourceLocal) || s.needs2FA(ctx, u) {
+		deny(u.Username, "sign-in duties open here (new password or 2FA setup)")
+		return nil
+	}
+	return u
+}
+
+// envLogin legt die Sitzung mit begrenzter Rolle an.
+func (s *Server) envLogin(w http.ResponseWriter, r *http.Request, t *environment.Ticket, u *store.User) {
+	ctx := r.Context()
+	ip := s.clientIP(r)
 	role := environment.MinRole(t.Role, s.Store.EffectiveRole(ctx, u))
 	id, err := s.newSession(w, r, u.ID, false) // zweiter Faktor ist auf der oeffnenden Node erledigt
 	if err != nil {
@@ -178,27 +249,78 @@ func sourceOrigin(r *http.Request) string {
 	return r.Header.Get("Referer")
 }
 
-// sameHost: gleicher Host samt Port. Das Schema zaehlt nicht, weil die oeffnende Node hinter einem Proxy mit TLS ihren
-// Rueckweg mit http:// bildet, der Browser aber https:// schickt.
-func sameHost(a, b string) bool {
-	pa, err1 := url.Parse(a)
-	pb, err2 := url.Parse(b)
-	return err1 == nil && err2 == nil && pa.Host != "" && strings.EqualFold(pa.Host, pb.Host)
-}
-
 // envCap begrenzt die Rolle einer Sitzung, die ueber Environment entstanden ist (env_sessions.max_role); die
-// Rechtepruefung (roles.go) sieht so nur die begrenzte Rolle. Bei einem Lesefehler „nur lesen“.
+// Rechtepruefung (roles.go) sieht so nur die begrenzte Rolle. Die Herkunft steht danach im Kontext (envOrigin, einmal
+// je Anfrage gelesen). Bei einem Lesefehler „nur lesen“ und wie eine Environment-Sitzung behandelt.
 func (s *Server) envCap(ctx context.Context, sessionID string) context.Context {
 	if s.Env == nil {
 		return ctx
 	}
 	o, err := s.Env.SessionOrigin(ctx, sessionID)
 	if err != nil {
-		return context.WithValue(ctx, ctxRole, store.RoleRead)
+		o = &environment.Origin{MaxRole: store.RoleRead}
 	}
 	if o == nil {
 		return ctx
 	}
 	role, _ := ctx.Value(ctxRole).(string)
+	ctx = context.WithValue(ctx, ctxEnvOrigin, o)
 	return context.WithValue(ctx, ctxRole, environment.MinRole(role, o.MaxRole))
+}
+
+// envOrigin: Herkunft der Sitzung, wenn sie ueber Environment geoeffnet wurde (nil = normale Anmeldung).
+func envOrigin(r *http.Request) *environment.Origin {
+	o, _ := r.Context().Value(ctxEnvOrigin).(*environment.Origin)
+	return o
+}
+
+// envCredentials: Routen, die Zugangsdaten anlegen, aendern oder entfernen (Passwort, 2FA, Passkeys, SSO-Verknuepfung,
+// API- und MCP-Keys). In einer ueber Environment geoeffneten Sitzung gesperrt: solche Zugangsdaten gaelten danach
+// ohne die Begrenzung der Sitzung (z. B. ein API-Key mit der vollen Rolle des Benutzers hier).
+var envCredentials = func() *http.ServeMux {
+	m := http.NewServeMux()
+	ok := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	for _, p := range []string{
+		"POST /settings/password",
+		"POST /login/password",
+		"POST /settings/2fa/enable",
+		"POST /settings/2fa/disable",
+		"POST /settings/api-keys",
+		"POST /settings/api-keys/{id}/delete",
+		"POST /settings/login/passkeys/begin",
+		"POST /settings/login/passkeys/finish",
+		"POST /settings/login/passkeys/{id}/delete",
+		"POST /settings/login/oidc/link",
+		"POST /settings/login/identities/{id}/delete",
+		"POST /settings/mcp/keys",
+		"POST /settings/mcp/keys/{id}/delete",
+		"POST /api/keys",
+		"DELETE /api/keys/{id}",
+		"POST /api/mcp/keys",
+		"DELETE /api/mcp/keys/{id}",
+	} {
+		m.Handle(p, ok)
+	}
+	return m
+}()
+
+// envForbidden: Anfrage aendert Zugangsdaten in einer ueber Environment geoeffneten Sitzung (dann 403 geschickt).
+func (s *Server) envForbidden(w http.ResponseWriter, r *http.Request) bool {
+	if envOrigin(r) == nil {
+		return false
+	}
+	if _, pat := envCredentials.Handler(r); pat == "" {
+		return false
+	}
+	name := "-"
+	if u := currentUser(r); u != nil {
+		name = u.Username
+	}
+	s.log.Warn("credentials change denied in environment session", "user", name, "method", r.Method, "path", r.URL.Path, "ip", s.clientIP(r))
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		writeErr(w, http.StatusForbidden, "not allowed in a session opened via environment")
+		return true
+	}
+	s.errorPage(w, r, http.StatusForbidden, "errors.env_credentials")
+	return true
 }

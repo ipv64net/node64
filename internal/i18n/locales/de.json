@@ -2193,7 +2193,8 @@
     "too_large": "Die Anfrage ist zu groß.",
     "setup_done": "Die Einrichtung ist bereits abgeschlossen.",
     "read_only": "Dein Benutzer hat die Rolle „Nur lesen“ und darf hier nichts ändern.",
-    "admin_only": "Diese Seite ist nur für Administratoren."
+    "admin_only": "Diese Seite ist nur für Administratoren.",
+    "env_credentials": "In einer über Environment geöffneten Sitzung lassen sich keine Zugangsdaten anlegen oder ändern (Passwort, 2FA, Passkeys, SSO-Verknüpfung, API- und MCP-Keys). Melde dich dafür direkt an dieser Node an."
   },
   "module": {
     "dns64": "DNS64 (lokaler DNS mit Blocklisten)",
@@ -3678,8 +3679,14 @@
     "opened_from": "Geöffnet über Environment von {name}",
     "read_only_badge": "nur lesen",
     "back": "Zurück zu {name}",
-    "login_hint": "Über Environment ist hier keine Anmeldung mit deinem Benutzer möglich (Benutzer unbekannt oder gesperrt, Abgleich aus oder Ticket abgelaufen). Bitte melde dich an.",
+    "login_hint": "Über Environment ist hier keine Anmeldung mit deinem Benutzer möglich (Benutzer unbekannt oder gesperrt, Abgleich aus, Ticket abgelaufen, oder hier ist erst ein neues Passwort bzw. die Zwei-Faktor-Einrichtung nötig). Bitte melde dich an.",
     "other_user": "Hier ist schon ein anderer Benutzer angemeldet. Die Anmeldung über Environment von {name} wurde nicht übernommen. Melde dich zuerst ab, wenn du wechseln möchtest.",
+    "confirm_title": "Anmeldung über Environment bestätigen",
+    "confirm_text": "Als „{name}“ anmelden? Geöffnet über Environment von {from}.",
+    "confirm_read_only": "Die Sitzung ist auf „nur lesen“ begrenzt.",
+    "confirm_hint": "Bestätige nur, wenn du gerade selbst „Öffnen“ geklickt hast. Diese Node kennt die Adresse, von der du kommst, nicht als Adresse von {from}.",
+    "confirm_button": "Anmelden",
+    "confirm_cancel": "Abbrechen",
     "origin_added": "Hinzugefügt",
     "update": "Update {version}",
     "key_invalid": "Zugangsschlüssel abgelehnt",

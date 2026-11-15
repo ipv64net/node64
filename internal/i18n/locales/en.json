@@ -2193,7 +2193,8 @@
     "too_large": "The request is too large.",
     "setup_done": "Setup is already complete.",
     "read_only": "Your user has the role “Read only” and cannot change anything here.",
-    "admin_only": "This page is for administrators only."
+    "admin_only": "This page is for administrators only.",
+    "env_credentials": "In a session opened via Environment you cannot create or change credentials (password, 2FA, passkeys, SSO link, API and MCP keys). Sign in on this node directly for that."
   },
   "module": {
     "dns64": "DNS64 (local DNS with blocklists)",
@@ -3678,8 +3679,14 @@
     "opened_from": "Opened via Environment from {name}",
     "read_only_badge": "read only",
     "back": "Back to {name}",
-    "login_hint": "Signing in with your user via Environment is not possible here (user unknown or locked, sync off or ticket expired). Please sign in.",
+    "login_hint": "Signing in with your user via Environment is not possible here (user unknown or locked, sync off, ticket expired, or a new password or two-factor setup is needed here first). Please sign in.",
     "other_user": "Another user is already signed in here. The sign-in via Environment from {name} was not applied. Sign out first if you want to switch.",
+    "confirm_title": "Confirm sign-in via Environment",
+    "confirm_text": "Sign in as \"{name}\"? Opened via Environment from {from}.",
+    "confirm_read_only": "The session is limited to read-only.",
+    "confirm_hint": "Only confirm if you just clicked \"Open\" yourself. This node does not know the address you came from as an address of {from}.",
+    "confirm_button": "Sign in",
+    "confirm_cancel": "Cancel",
     "origin_added": "Added",
     "update": "Update {version}",
     "key_invalid": "Access key rejected",
