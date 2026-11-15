@@ -255,19 +255,20 @@ type streamStats struct {
 }
 
 type streamRun struct {
-	key    string
-	target string       // Ziel host:port (auch fuer Verbindungen aus dem CDN64-Tunnel)
-	tlsc   *tls.Config  // TLS hier beenden (nil = nein)
-	tunTCP atomic.Int64 // offene Verbindungen aus dem CDN64-Tunnel (Grenze tunMaxTCP)
-	tunUDP atomic.Int64 // offene UDP-Sitzungen aus dem CDN64-Tunnel (Grenze udpMaxSessions)
-	tcp    net.Listener
-	udp    net.PacketConn
-	errs   map[string]string // tcp/udp -> Fehler beim Oeffnen
-	stats  *streamStats
-	mu     sync.Mutex
-	conns  map[net.Conn]struct{}
-	closed bool
-	wg     sync.WaitGroup
+	key        string
+	target     string       // Ziel host:port (auch fuer Verbindungen aus dem CDN64-Tunnel)
+	tlsc       *tls.Config  // TLS hier beenden (nil = nein)
+	tunTCP     atomic.Int64 // offene Verbindungen aus dem CDN64-Tunnel (Grenze tunMaxTCP)
+	tunUDP     atomic.Int64 // offene UDP-Sitzungen aus dem CDN64-Tunnel (Grenze udpMaxSessions)
+	reflectLog atomic.Bool  // Ziel ist ein Verstaerker-Dienst: einmal gemeldet
+	tcp        net.Listener
+	udp        net.PacketConn
+	errs       map[string]string // tcp/udp -> Fehler beim Oeffnen
+	stats      *streamStats
+	mu         sync.Mutex
+	conns      map[net.Conn]struct{}
+	closed     bool
+	wg         sync.WaitGroup
 
 	geo atomic.Pointer[Stream] // Laendersperre (GeoMode, GeoCountries), bei jedem Abgleich neu gesetzt
 	bw  atomic.Pointer[bwPair] // Bandbreite (nil = unbegrenzt), bei jedem Abgleich neu gesetzt

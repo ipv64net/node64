@@ -140,6 +140,16 @@ func TestOnlinePorts(t *testing.T) {
 	}
 	u.Close()
 	run.tunUDP.Store(0)
+	// Ziel auf einem Verstaerker-Port (DNS, NTP ...): ueber den Tunnel nicht erreichbar
+	up, _ := strconv.Atoi(uport)
+	tunnel.UDPReflectPorts[up] = true
+	u = open(tunnel.KindUDP, "app.test", sp)
+	_ = tunnel.WriteDatagram(u, []byte("x"))
+	if _, err := tunnel.ReadDatagram(u, buf); err == nil {
+		t.Fatal("udp to a reflector port via the tunnel must be closed")
+	}
+	u.Close()
+	delete(tunnel.UDPReflectPorts, up)
 	for _, x := range []struct {
 		kind, host string
 		port       int

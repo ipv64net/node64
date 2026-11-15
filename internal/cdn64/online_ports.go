@@ -268,6 +268,13 @@ func (m *Module) onlinePortStream(c net.Conn, h tunnel.Header) {
 		return
 	}
 	if h.Kind == tunnel.KindUDP {
+		if reflectTarget(r.target) { // Verstaerker-Dienst (DNS, NTP ...): nicht ueber die CDN64-Server erreichbar
+			if r.reflectLog.CompareAndSwap(false, true) {
+				m.log.Warn("cdn64 online: udp stream target is a known reflector service, not reachable via cdn64", "target", r.target)
+			}
+			_ = c.Close()
+			return
+		}
 		if r.tunUDP.Add(1) > udpMaxSessions {
 			r.tunUDP.Add(-1)
 			_ = c.Close()
@@ -296,6 +303,16 @@ func (m *Module) onlinePortStream(c net.Conn, h tunnel.Header) {
 
 // streamUDPTunnel: eine UDP-Sitzung eines Besuchers (Datagramme mit Laenge im Stream) mit eigenem Socket zum Ziel;
 // nach udpIdle ohne Pakete faellt sie weg.
+// reflectTarget: Ziel host:port auf einem Port aus tunnel.UDPReflectPorts.
+func reflectTarget(target string) bool {
+	_, p, err := net.SplitHostPort(target)
+	if err != nil {
+		return false
+	}
+	n, err := strconv.Atoi(p)
+	return err == nil && tunnel.UDPReflectPorts[n]
+}
+
 func (m *Module) streamUDPTunnel(r *streamRun, c net.Conn) {
 	up, err := net.Dial("udp", r.target)
 	if err != nil {

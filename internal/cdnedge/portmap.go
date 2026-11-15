@@ -228,17 +228,11 @@ var errNoPortTunnel = errors.New("portmapper: node not connected or without port
 
 var errReflectPort = errors.New("portmapper: udp target port is a known reflector service")
 
-// udpReflectPorts: UDP-Dienste, die auf kleine Anfragen grosse Antworten schicken (DNS, NTP, memcached, SSDP, CLDAP,
-// chargen ...). Modus 3 geht von der Edge direkt zum Ziel: dorthin keine UDP-Weiterleitung, sonst laesst sich die
-// Edge mit gefaelschten Absendern als Verstaerker nutzen.
-var udpReflectPorts = map[int]bool{7: true, 17: true, 19: true, 53: true, 111: true, 123: true, 137: true, 161: true,
-	389: true, 1900: true, 3702: true, 5353: true, 11211: true}
-
 // upstream: Verbindung fuer einen Besucher - Modus 3 direkt zum Ziel, Modus 1/2 durch den Tunnel der Node bzw. ueber
 // den Nachbarn (UDP dann als Datagramme mit Laenge). counted = false: der Nachbar zaehlt und begrenzt.
 func (p *portmapper) upstream(ctx context.Context, network string, re *route, port int, client string) (net.Conn, bool, error) {
 	if re.Mode == 3 {
-		if network == "udp" && udpReflectPorts[port] {
+		if network == "udp" && tunnel.UDPReflectPorts[port] {
 			return nil, false, errReflectPort
 		}
 		c, err := p.dial(ctx, network, re, port)
@@ -564,7 +558,7 @@ func (u *udpPort) newOK(now time.Time) bool {
 // Hintergrund); nil = verwerfen.
 func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	re, tport, denied := u.p.resolve(pmKey{udp: true, port: u.port}, from.Addr())
-	if re != nil && re.Mode == 3 && udpReflectPorts[tport] { // gar nicht erst anlegen (upstream lehnt ab)
+	if re != nil && re.Mode == 3 && tunnel.UDPReflectPorts[tport] { // gar nicht erst anlegen (upstream lehnt ab)
 		return nil
 	}
 	u.mu.Lock()

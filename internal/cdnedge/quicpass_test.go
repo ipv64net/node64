@@ -138,6 +138,21 @@ func TestQUICPassthroughMode1(t *testing.T) {
 	if s.qd.Load().open() != 1 {
 		t.Fatalf("open passthrough flows: %d", s.qd.Load().open())
 	}
+	// quic-go wechselt gleich nach dem Handshake die Verbindungs-ID: nachgewiesen ist der Besucher ueber das Signal der
+	// Node (Handshake fertig), sonst schloesse sweep den Fluss nach qpProveIn
+	proven := false
+	for i := 0; i < 100 && !proven; i++ {
+		d := s.qd.Load()
+		d.mu.Lock()
+		for _, f := range d.flows {
+			proven = f.proven.Load()
+		}
+		d.mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !proven {
+		t.Fatal("passthrough flow not proven after the handshake")
+	}
 
 	// ueber den Nachbarn: A hat keinen Tunnel, reicht an B
 	h3a := &http.Client{Timeout: 10 * time.Second, Transport: &http3.Transport{TLSClientConfig: &tls.Config{RootCAs: hpool},

@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.56.5 – 2026-11-15
+
+### Fixed
+- HTTP/3 via CDN64 (mode 1): connections dropped after about 10 seconds with some clients. The node now tells the CDN64 server when the handshake is complete (from cdn64-edge 0.22.2).
+
+### Changed
+- Streams via CDN64 (port mapper mode 1/2): UDP to known amplifier services (e.g. DNS 53, NTP 123, memcached 11211) is no longer reachable via the CDN64 servers; in the home network or via own ports the stream keeps working. TCP is not affected.
+
 ## 1.56.4 – 2026-11-15
 
 ### Fixed

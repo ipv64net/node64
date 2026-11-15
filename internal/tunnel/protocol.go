@@ -198,6 +198,12 @@ func closeWrite(c net.Conn) {
 
 // ---------------------------------------------------------------- Datagramme (KindQUIC)
 
+// UDPReflectPorts: UDP-Dienste, die auf kleine Anfragen grosse Antworten schicken (DNS, NTP, memcached, SSDP, CLDAP,
+// chargen ...). Der Portmapper leitet UDP von den CDN64-Servern nie dorthin (Modus 3 auf dem Server, Modus 1/2 in der
+// Node): mit gefaelschten Absendern liessen sich sonst die Server-Adressen als Verstaerker nutzen.
+var UDPReflectPorts = map[int]bool{7: true, 17: true, 19: true, 53: true, 111: true, 123: true, 137: true, 161: true,
+	389: true, 1900: true, 3702: true, 5353: true, 11211: true}
+
 // MaxDatagram: groesstes UDP-Datagramm, das durch den Tunnel geht.
 const MaxDatagram = 65535
 

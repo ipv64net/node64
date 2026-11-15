@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/ipv64net/node64/internal/tunnel"
 )
 
 func freeListenPort(t *testing.T, network string) int {
@@ -147,8 +149,8 @@ func TestPortmapUDPReflectPort(t *testing.T) {
 	}
 	defer back.Close()
 	bport := port(back.LocalAddr().String())
-	udpReflectPorts[bport] = true // im Test steht der Dienst auf einem freien Port statt auf 53/123/...
-	t.Cleanup(func() { delete(udpReflectPorts, bport) })
+	tunnel.UDPReflectPorts[bport] = true // im Test steht der Dienst auf einem freien Port statt auf 53/123/...
+	t.Cleanup(func() { delete(tunnel.UDPReflectPorts, bport) })
 	var hits atomic.Int32
 	go func() {
 		b := make([]byte, 2048)

@@ -22,7 +22,8 @@ import (
 //
 // Die Adresse eines Besuchers kann gefaelscht sein, bis er auf eine Antwort der Node reagiert: sein Paket traegt dann
 // die Verbindungs-ID, die die Node gewaehlt hat (Source Connection ID ihrer langen Pakete) - die kennt nur, wer die
-// Antwort bekommen hat. Bis dahin zaehlt der Fluss nur im UDP-Budget (guard.admitUDP), die Node darf ihm hoechstens
+// Antwort bekommen hat. Clients, die gleich nach dem Handshake die ID wechseln (z. B. quic-go), erreichen das nie;
+// fuer sie meldet die Node den fertigen Handshake mit einem Datagramm der Laenge 0 im Stream (ab PROXY64 1.56.5). Bis dahin zaehlt der Fluss nur im UDP-Budget (guard.admitUDP), die Node darf ihm hoechstens
 // qpFree + qpAmp x Eingang schicken (keine Reflexion) und nach qpProveIn ist Schluss. Danach gilt qpAmpProven x
 // Eingang: eine Node kann den Nachweis mit einem Helfer, der Absender faelscht, selbst erbringen. (Nur lange Pakete
 // vor dem Nachweis taugt nicht: Clients wie quic-go wechseln gleich nach dem Handshake auf eine neue, verschluesselt
@@ -361,7 +362,14 @@ func (f *qflow) run(re *route, sni string) {
 		buf := make([]byte, tunnel.MaxDatagram)
 		for {
 			n, err := tunnel.ReadDatagram(conn, buf)
-			if err != nil || !f.fromNode(buf[:n], re, counted) {
+			if err != nil {
+				return
+			}
+			if n == 0 { // Node: Handshake fertig, Adresse nachgewiesen (edge.vflow.handshakeDone)
+				f.prove()
+				continue
+			}
+			if !f.fromNode(buf[:n], re, counted) {
 				return
 			}
 		}
@@ -387,6 +395,9 @@ func (f *qflow) run(re *route, sni string) {
 // fromNode: Paket der Node an den Besucher (aus dem Stream oder als Datagramm); false = UDP-Port zu.
 func (f *qflow) fromNode(p []byte, re *route, counted bool) bool {
 	n := len(p)
+	if n == 0 { // Signal der Node gehoert nicht zum Besucher
+		return true
+	}
 	if !f.proven.Load() { // vor dem Nachweis: ID der Node merken, Antwort begrenzen (gefaelschter Absender)
 		if id := nodeSCID(p); len(id) >= qpMinCID && (f.scid.Load() == nil || !bytes.Equal(*f.scid.Load(), id)) {
 			id = append([]byte(nil), id...)

@@ -144,6 +144,7 @@ func (e *Edge) admitQUIC(qc *quic.Conn, f *vflow) {
 		g = *p
 	}
 	if f.admit(g, addrIP(qc.RemoteAddr())) {
+		f.handshakeDone()
 		return
 	}
 	_ = qc.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeExcessiveLoad), "")
@@ -255,6 +256,16 @@ func (f *vflow) admit(g ConnGate, ip netip.Addr) bool {
 		f.pc.unreserve(f.ip)
 	}
 	return true
+}
+
+// handshakeDone meldet dem CDN64-Server ueber den Stream, dass der Handshake fertig ist (Datagramm der Laenge 0, kommt
+// bei QUIC nie vor): Der Besucher hat die Antworten bekommen, seine Adresse ist nachgewiesen. Der Server kann das an
+// den Paketen nicht immer selbst sehen - viele Clients wechseln gleich danach auf eine verschluesselt mitgeteilte
+// Verbindungs-ID. Aeltere Server schicken dem Besucher ein leeres Datagramm, das QUIC verwirft.
+func (f *vflow) handshakeDone() {
+	f.mu.Lock()
+	_ = tunnel.WriteDatagram(f.c, nil)
+	f.mu.Unlock()
 }
 
 // end: Stream zu - Platz beim Limit bzw. bei den offenen Handshakes freigeben.
