@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.3 – 2026-11-15
+
 - DNS64: DNS rebinding protection (on by default; if your own domain points to devices in your home network publicly, add it as an exception in the settings); new home network CAs only cover local and own names, an existing CA can be replaced by a restricted one with a button.
 - DNS64 (security): in the Docker bridge network, queries through the Docker gateway are refused (unknown origin); hint on the pages, network_mode: host recommended, the gateway can be added as a client network if needed.
 - Honeypot64 (security): in a Docker bridge network the gateway address no longer counts as local – the info page and `/metrics` need the token from there, syslog accepts it only if listed on its own.

@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.3 – 2026-11-15
+
 - DNS64: Schutz vor DNS-Rebinding (Standard an; zeigt die eigene Domain öffentlich auf Geräte im Heimnetz, in den Einstellungen als Ausnahme eintragen); neue Heimnetz-CAs gelten nur für lokale und eigene Namen, eine vorhandene CA lässt sich per Knopf durch eine beschränkte ersetzen.
 - DNS64 (Sicherheit): Im Docker-Bridge-Netz werden Anfragen über das Docker-Gateway abgewiesen (Herkunft unbekannt); Hinweis auf den Seiten, network_mode: host empfohlen, Gateway bei Bedarf als Client-Netz eintragbar.
 - Honeypot64 (Sicherheit): Im Docker-Bridge-Netz gilt die Gateway-Adresse nicht mehr als lokal – Info-Seite und `/metrics` brauchen von dort das Token, Syslog nimmt sie nur einzeln eingetragen an.
