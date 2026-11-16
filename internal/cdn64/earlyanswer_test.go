@@ -35,7 +35,8 @@ func (z *zeroBody) Read(p []byte) (int, error) {
 // Ziel antwortet, bevor es den Upload gelesen hat (nginx bei OpenSpeedTest: POST auf eine Datei = sofort 200, den Rest
 // verwirft nginx still): Der Besucher muss seinen Upload trotzdem zu Ende schicken koennen. Vorher brach PROXY64 den
 // Upload ab, sobald die Antwort durch war (HTTP/2/3: Stream zu, HTTP/1.1: Verbindung zu) - der Speedtest zeigte
-// einen Upload, der bis auf fast null einbrach.
+// einen Upload, der bis auf fast null einbrach. Firefox hoert schon auf, sobald die Antwort vollstaendig da ist: die
+// fruehe Antwort kommt deshalb erst nach dem Upload.
 func TestUploadAfterEarlyAnswer(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -64,6 +65,10 @@ func TestUploadAfterEarlyAnswer(t *testing.T) {
 		resp, err := c.Do(req)
 		if err != nil {
 			t.Fatalf("h2=%v: %v", h2, err)
+		}
+		// Firefox hoert auf zu senden, sobald die Antwort vollstaendig da ist: sie darf erst nach dem Upload kommen
+		if n := body.sent.Load(); n != size {
+			t.Fatalf("h2=%v (%s): answer before the upload was complete (%d of %d bytes sent)", h2, resp.Proto, n, size)
 		}
 		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()

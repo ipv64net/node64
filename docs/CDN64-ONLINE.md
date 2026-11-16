@@ -812,6 +812,9 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   „Connection: close“ – der Browser hörte auf zu senden. Jetzt `edge.KeepUpload` in PROXY64 und im Modus-2/3-Weg der
   Server: Transport schließt nur eine Hülle, danach Rest lesen und verwerfen (1 GiB/30 s, EnableFullDuplex für HTTP/1.1),
   wie nginx. Tests `TestUploadAfterEarlyAnswer` (cdn64), `TestTerminate` (Fall /early).
+  **Firefox (cdn64-edge 0.22.5):** Firefox beendet den Upload, sobald die Antwort vollständig ist („ok“ mit
+  Content-Length 2), auch wenn der Server weiter liest (Playwright: 0,5 von 31,5 MB, Chromium 31,5). Deshalb hält
+  `edge.KeepUpload` eine frühe Antwort bis 64 KB zurück, bis der Upload gelesen ist, und schickt sie danach.
 - **TCP-/UDP-Streams (Portmapper Modus 1/2):** gebaut 2026-10-21 (PROXY64 1.24.0, cdn64-edge 0.15.0), siehe 8.3.
 - **Fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,

@@ -4,7 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
-- PROXY64: uploads broke off when the target answers before the upload has finished (e.g. OpenSpeedTest behind nginx): the speed test upload dropped to almost zero over HTTP/2 and HTTP/3; fixed (mode 2 together with cdn64-edge 0.22.4).
+- PROXY64: uploads broke off when the target answers before the upload has finished (e.g. OpenSpeedTest behind nginx): the speed test upload dropped to almost zero over HTTP/2 and HTTP/3, in Firefox even after the first fix; fixed (modes 2 and 3 together with cdn64-edge 0.22.5).
 - PROXY64: HTTP/3 via CDN64 – uploads (e.g. in a speed test) dropped to almost zero after a short time; fixed (together with cdn64-edge 0.22.3), downloads are steadier too.
 
 ## 1.7.5 – 2026-11-16

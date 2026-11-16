@@ -380,10 +380,12 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	defer s.track(re.Name, re.Mode, ap.Addr(), cancel)()
 	ctx := context.WithValue(cctx, termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr, ip: ap.Addr()})
-	// Ziel antwortet vor dem Ende des Uploads (z. B. nginx bei OpenSpeedTest): Rest danach lesen und verwerfen, sonst
-	// bricht der Upload des Besuchers ab (edge.KeepUpload)
+	// Ziel antwortet vor dem Ende des Uploads (z. B. nginx bei OpenSpeedTest): Antwort zurueckhalten, Rest lesen und
+	// verwerfen, sonst bricht der Upload des Besuchers ab (edge.KeepUpload)
 	if r.Header.Get("Upgrade") == "" && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-		defer edge.KeepUpload(w, r)()
+		var done func()
+		w, done = edge.KeepUpload(w, r)
+		defer done()
 	}
 	if re.Mode == 3 { // Traffic: was zum Besucher geht (komprimiert bzw. aus dem Cache), nicht was vom Ziel kommt
 		s.serveCached(&outCounter{ResponseWriter: w, st: st, bw: s.bw, uid: re.UserID}, r.WithContext(ctx), re, s.term.dirC)

@@ -161,6 +161,9 @@ func TestTerminate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("early answer: %v", err)
 	}
+	if n := early.n.Load(); n != 8<<20 { // Firefox hoert auf, sobald die Antwort da ist: erst nach dem Upload antworten
+		t.Fatalf("early answer before the upload was complete: %d of %d", n, 8<<20)
+	}
 	_, _ = io.Copy(io.Discard, eresp.Body)
 	eresp.Body.Close()
 	for i := 0; i < 100 && early.n.Load() < 8<<20; i++ {
