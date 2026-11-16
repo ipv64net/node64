@@ -3841,6 +3841,7 @@
       "scope_edit": "Edit network",
       "iface": "Interface",
       "iface_hint": "Network card or VLAN of the host, e.g. eth0 or eth0.20. One network per interface.",
+      "iface_other": "Other …",
       "subnet": "Network",
       "range": "Address range",
       "range_from": "from",
@@ -4375,7 +4376,9 @@
       "lookup_group_block": "blocked by group {group}: {entry}",
       "lookup_service": "service {svc} (can be blocked in groups)",
       "lookup_cat": "category {cat} (can be blocked in groups)",
-      "lookup_none": "Not in any list or rule."
+      "lookup_none": "Not in any list or rule.",
+      "dhcp_iface_missing": "{name} (not found)",
+      "dhcp_outside": "Not in the network {net} – please adjust."
     },
     "retrying": "Retrying every minute; port or address can be changed in the settings.",
     "custom": "custom",

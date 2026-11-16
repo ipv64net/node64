@@ -846,19 +846,110 @@
 		document.querySelectorAll("form [data-cancel]").forEach(function (c) {
 			c.addEventListener("click", function () { reset(c.form); });
 		});
-		// DHCP: Schnittstelle gewaehlt -> Netz, Bereich und Router aus dem Vorschlag (nur beim Anlegen)
-		var iface = $("d-iface");
+		// DHCP-Netz: Schnittstelle aus der Liste dieser Node ("Sonstige" = Textfeld), Netz aus der Schnittstelle,
+		// Bereich und Router wandern mit dem Netz mit - nur Felder, die niemand von Hand geaendert hat; passt ein von
+		// Hand gesetzter Wert nicht mehr ins Netz, steht ein Hinweis am Feld. Ohne JS bleibt das Textfeld (Server prueft).
+		var iface = $("d-iface"), pick = $("d-iface-pick");
 		if (iface) {
-			iface.addEventListener("change", function () {
-				var form = iface.form, o = document.querySelector('#dhcp-ifaces option[value="' + iface.value.replace(/"/g, "") + '"]');
-				if (!o || form.action.indexOf("/edit") >= 0) { return; }
-				["subnet", "start", "end", "router"].forEach(function (k) { form.elements[k].value = o.getAttribute("data-" + k) || ""; });
+			var sf = iface.form, el = sf.elements, auto = { subnet: "" }, prevNet = null;
+			var ip4 = function (s) {
+				var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec((s || "").trim());
+				if (!m || m.slice(1).some(function (x) { return +x > 255; })) { return null; }
+				return ((+m[1] << 24) >>> 0) + (+m[2] << 16) + (+m[3] << 8) + (+m[4]);
+			};
+			var str4 = function (v) { return [v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255].join("."); };
+			var net4 = function (s) { // {base, size} eines IPv4-Netzes (/8 bis /30), sonst null
+				var p = (s || "").trim().split("/"), a = ip4(p[0]), bits = +p[1];
+				if (a === null || p.length !== 2 || !(bits >= 8 && bits <= 30)) { return null; }
+				var size = Math.pow(2, 32 - bits);
+				return { base: a - (a % size), size: size, text: str4(a - (a % size)) + "/" + bits };
+			};
+			var inside = function (n, v) { return v !== null && v > n.base && v < n.base + n.size - 1; };
+			var hint = function (k, n) {
+				var h = sf.querySelector('[data-outside="' + k + '"]'), v = ip4(el[k].value), bad = n && el[k].value.trim() !== "" && !inside(n, v);
+				el[k].classList.toggle("is-invalid", !!bad);
+				if (h) { h.textContent = bad ? t("dhcp_outside", { net: n.text }) : ""; h.classList.toggle("d-none", !bad); }
+			};
+			// Netz geaendert: Bereich und Router mit gleichem Host-Anteil ins neue Netz, bei kleineren Netzen begrenzt
+			var moveNet = function () {
+				var n = net4(el.subnet.value);
+				if (!n) { return; } // noch beim Tippen: letztes gueltiges Netz bleibt die Grundlage
+				var off = function (k) { var v = ip4(el[k].value); return prevNet && inside(prevNet, v) ? v - prevNet.base : null; };
+				var s = off("start"), e = off("end"), r = off("router");
+				if (s === null || e === null || e > n.size - 2 || s < 1) { // Vorschlag wie der Server: .100-.199 bzw. obere Haelfte
+					s = n.size >= 256 ? 100 : n.size / 2;
+					e = n.size >= 256 ? 199 : n.size - 2;
+				}
+				if (r === null || r > n.size - 2) { r = 1; }
+				[["start", s], ["end", e], ["router", r]].forEach(function (x) {
+					if (!el[x[0]].dataset.touched && (x[0] !== "router" || el.router.value.trim() !== "" || !prevNet)) { el[x[0]].value = str4(n.base + x[1]); }
+				});
+				prevNet = n;
+				["start", "end", "router"].forEach(function (k) { hint(k, n); });
+			};
+			["start", "end", "router"].forEach(function (k) {
+				el[k].addEventListener("input", function () { el[k].dataset.touched = "1"; hint(k, net4(el.subnet.value)); });
 			});
+			el.subnet.addEventListener("input", function () { if (!el.subnet.readOnly) { moveNet(); } });
+			// Vorschlag einer Schnittstelle (Liste oder Textfeld mit datalist): Netz nur, wenn leer bzw. noch automatisch
+			var takeSuggest = function (o) {
+				if (!o || el.subnet.readOnly) { return; }
+				var sub = o.getAttribute("data-subnet") || "";
+				if (!sub || (el.subnet.value.trim() !== "" && el.subnet.value !== auto.subnet)) { return; }
+				el.subnet.value = auto.subnet = sub;
+				["start", "end", "router"].forEach(function (k) {
+					if (!el[k].dataset.touched && o.getAttribute("data-" + k)) { el[k].value = o.getAttribute("data-" + k); }
+				});
+				prevNet = net4(sub);
+				["start", "end", "router"].forEach(function (k) { hint(k, prevNet); });
+			};
+			iface.addEventListener("change", function () {
+				takeSuggest(document.querySelector('#dhcp-ifaces option[value="' + iface.value.replace(/"/g, "") + '"]'));
+			});
+			// Liste statt Textfeld: zum Wert im Textfeld passend waehlen; unbekannter gespeicherter Wert bleibt sichtbar
+			var syncPick = function () {
+				if (!pick) { return; }
+				pick.querySelectorAll("option[data-missing]").forEach(function (o) { o.remove(); });
+				var v = iface.value.trim(), other = pick.querySelector("option[data-other]");
+				var o = v ? Array.prototype.find.call(pick.options, function (x) { return x.value === v && !x.hasAttribute("data-other"); }) : pick.options[0];
+				if (!o && v) {
+					o = new Option(t("dhcp_iface_missing", { name: v }), v);
+					o.setAttribute("data-missing", "");
+					pick.insertBefore(o, other);
+				}
+				o = o || other;
+				pick.value = o.value;
+				o.selected = true;
+				if (!o.hasAttribute("data-other")) { iface.value = o.value; }
+				iface.classList.toggle("d-none", !o.hasAttribute("data-other"));
+			};
+			if (pick) {
+				pick.classList.remove("d-none");
+				pick.addEventListener("change", function () {
+					var o = pick.options[pick.selectedIndex];
+					if (o.hasAttribute("data-other")) {
+						iface.classList.remove("d-none");
+						iface.value = "";
+						iface.focus();
+						return;
+					}
+					iface.classList.add("d-none");
+					iface.value = o.value;
+					takeSuggest(o.hasAttribute("data-missing") ? null : o);
+				});
+			}
+			var fresh = function () { // Ausgangslage nach Laden, Bearbeiten und Abbrechen
+				["start", "end", "router"].forEach(function (k) { delete el[k].dataset.touched; hint(k, null); });
+				auto.subnet = el.subnet.readOnly ? "" : el.subnet.value;
+				prevNet = net4(el.subnet.value);
+				syncPick();
+			};
 			// das Netz eines vorhandenen Netzes ist fest (Kennung): beim Bearbeiten nur anzeigen
 			document.querySelectorAll('[data-edit-form="dhcp-scope-form"]').forEach(function (b) {
-				b.addEventListener("click", function () { iface.form.elements.subnet.readOnly = true; });
+				b.addEventListener("click", function () { el.subnet.readOnly = true; fresh(); });
 			});
-			iface.form.querySelector("[data-cancel]").addEventListener("click", function () { iface.form.elements.subnet.readOnly = false; });
+			sf.querySelector("[data-cancel]").addEventListener("click", function () { el.subnet.readOnly = false; setTimeout(fresh, 0); });
+			fresh();
 		}
 		document.querySelectorAll("[data-fwd-test]").forEach(function (b) {
 			b.addEventListener("click", function () {

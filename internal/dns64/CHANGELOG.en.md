@@ -1,6 +1,11 @@
 # Changes – DNS64
 
-## 1.42.1 – unreleased
+## 1.43.0 – unreleased
+
+### New
+- Adding and editing a DHCP network is easier: you pick the interface from a list of this node (name and address, e.g. "eth0 – 192.168.1.20/24"; Docker, VPN and VM interfaces only via "Other …" with a text field). A saved interface that does not exist right now stays visible as "(not found)". The chosen interface fills in the network; when the network changes, address range and router move along (same host parts, limited in smaller networks). Fields changed by hand stay as they are and get a hint if they no longer fit the network. Without JavaScript the text field remains.
+
+## 1.42.1 – 2026-11-16
 
 ### Fixed
 - Rewrites with an IP address as target (e.g. *.example.de → 192.168.1.10) returned NXDOMAIN. Now an IPv4 address answers A, an IPv6 address AAAA, other types get no answer (no NXDOMAIN); IPv6 addresses are now allowed as target too (#174).

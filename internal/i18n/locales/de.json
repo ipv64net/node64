@@ -3841,6 +3841,7 @@
       "scope_edit": "Netz bearbeiten",
       "iface": "Schnittstelle",
       "iface_hint": "Netzwerkkarte bzw. VLAN des Hosts, z. B. eth0 oder eth0.20. Je Schnittstelle ein Netz.",
+      "iface_other": "Sonstige …",
       "subnet": "Netz",
       "range": "Adressbereich",
       "range_from": "von",
@@ -4375,7 +4376,9 @@
       "lookup_group_block": "Sperre der Gruppe {group}: {entry}",
       "lookup_service": "Dienst {svc} (in Gruppen sperrbar)",
       "lookup_cat": "Kategorie {cat} (in Gruppen sperrbar)",
-      "lookup_none": "In keiner Liste und keiner Regel."
+      "lookup_none": "In keiner Liste und keiner Regel.",
+      "dhcp_iface_missing": "{name} (nicht gefunden)",
+      "dhcp_outside": "Liegt nicht im Netz {net} – bitte anpassen."
     },
     "retrying": "Neuer Versuch jede Minute; Port oder Adresse lassen sich unter Einstellungen ändern.",
     "custom": "eigene",

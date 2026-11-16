@@ -44,6 +44,11 @@
 				<form method="post" action="/dns64/dhcp/scopes" id="dhcp-scope-form" data-base="/dns64/dhcp/scopes">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<label class="form-label" for="d-iface">{{.T "dns64.dhcp.iface"}}</label>
+					{{/* Auswahl der Schnittstellen dieser Node (dns64.js zeigt sie und blendet das Textfeld nur fuer "Sonstige" ein; ohne JS bleibt das Textfeld) */}}
+					<select class="form-select font-monospace mb-1 d-none" id="d-iface-pick" aria-label="{{.T "dns64.dhcp.iface"}}">
+						{{range $h.Ifaces}}{{if not .Virtual}}<option value="{{.Name}}" data-subnet="{{.Suggest.Subnet}}" data-start="{{.Suggest.Start}}" data-end="{{.Suggest.End}}" data-router="{{.Suggest.Router}}">{{.Name}} – {{index .Addrs 0}}</option>{{end}}{{end}}
+						<option value="" data-other>{{.T "dns64.dhcp.iface_other"}}</option>
+					</select>
 					<input type="text" class="form-control font-monospace mb-1" id="d-iface" name="iface" data-field="iface" list="dhcp-ifaces" value="{{$h.Suggest.Iface}}" required maxlength="15" placeholder="eth0">
 					<datalist id="dhcp-ifaces">{{range $h.Ifaces}}<option value="{{.Name}}" data-subnet="{{.Suggest.Subnet}}" data-start="{{.Suggest.Start}}" data-end="{{.Suggest.End}}" data-router="{{.Suggest.Router}}">{{range $i, $a := .Addrs}}{{if $i}}, {{end}}{{$a}}{{end}}</option>{{end}}</datalist>
 					<div class="form-text mb-2">{{.T "dns64.dhcp.iface_hint"}}</div>
@@ -54,13 +59,16 @@
 						<span class="input-group-text" style="min-width: 3.5rem">{{.T "dns64.dhcp.range_from"}}</span>
 						<input type="text" class="form-control font-monospace" name="start" data-field="start" value="{{$h.Suggest.Start}}" required placeholder="192.168.1.100" aria-label="{{.T "dns64.dhcp.range_from"}}">
 					</div>
+					<div class="small text-warning-emphasis mb-1 d-none" data-outside="start"></div>
 					<div class="input-group mb-1">
 						<span class="input-group-text" style="min-width: 3.5rem">{{.T "dns64.dhcp.range_to"}}</span>
 						<input type="text" class="form-control font-monospace" name="end" data-field="end" value="{{$h.Suggest.End}}" required placeholder="192.168.1.199" aria-label="{{.T "dns64.dhcp.range_to"}}">
 					</div>
+					<div class="small text-warning-emphasis mb-1 d-none" data-outside="end"></div>
 					<div class="form-text mb-2">{{.T "dns64.dhcp.range_hint"}}</div>
 					<label class="form-label" for="d-router">{{.T "dns64.dhcp.router"}}</label>
 					<input type="text" class="form-control font-monospace mb-2" id="d-router" name="router" data-field="router" value="{{$h.Suggest.Router}}" placeholder="192.168.1.1">
+					<div class="small text-warning-emphasis mb-2 d-none" data-outside="router"></div>
 					<label class="form-label" for="d-name">{{.T "dns64.dhcp.name"}}</label>
 					<input type="text" class="form-control mb-2" id="d-name" name="name" data-field="name" maxlength="60" placeholder="{{.T "dns64.dhcp.name_ph"}}">
 					<details class="mb-3">

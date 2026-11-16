@@ -788,6 +788,7 @@ type dhcpIface struct {
 	Name    string         `json:"name"`
 	Addrs   []netip.Prefix `json:"addrs"`
 	Suggest DHCPScope      `json:"suggest"`
+	Virtual bool           `json:"virtual"` // Docker, VPN, VM-Bruecke ...: im Formular nur ueber "Sonstige"
 }
 
 // dhcpInterfaces: Schnittstellen mit IPv4 (ohne Loopback), je mit Vorschlag fuer Netz, Bereich und Router.
@@ -806,7 +807,7 @@ func dhcpInterfaces() []dhcpIface {
 		if len(addrs) == 0 {
 			continue
 		}
-		out = append(out, dhcpIface{Name: ifi.Name, Addrs: addrs, Suggest: suggestScope(ifi.Name, addrs[0], gw)})
+		out = append(out, dhcpIface{Name: ifi.Name, Addrs: addrs, Suggest: suggestScope(ifi.Name, addrs[0], gw), Virtual: virtualIface(ifi.Name)})
 	}
 	return out
 }

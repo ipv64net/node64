@@ -1,6 +1,11 @@
 # Änderungen – DNS64
 
-## 1.42.1 – unveröffentlicht
+## 1.43.0 – unveröffentlicht
+
+### Neu
+- DHCP-Netz anlegen und bearbeiten ist einfacher: Die Schnittstelle wählst du aus einer Liste dieser Node (Name und Adresse, z. B. „eth0 – 192.168.1.20/24“; Docker-, VPN- und VM-Schnittstellen nur über „Sonstige …“ mit Textfeld). Eine gespeicherte Schnittstelle, die es gerade nicht gibt, bleibt als „(nicht gefunden)“ sichtbar. Die gewählte Schnittstelle belegt das Netz vor; ändert sich das Netz, wandern Adressbereich und Router mit (gleiche Host-Anteile, bei kleineren Netzen begrenzt). Von Hand geänderte Felder bleiben stehen und bekommen einen Hinweis, wenn sie nicht mehr ins Netz passen. Ohne JavaScript bleibt das Textfeld.
+
+## 1.42.1 – 2026-11-16
 
 ### Behoben
 - Umschreiben mit einer IP-Adresse als Ziel (z. B. *.example.de → 192.168.1.10) lieferte NXDOMAIN. Jetzt beantwortet eine IPv4-Adresse A, eine IPv6-Adresse AAAA, andere Typen kommen ohne Antwort (kein NXDOMAIN); IPv6-Adressen sind als Ziel jetzt auch erlaubt (#174).

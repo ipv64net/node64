@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- DNS64: DHCP-Netz einfacher anlegen – Schnittstelle aus einer Liste, das Netz wird vorbelegt, Adressbereich und Router wandern mit dem Netz mit.
 - Installation ohne Docker: Debian-Paket (`.deb`) für amd64, arm64 und armhf – Systemdienst `node64` unter eigenem Benutzer, Daten in `/var/lib/node64`, Einstellungen in `/etc/default/node64`; Download am GitHub-Release (`releases/latest/download/node64_amd64.deb`) und unter ipv64.net/node64/deb/.
 
 ## 1.7.4 – 2026-11-16
