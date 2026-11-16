@@ -5,6 +5,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Healthchecks: Whois-Check für .ch- und .li-Domains funktioniert (Blockformat der Registry SWITCH, RDAP-Server ohne IANA-Eintrag, #170).
+- DNS64: Umschreiben mit einer IP-Adresse als Ziel liefert wieder die Adresse statt NXDOMAIN (IPv4 für A, IPv6 für AAAA, #174).
 - IPAM64: eigenes Logo in der Übersicht, auf dem Dashboard und unter Einstellungen → Module.
 - PROXY64 1.56.6 (Sicherheit): Anfragen über das Docker-Gateway (Bridge-Netz) gelten nicht mehr als Heimnetz – Zugriffslisten mit privaten Netzen, „nur eigenes Netz“ und die Heimnetz-Ausnahme der Limits greifen für sie nicht; ein Hinweis empfiehlt `network_mode: host`.
 

@@ -4038,7 +4038,7 @@
       "rw_edit": "Umschreiben bearbeiten",
       "rw_name": "Name",
       "rw_target": "antwortet wie",
-      "rw_hint": "DNS64 löst das Ziel selbst auf und antwortet unter dem gefragten Namen (ohne CNAME). *.example.com gilt für alle Namen darunter.",
+      "rw_hint": "Ziel ist ein Name oder eine IP-Adresse. Einen Namen löst DNS64 selbst auf und antwortet unter dem gefragten Namen (ohne CNAME); eine IPv4-Adresse beantwortet A, eine IPv6-Adresse AAAA. *.example.com gilt für alle Namen darunter.",
       "rw_none": "Noch nichts umgeschrieben.",
       "rw_added": "Umschreiben angelegt, gilt sofort."
     },
@@ -4596,7 +4596,7 @@
       "name": "Ungültiger Name.",
       "ip_a": "Für A wird eine IPv4-Adresse gebraucht.",
       "ip_aaaa": "Für AAAA wird eine IPv6-Adresse gebraucht.",
-      "target": "Ungültiger Zielname.",
+      "target": "Ungültiges Ziel (Name oder IP-Adresse).",
       "type": "Unbekannter Typ.",
       "dup": "Diesen Eintrag gibt es schon.",
       "cname": "Ein CNAME steht allein: kein weiterer Eintrag für denselben Namen.",

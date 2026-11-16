@@ -5299,7 +5299,8 @@
           },
           "target": {
             "type": "string",
-            "example": "nas.home.lan"
+            "example": "nas.home.lan",
+            "description": "Name (DNS64 loest ihn auf und antwortet unter dem gefragten Namen) oder IP-Adresse (IPv4 beantwortet A, IPv6 AAAA, andere Typen ohne Antwort)"
           },
           "comment": {
             "type": "string"

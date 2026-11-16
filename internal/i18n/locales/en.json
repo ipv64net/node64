@@ -4038,7 +4038,7 @@
       "rw_edit": "Edit rewrite",
       "rw_name": "Name",
       "rw_target": "answers like",
-      "rw_hint": "DNS64 resolves the target itself and answers under the queried name (without CNAME). *.example.com applies to all names below.",
+      "rw_hint": "The target is a name or an IP address. DNS64 resolves a name itself and answers under the queried name (without CNAME); an IPv4 address answers A, an IPv6 address AAAA. *.example.com applies to all names below.",
       "rw_none": "Nothing rewritten yet.",
       "rw_added": "Rewrite added, effective immediately."
     },
@@ -4596,7 +4596,7 @@
       "name": "Invalid name.",
       "ip_a": "A needs an IPv4 address.",
       "ip_aaaa": "AAAA needs an IPv6 address.",
-      "target": "Invalid target name.",
+      "target": "Invalid target (name or IP address).",
       "type": "Unknown type.",
       "dup": "This record already exists.",
       "cname": "A CNAME stands alone: no other record for the same name.",

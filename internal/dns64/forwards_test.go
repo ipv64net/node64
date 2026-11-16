@@ -184,3 +184,21 @@ func TestForwardAndRewrite(t *testing.T) {
 		t.Fatalf("views = %+v", views)
 	}
 }
+
+// Umschreiben auf eine IP-Adresse wird angenommen und vereinheitlicht (#174).
+func TestRewriteIPTarget(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	for in, want := range map[string]string{"192.168.1.10": "192.168.1.10", "FD00::0010": "fd00::10", "::ffff:10.0.0.1": "10.0.0.1"} {
+		r, err := m.AddRewrite(ctx, Rewrite{Name: "x" + strconv.Itoa(len(in)) + ".example.de", Target: in})
+		if err != nil || r.Target != want {
+			t.Fatalf("%s: %q %v", in, r.Target, err)
+		}
+	}
+	if _, err := m.AddRewrite(ctx, Rewrite{Name: "*.wild.example.de", Target: "192.168.1.20"}); err != nil {
+		t.Fatal(err)
+	}
+	if target, ok := m.rewriteFor("nas.wild.example.de"); !ok || target != "192.168.1.20" {
+		t.Fatalf("wildcard: %q %v", target, ok)
+	}
+}

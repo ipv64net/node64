@@ -1,6 +1,11 @@
 # Änderungen – DNS64
 
-## 1.42.0 – unveröffentlicht
+## 1.42.1 – unveröffentlicht
+
+### Behoben
+- Umschreiben mit einer IP-Adresse als Ziel (z. B. *.example.de → 192.168.1.10) lieferte NXDOMAIN. Jetzt beantwortet eine IPv4-Adresse A, eine IPv6-Adresse AAAA, andere Typen kommen ohne Antwort (kein NXDOMAIN); IPv6-Adressen sind als Ziel jetzt auch erlaubt (#174).
+
+## 1.42.0 – 2026-11-15
 
 ### Neu
 - Schutz vor DNS-Rebinding (Einstellungen, Standard an): Antworten aus dem Internet liefern für öffentliche Namen keine Adressen aus dem Heimnetz mehr (privat, ULA, Loopback, Link-Local). Ausgenommen sind eigene Einträge, lokale Zonen und Namen, Weiterleitungen, Freigaben, ipv64-Domains, plex.direct, die Endungen der Docker-Labels und eigene Endungen („Weitere Endungen ohne Rebinding-Schutz“, im Cluster abgeglichen). Das Abfrage-Log zeigt „Rebinding-Schutz“, „Freigeben“ hebt ihn für den Namen auf. Zeigt deine eigene Domain öffentlich auf Geräte im Heimnetz, trag sie dort ein.

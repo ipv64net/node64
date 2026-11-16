@@ -271,7 +271,9 @@ func normalizeRewrite(r *Rewrite) error {
 	if !validName(strings.TrimPrefix(r.Name, "*.")) {
 		return errCfg("err_name")
 	}
-	if !validName(r.Target) || r.Target == r.Name {
+	if ip, err := netip.ParseAddr(r.Target); err == nil { // Adresse als Ziel (IPv4 oder IPv6, #174)
+		r.Target = ip.Unmap().String()
+	} else if !validName(r.Target) || r.Target == r.Name {
 		return errCfg("err_target")
 	}
 	r.Comment = strings.TrimSpace(r.Comment)

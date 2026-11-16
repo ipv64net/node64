@@ -1,6 +1,11 @@
 # Changes – DNS64
 
-## 1.42.0 – unreleased
+## 1.42.1 – unreleased
+
+### Fixed
+- Rewrites with an IP address as target (e.g. *.example.de → 192.168.1.10) returned NXDOMAIN. Now an IPv4 address answers A, an IPv6 address AAAA, other types get no answer (no NXDOMAIN); IPv6 addresses are now allowed as target too (#174).
+
+## 1.42.0 – 2026-11-15
 
 ### New
 - DNS rebinding protection (settings, on by default): answers from the internet no longer return addresses of the home network (private, ULA, loopback, link-local) for public names. Exempt are own records, local zones and names, forwards, releases, ipv64 domains, plex.direct, the suffixes of the Docker labels and own suffixes ("More suffixes without rebinding protection", synced in the cluster). The query log shows "rebinding protection", "Release" lifts it for the name. If your own domain points to devices in your home network publicly, add it there.
