@@ -1,5 +1,12 @@
 # Monitor64 – Änderungen
 
+## 0.1.22 – 2026-11-16
+
+Neu:
+
+- UniFi: Der Zugang „UniFi“ fragt jetzt auch UniFi Drive ab – z. B. eine UNAS Pro mit demselben API-Schlüssel. Monitor64 erkennt selbst, welche Apps auf der Konsole laufen (Network, Drive oder beides). Dazu kommen je Pool ein Dienst (RAID-Stufe, Zustand, Redundanz, Belegung mit Schwelle, laufende Prüfung bzw. Wiederherstellung) und je Platte einer (Zustand, Temperatur, defekte und nicht korrigierbare Sektoren samt „steigen“, Betriebsstunden, Verschleiß bei SSDs, Risiko-Hinweise, Pool-Zugehörigkeit). Außerdem gibt es Dienste für CPU, RAM, CPU-Temperatur, Netz-Ports und das System mit UniFi-OS- und Drive-Version, Laufzeit und Durchsatz. Bisher scheiterte der Zugang auf einer UNAS, weil er nur die Network Application kannte.
+- UniFi: Der Hinweis bei einem abgelehnten API-Schlüssel nennt jetzt auch die UniFi-OS-Einstellungen (Control Plane → Integrations).
+
 ## 0.1.21 – 2026-11-16
 
 Fehlerbehebungen:

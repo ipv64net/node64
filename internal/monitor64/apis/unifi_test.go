@@ -36,7 +36,12 @@ type fakeUnifi struct {
 	keyCalls int  // Anfragen mit API-Schluessel
 	expire   bool // die naechste Datenabfrage antwortet "Sitzung abgelaufen"
 	statusRC int  // GET /status antwortet einmal mit diesem Status (z. B. 502 vom Proxy davor)
-	starting bool // selbst gehostet: die Anwendung startet noch
+	// UniFi Drive (UNAS): Pfad unter /proxy/drive -> Antwort ohne Huelle (nil = Drive laeuft nicht); noNetwork: die
+	// Konsole hat keine Network Application (unter /proxy/network kommt die Oberflaeche, wie bei der UNAS Pro)
+	drive     map[string]string
+	driveFail map[string]int
+	noNetwork bool
+	starting  bool // selbst gehostet: die Anwendung startet noch
 }
 
 const (
@@ -169,6 +174,39 @@ func (f *fakeUnifi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.logouts++
 		f.session = 0
 		_, _ = w.Write([]byte(`{"meta":{"rc":"ok"},"data":[]}`))
+		return
+	}
+	if f.os && f.noNetwork && strings.HasPrefix(path, ufOSPrefix) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<!doctype html><html>UniFi OS</html>"))
+		return
+	}
+	if f.os && strings.HasPrefix(path, "/proxy/drive/") {
+		if f.drive == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		ok := r.Header.Get("X-API-KEY") == f.key
+		if c, err := r.Cookie("TOKEN"); err == nil && f.session > 0 && c.Value == fmt.Sprintf("jwt-%d", f.session) {
+			ok = true
+		}
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("Unauthorized"))
+			return
+		}
+		f.hits[path]++
+		if st := f.driveFail[path]; st != 0 {
+			w.WriteHeader(st)
+			return
+		}
+		body, found := f.drive[path]
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

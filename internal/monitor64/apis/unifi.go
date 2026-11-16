@@ -21,7 +21,9 @@ import (
 )
 
 // UniFi Network Application ueber die Controller-API (UniFi-OS-Konsolen wie UDM, UDR, UCG, Cloud Key und der selbst
-// gehostete Network Server). Es wird nur gelesen. Zwei Arten der Anmeldung:
+// gehostete Network Server) und UniFi Drive (UNAS, unifi_drive.go). Auf UniFi OS erkennt der Sammler die Apps selbst
+// (ufApps: Network unter /proxy/network, Drive unter /proxy/drive; stuendlich neu) und fragt ab, was laeuft. Es wird
+// nur gelesen. Zwei Arten der Anmeldung:
 //
 //   - API-Schluessel (Kopf X-API-KEY, in der Konsole unter "Integrations" angelegt): nur auf UniFi OS, ohne Sitzung.
 //   - Benutzer und Passwort eines lokalen Nur-Lese-Admins: Anmeldung per POST /api/auth/login (UniFi OS) bzw.
@@ -48,6 +50,7 @@ const (
 	ufMaxDevices  = 500
 	ufMaxPorts    = 64
 	ufOSPrefix    = "/proxy/network"
+	ufAppsEvery   = time.Hour // Apps der Konsole neu erkennen (Network, Drive)
 )
 
 var ufSiteRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -87,6 +90,15 @@ type Unifi struct {
 	alarmsGone time.Time
 	slowAt     time.Time
 	sys        *ufSysinfo
+
+	apps      ufApps            // Apps der Konsole (nur UniFi OS)
+	udSectors map[string]uint64 // Drive: Sektoren je Platte der vorigen Runde ("steigen")
+}
+
+// ufApps sind die erkannten Apps einer UniFi-OS-Konsole.
+type ufApps struct {
+	at             time.Time // Null = noch nicht erkannt
+	network, drive bool
 }
 
 // NewUnifi baut den Sammler (prueft Adresse, Zugangsdaten und Pin; fragt noch nichts ab).
@@ -167,7 +179,8 @@ func (u *Unifi) Close() {
 // Queries nennt die Abfragen ("Was wird abgefragt?").
 func (u *Unifi) Queries() []string {
 	p := "/api/s/" + u.site
-	out := []string{"GET " + p + "/stat/device", "GET " + p + "/stat/health", "GET " + p + "/list/alarm", "GET " + p + "/stat/sysinfo", "GET /api/self/sites"}
+	out := []string{"GET " + p + "/stat/device", "GET " + p + "/stat/health", "GET " + p + "/list/alarm", "GET " + p + "/stat/sysinfo", "GET /api/self/sites",
+		"UniFi Drive: GET " + udPrefix + "/storage, " + udPrefix + "/systems/device-info, " + udPrefix + "/systems/network-io"}
 	if u.apiKey {
 		return append([]string{"X-API-KEY, " + ufOSPrefix + "/…"}, out...)
 	}
@@ -333,17 +346,100 @@ type ufEnvelope struct {
 	Data json.RawMessage `json:"data"`
 }
 
+// ensureLogin meldet an, falls noch keine Sitzung besteht (nur mit Benutzer und Passwort).
+func (u *Unifi) ensureLogin(ctx context.Context) error {
+	if u.apiKey {
+		return nil
+	}
+	u.sm.Lock()
+	have := u.cookie != ""
+	u.sm.Unlock()
+	if have {
+		return nil
+	}
+	return u.login(ctx)
+}
+
+// getRaw fragt einen Pfad ohne Huelle der Network Application ab (UniFi Drive, absoluter Pfad); mit Sitzung wird bei
+// 401 einmal neu angemeldet.
+func (u *Unifi) getRaw(ctx context.Context, path string, out any) error {
+	if err := u.ensureLogin(ctx); err != nil {
+		return err
+	}
+	err := u.wc.get(ctx, path, out)
+	if !u.apiKey && errors.Is(err, errWebAuth) {
+		u.sm.Lock()
+		u.cookie = ""
+		u.sm.Unlock()
+		if lerr := u.login(ctx); lerr != nil {
+			return lerr
+		}
+		err = u.wc.get(ctx, path, out)
+	}
+	return err
+}
+
+// ufNoApp: die App antwortet unter ihrem Pfad nicht (404 bzw. die Oberflaeche der Konsole statt JSON) - sie laeuft
+// auf dieser Konsole nicht.
+func ufNoApp(err error) bool {
+	var we *webError
+	if !errors.As(err, &we) {
+		return false
+	}
+	return we.Status == 404 || (we.Status == 200 && errors.Is(err, errWebResp))
+}
+
+// osConsole: UniFi OS (API-Schluessel bzw. erkannt) - nur dort gibt es mehrere Apps.
+func (u *Unifi) osConsole() bool {
+	if u.apiKey {
+		return true
+	}
+	u.sm.Lock()
+	defer u.sm.Unlock()
+	return u.unifiOS
+}
+
+// detectApps erkennt die Apps der Konsole (stuendlich bzw. force). Der selbst gehostete Network Server hat nur
+// Network. Antwortet keine App, kommt der Fehler der Network-Abfrage zurueck (wie bisher, mit Hinweisen).
+func (u *Unifi) detectApps(ctx context.Context, now time.Time, force bool) (ufApps, error) {
+	if !force && !u.apps.at.IsZero() && now.Sub(u.apps.at) < ufAppsEvery {
+		return u.apps, nil
+	}
+	if err := u.ensureLogin(ctx); err != nil {
+		return u.apps, err
+	}
+	if !u.osConsole() {
+		u.apps = ufApps{at: now, network: true}
+		return u.apps, nil
+	}
+	var a ufApps
+	var sites []ufSite
+	nerr := u.get(ctx, "/api/self/sites", &sites)
+	a.network = nerr == nil
+	var st udStorage
+	derr := u.getRaw(ctx, udPrefix+"/storage", &st)
+	a.drive = derr == nil
+	var we *webError
+	switch {
+	case a.network || a.drive:
+	case !ufNoApp(nerr):
+		return u.apps, nerr // Netz, Anmeldung, Rechte: Fehler der Network-Abfrage (mit Hinweisen)
+	case errors.As(nerr, &we) && we.Status == 404:
+		return u.apps, nerr // gar kein /proxy: kein UniFi OS (selbst gehosteter Server; Hinweis "kein UniFi OS")
+	case !ufNoApp(derr):
+		return u.apps, derr // UniFi OS ohne Network (Oberflaeche), Drive lehnt ab: z. B. falscher Schluessel
+	default:
+		return u.apps, nerr
+	}
+	a.at = now
+	u.apps = a
+	return a, nil
+}
+
 // get fragt einen Pfad der Network Application ab (ohne Praefix) und legt data in out ab.
 func (u *Unifi) get(ctx context.Context, path string, out any) error {
-	if !u.apiKey {
-		u.sm.Lock()
-		have := u.cookie != ""
-		u.sm.Unlock()
-		if !have {
-			if err := u.login(ctx); err != nil {
-				return err
-			}
-		}
+	if err := u.ensureLogin(ctx); err != nil {
+		return err
 	}
 	var env ufEnvelope
 	call := func() error {
@@ -533,6 +629,25 @@ func (u *Unifi) Test(ctx context.Context) TestResult {
 		res.Error = scrub(u.hint(err).Error(), u.secrets()...)
 		return res
 	}
+	apps, err := u.detectApps(ctx, u.now(), true)
+	if err != nil {
+		return fail(err)
+	}
+	if apps.drive {
+		var st udStorage
+		if err := u.getRaw(ctx, udPrefix+"/storage", &st); err != nil {
+			return fail(err)
+		}
+		var di udDeviceInfo
+		if err := u.getRaw(ctx, udPrefix+"/systems/device-info", &di); err == nil {
+			res.Version = shortText(firstNonEmpty(di.Firmware, di.Version))
+		}
+		res.Summary = model.T("monitor64.txt.ud_summary", "p", len(st.Pools), "n", len(st.Disks)+len(st.CacheSlots))
+		if !apps.network {
+			res.OK = true
+			return res
+		}
+	}
 	var sites []ufSite
 	if err := u.get(ctx, "/api/self/sites", &sites); err != nil {
 		return fail(err)
@@ -565,7 +680,7 @@ func (u *Unifi) Test(ctx context.Context) TestResult {
 			n++
 		}
 	}
-	res.Summary = model.T("monitor64.txt.uf_summary", "n", n)
+	res.Summary = model.Join(model.T("monitor64.txt.uf_summary", "n", n), res.Summary)
 	var si []ufSysinfo
 	if err := u.get(ctx, "/api/s/"+url.PathEscape(u.site)+"/stat/sysinfo", &si); err == nil && len(si) > 0 {
 		res.Version = shortText(si[0].Version)
@@ -573,19 +688,61 @@ func (u *Unifi) Test(ctx context.Context) TestResult {
 	return res
 }
 
-// Collect ist eine Abfragerunde (nicht gleichzeitig mit sich selbst aufrufen).
+// Collect ist eine Abfragerunde (nicht gleichzeitig mit sich selbst aufrufen): Network und/oder Drive, je nachdem,
+// was auf der Konsole laeuft. Scheitert eine von zwei Apps, ist das ein Teilfehler.
 func (u *Unifi) Collect(ctx context.Context) ([]model.Service, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, u.timeout())
 	defer cancel()
 	now := u.now()
-	base := "/api/s/" + url.PathEscape(u.site)
-	var devs []ufDevice
-	if err := u.get(ctx, base+"/stat/device", &devs); err != nil {
+	apps, err := u.detectApps(ctx, now, false)
+	if err != nil {
 		return nil, scrubErr(u.hint(err), u.secrets()...)
 	}
 	part := hintPartial{partial: &partial{secrets: u.secrets()}, hint: u.hint}
+	var out []model.Service
+	// fail: eine App antwortet nicht - allein ein Fehler der Runde, neben der anderen ein Teilfehler; ist sie nicht
+	// mehr da (404, Oberflaeche), erkennt die naechste Runde neu
+	fail := func(app string, err error, other bool, prefixes ...string) error {
+		if ufNoApp(err) {
+			u.apps.at = time.Time{}
+		}
+		if !other {
+			return scrubErr(u.hint(err), u.secrets()...)
+		}
+		part.add(app, err, prefixes...)
+		return nil
+	}
+	if apps.network {
+		svcs, err := u.network(ctx, now, part)
+		if err != nil {
+			if ferr := fail("network", err, apps.drive, "dev:", "port:", "wan", "clients", "alerts", "system", "updates"); ferr != nil {
+				return nil, ferr
+			}
+		}
+		out = append(out, svcs...)
+	}
+	if apps.drive {
+		svcs, err := u.drive(ctx, now, part)
+		if err != nil {
+			if ferr := fail("drive", err, apps.network, "raid:", "disk:", "drive", "cpu", "mem", "temp:", "if:"); ferr != nil {
+				return nil, ferr
+			}
+		}
+		out = append(out, svcs...)
+	}
+	sortServices(out)
+	return out, part.result()
+}
+
+// network ist eine Runde der Network Application (Geraete, Ports, WAN, Alarme, System, Updates).
+func (u *Unifi) network(ctx context.Context, now time.Time, part hintPartial) ([]model.Service, error) {
+	base := "/api/s/" + url.PathEscape(u.site)
+	var devs []ufDevice
+	if err := u.get(ctx, base+"/stat/device", &devs); err != nil {
+		return nil, err
+	}
 	if len(devs) > ufMaxDevices {
 		devs = devs[:ufMaxDevices]
 	}
@@ -646,8 +803,7 @@ func (u *Unifi) Collect(ctx context.Context) ([]model.Service, error) {
 		u.slowAt = now
 	}
 	out = append(out, ufSystem(u.sys, total, offline), ufUpdates(u.sys, fw))
-	sortServices(out)
-	return out, part.result()
+	return out, nil
 }
 
 // ufStates: Zustand eines Geraets (state) als Text; fact = Meldung dazu ("" = keine).

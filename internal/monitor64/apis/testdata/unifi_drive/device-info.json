@@ -1,0 +1,39 @@
+{
+ "networkInterfaces": [
+  {
+   "interface": "ethernet",
+   "interfaceName": "enp0s1",
+   "connected": false,
+   "maxSpeed": "GbE",
+   "linkSpeed": ""
+  },
+  {
+   "interface": "sfp+",
+   "interfaceName": "enp0s2",
+   "connected": true,
+   "maxSpeed": "10 GbE",
+   "linkSpeed": "10 GbE",
+   "address": "192.0.2.200",
+   "mac": "00:00:5e:00:53:01"
+  }
+ ],
+ "usbs": null,
+ "version": "4.4.31",
+ "name": "UNAS Pro",
+ "fabricName": "",
+ "fabricId": "",
+ "model": "UNASPRO",
+ "startupTime": "2026-11-14T23:49:14Z",
+ "memory": {
+  "free": 2785920,
+  "total": 8265408,
+  "available": 6536192
+ },
+ "cpu": {
+  "currentload": 0.026000000000000002,
+  "temperature": 60
+ },
+ "firmwareVersion": "6.0.18",
+ "status": "STATE_RUNNING",
+ "sfpAggregation": false
+}

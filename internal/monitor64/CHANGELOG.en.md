@@ -1,5 +1,12 @@
 # Monitor64 – Changes
 
+## 0.1.22 – 2026-11-16
+
+New:
+
+- UniFi: the "UniFi" access now also queries UniFi Drive – e.g. a UNAS Pro with the same API key. Monitor64 detects which apps run on the console (Network, Drive or both). There is one service per pool (RAID level, state, redundancy, usage with threshold, running scrub or rebuild) and one per disk (state, temperature, bad and uncorrectable sectors including "rising", power-on hours, wear on SSDs, risk notes, pool membership). In addition there are services for CPU, RAM, CPU temperature, network ports and the system with UniFi OS and Drive version, uptime and throughput. Before, the access failed on a UNAS because it only knew the Network Application.
+- UniFi: the hint for a refused API key now also names the UniFi OS settings (Control Plane → Integrations).
+
 ## 0.1.21 – 2026-11-16
 
 Bug fixes:

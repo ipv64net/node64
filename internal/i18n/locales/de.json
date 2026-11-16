@@ -6798,7 +6798,7 @@
       "hint_mikrotik": "Für RouterOS ab Version 7 (REST-API über HTTPS). Auf dem Router einen eigenen Benutzer in einer Gruppe mit nur read, api und rest-api anlegen und dem Dienst www-ssl ein Zertifikat geben – ohne Zertifikat nimmt RouterOS keine HTTPS-Verbindung an. Die Befehle unten erledigen beides (im Terminal des Routers). Das Zertifikat ist selbst signiert – den Fingerabdruck beim Test bestätigen. Monitor64 liest nur und stößt nichts an; ob ein Update bereitsteht, zeigt der Router erst, nachdem er selbst gesucht hat. RouterOS 6 hat keine REST-API – dort SNMP verwenden.",
       "dev_cmd": "Auf dem Gerät einrichten",
       "cmd_password": "Passwort",
-      "hint_unifi": "Für die UniFi Network Application auf einer UniFi-OS-Konsole (UDM, UDR, UCG, Cloud Key, UniFi OS Server) oder als selbst gehosteter Network Server. Am einfachsten mit API-Schlüssel: in UniFi Network unter „Integrations“ (bei Network 9 unter Einstellungen → Control Plane → Integrations) einen Schlüssel anlegen, hier als Geheimnis eintragen und den Benutzer leer lassen – das geht nur auf UniFi OS. Sonst einen lokalen Admin mit der Rolle „View Only“ anlegen („Restrict to local access only“, ohne Zwei-Faktor-Anmeldung) und Benutzer und Passwort eintragen; beim selbst gehosteten Server gehört der Port in die URL (meist 8443). Monitor64 liest nur. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
+      "hint_unifi": "Für UniFi-OS-Konsolen: die UniFi Network Application (UDM, UDR, UCG, Cloud Key, UniFi OS Server, auch selbst gehostet) und UniFi Drive auf einer UNAS (Pools, Platten, System) – Monitor64 erkennt selbst, was läuft. Am einfachsten mit API-Schlüssel: in den UniFi-OS-Einstellungen unter Control Plane → Integrations bzw. in UniFi Network unter „Integrations“ einen Schlüssel anlegen, hier als Geheimnis eintragen und den Benutzer leer lassen – das geht nur auf UniFi OS. Sonst einen lokalen Admin mit der Rolle „View Only“ anlegen („Restrict to local access only“, ohne Zwei-Faktor-Anmeldung) und Benutzer und Passwort eintragen; beim selbst gehosteten Server gehört der Port in die URL (meist 8443). Monitor64 liest nur. Das Zertifikat ist meist selbst signiert – den Fingerabdruck beim Test bestätigen.",
       "fp_secret": "Geheimnis (Token bzw. Passwort) für das neue Zertifikat – das gespeicherte geht nur an das bisherige",
       "fp_apply": "Übernehmen und testen"
     },
@@ -7779,7 +7779,7 @@
       "uf_locked": "zu viele abgelehnte Anmeldungen – die Konsole sperrt vorübergehend",
       "uf_login_pause": "nächster Versuch in {n} Min. (Zugang ändern, um sofort neu zu testen)",
       "uf_hint_site": "die Site „{s}“ gibt es nicht bzw. der Zugang darf sie nicht sehen",
-      "uf_hint_key": "API-Schlüssel prüfen: er muss in UniFi Network unter „Integrations“ dieser Konsole angelegt sein (Schlüssel aus dem Site Manager gelten lokal nicht); beim selbst gehosteten Network Server Benutzer und Passwort verwenden",
+      "uf_hint_key": "API-Schlüssel prüfen: er muss lokal auf dieser Konsole angelegt sein – in den UniFi-OS-Einstellungen unter Control Plane → Integrations (UNAS, neuere Konsolen) bzw. in UniFi Network unter „Integrations“; Schlüssel aus dem Site Manager gelten lokal nicht. Beim selbst gehosteten Network Server Benutzer und Passwort verwenden",
       "uf_hint_login": "Benutzer und Passwort prüfen; es muss ein lokaler Admin ohne Zwei-Faktor-Anmeldung sein",
       "uf_hint_perm": "dem Zugang fehlt das Recht – die Rolle „View Only“ für Network reicht",
       "uf_hint_no_os": "unter dieser Adresse antwortet kein UniFi OS – API-Schlüssel gibt es nur dort; beim selbst gehosteten Network Server Benutzer und Passwort verwenden (Port meist 8443)",
@@ -7824,7 +7824,17 @@
       "ha_state": "HA: {v}",
       "mc_no_containers": "mailcow meldet keine Container – erreicht mailcow seine Docker-API (dockerapi-mailcow)?",
       "mc_no_vmail": "mailcow meldet keinen Mail-Speicher",
-      "fb_no_soap_body": "Antwort ohne SOAP-Body"
+      "fb_no_soap_body": "Antwort ohne SOAP-Body",
+      "ud_slot": "Schacht {n}",
+      "ud_cache_slot": "Cache-Schacht {n}",
+      "ud_no_pool": "keinem Pool zugeordnet",
+      "ud_spare": "Hot-Spare",
+      "ud_risk": "Risiko: {v}",
+      "ud_protection": "Redundanz {cur} statt {exp}",
+      "ud_rebuild": "Wiederherstellung {v} %",
+      "ud_scrub_running": "Prüfung läuft",
+      "ud_cpu_temp": "CPU-Temperatur",
+      "ud_summary": "UniFi Drive: {p} Pool(s), {n} Platte(n)"
     },
     "smart": {
       "title": "SMART-Werte: {n}",

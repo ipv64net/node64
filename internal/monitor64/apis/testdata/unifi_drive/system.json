@@ -1,0 +1,29 @@
+{
+ "hardware": {
+  "shortname": "UNASPRO"
+ },
+ "name": "UNAS Pro",
+ "mac": "00:00:5e:00:53:02",
+ "directConnectDomain": "example.id.ui.direct",
+ "deviceState": "setup",
+ "deviceErrorCode": null,
+ "uidb": {
+  "guid": "00000000-0000-4000-8000-000000000002",
+  "id": "00000000-0000-4000-8000-000000000003",
+  "images": {
+   "default": "00000000000000000000000000000001",
+   "nopadding": "00000000000000000000000000000002",
+   "topology": "00000000000000000000000000000003",
+   "rack": "00000000000000000000000000000004"
+  }
+ },
+ "debugEnabled": false,
+ "cloudConnected": true,
+ "cloudRegistrationRevoked": false,
+ "isOrHasGatewayInLAN": true,
+ "remoteAccessEnabled": true,
+ "hasInternet": true,
+ "hasInternetLastChanged": 1794700230864,
+ "isSingleUser": false,
+ "isSsoEnabled": true
+}

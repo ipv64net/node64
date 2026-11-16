@@ -6798,7 +6798,7 @@
       "hint_mikrotik": "For RouterOS version 7 and later (REST API over HTTPS). On the router, create a dedicated user in a group with only read, api and rest-api, and give the www-ssl service a certificate – without one RouterOS accepts no HTTPS connection. The commands below do both (in the router's terminal). The certificate is self-signed – confirm the fingerprint during the test. Monitor64 only reads and triggers nothing; whether an update is available is only shown after the router has checked for itself. RouterOS 6 has no REST API – use SNMP there.",
       "dev_cmd": "Set up on the device",
       "cmd_password": "password",
-      "hint_unifi": "For the UniFi Network Application on a UniFi OS console (UDM, UDR, UCG, Cloud Key, UniFi OS Server) or as a self-hosted Network Server. Easiest with an API key: create a key in UniFi Network under \"Integrations\" (Network 9: Settings → Control Plane → Integrations), enter it here as the secret and leave the user empty – this only works on UniFi OS. Otherwise create a local admin with the role \"View Only\" (\"Restrict to local access only\", without two-factor login) and enter user and password; for the self-hosted server the port belongs in the URL (usually 8443). Monitor64 only reads. The certificate is usually self-signed – confirm the fingerprint during the test.",
+      "hint_unifi": "For UniFi OS consoles: the UniFi Network Application (UDM, UDR, UCG, Cloud Key, UniFi OS Server, also self-hosted) and UniFi Drive on a UNAS (pools, disks, system) – Monitor64 detects what runs. Easiest with an API key: create a key in the UniFi OS settings under Control Plane → Integrations or in UniFi Network under \"Integrations\", enter it here as the secret and leave the user empty – this only works on UniFi OS. Otherwise create a local admin with the role \"View Only\" (\"Restrict to local access only\", without two-factor login) and enter user and password; for the self-hosted server the port belongs in the URL (usually 8443). Monitor64 only reads. The certificate is usually self-signed – confirm the fingerprint during the test.",
       "fp_secret": "Secret (token or password) for the new certificate – the stored one only goes to the previous one",
       "fp_apply": "Apply and test"
     },
@@ -7779,7 +7779,7 @@
       "uf_locked": "too many rejected logins – the console blocks temporarily",
       "uf_login_pause": "next attempt in {n} min (change the access to test again right away)",
       "uf_hint_site": "the site \"{s}\" does not exist or the access may not see it",
-      "uf_hint_key": "check the API key: it must be created in UniFi Network under \"Integrations\" of this console (keys from the Site Manager do not work locally); use user and password for the self-hosted Network Server",
+      "uf_hint_key": "check the API key: it must be created locally on this console – in the UniFi OS settings under Control Plane → Integrations (UNAS, newer consoles) or in UniFi Network under \"Integrations\"; keys from the Site Manager do not work locally. Use user and password for the self-hosted Network Server",
       "uf_hint_login": "check user and password; it must be a local admin without two-factor login",
       "uf_hint_perm": "the access lacks permission – the role \"View Only\" for Network is enough",
       "uf_hint_no_os": "no UniFi OS answers at this address – API keys exist only there; use user and password for the self-hosted Network Server (port usually 8443)",
@@ -7824,7 +7824,17 @@
       "ha_state": "HA: {v}",
       "mc_no_containers": "mailcow reports no containers – can mailcow reach its Docker API (dockerapi-mailcow)?",
       "mc_no_vmail": "mailcow reports no mail storage",
-      "fb_no_soap_body": "answer without SOAP body"
+      "fb_no_soap_body": "answer without SOAP body",
+      "ud_slot": "Bay {n}",
+      "ud_cache_slot": "Cache bay {n}",
+      "ud_no_pool": "not in a pool",
+      "ud_spare": "hot spare",
+      "ud_risk": "risk: {v}",
+      "ud_protection": "redundancy {cur} instead of {exp}",
+      "ud_rebuild": "rebuild {v} %",
+      "ud_scrub_running": "scrub running",
+      "ud_cpu_temp": "CPU temperature",
+      "ud_summary": "UniFi Drive: {p} pool(s), {n} disk(s)"
     },
     "smart": {
       "title": "SMART values: {n}",
