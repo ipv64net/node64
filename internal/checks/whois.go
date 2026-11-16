@@ -418,6 +418,10 @@ func rdapBase(ctx context.Context, kind, query string) (string, error) {
 			}
 		}
 	}
+	if best == "" && kind == "domain" {
+		tld := query[strings.LastIndex(query, ".")+1:]
+		best = rdapFallback[strings.ToLower(tld)]
+	}
 	if best == "" {
 		return "", errNoRDAP
 	}
@@ -425,6 +429,9 @@ func rdapBase(ctx context.Context, kind, query string) (string, error) {
 }
 
 var errNoRDAP = errors.New("no RDAP server for this target")
+
+// rdapFallback: RDAP-Server von Registries, die (noch) nicht im IANA-Bootstrap stehen (#170: SWITCH fuer .ch/.li).
+var rdapFallback = map[string]string{"ch": "https://rdap.nic.ch/", "li": "https://rdap.nic.ch/"}
 
 // rdapMatch: passt ein Bootstrap-Eintrag (TLD, Netz bzw. AS-Bereich)? l = Laenge fuer "genauester gewinnt".
 func rdapMatch(kind, query, key string) (int, bool) {
@@ -807,8 +814,35 @@ func whoisQuery(ctx context.Context, server, query string) (string, error) {
 
 var whoisNotFound = regexp.MustCompile(`(?i)^(no match|not found|no entries found|no data found|status:\s*free|domain not found|the queried object does not exist|% no such domain|no object found|this query returned 0 objects)`)
 
+// whoisKeyLine: Zeile der Form "Feld: Wert" bzw. "Feld:" (Feldname aus Buchstaben, Ziffern, Leerzeichen und ._/-).
+var whoisKeyLine = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9 ._/-]{0,60}:(\s|$)`)
+
+// unblockWhois wandelt das Blockformat mancher Registries (SWITCH fuer .ch/.li, #170: Feldname allein in einer
+// Zeile, die Werte in den Zeilen darunter bis zur Leerzeile) in "Feld: Wert"-Zeilen um. Andere Antworten bleiben gleich.
+func unblockWhois(text string) string {
+	lines := strings.Split(text, "\n")
+	key := ""
+	for n, raw := range lines {
+		line := strings.TrimSpace(raw)
+		switch {
+		case line == "":
+			key = ""
+		case whoisKeyLine.MatchString(line):
+			k, v, _ := strings.Cut(line, ":")
+			key = ""
+			if strings.TrimSpace(v) == "" {
+				key = strings.TrimSpace(k)
+			}
+		case key != "":
+			lines[n] = key + ": " + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // parseWhoisText liest die gaengigen Schluessel der Registries und RIRs (Gross-/Kleinschreibung egal).
 func parseWhoisText(text, kind string) *WhoisInfo {
+	text = unblockWhois(text)
 	i := &WhoisInfo{Kind: kind}
 	var addr []string
 	seenNS := map[string]bool{}
@@ -861,7 +895,7 @@ func parseWhoisText(text, kind string) *WhoisInfo {
 			if t := parseWhoisTime(v); !t.IsZero() && (i.Expires.IsZero() || t.Before(i.Expires)) {
 				i.Expires = t
 			}
-		case "creation date", "created", "registered", "registration time", "regdate":
+		case "creation date", "created", "registered", "registration time", "regdate", "first registration date":
 			if t := parseWhoisTime(v); !t.IsZero() && i.Created.IsZero() {
 				i.Created = t
 			}

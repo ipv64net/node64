@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 3.2.5 – 2026-11-16
+
+### Behoben
+- Whois-Check für .ch- und .li-Domains: Die Antwort der Registry SWITCH (Blockformat, Wert in der Zeile unter dem Feldnamen) wird gelesen, und RDAP nutzt deren Server, obwohl er im IANA-Verzeichnis fehlt (#170). Gilt auch für Online-Checks mit dem Update der ipv64-Server.
+
 ## 3.2.4 – 2026-11-15
 
 ### Geändert

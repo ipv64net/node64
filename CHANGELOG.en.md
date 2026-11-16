@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Health checks: whois check for .ch and .li domains works (block format of the SWITCH registry, RDAP server without IANA entry, #170).
 - IPAM64: own logo in the overview, on the dashboard and under Settings → Modules.
 - PROXY64 1.56.6 (security): requests via the Docker gateway (bridge network) no longer count as home network – access lists with private networks, "own network only" and the home network exemption of the limits do not apply to them; a hint recommends `network_mode: host`.
 
