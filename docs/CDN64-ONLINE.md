@@ -806,6 +806,12 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   (`tunnel.DropTooLarge`, wie eine kleinere MTU; Zähler `cdn64_edge_quic_datagrams_dropped_total`). Labor 30 ms ohne
   Verlust: Upload ~3 → 470 Mbit/s, Download 140 → 420 Mbit/s. Bleibt: der Tunnel (quic-go Cubic, eine Verbindung) ist
   verlustempfindlich – 0,5 % Verlust ≈ 10 Mbit/s je Tunnel-Verbindung (TCP wie HTTP/3); mehrere Sessions helfen bei TCP.
+  **Frühe Antwort (2026-11-16, PROXY64 1.56.7 + cdn64-edge 0.22.4):** Der eigentliche Speedtest-Einbruch (OpenSpeedTest
+  hinter nginx, speed.lappen.ipv64.net): nginx antwortet auf den Upload-POST sofort mit 200, ReverseProxy schloss den
+  Body, Go beendete unter HTTP/2/3 den Stream des Besuchers (STOP_SENDING/RST_STREAM), HTTP/1.1 ab 256 KB
+  „Connection: close“ – der Browser hörte auf zu senden. Jetzt `edge.KeepUpload` in PROXY64 und im Modus-2/3-Weg der
+  Server: Transport schließt nur eine Hülle, danach Rest lesen und verwerfen (1 GiB/30 s, EnableFullDuplex für HTTP/1.1),
+  wie nginx. Tests `TestUploadAfterEarlyAnswer` (cdn64), `TestTerminate` (Fall /early).
 - **TCP-/UDP-Streams (Portmapper Modus 1/2):** gebaut 2026-10-21 (PROXY64 1.24.0, cdn64-edge 0.15.0), siehe 8.3.
 - **Fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,

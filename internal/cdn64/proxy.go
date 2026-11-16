@@ -1125,7 +1125,13 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 				r.Body = &countBody{ReadCloser: r.Body, n: &sw.in}
 			}
 		}
+		// Ziel antwortet vor dem Ende des Uploads: Rest danach lesen und verwerfen (edge.KeepUpload)
+		done := func() {}
+		if !wsUpgrade(r) && !grpcReq(r) {
+			done = edge.KeepUpload(sw, r)
+		}
 		next.ServeHTTP(sw, r)
+		done()
 		if sw.status >= 500 && sw.status != http.StatusBadGateway { // 502 zaehlt der ErrorHandler schon
 			st.errors.Add(1)
 		}

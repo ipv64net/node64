@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -88,6 +89,14 @@ func TestTerminate(t *testing.T) {
 					hj.Close()
 					return
 				}
+				if r.URL.Path == "/early" { // wie PROXY64 vor nginx: Antwort mit Laenge zuerst, Upload danach lesen
+					_ = http.NewResponseController(w).EnableFullDuplex()
+					w.Header().Set("Content-Length", "2")
+					_, _ = io.WriteString(w, "ok")
+					_ = http.NewResponseController(w).Flush()
+					_, _ = io.Copy(io.Discard, r.Body)
+					return
+				}
 				n, _ := io.Copy(io.Discard, r.Body)
 				_, _ = io.WriteString(w, "node "+r.Host+" client="+h.Client+" proto="+r.Header.Get("X-Forwarded-Proto")+" xff="+r.Header.Get("X-Forwarded-For")+
 					" body="+strconv.FormatInt(n, 10))
@@ -143,6 +152,22 @@ func TestTerminate(t *testing.T) {
 	}
 	if b.stats.of("m2.test").BytesIn.Load() < 6<<20 || a.stats.of("m2.test").ViaPeer.Load() != 1 {
 		t.Fatalf("counters: in=%d via=%d", b.stats.of("m2.test").BytesIn.Load(), a.stats.of("m2.test").ViaPeer.Load())
+	}
+	// fruehe Antwort: der Besucher muss seinen Upload trotzdem zu Ende schicken koennen (vorher Stream zu, Upload brach ab)
+	early := &countingReader{r: bytes.NewReader(make([]byte, 8<<20))}
+	ereq, _ := http.NewRequest("POST", "https://m2.test/early", early)
+	ereq.ContentLength = 8 << 20
+	eresp, err := cb.Do(ereq)
+	if err != nil {
+		t.Fatalf("early answer: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, eresp.Body)
+	eresp.Body.Close()
+	for i := 0; i < 100 && early.n.Load() < 8<<20; i++ {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if eresp.StatusCode != 200 || early.n.Load() != 8<<20 {
+		t.Fatalf("early answer: %d, upload sent %d of %d", eresp.StatusCode, early.n.Load(), 8<<20)
 	}
 	// Domain-Fronting: SNI m2.test, Host fremd
 	resp, _ = get(cb, "GET", "https://m2.test/", "evil.test", nil)
@@ -407,4 +432,16 @@ func TestPrefersGerman(t *testing.T) {
 			t.Errorf("%q: %v", h, got)
 		}
 	}
+}
+
+// countingReader zaehlt, was der Client vom Upload wirklich losgeworden ist.
+type countingReader struct {
+	r io.Reader
+	n atomic.Int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n.Add(int64(n))
+	return n, err
 }
