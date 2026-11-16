@@ -6,6 +6,7 @@ Neu:
 
 - UniFi: Der Zugang „UniFi“ fragt jetzt auch UniFi Drive ab – z. B. eine UNAS Pro mit demselben API-Schlüssel. Monitor64 erkennt selbst, welche Apps auf der Konsole laufen (Network, Drive oder beides). Dazu kommen je Pool ein Dienst (RAID-Stufe, Zustand, Redundanz, Belegung mit Schwelle, laufende Prüfung bzw. Wiederherstellung) und je Platte einer (Zustand, Temperatur, defekte und nicht korrigierbare Sektoren samt „steigen“, Betriebsstunden, Verschleiß bei SSDs, Risiko-Hinweise, Pool-Zugehörigkeit). Außerdem gibt es Dienste für CPU, RAM, CPU-Temperatur, Netz-Ports und das System mit UniFi-OS- und Drive-Version, Laufzeit und Durchsatz. Bisher scheiterte der Zugang auf einer UNAS, weil er nur die Network Application kannte.
 - UniFi: Der Hinweis bei einem abgelehnten API-Schlüssel nennt jetzt auch die UniFi-OS-Einstellungen (Control Plane → Integrations).
+- Zustand gewollt: Meldet eine Zustandsregel (z. B. „Port ohne Link“ an einem gerade ungenutzten Port, „Gast läuft nicht“, „Neustart nötig“), lässt sich im Dienst-Dialog bestätigen, dass der Zustand in Ordnung ist – „bis sich der Zustand ändert“ (bekommt der Port wieder Link, gilt die Regel wieder und ein späterer Ausfall meldet) oder „dauerhaft nicht melden“. Bestätigte Zustände stehen in der Diensteliste und lassen sich aufheben. API: `accept` beim Ändern eines Dienstes.
 
 ## 0.1.21 – 2026-11-16
 

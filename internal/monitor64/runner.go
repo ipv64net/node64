@@ -213,6 +213,10 @@ type SvcView struct {
 	// nach 24 Std.) – damit sichtbar ist, warum der Dienst noch OK ist
 	Pending []PendView   `json:"pending,omitempty"`
 	Metrics []MetricView `json:"metrics,omitempty"`
+	// Firing: Zustandsregeln, die gerade melden (Warnung/Kritisch); Accepted: Zustandsregeln, deren Bedingung gilt, die
+	// aber als gewollt bestaetigt sind ("in Ordnung, bis sich der Zustand aendert") - beides fuer den Dienst-Dialog
+	Firing   []string `json:"firing,omitempty"`
+	Accepted []string `json:"accepted,omitempty"`
 }
 
 // HostView ist der aktuelle Stand eines Hosts fuer die Oberflaeche.
@@ -703,6 +707,16 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			kindList = append(kindList, k)
 		}
 		sort.Strings(kindList)
+		// bestaetigte Zustaende, deren Bedingung entfallen ist (bzw. deren Regel-Art der Dienst nicht mehr hat): Ausnahme
+		// entfernen, damit der naechste Eintritt wieder meldet
+		var accDone []string
+		if ok || !r.VanishedAt.IsZero() {
+			for k, hr := range hostRules {
+				if hr.Accepted != nil && *hr.Accepted && !kinds[k] {
+					accDone = append(accDone, k)
+				}
+			}
+		}
 		for _, k := range kindList {
 			cond := false
 			text := ""
@@ -742,6 +756,16 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 					}
 				}
 			}
+			// "in Ordnung, bis sich der Zustand aendert": solange die Bedingung gilt, meldet sie nichts; entfaellt sie
+			// (Dienst geliefert bzw. wieder da), ist die Ausnahme erledigt
+			if hr := hostRules[k]; hr.Accepted != nil && *hr.Accepted && (ok || k == eval.KindServiceGone) {
+				if cond {
+					cond = false
+					sv.Accepted = append(sv.Accepted, k)
+				} else {
+					accDone = append(accDone, k)
+				}
+			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, k), k)
 			tr := rt.tracker(r.Key+"|state:"+k, iv)
 			var st eval.Status
@@ -757,12 +781,18 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				st = tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(cond)})
 			}
 			ms = append(ms, eval.MetricStatus{Name: k, Status: st, Notify: e.Notify()})
+			if cond && (st.State == eval.Warn || st.State == eval.Crit) {
+				sv.Firing = append(sv.Firing, k)
+			}
 			if cond && st.State != eval.OK && text != "" {
 				sv.Cause = text
 			}
 			if cond && st.State == eval.OK && (st.Pending == eval.Warn || st.Pending == eval.Crit) && !st.PendingAt.IsZero() {
 				sv.Pending = append(sv.Pending, PendView{Kind: k, State: st.Pending, Since: st.PendingSince, At: st.PendingAt})
 			}
+		}
+		if len(accDone) > 0 && role == roleReport {
+			m.clearAccepted(dbctx, h.UID, r, hostRules, accDone)
 		}
 		// eigene Skripte: Zustand direkt aus dem Skript; ohne Daten letzter Zustand, nach 3 Intervallen Unbekannt
 		if r.Kind == "local" {

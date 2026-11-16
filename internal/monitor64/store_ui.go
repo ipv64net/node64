@@ -46,6 +46,30 @@ func (s *Store) UpdateService(ctx context.Context, hostUID, key string, p svcPat
 	return affected(res, err)
 }
 
+// clearAccepted entfernt erledigte Ausnahmen "in Ordnung, bis sich der Zustand aendert" (eval.Rule.Accepted) aus den
+// Schwellen "nur dieser Dienst" - die Bedingung ist entfallen, der naechste Eintritt meldet wieder.
+func (m *Module) clearAccepted(ctx context.Context, hostUID string, r *ServiceRow, rules map[string]eval.Rule, kinds []string) {
+	next := make(map[string]eval.Rule, len(rules))
+	for k, v := range rules {
+		next[k] = v
+	}
+	for _, k := range kinds {
+		v := next[k]
+		v.Accepted = nil
+		if v.Empty() {
+			delete(next, k)
+		} else {
+			next[k] = v
+		}
+	}
+	s := encodeHostRules(next)
+	if err := m.store.UpdateService(ctx, hostUID, r.Key, svcPatch{HostRule: &s}, SystemActor); err != nil {
+		m.log.Warn("monitor64: clear accepted state", "host", hostUID, "key", r.Key, "err", err)
+		return
+	}
+	r.HostRule = s
+}
+
 // encodeHostRules schreibt die Schwellen "nur dieser Dienst" (Regel-Art -> Regel) fuer m64_services.host_rule;
 // leere Regeln entfallen, ohne Regel "" (Gegenstueck: parseHostRules im Kern).
 func encodeHostRules(rules map[string]eval.Rule) string {

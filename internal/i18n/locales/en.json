@@ -6225,7 +6225,8 @@
       "more_rules": "+{n} more",
       "pending_state": "{s} from {t} ({k})",
       "address_secret_title": "New address",
-      "address_secret_ok": "Save and remove secrets"
+      "address_secret_ok": "Save and remove secrets",
+      "accepted_state": "{k}: intended until the state changes"
     },
     "acc": {
       "type": "Type",
@@ -6384,7 +6385,17 @@
       "traps_handled": "polled",
       "traps_handled_hint": "Known trap: immediate poll, the state comes from the poll.",
       "traps_values": "{n} values",
-      "traps_none": "No traps received yet."
+      "traps_none": "No traps received yet.",
+      "accept_title": "Intended state?",
+      "accept_q": "\"{k}\" is reporting. Is this state fine?",
+      "accept_change": "Fine until the state changes",
+      "accept_always": "Never report",
+      "accept_hint": "\"Until the state changes\": once the state is normal again (e.g. the port gets a link), the rule applies again – a later failure reports. \"Never\": the rule no longer reports on this service until you undo it.",
+      "accepted_change": "\"{k}\" counts as fine until the state changes",
+      "accepted_always": "\"{k}\" is never reported on this service",
+      "accept_clear": "Undo",
+      "accept_toast": "State accepted as fine",
+      "accept_cleared_toast": "Exception removed"
     },
     "f": {
       "name": "Name",
@@ -6977,7 +6988,8 @@
       "agent_current": "The agent is already up to date (version {version}).",
       "backup_max_age_h": "Maximum backup age: 1 to 8760 hours (Proxmox Backup Server only).",
       "site": "Invalid site (letters, digits, - and _; UniFi access only).",
-      "address_secret": "New address: the accesses {list} would send their stored secret to the new address (their target is not bound by fingerprint or host key). Saving removes these secrets – enter them again at the access afterwards."
+      "address_secret": "New address: the accesses {list} would send their stored secret to the new address (their target is not bound by fingerprint or host key). Saving removes these secrets – enter them again at the access afterwards.",
+      "accept_mode": "Invalid value for \"state is fine\" (change, always or empty)."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",

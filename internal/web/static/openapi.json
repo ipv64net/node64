@@ -6070,6 +6070,10 @@
               "warn",
               "off"
             ]
+          },
+          "accepted": {
+            "type": "boolean",
+            "description": "Nur Stufe „dieser Dienst“, Zustandsregeln: der aktuelle Zustand ist gewollt und meldet nichts, bis die Bedingung entfällt – dann entfernt Monitor64 die Ausnahme selbst (setzen über `accept` beim Ändern des Dienstes)"
           }
         }
       },
@@ -7418,6 +7422,20 @@
             ],
             "description": "Weitere Werte abrufbar: `smart` = alle SMART-Werte über `GET /monitor64/hosts/{uid}/smart?key=`"
           },
+          "firing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Zustandsregeln, die gerade melden (Warnung/Kritisch)"
+          },
+          "accepted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Zustandsregeln, deren Bedingung gilt, die aber als gewollt bestätigt sind (bis sich der Zustand ändert)"
+          },
           "pending": {
             "type": "array",
             "description": "Zustandsregeln, deren Bedingung gilt, die aber erst nach ihrer Dauer melden (z. B. Sicherheitsupdates nach 24 Std.)",
@@ -7914,6 +7932,28 @@
           "reset": {
             "type": "boolean",
             "description": "Alle Schwellen „dieser Host“ der Arten dieses Dienstes entfernen"
+          },
+          "accept": {
+            "type": "object",
+            "description": "Zustand einer Zustandsregel dieses Dienstes ist in Ordnung (z. B. Port ohne Link)",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "Zustandsregel, z. B. if.down"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "change",
+                  "always",
+                  ""
+                ],
+                "description": "`change`: bis sich der Zustand ändert; `always`: dauerhaft nicht melden (Schwere `off`); leer: Ausnahme aufheben"
+              }
+            },
+            "required": [
+              "kind"
+            ]
           }
         }
       },

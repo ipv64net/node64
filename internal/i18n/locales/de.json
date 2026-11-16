@@ -6225,7 +6225,8 @@
       "more_rules": "+{n} weitere",
       "pending_state": "{s} ab {t} ({k})",
       "address_secret_title": "Neue Adresse",
-      "address_secret_ok": "Speichern und Geheimnisse entfernen"
+      "address_secret_ok": "Speichern und Geheimnisse entfernen",
+      "accepted_state": "{k}: gewollt, bis sich der Zustand ändert"
     },
     "acc": {
       "type": "Art",
@@ -6384,7 +6385,17 @@
       "traps_handled": "abgefragt",
       "traps_handled_hint": "Bekannter Trap: sofortige Abfrage, der Zustand kommt aus der Abfrage.",
       "traps_values": "{n} Werte",
-      "traps_none": "Noch keine Traps empfangen."
+      "traps_none": "Noch keine Traps empfangen.",
+      "accept_title": "Zustand gewollt?",
+      "accept_q": "„{k}“ meldet gerade. Ist dieser Zustand in Ordnung?",
+      "accept_change": "In Ordnung, bis sich der Zustand ändert",
+      "accept_always": "Dauerhaft nicht melden",
+      "accept_hint": "„Bis sich der Zustand ändert“: Wird der Zustand wieder normal (z. B. der Port bekommt Link), gilt die Regel wieder – ein späterer Ausfall meldet. „Dauerhaft“: Die Regel meldet an diesem Dienst nichts mehr, bis du es zurücknimmst.",
+      "accepted_change": "„{k}“ gilt als in Ordnung, bis sich der Zustand ändert",
+      "accepted_always": "„{k}“ wird an diesem Dienst dauerhaft nicht gemeldet",
+      "accept_clear": "Aufheben",
+      "accept_toast": "Zustand als in Ordnung übernommen",
+      "accept_cleared_toast": "Ausnahme aufgehoben"
     },
     "f": {
       "name": "Name",
@@ -6977,7 +6988,8 @@
       "agent_current": "Der Agent ist schon aktuell (Version {version}).",
       "backup_max_age_h": "Höchstalter der Backups: 1 bis 8760 Stunden (nur Proxmox Backup Server).",
       "site": "Site ungültig (Buchstaben, Ziffern, - und _; nur beim Zugang UniFi).",
-      "address_secret": "Neue Adresse: Die Zugänge {list} würden ihr gespeichertes Geheimnis an die neue Adresse senden (ihr Ziel ist nicht über Fingerabdruck bzw. Hostschlüssel gebunden). Beim Speichern werden diese Geheimnisse entfernt – danach am Zugang neu eingeben."
+      "address_secret": "Neue Adresse: Die Zugänge {list} würden ihr gespeichertes Geheimnis an die neue Adresse senden (ihr Ziel ist nicht über Fingerabdruck bzw. Hostschlüssel gebunden). Beim Speichern werden diese Geheimnisse entfernt – danach am Zugang neu eingeben.",
+      "accept_mode": "Ungültige Angabe für „Zustand in Ordnung“ (change, always oder leer)."
     },
     "quote": "„{t}“",
     "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",

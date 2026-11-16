@@ -6,6 +6,7 @@ New:
 
 - UniFi: the "UniFi" access now also queries UniFi Drive – e.g. a UNAS Pro with the same API key. Monitor64 detects which apps run on the console (Network, Drive or both). There is one service per pool (RAID level, state, redundancy, usage with threshold, running scrub or rebuild) and one per disk (state, temperature, bad and uncorrectable sectors including "rising", power-on hours, wear on SSDs, risk notes, pool membership). In addition there are services for CPU, RAM, CPU temperature, network ports and the system with UniFi OS and Drive version, uptime and throughput. Before, the access failed on a UNAS because it only knew the Network Application.
 - UniFi: the hint for a refused API key now also names the UniFi OS settings (Control Plane → Integrations).
+- Intended state: when a state rule reports (e.g. "Port without link" on a port currently not in use, "Guest not running", "Reboot required"), the service dialog lets you confirm that the state is fine – "until the state changes" (once the port gets a link again, the rule applies again and a later failure reports) or "never report". Accepted states are shown in the service list and can be undone. API: `accept` when changing a service.
 
 ## 0.1.21 – 2026-11-16
 

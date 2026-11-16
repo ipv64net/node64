@@ -147,6 +147,10 @@ type Rule struct {
 	Mode     *Mode      `json:"mode,omitempty"`
 	Report   *Report    `json:"report,omitempty"`
 	Severity *Severity  `json:"severity,omitempty"`
+	// Accepted: nur Stufe "dieser Dienst", Zustandsregeln - der aktuelle Zustand ist gewollt ("Port ohne Link ist in
+	// Ordnung") und meldet nichts, bis die Bedingung wieder entfaellt; dann entfernt die Runde die Ausnahme, der
+	// naechste Eintritt meldet wieder. Dauerhaft nicht melden ist Severity "off".
+	Accepted *bool `json:"accepted,omitempty"`
 }
 
 // Validate prueft eine Regel auf offensichtliche Fehler (nicht endliche Zahlen, negative Werte).

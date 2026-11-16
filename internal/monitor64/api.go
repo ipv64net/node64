@@ -1253,6 +1253,15 @@ type svcUpdateIn struct {
 	Report *string                 `json:"report"` // "", show
 	Rules  map[string]ruleChangeIn `json:"rules"`  // Regel-Art -> Aenderung (fehlende Arten bleiben unveraendert)
 	Reset  bool                    `json:"reset"`  // alle Schwellen "dieser Host" der Arten dieses Dienstes entfernen
+	// Accept: Zustand einer Zustandsregel ist gewollt ("Port ohne Link ist in Ordnung") - mode "change" bis sich der
+	// Zustand aendert, "always" dauerhaft nicht melden, "" Ausnahme aufheben
+	Accept *acceptIn `json:"accept"`
+}
+
+// acceptIn bestaetigt bzw. hebt den Zustand einer Zustandsregel am Dienst auf.
+type acceptIn struct {
+	Kind string `json:"kind"`
+	Mode string `json:"mode"` // change, always, ""
 }
 
 // ruleChangeIn ist die Aenderung der Stufe "dieser Host" fuer eine Regel-Art.
@@ -1387,6 +1396,40 @@ func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
 			m.fail(w, r, err)
 			return
 		}
+	}
+	if a := in.Accept; a != nil {
+		rk, known := ruleKindOf(a.Kind)
+		if !known || !rk.State || !slices.Contains(m.ruleKindsOfService(h.UID, row), a.Kind) {
+			m.fail(w, r, errBad("rule_kind", "kind", a.Kind, "error", "no state rule of this service"))
+			return
+		}
+		rule := svcRules[a.Kind]
+		off := eval.SevOff
+		switch a.Mode {
+		case "change": // bis sich der Zustand aendert (die Runde entfernt die Ausnahme)
+			t := true
+			rule.Accepted = &t
+			if rule.Severity != nil && *rule.Severity == eval.SevOff {
+				rule.Severity = nil
+			}
+		case "always": // dauerhaft nicht melden
+			rule.Accepted, rule.Severity = nil, &off
+		case "": // aufheben
+			rule.Accepted = nil
+			if rule.Severity != nil && *rule.Severity == eval.SevOff {
+				rule.Severity = nil
+			}
+		default:
+			m.fail(w, r, errBad("accept_mode"))
+			return
+		}
+		if rule.Empty() {
+			delete(svcRules, a.Kind)
+		} else {
+			svcRules[a.Kind] = rule
+		}
+		svcChanged = true
+		details = append(details, "accept="+a.Kind+":"+firstNonEmpty(a.Mode, "clear"))
 	}
 	if svcChanged {
 		s := encodeHostRules(svcRules)
