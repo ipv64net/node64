@@ -366,8 +366,8 @@ func queryServiceConfig(scm windows.Handle, s *svcInfo) bool {
 	return true
 }
 
-// readReboot prueft die Registry-Merkmale fuer "Neustart noetig".
-func readReboot() (wu, cbs, renames bool) {
+// readReboot prueft die Registry-Merkmale fuer "Neustart noetig" (renames, first: pendingRenames).
+func readReboot() (wu, cbs bool, renames int, first string) {
 	keyExists := func(path string) bool {
 		k, err := registry.OpenKey(registry.LOCAL_MACHINE, path, registry.QUERY_VALUE)
 		if err != nil {
@@ -380,16 +380,11 @@ func readReboot() (wu, cbs, renames bool) {
 	cbs = keyExists(`SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending`)
 	if k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager`, registry.QUERY_VALUE); err == nil {
 		if v, _, err := k.GetStringsValue("PendingFileRenameOperations"); err == nil {
-			for _, s := range v {
-				if s != "" {
-					renames = true
-					break
-				}
-			}
+			renames, first = pendingRenames(v)
 		} else if errors.Is(err, registry.ErrUnexpectedType) {
-			renames = true // anderer Typ als REG_MULTI_SZ: vorhandener Wert zaehlt
+			renames = 1 // anderer Typ als REG_MULTI_SZ: vorhandener Wert zaehlt (Inhalt unbekannt)
 		}
 		k.Close()
 	}
-	return wu, cbs, renames
+	return wu, cbs, renames, first
 }

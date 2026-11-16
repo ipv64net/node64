@@ -6,6 +6,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 - CDN64 servers (cdn64-edge 0.22.6, already rolled out): UDP port mapper (e.g. WireGuard) – downloads often did not get going at all or only at a few Mbit/s in all modes; the reflection protection no longer chokes the start.
 
+- Monitor64: Windows agent 0.1.10 – "Reboot required" is no longer permanently "yes" just because Windows wants to delete leftover files on the next start (PendingFileRenameOperations); the reason is readable.
 - Monitor64: intended state – when e.g. "Port without link" reports on an unused port, the service dialog lets you confirm that this is fine: until the state changes or permanently. Works for all state rules.
 - Monitor64: the UniFi access now also monitors UniFi Drive, e.g. a UNAS Pro with an API key – pools, disks (state, temperature, sectors), CPU, RAM, network ports and system. Monitor64 detects whether Network, Drive or both run.
 ## 1.7.6 – 2026-11-16

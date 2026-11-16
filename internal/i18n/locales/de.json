@@ -7213,7 +7213,10 @@
       "too_large": "Ausgabe zu groß ({a} Bytes, höchstens {b})",
       "unknown_error": "unbekannter Fehler",
       "unreadable": "Ausgabe nicht lesbar",
-      "upgrade_locked": "Updates über die Paketverwaltung sind auf diesem System gesperrt (z. B. UGOS – Aktualisierung nur per Firmware)"
+      "upgrade_locked": "Updates über die Paketverwaltung sind auf diesem System gesperrt (z. B. UGOS – Aktualisierung nur per Firmware)",
+      "reboot_cbs": "Windows-Komponenten (CBS)",
+      "reboot_rename": "{a} Datei(en) werden beim Neustart ersetzt, z. B. {b}",
+      "reboot_pfro_old": "ausstehende Dateiaktionen (PendingFileRenameOperations; ab Agent 0.1.10 zählen nur noch Ersetzungen)"
     },
     "snmp": {
       "assembling": "Zusammenbau",

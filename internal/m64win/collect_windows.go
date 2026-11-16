@@ -111,8 +111,8 @@ func Collect(ctx context.Context, opt Options) *m64proto.Report {
 		}
 	}
 	if want(m64proto.SecReboot) {
-		wu, cbs, ren := readReboot()
-		r.Reboot = rebootFrom(wu, cbs, ren, wuReboot)
+		wu, cbs, ren, first := readReboot()
+		r.Reboot = rebootFrom(wu, cbs, ren, first, wuReboot)
 	}
 	return r
 }

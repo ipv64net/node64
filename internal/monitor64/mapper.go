@@ -162,7 +162,7 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		sv := Service{Key: "reboot", Name: model.T("monitor64.svc.reboot"), Kind: "reboot", Default: true, Text: model.T("monitor64.txt.no")}
 		if r.Required {
 			sv.Text = model.T("monitor64.txt.yes")
-			why := hostText(strings.Join(limitList(r.Packages, 5), ", "))
+			why := hostText(strings.Join(limitList(rebootReasons(r.Packages), 5), ", "))
 			if r.KernelNewest != "" { // neuerer Kernel installiert (#130)
 				k := model.T("monitor64.txt.kernel_newer", "run", hostText(r.KernelRunning), "new", hostText(r.KernelNewest))
 				sv.Text = model.Join(sv.Text, k)
@@ -791,12 +791,28 @@ var noteKeys = map[string]string{
 	"slow_failed": "monitor64.note.slow_failed", "member": "monitor64.note.member", "pkg_missing": "monitor64.note.pkg_missing",
 	"no_repo": "monitor64.note.no_repo", "no_vuln_db": "monitor64.note.no_vuln_db", "running": "monitor64.note.running",
 	"no_disks": "monitor64.note.no_disks", "counters_unreadable": "monitor64.note.counters_unreadable", "larger_than": "monitor64.note.larger_than",
-	"pacman_local": "monitor64.note.pacman_local",
+	"pacman_local": "monitor64.note.pacman_local", "reboot_cbs": "monitor64.note.reboot_cbs", "reboot_rename": "monitor64.note.reboot_rename",
+	"reboot_pfro_old": "monitor64.note.reboot_pfro_old",
 }
 
 // hostText macht aus einem Text des Hosts (Abschnittsfehler, Hinweis, SMART-Fehler) einen Text fuer die Anzeige:
 // bekannte Hinweis-Codes werden uebersetzbar, alles andere ist freier Text vom Host (model.Raw). Texte aelterer
 // Agents (deutsch, ohne Code) bleiben damit unveraendert.
+// rebootReasons uebersetzt die Gruende aelterer Windows-Agents (bis 0.1.9: rohe Registry-Namen) in Hinweis-Codes.
+func rebootReasons(l []string) []string {
+	out := make([]string, len(l))
+	for i, p := range l {
+		switch p {
+		case "Component Based Servicing":
+			p = m64proto.HintRebootCBS
+		case "PendingFileRenameOperations":
+			p = m64proto.HintRebootPFROOld
+		}
+		out[i] = p
+	}
+	return out
+}
+
 func hostText(s string) string {
 	token := false // direkt davor steht ein Token: Abstand halten, sonst wuerde der folgende Text dazugelesen
 	return m64proto.ReplaceHints(s, func(code string, args []string) (string, bool) {

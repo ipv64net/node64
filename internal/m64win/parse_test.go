@@ -268,15 +268,37 @@ func TestSvcWanted(t *testing.T) {
 }
 
 func TestRebootFrom(t *testing.T) {
-	if r := rebootFrom(false, false, false, false); r.Required || r.Packages != nil {
+	if r := rebootFrom(false, false, 0, "", false); r.Required || r.Packages != nil {
 		t.Fatalf("%+v", r)
 	}
-	r := rebootFrom(true, true, true, true)
-	if !r.Required || strings.Join(r.Packages, ",") != "Windows Update,Component Based Servicing,PendingFileRenameOperations" {
+	r := rebootFrom(true, true, 2, `C:\Program Files\App\a.dll`, true)
+	if !r.Required || strings.Join(r.Packages, ",") != `Windows Update,{m64:reboot_cbs},{m64:reboot_rename=2;C:\Program Files\App\a.dll}` {
 		t.Fatalf("%+v", r)
 	}
-	if r := rebootFrom(false, false, false, true); !r.Required || r.Packages[0] != "Windows Update" {
+	if r := rebootFrom(false, false, 0, "", true); !r.Required || r.Packages[0] != "Windows Update" {
 		t.Fatalf("%+v", r)
+	}
+}
+
+// Windows 11 meldete dauerhaft "Neustart noetig: PendingFileRenameOperations" - dort stehen meist nur Loeschungen
+// (Ziel leer), die Installer und Updater hinterlassen. Nur Ersetzungen zaehlen.
+func TestPendingRenames(t *testing.T) {
+	onlyDeletes := []string{`\??\C:\Users\x\AppData\Local\Temp\setup123.tmp`, "", `\??\C:\Windows\Temp\old.dll`, ""}
+	if n, _ := pendingRenames(onlyDeletes); n != 0 {
+		t.Fatalf("Loeschungen gezaehlt: %d", n)
+	}
+	mixed := append([]string{}, onlyDeletes...)
+	mixed = append(mixed, `\??\C:\Program Files\App\new.dll`, `!\??\C:\Program Files\App\app.dll`, `\??\C:\x.tmp`, `\??\C:\y.dll`, `\??\C:\rest`)
+	n, first := pendingRenames(mixed)
+	if n != 2 || first != `C:\Program Files\App\app.dll` {
+		t.Fatalf("Ersetzungen: %d %q", n, first)
+	}
+	long := strings.Repeat(`a\`, 100) + "x.dll"
+	if _, f := pendingRenames([]string{"src", long}); len(f) > maxRenamePath+3 || !strings.HasSuffix(f, "x.dll") {
+		t.Fatalf("lange Datei: %q", f)
+	}
+	if n, _ := pendingRenames(nil); n != 0 {
+		t.Fatal("leer")
 	}
 }
 

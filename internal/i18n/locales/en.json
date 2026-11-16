@@ -7213,7 +7213,10 @@
       "too_large": "output too large ({a} bytes, max. {b})",
       "unknown_error": "unknown error",
       "unreadable": "output not readable",
-      "upgrade_locked": "updates via the package manager are locked on this system (e.g. UGOS – updated by firmware only)"
+      "upgrade_locked": "updates via the package manager are locked on this system (e.g. UGOS – updated by firmware only)",
+      "reboot_cbs": "Windows components (CBS)",
+      "reboot_rename": "{a} file(s) to be replaced on restart, e.g. {b}",
+      "reboot_pfro_old": "pending file operations (PendingFileRenameOperations; from agent 0.1.10 only replacements count)"
     },
     "snmp": {
       "assembling": "assembling",

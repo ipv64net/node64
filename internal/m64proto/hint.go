@@ -36,6 +36,9 @@ const (
 	HintNoVulnDB      = "{m64:no_vuln_db}"     // keine Schwachstellen-Datenbank (pkg audit -F)
 	HintNoDisks       = "{m64:no_disks}"       // keine Platten gefunden (Windows)
 	HintPacmanLocal   = "{m64:pacman_local}"   // pacman -Qu ohne checkupdates: nur gegen die lokale Paketliste (#158)
+	HintRebootCBS     = "{m64:reboot_cbs}"     // Windows: Komponenten-Wartung (Component Based Servicing) wartet auf Neustart
+	// HintRebootPFROOld: Windows-Agent bis 0.1.9 meldete "PendingFileRenameOperations" (auch reine Loeschungen)
+	HintRebootPFROOld = "{m64:reboot_pfro_old}"
 
 	HintCountersUnreadable = "{m64:counters_unreadable}" // Zuverlaessigkeitszaehler nicht lesbar (Administratorrechte noetig?)
 )
@@ -53,6 +56,8 @@ const (
 	HintMember     = "member"       // Mitglied a (Bond-Mitglied ohne Namen)
 	HintRunning    = "running"      // laeuft: a (laufender Kernel bei "Neustart noetig")
 	HintLargerThan = "larger_than"  // Ausgabe groesser als a Byte
+	// HintRebootRename: Windows - a Dateien werden beim Neustart ersetzt, z. B. b (PendingFileRenameOperations)
+	HintRebootRename = "reboot_rename"
 )
 
 // Hint baut einen Hinweis-Code mit Werten: Hint(HintMissing, "smartctl") -> "{m64:missing=smartctl}". Werte sind

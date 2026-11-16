@@ -595,20 +595,53 @@ func svcWanted(s svcInfo) bool {
 
 // ---- Neustart noetig ----
 
-// rebootFrom baut den Abschnitt aus den Registry-Merkmalen und dem Stand von Windows Update.
-func rebootFrom(wuKey, cbsKey, renames, wuCOM bool) *m64proto.Reboot {
+// rebootFrom baut den Abschnitt aus den Registry-Merkmalen und dem Stand von Windows Update. renames: Dateien, die
+// beim Neustart ersetzt werden (pendingRenames), first die erste davon.
+func rebootFrom(wuKey, cbsKey bool, renames int, first string, wuCOM bool) *m64proto.Reboot {
 	r := &m64proto.Reboot{}
 	if wuKey || wuCOM {
 		r.Packages = append(r.Packages, "Windows Update")
 	}
 	if cbsKey {
-		r.Packages = append(r.Packages, "Component Based Servicing")
+		r.Packages = append(r.Packages, m64proto.HintRebootCBS)
 	}
-	if renames {
-		r.Packages = append(r.Packages, "PendingFileRenameOperations")
+	if renames > 0 {
+		if first == "" {
+			first = "?"
+		}
+		r.Packages = append(r.Packages, m64proto.Hint(m64proto.HintRebootRename, strconv.Itoa(renames), first))
 	}
 	r.Required = len(r.Packages) > 0
 	return r
+}
+
+// maxRenamePath: so lang darf die genannte Datei in "Neustart noetig" sein (der Rest wird gekuerzt).
+const maxRenamePath = 120
+
+// pendingRenames wertet PendingFileRenameOperations aus: Paare aus Quelle ("\??\C:\...") und Ziel. Ziel leer =
+// die Datei wird beim Start nur geloescht, sonst ersetzt ("!" davor: ersetzen erzwingen). Gezaehlt werden nur
+// Ersetzungen (z. B. eine DLL, die beim Update in Benutzung war): reine Loeschungen sind Aufraeumen - Installer und
+// Updater hinterlassen dort oft dauerhaft Reste (Temp-Dateien), die keinen Neustart brauchen. first ist das Ziel der
+// ersten Ersetzung ohne Praefix.
+func pendingRenames(v []string) (n int, first string) {
+	clean := func(s string) string {
+		s = strings.TrimPrefix(strings.TrimSpace(s), "!")
+		s = strings.TrimPrefix(s, `\??\`)
+		if len(s) > maxRenamePath {
+			s = "…" + s[len(s)-maxRenamePath+1:]
+		}
+		return s
+	}
+	for i := 0; i+1 < len(v); i += 2 {
+		if strings.TrimSpace(v[i]) == "" || strings.TrimSpace(v[i+1]) == "" {
+			continue
+		}
+		n++
+		if first == "" {
+			first = clean(v[i+1])
+		}
+	}
+	return n, first
 }
 
 // ---- Ausgabe der PowerShell-Skripte ----
