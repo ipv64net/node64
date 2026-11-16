@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.5 – 2026-11-16
+
 - Settings: new page "My account" for every user with language, time zone, password, appearance, two-factor sign-in, passkeys and SSO links (before under "General"; also reachable via the user name at the top right). The update settings are in one row again.
 - DNS64: easier DHCP network setup – interface from a list, the network is filled in, address range and router move along with the network.
 - Installation without Docker: Debian package (`.deb`) for amd64, arm64 and armhf – system service `node64` under its own user, data in `/var/lib/node64`, settings in `/etc/default/node64`; download at the GitHub release (`releases/latest/download/node64_amd64.deb`) and at ipv64.net/node64/deb/.
