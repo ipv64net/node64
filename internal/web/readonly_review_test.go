@@ -54,7 +54,7 @@ func TestReadOnlyNodeTimezone(t *testing.T) {
 	if resp := login(t, a, "admin", "sehr geheimes passwort"); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("login admin: %d", resp.StatusCode)
 	}
-	if _, body := a.get(t, "/settings"); !strings.Contains(body, "Zeitzone der Node") {
+	if _, body := a.get(t, "/settings/account"); !strings.Contains(body, "Zeitzone der Node") {
 		t.Fatal("Hinweis Node-Zeitzone fehlt beim Administrator")
 	}
 }

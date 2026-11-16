@@ -229,7 +229,7 @@ func TestSettingsNav(t *testing.T) {
 			subs = append(subs, n.Key)
 		}
 	}
-	if strings.Join(subs, ",") != "nav.settings_general,nav.settings_modules,nav.settings_ports,nav.settings_data" {
+	if strings.Join(subs, ",") != "nav.settings_general,nav.settings_account,nav.settings_modules,nav.settings_ports,nav.settings_data" {
 		t.Fatalf("settings submenu: %v", subs)
 	}
 }

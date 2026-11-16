@@ -8,7 +8,7 @@
 		<p>{{.T "twofa.recovery_hint"}}</p>
 		<pre class="border rounded p-3 font-monospace">{{range $d.Recovery}}{{.}}
 {{end}}</pre>
-		<a class="btn btn-primary" href="/settings">{{.T "common.back"}}</a>
+		<a class="btn btn-primary" href="/settings/account#twofa">{{.T "common.back"}}</a>
 	</div>
 </div>
 {{else if $d.Enabled}}
@@ -44,7 +44,7 @@
 				<label class="form-label" for="code">{{.T "login.totp"}}</label>
 				<input class="form-control form-control-lg text-center font-monospace mb-3" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required>
 				<button class="btn btn-primary" type="submit">{{.T "twofa.enable"}}</button>
-				<a class="btn btn-outline-secondary" href="/settings">{{.T "common.cancel"}}</a>
+				<a class="btn btn-outline-secondary" href="/settings/account#twofa">{{.T "common.cancel"}}</a>
 			</form>
 		</div></div>
 	</div>

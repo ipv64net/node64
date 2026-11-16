@@ -211,7 +211,7 @@ func (s *Server) twoFADisable(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "twofa.disable", u.Username, "")
 	s.flash(w, r, "success", v.T("twofa.disabled"))
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, accountPath+"#twofa", http.StatusSeeOther)
 }
 
 // ---------------------------------------------------------------- API-Keys

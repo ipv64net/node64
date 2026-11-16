@@ -23,7 +23,7 @@
 			<div class="ms-auto d-flex align-items-center gap-2">
 				<button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}" aria-label="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
 				{{if .ReadOnly}}<span class="badge rounded-pill text-bg-light border readonly-badge" title="{{.T "useradmin.readonly_hint"}}"><i class="bi bi-eye"></i> {{.T "useradmin.readonly"}}</span>{{end}}
-				<span class="topbar-user d-none d-sm-inline-flex"><span class="topbar-avatar" aria-hidden="true">{{printf "%.2s" .User.Username}}</span>{{.User.Username}}</span>
+				<a class="topbar-user d-none d-sm-inline-flex text-reset text-decoration-none" href="/settings/account" title="{{.T "nav.settings_account"}}"><span class="topbar-avatar" aria-hidden="true">{{printf "%.2s" .User.Username}}</span>{{.User.Username}}</a>
 				<form method="post" action="/logout" class="m-0">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<button class="btn btn-outline-secondary" type="submit" title="{{.T "nav.logout"}}" aria-label="{{.T "nav.logout"}}"><i class="bi bi-box-arrow-right"></i><span class="d-none d-xl-inline ms-1">{{.T "nav.logout"}}</span></button>
@@ -48,7 +48,7 @@
 	<div class="ms-auto d-flex align-items-center gap-2">
 		<button class="btn btn-outline-secondary btn-sm theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
 		{{if .ReadOnly}}<span class="badge rounded-pill text-bg-light border readonly-badge" title="{{.T "useradmin.readonly_hint"}}"><i class="bi bi-eye"></i> {{.T "useradmin.readonly"}}</span>{{end}}
-		<span class="d-none d-sm-inline text-body-secondary small"><i class="bi bi-person-circle"></i> {{.User.Username}}</span>
+		<a class="d-none d-sm-inline text-body-secondary small text-decoration-none" href="/settings/account" title="{{.T "nav.settings_account"}}"><i class="bi bi-person-circle"></i> {{.User.Username}}</a>
 		<form method="post" action="/logout" class="m-0">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
 			<button class="btn btn-outline-secondary btn-sm" type="submit" title="{{.T "nav.logout"}}"><i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">{{.T "nav.logout"}}</span></button>

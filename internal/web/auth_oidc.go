@@ -443,5 +443,5 @@ func (s *Server) ssoUnlink(w http.ResponseWriter, r *http.Request) {
 		s.audit(r, "sso.unlink", strconv.FormatInt(id, 10), "")
 		s.flash(w, r, "success", v.T("sso.unlinked"))
 	}
-	http.Redirect(w, r, "/settings#identities", http.StatusSeeOther)
+	http.Redirect(w, r, accountPath+"#identities", http.StatusSeeOther)
 }

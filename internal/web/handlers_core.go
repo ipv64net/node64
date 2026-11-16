@@ -610,7 +610,7 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 	}
 	s.validateTimezone(v, f["timezone"])
 	if len(v.Errors) > 0 {
-		s.render(w, r, http.StatusUnprocessableEntity, "settings", v)
+		s.render(w, r, http.StatusUnprocessableEntity, "settings_account", v)
 		return
 	}
 	if err := s.saveUserPrefs(r, v.User, f["lang"], f["timezone"]); err != nil {
@@ -619,7 +619,7 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setCookie(w, r, langCookie, f["lang"], 365*24*3600)
 	s.flash(w, r, "success", s.I18n.T(f["lang"], "common.saved"))
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, accountPath+"#user", http.StatusSeeOther)
 }
 
 // saveUserPrefs speichert Sprache und Zeitzone eines Benutzers (Oberflaeche und API); die Zeitzone gilt auch fuer die
@@ -640,7 +640,7 @@ func (s *Server) settingsPassword(w http.ResponseWriter, r *http.Request) {
 	v := s.settingsView(r)
 	if v.User.Source != store.SourceLocal { // LDAP/SSO: Passwort wird im Verzeichnis bzw. beim Anbieter verwaltet
 		s.flash(w, r, "warning", v.T("ldap.password_external"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, accountPath+"#user", http.StatusSeeOther)
 		return
 	}
 	if !VerifyPassword(v.User.PasswordHash, f["current"]) {
@@ -652,7 +652,7 @@ func (s *Server) settingsPassword(w http.ResponseWriter, r *http.Request) {
 		v.Errors["password2"] = v.T("errors.password_mismatch")
 	}
 	if len(v.Errors) > 0 {
-		s.render(w, r, http.StatusUnprocessableEntity, "settings", v)
+		s.render(w, r, http.StatusUnprocessableEntity, "settings_account", v)
 		return
 	}
 	hash, err := HashPassword(f["password"])
@@ -667,7 +667,7 @@ func (s *Server) settingsPassword(w http.ResponseWriter, r *http.Request) {
 	_ = s.Store.DeleteUserSessions(r.Context(), v.User.ID, sessionID(r))
 	s.audit(r, "settings.password", v.User.Username, "")
 	s.flash(w, r, "success", v.T("settings.password_changed"))
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, accountPath+"#user", http.StatusSeeOther)
 }
 
 func (s *Server) settingsModules(w http.ResponseWriter, r *http.Request) {

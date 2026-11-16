@@ -40,11 +40,11 @@ func TestDesignSwitch(t *testing.T) {
 			t.Fatalf("%s without cookie must render the new design", p)
 		}
 	}
-	neu := get("/settings", str(""))
+	neu := get("/settings/account", str(""))
 	if !isNew(neu) {
 		t.Fatal("empty cookie must render the new design")
 	}
-	// Einstellungen: ein Knopf je Design aus der Liste, das aktive ausgewaehlt
+	// Mein Konto: ein Knopf je Design aus der Liste, das aktive ausgewaehlt
 	for _, d := range designs {
 		if !strings.Contains(neu, `id="ui-design-`+d.Name+`" value="`+d.Key+`"`) || !strings.Contains(neu, `<i class="bi `+d.Icon+`"></i>`) {
 			t.Fatalf("design choice %q missing on the settings page", d.Name)
@@ -54,7 +54,7 @@ func TestDesignSwitch(t *testing.T) {
 		t.Fatal("new design must be selected")
 	}
 
-	alt := get("/settings", str("classic"))
+	alt := get("/settings/account", str("classic"))
 	if strings.Contains(alt, `class="app-shell"`) || !strings.Contains(alt, `class="d-flex app-body"`) || !strings.Contains(alt, `data-design="classic"`) ||
 		!strings.Contains(alt, "/static/css/design-classic.css?v=test") || strings.Contains(alt, "design-new.css") ||
 		!strings.Contains(alt, "/static/css/node64.css?v=test") || !strings.Contains(alt, `id="ui-design-classic" value="classic" checked`) {

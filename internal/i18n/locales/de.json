@@ -108,6 +108,7 @@
     "sonar64": "Sonar64",
     "monitor64": "Monitor64",
     "settings_general": "Allgemein",
+    "settings_account": "Mein Konto",
     "settings_ports": "Ports",
     "settings_data": "Daten & Sicherung",
     "settings_modules": "Module",

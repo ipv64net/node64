@@ -379,8 +379,12 @@ func TestReadOnlyUI(t *testing.T) {
 	if strings.Contains(body, `href="/settings/users"`) {
 		t.Fatal("user management visible for read-only")
 	}
-	if !strings.Contains(body, `<fieldset class="border-0 p-0 m-0" disabled>`) || !strings.Contains(body, `id="passkeys"`) {
-		t.Fatal("forms not disabled or personal cards missing")
+	if !strings.Contains(body, `<fieldset class="border-0 p-0 m-0" disabled>`) {
+		t.Fatal("forms not disabled")
+	}
+	// eigene Karten (Sprache, Passwort, 2FA, Passkeys) auf Mein Konto - fuer "Nur lesen" bedienbar, nicht gesperrt
+	if _, acc := a.get(t, "/settings/account"); !strings.Contains(acc, `id="passkeys"`) || !strings.Contains(acc, `id="twofa"`) || !strings.Contains(acc, `action="/settings/password"`) || strings.Contains(acc, " disabled>") {
+		t.Fatal("personal cards missing on my account")
 	}
 	csrf := csrfOf(t, body)
 	resp, body = a.post(t, "/settings/node", url.Values{"_csrf": {csrf}, "node_name": {"x"}})

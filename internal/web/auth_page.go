@@ -63,7 +63,7 @@ func (s *Server) loginMethodsView(r *http.Request) *View { return s.userAdminVie
 // loginMethods: alte Adresse /settings/login - Administratoren zum Reiter „Anmeldung“, sonst zu den eigenen Passkeys.
 func (s *Server) loginMethods(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdmin(r) {
-		http.Redirect(w, r, "/settings#passkeys", http.StatusSeeOther)
+		http.Redirect(w, r, accountPath+"#passkeys", http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, userAdminPath+"?tab=login#login", http.StatusSeeOther)

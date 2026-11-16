@@ -211,7 +211,7 @@ func (s *Server) passkeyDelete(w http.ResponseWriter, r *http.Request) {
 		s.audit(r, "passkey.delete", strconv.FormatInt(id, 10), "")
 		s.flash(w, r, "success", v.T("sso.pk_deleted"))
 	}
-	http.Redirect(w, r, "/settings#passkeys", http.StatusSeeOther)
+	http.Redirect(w, r, accountPath+"#passkeys", http.StatusSeeOther)
 }
 
 // ---------------------------------------------------------------- Anmeldung (Login-Seite)

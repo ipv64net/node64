@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Einstellungen: neue Seite „Mein Konto“ für jeden Benutzer mit Sprache, Zeitzone, Passwort, Darstellung, Zwei-Faktor-Anmeldung, Passkeys und SSO-Verknüpfungen (vorher unter „Allgemein“; erreichbar auch über den Benutzernamen oben rechts). Die Update-Einstellungen stehen wieder in einer Zeile.
 - DNS64: DHCP-Netz einfacher anlegen – Schnittstelle aus einer Liste, das Netz wird vorbelegt, Adressbereich und Router wandern mit dem Netz mit.
 - Installation ohne Docker: Debian-Paket (`.deb`) für amd64, arm64 und armhf – Systemdienst `node64` unter eigenem Benutzer, Daten in `/var/lib/node64`, Einstellungen in `/etc/default/node64`; Download am GitHub-Release (`releases/latest/download/node64_amd64.deb`) und unter ipv64.net/node64/deb/.
 
