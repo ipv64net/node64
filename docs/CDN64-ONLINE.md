@@ -815,6 +815,12 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   **Firefox (cdn64-edge 0.22.5):** Firefox beendet den Upload, sobald die Antwort vollständig ist („ok“ mit
   Content-Length 2), auch wenn der Server weiter liest (Playwright: 0,5 von 31,5 MB, Chromium 31,5). Deshalb hält
   `edge.KeepUpload` eine frühe Antwort bis 64 KB zurück, bis der Upload gelesen ist, und schickt sie danach.
+  **UDP-Portmapper (cdn64-edge 0.22.6, Forum 5110):** Die weite Grenze (1024×) galt erst nach 2 s; bis dahin 10× –
+  der Anlauf eines Downloads (QUIC/TCP in WireGuard brauchen 25–50×) wurde verworfen, der Besucher schickte nichts
+  zurück, die weite Grenze kam nie (Labor `TestUDPPortmapMeasure`: 0 statt 290 Mbit/s; 250 ms bzw. 64× halfen nicht
+  zuverlässig). Jetzt gilt sie nach 3 Paketen des Besuchers seit der ersten Antwort. Datagramme statt Stream für
+  den UDP-Portmapper geprüft und verworfen: ohne Verlust schafft der Stream 240–290 Mbit/s, mit Verlust bremst die
+  Staukontrolle beide Wege gleich, WireGuard-Pakete (~1450 Byte) passen nicht in ein Datagramm.
 - **TCP-/UDP-Streams (Portmapper Modus 1/2):** gebaut 2026-10-21 (PROXY64 1.24.0, cdn64-edge 0.15.0), siehe 8.3.
 - **Fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,

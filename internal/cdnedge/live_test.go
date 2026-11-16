@@ -190,9 +190,6 @@ func TestPortmapUDPReflectPort(t *testing.T) {
 // UDP-Download (z. B. durch WireGuard): der Besucher schickt nur kleine ACKs, das Ziel ein Vielfaches davon. In der
 // laufenden Sitzung kommt der Download vollstaendig an (vorher bremste das Zehnfache auf wenige KB/s).
 func TestPortmapUDPDownload(t *testing.T) {
-	old := udpEstAge
-	udpEstAge = 200 * time.Millisecond
-	defer func() { udpEstAge = old }()
 	back, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
 	if err != nil {
 		t.Fatal(err)

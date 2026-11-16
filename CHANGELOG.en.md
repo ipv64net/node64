@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- CDN64 servers (cdn64-edge 0.22.6, already rolled out): UDP port mapper (e.g. WireGuard) – downloads often did not get going at all or only at a few Mbit/s in all modes; the reflection protection no longer chokes the start.
+
+- Monitor64: the UniFi access now also monitors UniFi Drive, e.g. a UNAS Pro with an API key – pools, disks (state, temperature, sectors), CPU, RAM, network ports and system. Monitor64 detects whether Network, Drive or both run.
 ## 1.7.6 – 2026-11-16
 
 - PROXY64: uploads via CDN64 dropped to almost zero after a short time in speed tests (e.g. OpenSpeedTest behind nginx, in Chrome and Firefox, over HTTP/2 and HTTP/3) – fixed. HTTP/3 via CDN64 is also steadier in both directions.

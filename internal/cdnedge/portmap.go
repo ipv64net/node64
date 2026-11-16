@@ -48,9 +48,14 @@ const (
 	udpNewPerSec   = 200             // neue Sitzungen je Port und Sekunde (gefaelschte Absender)
 	udpFree        = 4 << 10         // so viele Bytes darf das Ziel einem Besucher immer schicken (Handshakes) ...
 	udpAmp         = 10              // ... danach hoechstens das Zehnfache dessen, was vom Besucher kam
-	// Laufende Sitzung (Besucher sendet nach der ersten Antwort weiter, udpEstPkts Pakete, nach udpEstAge): weite
-	// Grenze. Ein Download (z. B. durch WireGuard) schickt dem Besucher 30- bis ueber 500-mal so viel, wie als ACKs
-	// zurueckkommt; mit dem Zehnfachen brach er nach wenigen Sekunden auf wenige Mbit/s ein.
+	// Laufende Sitzung (Besucher sendet nach der ersten Antwort weiter, udpEstPkts Pakete): weite Grenze. Ein Download
+	// (z. B. durch WireGuard) schickt dem Besucher 30- bis ueber 500-mal so viel, wie als ACKs zurueckkommt; mit dem
+	// Zehnfachen brach er nach wenigen Sekunden auf wenige Mbit/s ein. Frueher galt die weite Grenze zusaetzlich erst
+	// nach 2 s: in der Zeit verwarf der Server den Anlauf eines Downloads, der Besucher bekam nichts, schickte nichts
+	// zurueck - und die weite Grenze kam nie (Forum 5110: WireGuard in Modus 1 mit 3 statt 60 Mbit/s; Labor
+	// TestUDPPortmapMeasure: QUIC-Download 0 statt 290 Mbit/s). Die Wartezeit schuetzte kaum (ein Angreifer mit
+	// gefaelschten Absendern sendet ohnehin dauerhaft); es bleiben Zehnfaches bis dahin, 1024-Fache danach, neue
+	// Sitzungen je Port, UDP-Budget je IP, Sperrlisten und die gesperrten Verstaerker-Dienste.
 	udpAmpEst  = 1024
 	udpEstPkts = 3
 	tcpIdle    = time.Hour // TCP ohne Daten in beide Richtungen: trennen (ruhende Verbindungen binden nichts)
@@ -429,9 +434,6 @@ type udpPort struct {
 	aclLast netip.AddrPort // zuletzt nach der Liste abgewiesener Absender (je Absender einmal zaehlen, nicht je Datagramm)
 }
 
-// udpEstAge: so alt muss eine Sitzung sein, bevor die weite Grenze gilt (Tests kuerzer).
-var udpEstAge = 2 * time.Second
-
 type udpSess struct {
 	mu       sync.Mutex
 	up       net.Conn // nil, solange die Verbindung zum Ziel entsteht
@@ -444,7 +446,6 @@ type udpSess struct {
 	free     bool         // ueber den Nachbarn: der zaehlt und begrenzt
 	last     atomic.Int64 // Unix-Nanosekunden der letzten Aktivitaet
 	in, out  atomic.Int64 // Bytes vom bzw. zum Besucher
-	born     time.Time
 	answered atomic.Bool  // das Ziel hat dem Besucher schon geantwortet
 	after    atomic.Int32 // Pakete des Besuchers seit der ersten Antwort
 	est      atomic.Bool  // laufende Sitzung: weite Grenze (udpAmpEst)
@@ -514,7 +515,7 @@ func (u *udpPort) serve() {
 			continue
 		}
 		s.last.Store(time.Now().UnixNano())
-		if s.answered.Load() && !s.est.Load() && s.after.Add(1) >= udpEstPkts && time.Since(s.born) >= udpEstAge {
+		if s.answered.Load() && !s.est.Load() && s.after.Add(1) >= udpEstPkts {
 			s.est.Store(true) // der Besucher sendet nach den Antworten weiter: laufende Sitzung
 		}
 		s.mu.Lock()
@@ -592,7 +593,7 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	if why != "" {
 		return nil
 	}
-	s = &udpSess{gen: targetGen(re), tport: tport, st: st, uid: re.UserID, release: release, born: time.Now()}
+	s = &udpSess{gen: targetGen(re), tport: tport, st: st, uid: re.UserID, release: release}
 	s.last.Store(time.Now().UnixNano())
 	u.mu.Lock()
 	if old := u.sess[from]; old != nil { // gleichzeitig angelegt: die vorhandene nehmen
