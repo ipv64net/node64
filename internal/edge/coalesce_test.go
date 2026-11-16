@@ -152,10 +152,12 @@ func TestAllowMaskedGateway(t *testing.T) {
 		e.serveHTTPS(rec, req)
 		return rec.Code
 	}
+	restore := localnet.OriginForTest(false, netip.MustParseAddr("172.17.0.1")) // der Test selbst kann im Bridge-Netz laufen
 	if code := do(); code != 200 {
 		t.Fatalf("private address without bridge: %d", code)
 	}
-	restore := localnet.OriginForTest(true, netip.MustParseAddr("172.17.0.1"))
+	restore()
+	restore = localnet.OriginForTest(true, netip.MustParseAddr("172.17.0.1"))
 	defer restore()
 	if code := do(); code == 200 {
 		t.Fatalf("docker gateway counted as home network: %d", code)

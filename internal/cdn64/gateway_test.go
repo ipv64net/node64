@@ -25,11 +25,13 @@ func TestDockerGatewayOrigin(t *testing.T) {
 	allow := &Advanced{GeoMode: geoAllow, GeoCountries: []string{"DE"}}
 	block := &Advanced{GeoMode: geoBlock, GeoCountries: []string{"DE"}}
 
-	// ohne Bridge-Netz: privat wie bisher
+	// ohne Bridge-Netz: privat wie bisher (ausdruecklich gesetzt - der Test selbst kann in einem Bridge-Netz laufen)
+	restore := localnet.OriginForTest(false, gw)
 	if !lanOnly.ipAllowed(gw) || !l.exempted(&on, gw) || m.geoBlocked(allow, gw) {
 		t.Fatal("private address without bridge network must count as home network")
 	}
-	restore := localnet.OriginForTest(true, gw)
+	restore()
+	restore = localnet.OriginForTest(true, gw)
 	defer restore()
 	if lanOnly.ipAllowed(gw) {
 		t.Fatal("access list with private networks allows the docker gateway")
