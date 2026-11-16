@@ -58,3 +58,17 @@ func TestProbe(t *testing.T) {
 		t.Fatal("broken file accepted")
 	}
 }
+
+// #169: dnf schreibt Logs unter /var/log - die vorhandenen Dateien sind freigegeben (mit "-": fehlen sie, startet der
+// Dienst trotzdem); der Agent laesst dnf ausserdem in den eigenen Ordner loggen (wirkt ohne neue Unit).
+func TestUnitTextDnfLogs169(t *testing.T) {
+	u := unitText(6465, false)
+	for _, f := range []string{"dnf.log", "dnf.librepo.log", "dnf.rpm.log", "hawkey.log", "dnf5.log"} {
+		if !strings.Contains(u, " -/var/log/"+f) && !strings.Contains(u, "=-/var/log/"+f) {
+			t.Errorf("unit ohne -/var/log/%s", f)
+		}
+	}
+	if strings.Contains(u, "ReadWritePaths=/var/log") || strings.Contains(u, " /var/log ") {
+		t.Error("ganz /var/log freigegeben")
+	}
+}

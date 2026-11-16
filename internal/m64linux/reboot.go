@@ -1,6 +1,8 @@
 package m64linux
 
 import (
+	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/ipv64net/node64/internal/m64proto"
@@ -151,4 +153,34 @@ func ParseNeedsRestarting(code int) (required, ok bool) {
 		return true, true
 	}
 	return false, false
+}
+
+// needsRestartingErrs: Merkmale einer abgebrochenen Pruefung in der Ausgabe von needs-restarting (dnf meldet auch
+// dann Exit 1, z. B. "Config error: [Errno 30] Read-only file system: '/var/log/dnf.log'" unter einer gehaerteten
+// Unit, #169). Die eigentlichen Meldungen ("Reboot is required ...") sind uebersetzt, die Fehler nicht.
+var needsRestartingErrs = []string{"Traceback", "Errno", "Config error", "Error:", "error:", "Permission denied", "Read-only file system"}
+
+// NeedsRestarting wertet "needs-restarting -r" mit Exit-Code und Ausgabe (stdout und stderr) aus: Exit 1 heisst nur
+// dann "Neustart noetig", wenn die Ausgabe keinen Fehler zeigt; sonst err (Abschnitt unbekannt statt "ja", #169).
+func NeedsRestarting(code int, out []byte) (required, ok bool, err error) {
+	req, ok := ParseNeedsRestarting(code)
+	if !ok {
+		return false, false, errors.New("needs-restarting: " + m64proto.Hint(m64proto.HintExitCode, strconv.Itoa(code)))
+	}
+	if req {
+		s := string(out)
+		for _, m := range needsRestartingErrs {
+			if strings.Contains(s, m) {
+				msg := "needs-restarting: " + m64proto.Hint(m64proto.HintExitCode, strconv.Itoa(code))
+				for _, l := range lines(out) {
+					if strings.Contains(l, m) {
+						msg += ": " + strings.TrimSpace(l)
+						break
+					}
+				}
+				return false, false, errors.New(clip(msg))
+			}
+		}
+	}
+	return req, true, nil
 }

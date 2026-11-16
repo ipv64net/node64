@@ -31,7 +31,9 @@ const (
 // unitFile ist der systemd-Dienst. Root ist noetig (SMART, alle Dateisysteme); die Haertung beschraenkt Schreibzugriffe
 // auf Einstellungen (keys), den eigenen Programmordner (update, <datei>.old) und /var/lib/monitor64-agent (HOME der
 // eigenen Skripte). Paket-Caches nur fuer die Update-Pruefung; zypper braucht dazu noch /run (Sperrdatei
-// /run/zypp.pid, siehe zypperPaths). /home und /root sind nur lesbar: eigene Skripte koennen Zugangsdateien wie
+// /run/zypp.pid, siehe zypperPaths). dnf schreibt seine Logs seit Agent 0.1.9 nach /var/lib/monitor64-agent/dnf
+// (--setopt=logdir); die vorhandenen Logdateien unter /var/log sind fuer needs-restarting ohne dnf und fuer andere
+// Aufrufe trotzdem freigegeben (#169; "-" = nur wenn vorhanden). /home und /root sind nur lesbar: eigene Skripte koennen Zugangsdateien wie
 // /root/.my.cnf lesen (mit vollem Pfad, z. B. mysql --defaults-extra-file=/root/.my.cnf), aber nichts dort aendern.
 // Restart=always startet den Agent nach einem Absturz neu; nach einem Update startet er sich selbst neu (exec).
 // Kernel-Module laden darf der Dienst nicht (CapabilityBoundingSet, SystemCallFilter); ProtectKernelModules=yes ginge
@@ -59,6 +61,7 @@ StateDirectory=monitor64-agent
 StateDirectoryMode=0700
 ReadWritePaths=` + defaultDir + ` ` + libDir + `
 ReadWritePaths=-/var/cache/dnf -/var/cache/libdnf5 -/var/cache/yum -/var/cache/zypp
+ReadWritePaths=-/var/log/dnf.log -/var/log/dnf.librepo.log -/var/log/dnf.rpm.log -/var/log/hawkey.log -/var/log/dnf5.log
 %sCapabilityBoundingSet=~CAP_SYS_MODULE
 SystemCallFilter=~@module
 ProtectControlGroups=yes

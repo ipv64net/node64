@@ -289,11 +289,13 @@ fi
 if [ "$m64_updates" = 1 ]; then
 	# RHEL: Python-Aufruf, daher nur mit den Updates (hoechstens stuendlich)
 	if [ ! -e /var/run/reboot-required ] && m64_have needs-restarting; then
-		m64_run TERM 30 needs-restarting -r >/dev/null 2>&1
+		# Ausgabe mitgeben: dnf meldet auch bei einem Fehler (Config error ...) Exit 1 - das ist kein "Neustart noetig"
+		m64_o=$(m64_run TERM 30 needs-restarting -r 2>&1)
 		m64_rc=$?
 		if ! m64_timedout "$m64_rc"; then
 			m64_sec needs_restarting
 			echo "$m64_rc"
+			printf '%s\n' "$m64_o" | m64_mask | head -n 20
 		fi
 	fi
 	m64_done=0

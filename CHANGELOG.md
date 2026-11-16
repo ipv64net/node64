@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Unter RHEL, Oracle Linux und anderen Systemen mit dnf steht „Neustart nötig“ nicht mehr dauerhaft auf „ja“, und die Updates scheitern nicht mehr an „Read-only file system“ (Agent 0.1.9, auch per SSH, #169).
 - Healthchecks: Whois-Check für .ch- und .li-Domains funktioniert (Blockformat der Registry SWITCH, RDAP-Server ohne IANA-Eintrag, #170).
 - DNS64: Umschreiben mit einer IP-Adresse als Ziel liefert wieder die Adresse statt NXDOMAIN (IPv4 für A, IPv6 für AAAA, #174).
 - IPAM64: eigenes Logo in der Übersicht, auf dem Dashboard und unter Einstellungen → Module.

@@ -64,6 +64,9 @@ type Options struct {
 	Statfs   func(path string) (StatFS, error) // nil = statfs (nur Linux)
 	Now      func() time.Time                  // nil = time.Now
 	Cache    *Cache                            // Puffer fuer SMART/Updates und haengende Mounts; nil = Paket-Puffer
+	// PkgLogDir: dnf schreibt seine Logs hierhin (--setopt=logdir=...) statt nach /var/log - der Agent laeuft mit
+	// ProtectSystem=strict, /var/log ist fuer ihn schreibgeschuetzt (#169); "" = Standard von dnf
+	PkgLogDir string
 }
 
 // Cache puffert langsame Abschnitte (SMART 30 min, Updates 60 min) und merkt sich haengende statfs-Aufrufe.
@@ -93,6 +96,7 @@ type slowResult struct {
 	smart    []m64proto.SMART
 	updates  *m64proto.Updates
 	required *bool // needs-restarting
+	nrFailed bool  // needs-restarting lief, Ergebnis aber nicht verwertbar (Fehler in errs)
 	errs     []m64proto.SectionErr
 	notes    []m64proto.SectionNote
 }
@@ -441,8 +445,17 @@ func (c *collector) collectReboot(ctx context.Context, r *m64proto.Report) {
 	if !rb.Required && c.has("needs-restarting") { // RHEL: Python-Aufruf, daher 10 min gepuffert
 		res := c.slow(ctx, "needs-restarting", timeoutNeedsRestart, "", func(ctx context.Context) slowResult {
 			var out slowResult
-			if res, err := c.run(ctx, timeoutNeeds, "needs-restarting", "-r"); err == nil {
-				if req, ok := ParseNeedsRestarting(res.Code); ok {
+			name, args := "needs-restarting", []string{"-r"}
+			if dir := c.pkgLogDir(); dir != "" { // ueber dnf, damit es nicht nach /var/log schreiben will (#169)
+				name, args = "dnf", []string{"--setopt=logdir=" + dir, "needs-restarting", "-r"}
+			}
+			if res, err := c.run(ctx, timeoutNeeds, name, args...); err == nil {
+				req, ok, perr := NeedsRestarting(res.Code, append(append([]byte(nil), res.Stdout...), res.Stderr...))
+				switch {
+				case perr != nil: // abgebrochen (z. B. Config error): unbekannt statt "ja"
+					out.nrFailed = true
+					out.errs = append(out.errs, m64proto.SectionErr{Section: m64proto.SecReboot, Error: errText(perr)})
+				case ok:
 					out.required = &req
 				}
 			}
@@ -450,6 +463,12 @@ func (c *collector) collectReboot(ctx context.Context, r *m64proto.Report) {
 		})
 		if res.required != nil {
 			rb.Required = *res.required
+		}
+		if res.nrFailed && !rb.Required {
+			// Pruefung gescheitert und keine andere Quelle sagt "ja": kein "nein" melden, sondern den Fehler
+			// (der Dienst bleibt mit seinem letzten Stand, nach drei Intervallen unbekannt)
+			r.Errors = append(r.Errors, res.errs...)
+			return
 		}
 	}
 	r.Reboot = rb
@@ -558,8 +577,12 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	case mgrApt:
 		list = aptCall
 	case mgrDnf, mgrYum:
-		list = &call{mgr, []string{"-q", "check-update"}, func(c int) bool { return c == 0 || c == 100 }}
-		sec = &call{mgr, []string{"-q", "updateinfo", "list", "--security"}, zero}
+		var pre []string
+		if dir := c.pkgLogDir(); dir != "" && mgr == mgrDnf { // Logs nicht nach /var/log (#169)
+			pre = []string{"--setopt=logdir=" + dir}
+		}
+		list = &call{mgr, append(append([]string(nil), pre...), "-q", "check-update"), func(c int) bool { return c == 0 || c == 100 }}
+		sec = &call{mgr, append(append([]string(nil), pre...), "-q", "updateinfo", "list", "--security"), zero}
 	case mgrZypper:
 		list = &call{"zypper", []string{"-n", "-q", "list-updates"}, zero}
 		sec = &call{"zypper", []string{"-n", "-q", "list-patches", "--category", "security"}, func(c int) bool { return c == 0 || c == 100 || c == 101 }}
@@ -629,6 +652,19 @@ func (c *collector) collectUpdates(ctx context.Context) slowResult {
 	u.Checked = c.now().Unix()
 	out.updates = u
 	return out
+}
+
+// pkgLogDir: Ordner fuer die Logs von dnf (Options.PkgLogDir), nur wenn dnf da ist und der Ordner sich anlegen laesst
+// ("" = dnf schreibt wie sonst nach /var/log).
+func (c *collector) pkgLogDir() string {
+	dir := c.opt.PkgLogDir
+	if dir == "" || !c.has("dnf") {
+		return ""
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	return dir
 }
 
 // pkgFiles aendern sich, wenn Pakete installiert oder erneuert werden oder die Paketlisten neu geladen sind

@@ -1,5 +1,12 @@
 # Monitor64 – Änderungen
 
+## 0.1.21 – 2026-11-16
+
+Fehlerbehebungen:
+
+- RHEL, Oracle Linux, AlmaLinux, Rocky, Fedora (dnf): „Neustart nötig“ stand dauerhaft auf „ja“ und die Updates meldeten „Read-only file system: '/var/log/dnf.log'“. Der Agent-Dienst darf nicht nach `/var/log` schreiben, dnf brach deshalb ab – und den Exit-Code 1 von `needs-restarting -r` wertete Monitor64 als „Neustart nötig“. Der Agent lässt dnf jetzt in seinen eigenen Ordner loggen (`/var/lib/monitor64-agent/dnf`, wirkt ohne Neuinstallation), neue Installationen geben zusätzlich die vorhandenen dnf-Logdateien frei. Bricht `needs-restarting` mit einer Fehlermeldung ab, gilt der Dienst als unbekannt (mit Fehler am Zugang) statt „ja“ – beim Agent und per SSH (#169).
+- **Agent 0.1.9 (Linux):** dnf-Logs im eigenen Ordner; `needs-restarting` mit Fehlermeldung ist kein „Neustart nötig“.
+
 ## 0.1.20 – 2026-11-15
 
 Sicherheit:

@@ -1,5 +1,12 @@
 # Monitor64 – Changes
 
+## 0.1.21 – 2026-11-16
+
+Bug fixes:
+
+- RHEL, Oracle Linux, AlmaLinux, Rocky, Fedora (dnf): "Reboot required" was permanently "yes" and the updates reported "Read-only file system: '/var/log/dnf.log'". The agent service may not write to `/var/log`, so dnf aborted – and Monitor64 took the exit code 1 of `needs-restarting -r` as "reboot required". The agent now lets dnf log to its own folder (`/var/lib/monitor64-agent/dnf`, works without reinstalling), new installations additionally allow the existing dnf log files. If `needs-restarting` aborts with an error message, the service counts as unknown (with an error at the access) instead of "yes" – with the agent and via SSH (#169).
+- **Agent 0.1.9 (Linux):** dnf logs in its own folder; `needs-restarting` with an error message is no "reboot required".
+
 ## 0.1.20 – 2026-11-15
 
 Security:
