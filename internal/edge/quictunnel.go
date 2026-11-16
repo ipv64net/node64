@@ -404,8 +404,11 @@ func (p *virtPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if f == nil {
 		return len(b), nil
 	}
-	if f.dg != nil && f.dg.Send(b) { // zu gross bzw. Verbindung zu: Stream
-		return len(b), nil
+	if f.dg != nil { // zu gross: nach dem Handshake verwerfen (wie eine kleinere MTU, tunnel.DropTooLarge), sonst Stream
+		err := f.dg.Send(b)
+		if err == nil || (errors.Is(err, tunnel.ErrDatagramTooLarge) && tunnel.DropTooLarge(len(b), !f.isPending())) {
+			return len(b), nil
+		}
 	}
 	f.mu.Lock()
 	err := tunnel.WriteDatagram(f.c, b)

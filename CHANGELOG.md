@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: HTTP/3 über CDN64 – Uploads (z. B. im Speedtest) brachen nach kurzer Zeit bis auf fast null ein; behoben (zusammen mit cdn64-edge 0.22.3), Downloads ebenfalls gleichmäßiger.
+
 ## 1.7.5 – 2026-11-16
 
 - Einstellungen: neue Seite „Mein Konto“ für jeden Benutzer mit Sprache, Zeitzone, Passwort, Darstellung, Zwei-Faktor-Anmeldung, Passkeys und SSO-Verknüpfungen (vorher unter „Allgemein“; erreichbar auch über den Benutzernamen oben rechts). Die Update-Einstellungen stehen wieder in einer Zeile.

@@ -379,7 +379,13 @@ func (f *qflow) run(re *route, sni string) {
 		case <-f.done:
 			return
 		case p := <-f.q:
-			if dg == nil || !dg.Answered() || !dg.Send(p) { // Datagramm erst, wenn die Node den Fluss kennt; zu gross: Stream
+			// Datagramm erst, wenn die Node den Fluss kennt; zu gross: nach dem Handshake verwerfen (wie eine
+			// kleinere MTU, tunnel.DropTooLarge), sonst Stream
+			err := errNoDatagram
+			if dg != nil && dg.Answered() {
+				err = dg.Send(p)
+			}
+			if err != nil && !(errors.Is(err, tunnel.ErrDatagramTooLarge) && tunnel.DropTooLarge(len(p), f.proven.Load())) {
 				if err := tunnel.WriteDatagram(conn, p); err != nil {
 					return
 				}
@@ -391,6 +397,8 @@ func (f *qflow) run(re *route, sni string) {
 		}
 	}
 }
+
+var errNoDatagram = errors.New("no datagram flow yet")
 
 // fromNode: Paket der Node an den Besucher (aus dem Stream oder als Datagramm); false = UDP-Port zu.
 func (f *qflow) fromNode(p []byte, re *route, counted bool) bool {

@@ -408,6 +408,7 @@ func (s *Server) writeMetrics(_ context.Context, w *metrics.Writer) {
 	w.Counter("cdn64_edge_quic_datagrams_total", "Visitor QUIC packets as tunnel datagrams (mode 1, HTTP/3)", float64(dc.Sent), lbl("direction", "sent")...)
 	w.Counter("cdn64_edge_quic_datagrams_total", "Visitor QUIC packets as tunnel datagrams (mode 1, HTTP/3)", float64(dc.Received), lbl("direction", "received")...)
 	w.Counter("cdn64_edge_quic_datagrams_too_large_total", "Visitor QUIC packets too large for a datagram, sent in the stream", float64(dc.TooLarge), srv...)
+	w.Counter("cdn64_edge_quic_datagrams_dropped_total", "Visitor QUIC packets too large for a datagram after the handshake, dropped like a smaller MTU", float64(dc.Dropped), srv...)
 
 	// Drossel
 	load, capacity, throttled := s.bw.fairStatus()

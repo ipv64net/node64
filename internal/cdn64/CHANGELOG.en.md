@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.56.7 – 2026-11-16
+
+### Fixed
+- HTTP/3 via CDN64 (mode 1): uploads (e.g. in a speed test) dropped to almost zero after a short time. After MTU discovery the browser sends larger packets than fit into a tunnel datagram; they went through the stream and arrived out of order, which the browser took for loss. After the handshake the tunnel now behaves like a link with a smaller MTU: packets that are too large are dropped and the browser stays with packets that fit. In the lab (30 ms, no loss) HTTP/3 uploads rose from about 3 to more than 450 Mbit/s. The upload fix is on the CDN64 servers (cdn64-edge 0.22.3); this version does the same for downloads.
+
 ## 1.56.6 – 2026-11-15
 
 ### Changed

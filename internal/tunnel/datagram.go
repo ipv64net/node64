@@ -3,8 +3,11 @@ package tunnel
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"sync"
 	"sync/atomic"
+
+	"github.com/quic-go/quic-go"
 )
 
 // QUIC-Datagramme (RFC 9221) fuer KindQUIC: Die QUIC-Pakete eines HTTP/3-Besuchers gehen einzeln als Datagramm durch
@@ -19,16 +22,41 @@ import (
 // Datagramm im Tunnel: 4 Byte Fluss-Nummer, dann das Paket des Besuchers.
 const dgHeader = 4
 
-var dgSent, dgRecv, dgTooLarge atomic.Uint64
+// Zu grosse Pakete: Passt ein Paket nicht in ein Datagramm (je nach MTU des Tunnels etwa 1236 bis 1408 Byte), ging
+// es frueher ueber den Stream. Nach der MTU-Erkennung (RFC 8899) schickt ein Besucher aber viele grosse Pakete; die
+// kamen dann teils als Datagramm, teils (zu gross) ueber den Stream an - in anderer Reihenfolge und im Stream mit
+// Rueckstau. QUIC haelt das fuer Verlust, der Upload brach bis auf fast null ein (Speedtest). Nach dem Handshake
+// verhaelt sich der Tunnel deshalb wie eine Leitung mit kleinerer MTU: groessere Pakete als DgStreamMax, die nicht
+// in ein Datagramm passen, werden verworfen (DropTooLarge). Die Proben der MTU-Erkennung gehen verloren, der Besucher
+// bleibt bei Paketen, die passen; verlorene Proben zaehlen in QUIC nicht als Stau. Handshake und Pakete bis
+// DgStreamMax (Grundgroesse aller Clients) nehmen weiter den Stream, falls der Tunnel nicht einmal die schafft.
+const DgStreamMax = 1280
+
+// ErrDatagramTooLarge: das Paket passt nicht in ein Datagramm des Tunnels.
+var ErrDatagramTooLarge = errors.New("tunnel: packet too large for a datagram")
+
+var dgSent, dgRecv, dgTooLarge, dgDropped atomic.Uint64
 
 // DatagramCounts: Zaehler seit dem Start (fuer Tests und Metriken).
 type DatagramCounts struct {
 	Sent, Received, TooLarge uint64 // TooLarge: zu gross fuer ein Datagramm, ueber den Stream geschickt
+	Dropped                  uint64 // zu gross und nach dem Handshake verworfen (DropTooLarge)
 }
 
 // DatagramStats liefert die Zaehler aller Fluesse.
 func DatagramStats() DatagramCounts {
-	return DatagramCounts{Sent: dgSent.Load(), Received: dgRecv.Load(), TooLarge: dgTooLarge.Load()}
+	return DatagramCounts{Sent: dgSent.Load(), Received: dgRecv.Load(), TooLarge: dgTooLarge.Load(), Dropped: dgDropped.Load()}
+}
+
+// DropTooLarge: ein Paket, das nicht in ein Datagramm passte (ErrDatagramTooLarge), nach dem Handshake verwerfen statt
+// ueber den Stream schicken? Zaehlt verworfene Pakete; sonst zaehlt es als TooLarge (Stream).
+func DropTooLarge(n int, handshakeDone bool) bool {
+	if handshakeDone && n > DgStreamMax {
+		dgDropped.Add(1)
+		return true
+	}
+	dgTooLarge.Add(1)
+	return false
 }
 
 // dgMux verteilt die Datagramme einer QUIC-Verbindung auf die Fluesse.
@@ -114,17 +142,20 @@ func (f *DatagramFlow) ID() uint32 { return f.id }
 // Answered: die Gegenseite hat schon ein Datagramm dieses Flusses geschickt (kennt ihn also).
 func (f *DatagramFlow) Answered() bool { return f.answered.Load() }
 
-// Send schickt p als Datagramm; false = nicht geschickt (zu gross, Verbindung zu) - dann ueber den Stream.
-func (f *DatagramFlow) Send(p []byte) bool {
+// Send schickt p als Datagramm; Fehler = nicht geschickt: ErrDatagramTooLarge (siehe DropTooLarge) bzw. Verbindung
+// zu - dann ueber den Stream.
+func (f *DatagramFlow) Send(p []byte) error {
 	b := make([]byte, dgHeader+len(p))
 	binary.BigEndian.PutUint32(b, f.id)
 	copy(b[dgHeader:], p)
 	if err := f.m.s.c.SendDatagram(b); err != nil {
-		dgTooLarge.Add(1)
-		return false
+		if tl := (*quic.DatagramTooLargeError)(nil); errors.As(err, &tl) {
+			return ErrDatagramTooLarge
+		}
+		return err
 	}
 	dgSent.Add(1)
-	return true
+	return nil
 }
 
 // Close meldet den Fluss ab (spaetere Datagramme mit seiner Nummer werden verworfen).

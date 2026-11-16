@@ -799,6 +799,13 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   (`Header.Flow`, `internal/tunnel/datagram.go`), Pakete als QUIC-Datagramme (RFC 9221). Der Server schickt zuerst
   über den Stream und schaltet um, sobald die Node per Datagramm antwortet; alte Nodes, TCP-Ausweichweg, Weg über
   den Nachbarn und zu große Pakete bleiben beim Stream. Zähler `cdn64_edge_quic_datagrams_total`.
+  **Zu große Pakete (2026-11-16, PROXY64 1.56.7 + cdn64-edge 0.22.3):** Nach der MTU-Erkennung schickten Browser
+  Pakete bis 1452 Byte, ins Datagramm passen je nach Tunnel-MTU nur etwa 1236–1408 Byte; rund 30 % gingen über den
+  Stream, kamen umsortiert an, der Upload über HTTP/3 brach bis auf ~2 Mbit/s ein (Speedtest; Labor
+  `TestQUICDownloadMeasure`, `NODE64_DLTEST=1`). Jetzt nach dem Handshake: zu groß und über 1280 Byte = verwerfen
+  (`tunnel.DropTooLarge`, wie eine kleinere MTU; Zähler `cdn64_edge_quic_datagrams_dropped_total`). Labor 30 ms ohne
+  Verlust: Upload ~3 → 470 Mbit/s, Download 140 → 420 Mbit/s. Bleibt: der Tunnel (quic-go Cubic, eine Verbindung) ist
+  verlustempfindlich – 0,5 % Verlust ≈ 10 Mbit/s je Tunnel-Verbindung (TCP wie HTTP/3); mehrere Sessions helfen bei TCP.
 - **TCP-/UDP-Streams (Portmapper Modus 1/2):** gebaut 2026-10-21 (PROXY64 1.24.0, cdn64-edge 0.15.0), siehe 8.3.
 - **Fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,
