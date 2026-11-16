@@ -138,6 +138,23 @@ PROXY64 und DNS64 lesen auf Wunsch Docker-Labels (`node64.proxy.*`, `node64.dns.
 
 **Sicherheit:** Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro` (das schützt nur die Datei, nicht die API). Die Node sendet ausschließlich GET-Anfragen. Wer das Risiko begrenzen will, setzt einen [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) mit `CONTAINERS=1` davor und trägt in der Node `NODE64_DOCKER_HOST=tcp://socket-proxy:2375` ein.
 
+### Ohne Docker: Debian-Paket (Debian, Ubuntu, Raspberry Pi OS 64 Bit)
+
+Node64 gibt es auch als `.deb` für `amd64`, `arm64` und `armhf` (ARMv7). Das Paket richtet einen Systemdienst `node64` unter
+einem eigenen Benutzer ein; die Oberfläche ist danach unter `http://<Rechner>:8080` erreichbar.
+
+```bash
+curl -fLO https://github.com/ipv64net/node64/releases/latest/download/node64_amd64.deb
+sudo apt install ./node64_amd64.deb
+```
+
+- **Daten:** `/var/lib/node64`, **Einstellungen:** `/etc/default/node64` (danach `sudo systemctl restart node64`), **Log:** `journalctl -u node64`.
+- **Rechte:** wie im Docker-Image nur Ports unter 1024, Ping/Router Advertisements und der Firewall-Helfer (`CAP_NET_BIND_SERVICE`, `CAP_NET_RAW`, `CAP_NET_ADMIN`), dazu systemd-Härtung.
+- **Update:** über das Selbst-Update in der Oberfläche oder mit einem neueren Paket (`sudo apt install ./node64_amd64.deb`); die Einstellungen bleiben.
+- **Docker-Labels/Monitor64 für Docker:** Benutzer `node64` in die Gruppe des Sockets aufnehmen (`sudo usermod -aG docker node64`, dann neu starten) – das gibt Kontrolle über Docker, siehe oben.
+- **Entfernen:** `sudo apt remove node64`; `purge` entfernt auch Einstellungen und Benutzer, die Daten in `/var/lib/node64` bleiben.
+- Prüfsummen: `node64-deb.sha256` (signiert: `node64-deb.sha256.sig`) am Release bzw. `https://ipv64.net/node64/deb/SHA256SUMS`.
+
 ## Lokale API
 
 Der Node stellt alles, was die Oberfläche kann, auch als JSON-API im eigenen Netz bereit: Status, Module, Einstellungen, Audit-Log, Logs, Backup, Benachrichtigungskanäle und das komplette Healthchecks-Modul. Die Referenz liegt im Node unter `/api/docs`, die maschinenlesbare Beschreibung (OpenAPI 3.1) unter `/api/openapi.json`.

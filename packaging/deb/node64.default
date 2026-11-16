@@ -1,0 +1,19 @@
+# Einstellungen fuer den Dienst node64 (Paketinstallation). Nach Aenderungen: systemctl restart node64
+# Alle Variablen: https://node64.de/docs/ (Installation, Umgebungsvariablen). Fast alles stellst du spaeter in der
+# Oberflaeche ein.
+
+# Datenordner (Datenbank, Zertifikate, Selbst-Update)
+NODE64_DATA_DIR=/var/lib/node64
+
+# Oberflaeche und API: http://<Rechner>:8080
+NODE64_HTTP_PORT=8080
+NODE64_HTTPS_PORT=0
+
+# Nur an eine Adresse binden (leer = alle)
+#NODE64_BIND_ADDR=
+
+# Zeitzone fuer Anzeigen und Zeitplaene (sonst die des Systems)
+#TZ=Europe/Berlin
+
+# Protokoll: debug, info, warn, error
+#NODE64_LOG_LEVEL=info

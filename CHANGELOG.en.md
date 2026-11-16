@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Installation without Docker: Debian package (`.deb`) for amd64, arm64 and armhf – system service `node64` under its own user, data in `/var/lib/node64`, settings in `/etc/default/node64`; download at the GitHub release (`releases/latest/download/node64_amd64.deb`) and at ipv64.net/node64/deb/.
+
 ## 1.7.4 – 2026-11-16
 
 - Monitor64: on RHEL, Oracle Linux and other systems with dnf, "Reboot required" is no longer permanently "yes" and the updates no longer fail with "Read-only file system" (agent 0.1.9, also via SSH, #169).

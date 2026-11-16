@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Installation ohne Docker: Debian-Paket (`.deb`) für amd64, arm64 und armhf – Systemdienst `node64` unter eigenem Benutzer, Daten in `/var/lib/node64`, Einstellungen in `/etc/default/node64`; Download am GitHub-Release (`releases/latest/download/node64_amd64.deb`) und unter ipv64.net/node64/deb/.
+
 ## 1.7.4 – 2026-11-16
 
 - Monitor64: Unter RHEL, Oracle Linux und anderen Systemen mit dnf steht „Neustart nötig“ nicht mehr dauerhaft auf „ja“, und die Updates scheitern nicht mehr an „Read-only file system“ (Agent 0.1.9, auch per SSH, #169).

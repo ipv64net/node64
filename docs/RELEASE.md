@@ -88,6 +88,19 @@ solange sie selbst eine Vorabversion fährt, sonst `stable`.
 
 1.0.0 muss ebenfalls nach `preview`: Die Nodes bis 0.12.0-alpha.39.1 lesen ohne eigene Wahl diesen Kanal.
 
+## Debian-Paket (ohne Docker)
+
+Der Job `release` baut aus denselben Programmen `.deb`-Pakete (`packaging/deb/build.sh`, nur `dpkg-deb`) für `amd64`,
+`arm64` und `armhf` und hängt sie ans GitHub-Release (`node64_<version>_<arch>.deb`, `node64_<arch>.deb` für den festen
+Link `…/releases/latest/download/node64_amd64.deb`, Prüfsummen `node64-deb.sha256` + `.sig`). Im Artefakt liegen sie unter
+`deb/`. Bei **stabilen** Versionen zusätzlich hochladen nach `web/node64/deb/` (ipv64.net/node64/deb/): die drei
+`node64_<arch>.deb`, die versionierten Dateien, `SHA256SUMS` und `SHA256SUMS.sig` (Download-Links auf node64.de und in der
+ipv64.net-Doku). Ein Release-Candidate kommt nicht dorthin.
+
+Test vor einer Änderung an `packaging/deb`: Paket bauen, in einem Debian-12-Container mit systemd installieren,
+aktualisieren, `remove`/`purge` und erneut installieren (Dienst aktiv, `CapEff` 0x3400, `/api/health`, Einstellungen
+in `/etc/default/node64` bleiben).
+
 ## Später: Docker Hub
 
 Als Spiegel zum öffentlichen Start: Organisation auf Docker Hub anlegen, ein Access-Token als Repo-Secret

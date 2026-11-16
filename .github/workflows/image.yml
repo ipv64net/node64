@@ -103,6 +103,8 @@ jobs:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Debian-Pakete als Anhang am GitHub-Release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -118,6 +120,17 @@ jobs:
             CGO_ENABLED=0 GOOS=linux GOARCH=$goarch GOARM=$goarm go build -trimpath -ldflags="-s -w -X main.Version=$V" -o dist/$V/node64-linux-$a ./cmd/node64
           done
           go run ./cmd/node64-release manifest -version "$V" -out dist/manifest.json dist/$V/node64-linux-*
+      # Debian-Pakete fuer die Installation ohne Docker (packaging/deb, dpkg-deb): dist/deb/node64_<version>_<arch>.deb
+      # und dieselben Dateien ohne Version (node64_<arch>.deb) fuer feste Download-Links, dazu SHA256SUMS.
+      # Hochladen nach https://ipv64.net/node64/deb/ und als Anhang am GitHub-Release (Job deb-release).
+      - name: build deb
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          for a in amd64:amd64 arm64:arm64 armhf:armv7; do
+            sh packaging/deb/build.sh "$V" "${a%%:*}" "dist/$V/node64-linux-${a#*:}" dist/deb
+            cp "dist/deb/node64_${V}_${a%%:*}.deb" "dist/deb/node64_${a%%:*}.deb"
+          done
+          (cd dist/deb && sha256sum node64_*.deb > SHA256SUMS)
       - name: build agent
         run: |
           AV="$(tr -d ' \r\n' < cmd/monitor64-agent/VERSION)"
@@ -144,6 +157,8 @@ jobs:
             go run ./cmd/node64-release sign dist/agent/agents.json
             # Signatur fuer install.sh (prueft sie ohne --sums-sha256 mit OpenSSL, AG-2)
             go run ./cmd/node64-release sign-file dist/agent/SHA256SUMS "dist/agent/$AGENT_VERSION/SHA256SUMS"
+            # Pruefsummen der Debian-Pakete (wie beim Agent: SHA256SUMS.sig, ed25519)
+            go run ./cmd/node64-release sign-file dist/deb/SHA256SUMS
           else
             echo "no signing key - manifest and agent files not signed"
           fi
@@ -151,3 +166,16 @@ jobs:
         with:
           name: node64-release-${{ github.ref_name }}
           path: dist/
+      # Debian-Pakete auch am GitHub-Release: fester Link https://github.com/<repo>/releases/latest/download/node64_amd64.deb
+      # (Pruefsummen dort als node64-deb.sha256, weil SHA256SUMS schon Sonar64 gehoert). Das Release legt sonar64.yml an.
+      - name: deb release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p gh-deb
+          cp dist/deb/*.deb gh-deb/
+          cp dist/deb/SHA256SUMS gh-deb/node64-deb.sha256
+          if [ -f dist/deb/SHA256SUMS.sig ]; then cp dist/deb/SHA256SUMS.sig gh-deb/node64-deb.sha256.sig; fi
+          for i in $(seq 1 30); do gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break; sleep 20; done
+          gh release upload "$GITHUB_REF_NAME" gh-deb/* --clobber
