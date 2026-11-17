@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: "Mark as resolved" only appears on problems where it has an effect – for a value that is still not fine the next poll reopened the problem right away (acknowledgement gone); acknowledge it there, it is resolved automatically.
+
 ## 1.7.8 – 2026-11-17
 
 - Monitor64: SNMP values (e.g. disks of a QNAP NAS) no longer jump to "Unknown" for a few minutes now and then when the device briefly returns an incomplete table – the last state applies for up to 10 minutes (#204).

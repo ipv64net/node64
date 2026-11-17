@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: „Als gelöst markieren“ erscheint bei Problemen nur noch, wo es wirkt – bei einem Wert, der weiter nicht passt, öffnete die nächste Abfrage das Problem sofort neu (Quittierung weg); dort hilft Quittieren, gelöst wird automatisch.
+
 ## 1.7.8 – 2026-11-17
 
 - Monitor64: SNMP-Werte (z. B. Platten eines QNAP-NAS) springen nicht mehr sporadisch für einige Minuten auf „Unbekannt“, wenn das Gerät eine Tabelle kurz unvollständig liefert – der letzte Stand gilt bis zu 10 Minuten (#204).

@@ -6434,13 +6434,14 @@
       "resolve": "Mark as resolved",
       "to_host": "Go to host",
       "ack_hint": "Acknowledging stops reminders. It is resolved automatically once the value is fine again.",
+      "ack_hint_failing": "Acknowledging stops reminders. It is resolved automatically once the value is fine again – resolving by hand only works then, otherwise the problem would come back right away.",
       "result": "Result",
       "result_sub": "Duration {d} · {a} to {b}",
       "timeline": "Timeline",
       "done_ack": "Acknowledged – no reminders until the next change",
       "done_unack": "Acknowledgement removed",
       "done_comment": "Comment saved",
-      "done_resolve": "Marked as resolved – it comes back if the value is still not fine"
+      "done_resolve": "Marked as resolved – it comes back if the error occurs again"
     },
     "ev": {
       "unreachable": "unreachable",
@@ -6922,6 +6923,7 @@
       "internal": "Internal error – details in the node log.",
       "not_found": "Not found (maybe removed in the meantime).",
       "not_running": "Monitor64 is not running right now.",
+      "still_failing": "The value is still not fine – marked as resolved, the problem would come back right away. Please acknowledge it; it is resolved automatically.",
       "name": "Please enter a name.",
       "address": "Please enter a valid address (hostname, IPv4 or IPv6).",
       "kind": "Unknown kind.",

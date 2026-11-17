@@ -644,9 +644,10 @@ type problemOut struct {
 	Host     string   `json:"host"`
 	HostGone bool     `json:"host_gone,omitempty"`
 	Name     string   `json:"name"`
-	Duration int64    `json:"duration"`        // Sekunden (offen: bis jetzt)
-	Channels []string `json:"channels"`        // Namen der Kanaele, an die gemeldet wurde
-	Maint    bool     `json:"maint,omitempty"` // offen und der Host steht gerade im Wartungsfenster (#142)
+	Duration int64    `json:"duration"`          // Sekunden (offen: bis jetzt)
+	Channels []string `json:"channels"`          // Namen der Kanaele, an die gemeldet wurde
+	Maint    bool     `json:"maint,omitempty"`   // offen und der Host steht gerade im Wartungsfenster (#142)
+	Failing  bool     `json:"failing,omitempty"` // offen und der Wert passt weiter nicht: von Hand loesen geht nicht
 }
 
 type problemsOut struct {
@@ -722,7 +723,9 @@ func (m *Module) problems(r *http.Request) (problemsOut, error) {
 	}
 	svcNames := map[string]string{}
 	inMaint := map[string]bool{}
+	views := map[string]*HostView{}
 	for _, v := range m.Views() {
+		views[v.Host.UID] = v
 		for _, s := range v.Services {
 			svcNames[v.Host.UID+"|"+s.Key] = s.Name
 		}
@@ -748,6 +751,7 @@ func (m *Module) problems(r *http.Request) (problemsOut, error) {
 		}
 		o.Duration = int64(end.Sub(p.Opened).Seconds())
 		o.Maint = p.Closed.IsZero() && inMaint[p.HostUID]
+		o.Failing = p.Closed.IsZero() && failingIn(views[p.HostUID], p.Key)
 		for _, id := range p.Notified {
 			o.Channels = append(o.Channels, firstNonEmpty(chNames[id], id))
 		}
@@ -853,7 +857,11 @@ func (m *Module) apiProblemAction(w http.ResponseWriter, r *http.Request) {
 			err = m.Comment(ctx, in.Host, in.Key, comment, by)
 		}
 	case "resolve":
-		err = m.Resolve(ctx, in.Host, in.Key, comment, by)
+		if m.stillFailing(in.Host, in.Key) {
+			err = errStillFailing
+		} else {
+			err = m.Resolve(ctx, in.Host, in.Key, comment, by)
+		}
 	default:
 		err = errBad("action")
 	}

@@ -3,6 +3,7 @@ package monitor64
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 
@@ -199,6 +200,45 @@ func (m *Module) Resolve(ctx context.Context, hostUID, svcKey, comment string, b
 	m.event(ctx, p.UID, hostUID, svcKey, "resolved", comment, by, time.Now())
 	m.trapsAcked(hostUID, svcKey)
 	return nil
+}
+
+// errStillFailing: von Hand loesen geht nicht, solange der Wert weiter nicht passt - die naechste Runde (die
+// Aktion stoesst sie sofort an) wuerde das Problem neu eroeffnen, ohne Quittierung.
+var errStillFailing = &apiError{status: http.StatusConflict, code: "still_failing"}
+
+// stillFailing: Dienst (bzw. Host bei "") ist laut aktuellem Stand weiter nicht OK und wird abgefragt.
+func (m *Module) stillFailing(hostUID, svcKey string) bool {
+	m.rtMu.Lock()
+	rt := m.rts[hostUID]
+	m.rtMu.Unlock()
+	if rt == nil {
+		return false
+	}
+	return failingIn(rt.getView(), svcKey)
+}
+
+// failingIn prueft den Stand eines Hosts. Von Hand loesbar bleiben Probleme, die sich nicht selbst loesen koennen:
+// Traps (Warnung bis quittiert), pausierte Hosts, Hosts ohne aktuellen Stand (auch im Cluster: zustaendige Node
+// fehlt) und Dienste eines nicht erreichbaren Hosts (die bleiben sonst offen, bis er wieder antwortet).
+func failingIn(v *HostView, svcKey string) bool {
+	if v == nil || v.Host == nil || v.Host.Paused || v.Checked.IsZero() || svcKey == trapSvcKey {
+		return false
+	}
+	if c := v.Cluster; c != nil && (c.Note == noteOwnerUnreachable || c.Note == noteNoData) {
+		return false
+	}
+	if svcKey == "" {
+		return v.View == eval.ViewUnreachable
+	}
+	if v.View == eval.ViewUnreachable {
+		return false
+	}
+	for _, s := range v.Services {
+		if s.Key == svcKey {
+			return s.State != eval.OK
+		}
+	}
+	return false
 }
 
 // nodeID ist die Kennung dieser Node (Einstellung des Kerns; einmal gelesen gemerkt - sie aendert sich nicht, wird

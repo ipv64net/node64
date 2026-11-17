@@ -1862,9 +1862,10 @@ function pageProblems() {
 				right = '<div class="small fw-semibold mb-1">' + esc(L('pb.ack_title')) + '</div><textarea class="form-control form-control-sm mb-2" rows="2" id="m64-ack-c" maxlength="500" placeholder="' + esc(L('pb.ack_ph')) + '">' + esc(p.ack ? p.ack.comment || '' : '') + '</textarea>' +
 					'<div class="d-flex flex-wrap gap-2"><button class="btn btn-sm btn-primary" type="button" data-pa="' + (p.ack ? 'comment' : 'ack') + '">' + (p.ack ? esc(L('pb.comment_save')) : '<i class="bi bi-check2"></i> ' + esc(L('ov.ack'))) + '</button>' +
 					(p.ack ? '<button class="btn btn-sm btn-outline-secondary" type="button" data-pa="unack">' + esc(L('ov.unack')) + '</button>' : '') +
-					'<button class="btn btn-sm btn-outline-secondary" type="button" data-pa="resolve"><i class="bi bi-person-check"></i> ' + esc(L('pb.resolve')) + '</button>' +
+					// von Hand loesen nur, wo es wirkt: passt der Wert weiter nicht, eroeffnet die naechste Runde das Problem neu
+					(p.failing ? '' : '<button class="btn btn-sm btn-outline-secondary" type="button" data-pa="resolve"><i class="bi bi-person-check"></i> ' + esc(L('pb.resolve')) + '</button>') +
 					(p.host_gone ? '' : '<a class="btn btn-sm btn-outline-secondary" href="/monitor64/host/' + encodeURIComponent(p.host_uid) + (p.key ? '#svc=' + encodeURIComponent(p.key) : '') + '">' + esc(L('pb.to_host')) + '</a>') + '</div>' +
-					'<div class="small text-body-secondary mt-2">' + esc(L('pb.ack_hint')) + '</div>';
+					'<div class="small text-body-secondary mt-2">' + esc(L(p.failing ? 'pb.ack_hint_failing' : 'pb.ack_hint')) + '</div>';
 			} else {
 				right = '<div class="small fw-semibold mb-1">' + esc(L('pb.result')) + '</div><div class="small">' + esc(howText(p)) + '</div><div class="small text-body-secondary mt-1">' + esc(L('pb.result_sub', { d: fmtDur(p.duration), a: fmtTime(p.opened), b: fmtTime(p.closed) })) + '</div>' +
 					(p.host_gone ? '' : '<a class="btn btn-sm btn-outline-secondary mt-2" href="/monitor64/host/' + encodeURIComponent(p.host_uid) + '">' + esc(L('pb.to_host')) + '</a>');

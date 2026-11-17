@@ -300,7 +300,23 @@ func TestAPIProblems(t *testing.T) {
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/csv") || !strings.Contains(csv, `'=HYPERLINK`) || strings.Contains(csv, ";=HYPERLINK") || !strings.Contains(csv, "Platte bestellt") {
 		t.Fatalf("csv: %d %q", rec.Code, csv)
 	}
-	// als geloest markieren
+	// als geloest markieren: nicht, solange der Wert weiter nicht passt (die naechste Runde eroeffnet neu)
+	rt := &hostRT{host: h}
+	rt.setView(&HostView{Host: h, View: eval.ViewWarn, State: eval.Warn, Checked: now, Services: []SvcView{{Key: "fs:/", State: eval.Warn}}})
+	e.m.rtMu.Lock()
+	e.m.rts = map[string]*hostRT{h.UID: rt}
+	e.m.rtMu.Unlock()
+	decodeBody(t, e.do("GET", "/api/monitor64/problems?status=open", nil).Body.Bytes(), &out)
+	if len(out.Problems) != 1 || !out.Problems[0].Failing {
+		t.Fatalf("failing: %+v", out.Problems)
+	}
+	if rec := e.do("POST", "/api/monitor64/problems/action", map[string]any{"host": h.UID, "key": "fs:/", "action": "resolve"}); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "still_failing") {
+		t.Fatalf("resolve failing: %d %s", rec.Code, rec.Body)
+	}
+	if how := e.col(`SELECT closed_at FROM m64_problems WHERE uid = 'p1'`); how != "" {
+		t.Fatal("closed while failing")
+	}
+	rt.setView(&HostView{Host: h, View: eval.ViewOK, State: eval.OK, Checked: now, Services: []SvcView{{Key: "fs:/", State: eval.OK}}})
 	if rec := e.do("POST", "/api/monitor64/problems/action", map[string]any{"host": h.UID, "key": "fs:/", "action": "resolve", "comment": "erledigt"}); rec.Code != 200 {
 		t.Fatalf("resolve: %d", rec.Code)
 	}
@@ -312,6 +328,37 @@ func TestAPIProblems(t *testing.T) {
 	}
 	if !e.audited("monitor64.problem.ack|") || !e.audited("monitor64.problem.resolve|") {
 		t.Fatal("problem actions not audited")
+	}
+}
+
+// Von Hand loesbar nur, wo sich das Problem nicht selbst loest.
+func TestFailingIn(t *testing.T) {
+	now := time.Now()
+	h, paused := &Host{UID: "h"}, &Host{UID: "h", Paused: true}
+	svcs := []SvcView{{Key: "fs:/", State: eval.Crit}, {Key: trapSvcKey, State: eval.Warn}, {Key: "cpu", State: eval.OK}}
+	live := &HostView{Host: h, View: eval.ViewCrit, Checked: now, Services: svcs}
+	for _, c := range []struct {
+		name string
+		v    *HostView
+		key  string
+		want bool
+	}{
+		{"crit", live, "fs:/", true},
+		{"ok", live, "cpu", false},
+		{"gone", live, "smart:sda", false},
+		{"traps", live, trapSvcKey, false},
+		{"host reachable", live, "", false},
+		{"no view", nil, "fs:/", false},
+		{"never checked", &HostView{Host: h, View: eval.ViewCrit, Services: svcs}, "fs:/", false},
+		{"paused", &HostView{Host: paused, View: eval.ViewCrit, Checked: now, Services: svcs}, "fs:/", false},
+		{"unreachable host", &HostView{Host: h, View: eval.ViewUnreachable, Checked: now, Services: svcs}, "", true},
+		{"unreachable svc", &HostView{Host: h, View: eval.ViewUnreachable, Checked: now, Services: svcs}, "fs:/", false},
+		{"owner unreachable", &HostView{Host: h, View: eval.ViewUnknown, Checked: now, Services: svcs, Cluster: &ClusterRef{Node: "n2", Note: noteOwnerUnreachable}}, "fs:/", false},
+		{"remote crit", &HostView{Host: h, View: eval.ViewCrit, Checked: now, Services: svcs, Cluster: &ClusterRef{Node: "n2", Reachable: true}}, "fs:/", true},
+	} {
+		if got := failingIn(c.v, c.key); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
 	}
 }
 

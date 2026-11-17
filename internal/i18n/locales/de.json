@@ -6434,13 +6434,14 @@
       "resolve": "Als gelöst markieren",
       "to_host": "Zum Host",
       "ack_hint": "Quittieren stoppt Erinnerungen. Gelöst wird es automatisch, sobald der Wert wieder passt.",
+      "ack_hint_failing": "Quittieren stoppt Erinnerungen. Gelöst wird es automatisch, sobald der Wert wieder passt – von Hand lösen geht erst dann, sonst käme das Problem sofort wieder.",
       "result": "Ergebnis",
       "result_sub": "Dauer {d} · {a} bis {b}",
       "timeline": "Ablauf",
       "done_ack": "Quittiert – keine Erinnerungen bis zur nächsten Änderung",
       "done_unack": "Quittierung aufgehoben",
       "done_comment": "Kommentar gespeichert",
-      "done_resolve": "Als gelöst markiert – meldet sich wieder, falls der Wert weiter nicht passt"
+      "done_resolve": "Als gelöst markiert – meldet sich wieder, wenn der Fehler erneut auftritt"
     },
     "ev": {
       "unreachable": "nicht erreichbar",
@@ -6922,6 +6923,7 @@
       "internal": "Interner Fehler – Details im Log der Node.",
       "not_found": "Nicht gefunden (vielleicht inzwischen entfernt).",
       "not_running": "Monitor64 läuft gerade nicht.",
+      "still_failing": "Der Wert passt noch nicht – als gelöst markiert käme das Problem sofort wieder. Bitte quittieren; gelöst wird es automatisch.",
       "name": "Bitte einen Namen eingeben.",
       "address": "Bitte eine gültige Adresse eingeben (Hostname, IPv4 oder IPv6).",
       "kind": "Unbekannte Art.",

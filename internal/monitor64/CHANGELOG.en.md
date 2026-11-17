@@ -1,5 +1,11 @@
 # Monitor64 – Changes
 
+## 0.1.24 – unreleased
+
+Fixes:
+
+- Problems: "Mark as resolved" seemed to do nothing for a value that is still not fine – the problem was closed, but the poll started right away opened it again (new start time, acknowledgement gone, reminders back on). The button now only appears where it has an effect: traps, paused hosts, hosts without a current state and services of an unreachable host; otherwise a hint says the problem is resolved automatically. The API rejects resolving in this case with 409 `still_failing` instead of silently "succeeding".
+
 ## 0.1.23 – 2026-11-17
 
 Fixes:

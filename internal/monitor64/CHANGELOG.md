@@ -1,5 +1,11 @@
 # Monitor64 – Änderungen
 
+## 0.1.24 – unveröffentlicht
+
+Fehlerbehebungen:
+
+- Probleme: „Als gelöst markieren“ tat bei einem Wert, der weiter nicht passt, scheinbar nichts – das Problem wurde geschlossen, die sofort angestoßene Abfrage eröffnete es aber gleich neu (neue Startzeit, Quittierung weg, Erinnerungen wieder an). Der Knopf erscheint jetzt nur noch, wo er wirkt: bei Traps, pausierten Hosts, Hosts ohne aktuellen Stand und Diensten eines nicht erreichbaren Hosts; sonst steht dort der Hinweis, dass das Problem automatisch gelöst wird. Die API lehnt das Lösen in diesem Fall mit 409 `still_failing` ab statt still zu „gelingen“.
+
 ## 0.1.23 – 2026-11-17
 
 Fehlerbehebungen:
