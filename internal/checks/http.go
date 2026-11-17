@@ -112,7 +112,7 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 			}
 			return dialer.DialContext(ctx, family, addr)
 		},
-		TLSClientConfig:        &tls.Config{InsecureSkipVerify: p.InsecureTLS, MinVersion: tls.VersionTLS12}, //nolint:gosec // bewusst per Option
+		TLSClientConfig:        &tls.Config{InsecureSkipVerify: p.InsecureTLS, MinVersion: tls.VersionTLS12, RootCAs: trustRoots()}, //nolint:gosec // bewusst per Option; RootCAs nil = System-CAs, sonst plus eigene CAs (#190)
 		TLSHandshakeTimeout:    def.Timeouts.Connect,
 		ResponseHeaderTimeout:  def.Timeouts.Total,
 		DisableKeepAlives:      true,

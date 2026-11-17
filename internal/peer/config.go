@@ -195,6 +195,12 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Me
 	want := m.v1Wants(m.syncCaps(ctx), *from)
 	if q, ok := r.URL.Query()["items"]; ok {
 		asked := splitCaps(strings.Join(q, ","))
+		// Die abholende Node nennt ihre Bereiche selbst: die gelten, nicht ihr Stand beim letzten Ping hier. Der kann
+		// kurz nach dem Beitritt oder dem Einschalten der Healthchecks dort veraltet sein; die Eintraege wuerden dann
+		// uebersprungen, der Zeiger dort liefe trotzdem bis zum Ende, und vorhandene Checks kaemen nie an (#194).
+		x := *from
+		x.Sync = askedCaps(asked)
+		want = m.v1Wants(m.syncCaps(ctx), x)
 		for i := 0; i < len(want); i++ {
 			if !has(asked, want[i]) {
 				want = append(want[:i], want[i+1:]...)
@@ -276,6 +282,20 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Me
 		out.Items = append(out.Items, c)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// askedCaps: Bereiche aus ?items der abholenden Node als "modul/bereich" (settings und channels gehoeren zu den
+// Benachrichtigungen, alles andere zu den Healthchecks).
+func askedCaps(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		if it == "settings" || it == "channels" {
+			out = append(out, "notifications/"+it)
+		} else {
+			out = append(out, "healthchecks/"+it)
+		}
+	}
+	return out
 }
 
 // pullAgainLater merkt einen Anstoss, der auf ein laufendes Abholen bei der Node traf (sonst wartete die Aenderung

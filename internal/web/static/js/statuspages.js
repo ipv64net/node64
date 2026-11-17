@@ -74,8 +74,24 @@
 			var r = tr.getBoundingClientRect();
 			body.insertBefore(drag, e.clientY > r.top + r.height / 2 ? tr.nextSibling : tr);
 		});
+		// Am Rand des sichtbaren Bereichs mitscrollen (Firefox tut das beim Ziehen nicht von selbst, #196)
+		var edgeY = 0, scrolling = 0;
+		var edgeScroll = function () {
+			scrolling = 0;
+			if (!drag || !edgeY) { return; }
+			window.scrollBy(0, edgeY);
+			scrolling = window.requestAnimationFrame(edgeScroll);
+		};
+		document.addEventListener("dragover", function (e) {
+			if (!drag) { return; }
+			var zone = 60, h = window.innerHeight;
+			edgeY = e.clientY < zone ? -Math.ceil((zone - e.clientY) / 4) : (e.clientY > h - zone ? Math.ceil((e.clientY - (h - zone)) / 4) : 0);
+			if (edgeY && !scrolling) { scrolling = window.requestAnimationFrame(edgeScroll); }
+		});
+		document.addEventListener("dragleave", function (e) { if (!e.relatedTarget) { edgeY = 0; } }); // Fenster verlassen
 		body.addEventListener("drop", function (e) { if (drag) { e.preventDefault(); } });
 		body.addEventListener("dragend", function () {
+			edgeY = 0;
 			if (!drag) { return; }
 			drag.classList.remove("opacity-50");
 			drag.draggable = false;

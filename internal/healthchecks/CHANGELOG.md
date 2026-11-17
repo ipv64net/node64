@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 3.2.6 – 2026-11-17
+
+### Behoben
+- Übersicht, Detailseite und `/api/metrics` brauchten bei großen Datenbanken rund 13 s: Das Ablaufdatum der Zertifikate wird je HTTP(S)-Check aus den letzten Messungen gelesen statt über alle Messpunkte der letzten drei Tage (#197).
+- HTTPS- und Zertifikats-Checks vertrauen den eigenen CAs der Zertifikatsverwaltung: Dienste mit einem Zertifikat einer eigenen CA gelten nicht mehr als „certificate signed by unknown authority“ (#190).
+- Cluster: Eine neu beigetretene Node bekam bereits vorhandene Checks nicht, wenn die andere Node ihre Bereiche beim ersten Abgleich noch nicht kannte; nur danach angelegte Checks kamen an. Nodes mit diesem Update holen den Stand der Gruppe einmal neu ab (#194).
+- Statusseiten-Editor: Beim Verschieben eines Eintrags per Maus scrollt die Seite am oberen und unteren Rand mit (Firefox tat das nicht von selbst, #196).
+
 ## 3.2.5 – 2026-11-16
 
 ### Behoben

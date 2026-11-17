@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 3.2.6 – 2026-11-17
+
+### Fixed
+- Overview, detail page and `/api/metrics` took about 13 s on large databases: the certificate expiry is read per HTTP(S) check from its latest measurements instead of from all measurements of the last three days (#197).
+- HTTPS and certificate checks trust the own CAs of the certificate management: services with a certificate from an own CA no longer fail with "certificate signed by unknown authority" (#190).
+- Cluster: a newly joined node did not get existing checks when the other node did not yet know its areas at the first sync; only checks created afterwards arrived. Nodes with this update fetch the group's state once again (#194).
+- Status page editor: when moving an entry with the mouse, the page scrolls along at the top and bottom edge (Firefox did not do this by itself, #196).
+
 ## 3.2.5 – 2026-11-16
 
 ### Fixed

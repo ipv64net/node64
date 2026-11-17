@@ -89,7 +89,7 @@ func (certChecker) Check(ctx context.Context, def Definition, ip net.IP) Result 
 		return fail(ReasonCertInvalid, "certificate not valid before "+leaf.NotBefore.UTC().Format("2006-01-02"), lat, details)
 	}
 	if !p.SkipChain {
-		opts := x509.VerifyOptions{Intermediates: x509.NewCertPool(), CurrentTime: now}
+		opts := x509.VerifyOptions{Intermediates: x509.NewCertPool(), CurrentTime: now, Roots: trustRoots()} // nil = System-CAs, sonst plus eigene CAs (#190)
 		for _, c := range st.PeerCertificates[1:] {
 			opts.Intermediates.AddCert(c)
 		}

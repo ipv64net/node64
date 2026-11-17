@@ -1115,20 +1115,35 @@ func (s *Store) Counts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// CertExpiries liefert je HTTP(S)-Check das Ablaufdatum des Zertifikats aus der letzten Messung.
+// certScanRows: so viele der neuesten Messungen eines Checks sieht CertExpiries hoechstens an.
+const certScanRows = 50
+
+// CertExpiries liefert je HTTP(S)-Check das Ablaufdatum des Zertifikats aus der letzten Messung mit Zertifikat
+// (hoechstens 3 Tage alt). Je Check nur seine neuesten certScanRows Messungen ueber den Index token/time - frueher
+// durchsuchte eine Abfrage alle Messungen der letzten 3 Tage per LIKE, bei ~800 000 Zeilen dauerten Liste,
+// Detailseite und /api/metrics so ~13 s (#197).
 func (s *Store) CertExpiries(ctx context.Context) map[string]time.Time {
 	out := map[string]time.Time{}
-	rows, err := s.r.QueryContext(ctx, `SELECT m.token, m.details, m.message FROM hc_measurements m
-		JOIN (SELECT mm.token, MAX(mm.node_seq) seq FROM hc_measurements mm JOIN hc_checks c ON c.token = mm.token
-		      WHERE c.type IN ('http','keyword') AND (mm.details LIKE '%cert_not_after%' OR mm.message LIKE '%cert valid until%') AND mm.time > ? GROUP BY mm.token) x
-		ON x.seq = m.node_seq`, ft(time.Now().Add(-3*24*time.Hour)))
+	rows, err := s.r.QueryContext(ctx, `SELECT token FROM hc_checks WHERE type IN ('http','keyword')`)
 	if err != nil {
 		return out
 	}
-	defer rows.Close()
+	var tokens []string
 	for rows.Next() {
-		var token, details, msg string
-		if rows.Scan(&token, &details, &msg) != nil {
+		var t string
+		if rows.Scan(&t) == nil {
+			tokens = append(tokens, t)
+		}
+	}
+	rows.Close()
+	since := ft(time.Now().Add(-3 * 24 * time.Hour))
+	for _, token := range tokens {
+		var details, msg string
+		err := s.r.QueryRowContext(ctx, `SELECT details, message FROM (SELECT details, message, time FROM hc_measurements
+			WHERE token = ? AND time > ? ORDER BY time DESC LIMIT ?)
+			WHERE details LIKE '%cert_not_after%' OR message LIKE '%cert valid until%' ORDER BY time DESC LIMIT 1`,
+			token, since, certScanRows).Scan(&details, &msg)
+		if err != nil {
 			continue
 		}
 		if t, ok := certNotAfter([]byte(details)); ok {

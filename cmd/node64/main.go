@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 	"github.com/ipv64net/node64/internal/cdn64"
 	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/certs/certcluster"
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dns64/dns64cluster"
@@ -227,6 +229,11 @@ func run() error {
 	defer edgeSrv.Close(context.Background())
 	certMgr.SetHTTP(edgeSrv) // HTTP-01 ueber Port 80 des Eingangs
 	defer certMgr.Close()
+	checks.SetTrustPool(func() *x509.CertPool { // Healthchecks vertrauen den eigenen CAs (#190)
+		tctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return certMgr.TrustPool(tctx)
+	})
 	portReg.Provide(edge.Owner, edgeSrv.Claims)
 	dynModule := dyndns.New(st, logger.Slog(), box, dispatcher, Version)
 	dynModule.SetKey(ipv64Key)
