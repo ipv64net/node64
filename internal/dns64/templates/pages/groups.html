@@ -241,7 +241,7 @@
 						<td>{{if $d.Groups}}<form method="post" action="/dns64/groups/assign" class="d-flex gap-1 m-0">
 							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><input type="hidden" name="mac" value="{{.MAC}}"><input type="hidden" name="label" value="{{.Name}}">
 							<select class="form-select form-select-sm" style="width:auto" name="group_id" aria-label="{{$.T "dns64.groups.group"}}">
-								<option value="0">{{$.T "dns64.groups.no_group"}}</option>
+								<option value="0" data-sort="">{{$.T "dns64.groups.no_group"}}</option>
 								{{$cur := .GroupID}}{{range $d.Groups}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>{{end}}
 							</select>
 							<button class="btn btn-sm btn-outline-primary" type="submit" title="{{if .MAC}}{{$.T "dns64.groups.assign_mac"}}{{else}}{{$.T "dns64.groups.assign_ip"}}{{end}}"><i class="bi bi-check2"></i></button>

@@ -1,6 +1,11 @@
 # Changes – DNS64
 
-## 1.43.0 – unreleased
+## 1.43.1 – unreleased
+
+### Fixed
+- Device groups: the device table now sorts the “Group” column by the selected group instead of the text of all choices; devices without a group stay together, a second click reverses the order (#207).
+
+## 1.43.0 – 2026-11-16
 
 ### New
 - Adding and editing a DHCP network is easier: you pick the interface from a list of this node (name and address, e.g. "eth0 – 192.168.1.20/24"; Docker, VPN and VM interfaces only via "Other …" with a text field). A saved interface that does not exist right now stays visible as "(not found)". The chosen interface fills in the network; when the network changes, address range and router move along (same host parts, limited in smaller networks). Fields changed by hand stay as they are and get a hint if they no longer fit the network. Without JavaScript the text field remains.

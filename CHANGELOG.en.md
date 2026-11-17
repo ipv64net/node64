@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - PROXY64: the CDN64 quota now counts domains and subdomains separately (Free 1 domain and 2 subdomains, Home/Supporter 5 and 5, Business and Company 10 and 25 domains with unlimited subdomains); the tile shows both.
+- DNS64: the device table under device groups sorts the “Group” column by the selected group (#207).
 
 ## 1.7.7 – 2026-11-17
 

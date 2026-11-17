@@ -39,6 +39,10 @@
 		if (raw === null) {
 			var t = td.querySelector("time[datetime]");
 			if (t) { var dt = Date.parse(t.getAttribute("datetime")); if (!isNaN(dt)) { return { n: dt }; } }
+			// Auswahlfeld in der Zelle: gewaehlte Option zaehlt (data-sort der Option, sonst ihr Text), nicht alle Optionen (#207)
+			var sel = td.querySelector("select:not([multiple])");
+			var op = sel && sel.options[sel.selectedIndex];
+			if (sel) { raw = op ? (op.hasAttribute("data-sort") ? op.getAttribute("data-sort") : op.textContent) : ""; }
 		}
 		var s = (raw !== null ? raw : td.textContent).replace(/\s+/g, " ").trim();
 		if (raw === null) {
