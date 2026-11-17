@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: SNMP-Werte (z. B. Platten eines QNAP-NAS) springen nicht mehr sporadisch für einige Minuten auf „Unbekannt“, wenn das Gerät eine Tabelle kurz unvollständig liefert – der letzte Stand gilt bis zu 10 Minuten (#204).
+- Monitor64: Linux-Agent 0.1.11 startet auch auf Raspberry Pi OS 32 Bit mit 64-Bit-Kernel (z. B. Raspberry Pi 3B+, vorher „status=31/SYS“); bestehende Installationen den Installationsbefehl erneut ausführen (Forum 5205).
 - PROXY64: Das CDN64-Kontingent zählt jetzt Domains und Subdomains getrennt (Free 1 Domain und 2 Subdomains, Home/Supporter 5 und 5, Business und Company 10 bzw. 25 Domains mit unbegrenzt vielen Subdomains); die Kachel zeigt beides.
 - DNS64: Die Gerätetabelle unter Gerätegruppen sortiert die Spalte „Gruppe“ nach der gewählten Gruppe (#207).
 

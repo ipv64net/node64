@@ -137,8 +137,8 @@ type Collector struct {
 	profileOf string // sysObjectID|sysDescr der Auswahl
 	// probeMiss: Profil-ID -> Neuwahlen in Folge, bei denen die Probe ohne Wert blieb (Profil bleibt bis profileMisses)
 	probeMiss map[string]int
-	// held: letzter vollstaendiger Stand je Teil eines Profils (Skalare bzw. Tabelle), fuer Aussetzer des Geraets
-	held map[string]heldPart
+	// held: letzter Stand der Dienste je Teil eines Profils (Skalare bzw. Tabelle), fuer Aussetzer des Geraets
+	held map[string][]heldSvc
 }
 
 // New prueft die Konfiguration und baut den Sammler (verbindet noch nicht).

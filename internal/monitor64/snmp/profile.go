@@ -522,10 +522,10 @@ type acc struct {
 	parts []string
 }
 
-// heldPart ist der letzte vollstaendige Stand eines Teils (Skalare oder eine Tabelle) eines Profils.
-type heldPart struct {
-	at   time.Time
-	svcs []model.Service
+// heldSvc ist der letzte gelieferte Stand eines Dienstes aus einem Teil (Skalare oder eine Tabelle) eines Profils.
+type heldSvc struct {
+	at time.Time
+	s  model.Service
 }
 
 // walkProfileTable fragt eine Tabelle ab und wiederholt das bei einem Aussetzer einmal mit kleineren GETBULK-Antworten
@@ -651,7 +651,11 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 			}
 			name := ""
 			if t.NameCol > 0 {
-				name = keyPart(text(tab.col(colOID(t.NameCol))[idx]))
+				nv, ok := tab.col(colOID(t.NameCol))[idx]
+				if !ok {
+					continue // Zeile ohne Namensspalte (Teilantwort): nicht als Dienst unter der Indexnummer anlegen (#204)
+				}
+				name = keyPart(text(nv))
 				if name == "" {
 					name = idx
 				}
@@ -681,21 +685,30 @@ func (c *Collector) collectProfile(r *round, p *Profile) {
 		a := accs[k]
 		a.s.Text = strings.Join(a.parts, " · ")
 	}
-	// vollstaendig beantwortete Teile merken, fehlende aus dem letzten Stand ergaenzen
+	// gelieferte Dienste merken; was fehlt (Teil ohne Antwort, aber auch leere oder unvollstaendige Tabellen ohne
+	// Fehler, #204), ergaenzt useHeld aus dem letzten Stand
 	if c.held == nil {
-		c.held = map[string]heldPart{}
+		c.held = map[string][]heldSvc{}
 	}
 	for _, pt := range parts {
 		if failed[pt] {
 			continue
 		}
-		var svcs []model.Service
+		var list []heldSvc
+		seen := map[string]bool{}
 		for _, k := range partKeys[pt] {
-			if a, ok := accs[k]; ok {
-				svcs = append(svcs, a.s)
+			if a, ok := accs[k]; ok && !seen[k] {
+				seen[k] = true
+				list = append(list, heldSvc{at: r.now, s: a.s})
 			}
 		}
-		c.held[pt] = heldPart{at: r.now, svcs: svcs}
+		for _, h := range c.held[pt] { // diesmal fehlende Dienste behalten ihren alten Stand (useHeld laesst ihn verfallen)
+			if !seen[h.s.Key] {
+				seen[h.s.Key] = true
+				list = append(list, h)
+			}
+		}
+		c.held[pt] = list
 	}
 	c.useHeld(r, p, parts, failed, accs, &order)
 	for _, k := range order {
@@ -712,32 +725,36 @@ func tableParts(p *Profile) []string {
 	return out
 }
 
-// useHeld ergaenzt die Dienste fehlgeschlagener Teile aus ihrem letzten Stand, solange er hoechstens profileHold alt
-// ist: ohne Messwerte (keine alten Zahlen im Verlauf), mit Zustand und Hinweis. Dienste, die ein anderer Teil schon
-// geliefert hat, bleiben unberuehrt. Aeltere Staende verfallen.
+// useHeld ergaenzt Dienste, die in dieser Runde fehlen (Teil ohne Antwort oder Zeile nicht geliefert), aus ihrem
+// letzten Stand, solange er hoechstens profileHold alt ist: ohne Messwerte (keine alten Zahlen im Verlauf), mit Zustand
+// und Hinweis. Dienste, die ein anderer Teil schon geliefert hat, bleiben unberuehrt. Aeltere Staende verfallen (eine
+// ausgebaute Platte fehlt also nach profileHold).
 func (c *Collector) useHeld(r *round, p *Profile, parts []string, failed map[string]bool, accs map[string]*acc, order *[]string) {
 	for _, pt := range parts {
-		if !failed[pt] {
-			continue
-		}
-		h, ok := c.held[pt]
+		list, ok := c.held[pt]
 		if !ok {
 			continue
 		}
-		age := r.now.Sub(h.at)
-		if age > profileHold || age < 0 {
-			delete(c.held, pt)
-			continue
-		}
-		mins := int(age / time.Minute)
-		for _, s := range h.svcs {
-			if _, have := accs[s.Key]; have {
+		keep := list[:0]
+		for _, h := range list {
+			age := r.now.Sub(h.at)
+			if age > profileHold || age < 0 {
 				continue
 			}
+			keep = append(keep, h)
+			if _, have := accs[h.s.Key]; have {
+				continue
+			}
+			s := h.s
 			s.Metrics = nil
-			s.Text = model.Join(s.Text, model.T("monitor64.txt.snmp_held", "n", mins))
+			s.Text = model.Join(s.Text, model.T("monitor64.txt.snmp_held", "n", int(age/time.Minute)))
 			accs[s.Key] = &acc{s: s}
 			*order = append(*order, s.Key)
+		}
+		if len(keep) == 0 {
+			delete(c.held, pt)
+		} else {
+			c.held[pt] = keep
 		}
 	}
 }

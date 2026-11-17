@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: SNMP values (e.g. disks of a QNAP NAS) no longer jump to "Unknown" for a few minutes now and then when the device briefly returns an incomplete table – the last state applies for up to 10 minutes (#204).
+- Monitor64: Linux agent 0.1.11 also starts on Raspberry Pi OS 32-bit with a 64-bit kernel (e.g. Raspberry Pi 3B+, previously "status=31/SYS"); for existing installations run the install command again (forum 5205).
 - PROXY64: the CDN64 quota now counts domains and subdomains separately (Free 1 domain and 2 subdomains, Home/Supporter 5 and 5, Business and Company 10 and 25 domains with unlimited subdomains); the tile shows both.
 - DNS64: the device table under device groups sorts the “Group” column by the selected group (#207).
 

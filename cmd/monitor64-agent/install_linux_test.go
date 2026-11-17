@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -32,6 +33,20 @@ func TestUnitText(t *testing.T) {
 	}
 	if z := unitText(6465, true); !strings.Contains(z, "\nReadWritePaths=/run -/var/log/zypper.log\n") {
 		t.Errorf("unit with zypper:\n%s", z)
+	}
+}
+
+// Forum 5205: Raspberry Pi OS 32 Bit mit 64-Bit-Kernel - systemd (armhf) beendete die arm64-Datei bei
+// SystemCallArchitectures=native sofort (status=31/SYS). Die Architektur der Datei ist zusaetzlich erlaubt.
+func TestUnitSyscallArch5205(t *testing.T) {
+	u := unitText(6465, false)
+	if !strings.Contains(u, "\nSystemCallArchitectures=native"+sysArch(runtime.GOARCH)+"\n") {
+		t.Errorf("SystemCallArchitectures:\n%s", u)
+	}
+	for goarch, want := range map[string]string{"arm64": " arm64", "arm": " arm", "amd64": " x86-64", "386": " x86", "mips": ""} {
+		if got := sysArch(goarch); got != want {
+			t.Errorf("%s: %q, erwartet %q", goarch, got, want)
+		}
 	}
 }
 

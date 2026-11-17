@@ -1,5 +1,13 @@
 # Monitor64 – Änderungen
 
+## 0.1.23 – 2026-11-17
+
+Fehlerbehebungen:
+
+- SNMP-Profile (z. B. QNAP): Platten und Volumes standen weiterhin sporadisch für einige Minuten auf „Unbekannt“, jedes Mal mit Alarm und Entwarnung. Das NAS beantwortet seine Plattentabelle zeitweise ohne Fehler, aber leer oder ohne einzelne Zeilen – das galt bisher als vollständige Antwort, das Halten des letzten Stands aus 0.1.14 griff nur bei ganz ausbleibenden Tabellen. Jetzt kommt jeder Dienst, der in einer Runde fehlt, bis zu 10 Minuten mit seinem letzten Stand (Zustand bleibt, Hinweis „Stand von vor … Min.“); eine Zeile ohne Namensspalte legt keinen Dienst unter der Indexnummer mehr an (#204).
+- Linux-Agent-Installation: Auf Raspberry Pi OS 32 Bit mit 64-Bit-Kernel (z. B. Raspberry Pi 3B+) startete der Agent nicht („status=31/SYS“). Der Installer wählt dort die arm64-Datei, deren Systemaufrufe der Filter `SystemCallArchitectures=native` sofort beendete – „native“ ist die Architektur von systemd (32 Bit), nicht die des Kernels. Die Unit erlaubt jetzt zusätzlich die Architektur der Agent-Datei; bestehende Installationen bekommen das mit einem erneuten Installationsbefehl (Forum 5205).
+- **Agent 0.1.11 (Linux):** systemd-Unit erlaubt die Architektur der Agent-Datei (Raspberry Pi OS 32 Bit mit 64-Bit-Kernel).
+
 ## 0.1.22 – 2026-11-16
 
 Neu:

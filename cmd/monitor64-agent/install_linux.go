@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -38,6 +39,9 @@ const (
 // Restart=always startet den Agent nach einem Absturz neu; nach einem Update startet er sich selbst neu (exec).
 // Kernel-Module laden darf der Dienst nicht (CapabilityBoundingSet, SystemCallFilter); ProtectKernelModules=yes ginge
 // weiter und versteckte /lib/modules, das "Neustart noetig" nach einem Kernel-Update braucht (#158).
+// SystemCallArchitectures: "native" ist die Architektur von systemd, nicht die des Kernels. Raspberry Pi OS 32 Bit mit
+// 64-Bit-Kernel meldet uname -m aarch64, install.sh nimmt die arm64-Datei - deren Systemaufrufe beendete der Filter
+// sofort (status=31/SYS, Forum 5205). Deshalb ist die Architektur der Datei zusaetzlich erlaubt (sysArch).
 // UnsetEnvironment=GODEBUG: manche Systeme setzen GODEBUG fuer alle Dienste (UGOS von Ugreen: tlskyber=0 in
 // /etc/systemd/system.conf); einen dort inzwischen entfernten Schalter quittiert die Go-Laufzeit mit Abbruch beim Start.
 const unitFile = `[Unit]
@@ -70,7 +74,7 @@ ProtectHostname=yes
 LockPersonality=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
-SystemCallArchitectures=native
+SystemCallArchitectures=native%s
 
 [Install]
 WantedBy=multi-user.target
@@ -93,7 +97,16 @@ func unitTextPush(port int, zypper, noListen bool) string {
 	if noListen {
 		nl = " --no-listen"
 	}
-	return fmt.Sprintf(unitFile, port, nl, extra)
+	return fmt.Sprintf(unitFile, port, nl, extra, sysArch(runtime.GOARCH))
+}
+
+// sysArch nennt die Architektur der Datei fuer SystemCallArchitectures (mit Leerzeichen davor, "" = unbekannt, dann
+// gilt nur native).
+func sysArch(goarch string) string {
+	if a, ok := map[string]string{"amd64": "x86-64", "386": "x86", "arm64": "arm64", "arm": "arm", "riscv64": "riscv64"}[goarch]; ok {
+		return " " + a
+	}
+	return ""
 }
 
 func install(args []string) int {
