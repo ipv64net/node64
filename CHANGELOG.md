@@ -4,13 +4,14 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.7 – 2026-11-17
+
 - PROXY64: Live-Anzeigen hingen seit 1.7.6 (z. B. Dockhand-Live-Status und -Logs, Server-Sent Events und Streams über HTTP/2) – behoben (Forum 5202; CDN64 Modus 2 und 3 mit cdn64-edge 0.22.7).
-
 - CDN64-Server (cdn64-edge 0.22.6, schon ausgerollt): UDP-Portmapper (z. B. WireGuard) – Downloads kamen in allen Modi oft gar nicht oder nur mit wenigen Mbit/s in Gang (Forum 5110); der Reflexionsschutz würgt den Anlauf nicht mehr ab.
-
 - Monitor64: Windows-Agent 0.1.10 – „Neustart nötig“ steht nicht mehr dauerhaft auf „ja“, nur weil Windows beim nächsten Start Dateireste löschen will (PendingFileRenameOperations); der Grund ist lesbar.
 - Monitor64: Zustand gewollt – meldet z. B. „Port ohne Link“ an einem ungenutzten Port, lässt sich im Dienst-Dialog bestätigen, dass das in Ordnung ist: bis sich der Zustand ändert oder dauerhaft. Gilt für alle Zustandsregeln.
 - Monitor64: Der UniFi-Zugang überwacht jetzt auch UniFi Drive, z. B. eine UNAS Pro mit API-Schlüssel – Pools, Platten (Zustand, Temperatur, Sektoren), CPU, RAM, Netz-Ports und System. Monitor64 erkennt selbst, ob Network, Drive oder beides läuft.
+
 ## 1.7.6 – 2026-11-16
 
 - PROXY64: Uploads über CDN64 brachen im Speedtest nach kurzer Zeit bis auf fast null ein (z. B. OpenSpeedTest hinter nginx, in Chrome und Firefox, über HTTP/2 und HTTP/3) – behoben. HTTP/3 über CDN64 läuft außerdem in beide Richtungen gleichmäßiger.
