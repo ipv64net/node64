@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><i class="bi bi-key text-primary me-1"></i> {{.T "environment.access_title"}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-key text-primary me-1"></i> {{.T "environment.access_title"}}{{.Doc "cluster#environment-hinzufuegen"}}</h1>
 <p class="small text-body-secondary">{{.T "environment.access_intro"}}</p>
 {{if $d.Message}}<div class="alert alert-danger small">{{$d.Message}}</div>{{end}}
 {{if $d.Key}}

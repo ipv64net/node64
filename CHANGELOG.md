@@ -15,6 +15,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Healthchecks: Der Statusseiten-Editor scrollt beim Verschieben per Maus am Rand mit (#196).
 - Benachrichtigungen: SMTP meldet sich bei Servern, die nur `AUTH LOGIN` anbieten (z. B. Hosted Exchange), mit LOGIN an statt mit „5.7.4 Unrecognized authentication type“ abzubrechen (#205).
 - Einstellungen: Unter „Mein Konto“ erscheint der Knopf „Passkey anlegen“ wieder (#206).
+- Environment: Hilfe-Symbol mit Link zur Doku auf den Seiten Environment, Zugänge und Node hinzufügen (Forum 5193).
 
 ## 1.7.7 – 2026-11-17
 

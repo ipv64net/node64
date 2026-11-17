@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><i class="bi bi-hdd-stack text-primary me-1"></i> {{if $d.Node}}{{.T "environment.edit_node"}}{{else}}{{.T "environment.add_node"}}{{end}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-hdd-stack text-primary me-1"></i> {{if $d.Node}}{{.T "environment.edit_node"}}{{else}}{{.T "environment.add_node"}}{{end}}{{.Doc "cluster#environment-hinzufuegen"}}</h1>
 <p class="small text-body-secondary">{{.T "environment.node_intro"}}</p>
 {{if $d.Message}}<div class="alert alert-danger small" id="env-error">{{$d.Message}}</div>{{end}}
 <div class="card mb-3" style="max-width: 42rem">

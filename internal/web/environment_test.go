@@ -95,7 +95,7 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, page := a.app.get(t, "/environment")
-	for _, want := range []string{`href="/environment"`, "Node B", b.app.srv.URL, "Diese Node", "mit meinem Benutzer", `action="/environment/open/node-b"`} {
+	for _, want := range []string{`href="/environment"`, "Node B", b.app.srv.URL, "Diese Node", "mit meinem Benutzer", `action="/environment/open/node-b"`, `href="https://node64.de/docs/cluster/#environment"`} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("environment page misses %q", want)
 		}

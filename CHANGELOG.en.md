@@ -15,6 +15,7 @@ Short summary of what changes per version. Details per module are in the node un
 - Healthchecks: the status page editor scrolls along at the edge when moving entries with the mouse (#196).
 - Notifications: SMTP signs in with LOGIN on servers that only offer `AUTH LOGIN` (e.g. hosted Exchange) instead of failing with "5.7.4 Unrecognized authentication type" (#205).
 - Settings: the "Add passkey" button appears again under "My account" (#206).
+- Environment: help icon linking to the documentation on the Environment, access and add node pages (forum 5193).
 
 ## 1.7.7 – 2026-11-17
 
