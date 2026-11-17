@@ -1,6 +1,6 @@
 # Changes – DNS64
 
-## 1.43.1 – unreleased
+## 1.43.1 – 2026-11-17
 
 ### Fixed
 - Device groups: the device table now sorts the “Group” column by the selected group instead of the text of all choices; devices without a group stay together, a second click reverses the order (#207).

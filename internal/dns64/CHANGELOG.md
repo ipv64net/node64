@@ -1,6 +1,6 @@
 # Änderungen – DNS64
 
-## 1.43.1 – unveröffentlicht
+## 1.43.1 – 2026-11-17
 
 ### Behoben
 - Gerätegruppen: Die Gerätetabelle sortiert die Spalte „Gruppe“ jetzt nach der gewählten Gruppe statt nach dem Text aller Auswahlmöglichkeiten; Geräte ohne Gruppe stehen zusammen, ein zweiter Klick dreht die Reihenfolge um (#207).
