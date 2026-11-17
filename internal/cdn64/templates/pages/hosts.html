@@ -203,7 +203,7 @@
 		<div class="stat-label">{{$.T "cdn64.online.q_domains"}}</div>
 		<div class="stat-value">{{.Used}} / {{.Limit}}</div>
 		<div class="progress mt-1" style="height:.5rem" role="progressbar" aria-valuenow="{{.DomPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.DomClass}}" style="width:{{.DomBar}}%"></div></div>
-		<div class="small text-body-secondary mt-1">{{if .OldCDN}}{{$.T "cdn64.online.q_old" "n" .OldCDN}} · {{end}}{{if .Mbit}}{{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{else}}{{$.T "cdn64.online.q_bw_free"}}{{end}}</div>
+		<div class="small text-body-secondary mt-1">{{if .HasSub}}{{if lt .SubLimit 0}}{{$.T "cdn64.online.q_sub_free" "used" .Sub}}{{else}}{{$.T "cdn64.online.q_sub" "used" .Sub "limit" .SubLimit}}{{end}} · {{end}}{{if .OldCDN}}{{$.T "cdn64.online.q_old" "n" .OldCDN}} · {{end}}{{if .Mbit}}{{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{else}}{{$.T "cdn64.online.q_bw_free"}}{{end}}</div>
 	</div><i class="bi bi-diagram-3 stat-icon"></i></div></div></div>
 	<div class="col-md-6"><div class="card stat {{if .Short}}stat-warn{{else}}stat-info{{end}}"><div class="card-body"><div class="stat-text">
 		<div class="stat-label">{{$.T "cdn64.online.q_traffic"}}</div>

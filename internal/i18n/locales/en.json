@@ -1234,6 +1234,8 @@
       "servers_hint": "Applies to this proxy host only. DNS and tunnel switch over within minutes, remaining connections keep running.",
       "servers_saved": "Saved: {list} with {n} connection(s) per server. DNS and tunnel switch over within minutes.",
       "servers_failed": "Number of servers not saved: {error}",
+      "q_sub": "Subdomains: {used} of {limit}",
+      "q_sub_free": "Subdomains: {used} (unlimited)",
       "q_old": "{n} of them in the old CDN",
       "q_bw_free": "Bandwidth unlimited",
       "q_short": "At the same usage it only lasts until about {date} (forecast {n} for the month).",

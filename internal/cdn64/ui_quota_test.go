@@ -26,3 +26,19 @@ func TestOnlineQuotaForecast(t *testing.T) {
 		t.Fatal("no forecast on the first day")
 	}
 }
+
+// Subdomains (seit 2026-11-17): aelteres ipv64 ohne Feld zeigt nichts, -1 = unbegrenzt.
+func TestOnlineQuotaSubdomains(t *testing.T) {
+	var q ipv64api.CDN64Quota
+	now := time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
+	if o := newOnlineQuota(q, now); o.HasSub {
+		t.Fatal("subdomains shown without the field")
+	}
+	q.Subdomains = &struct {
+		Used  int `json:"used"`
+		Limit int `json:"limit"`
+	}{Used: 3, Limit: -1}
+	if o := newOnlineQuota(q, now); !o.HasSub || o.Sub != 3 || o.SubLimit != -1 {
+		t.Fatalf("subdomains: %+v", o)
+	}
+}

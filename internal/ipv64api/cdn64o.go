@@ -149,6 +149,11 @@ type CDN64Quota struct {
 		OldCDN int `json:"old_cdn"`
 		Limit  int `json:"limit"`
 	} `json:"domains"`
+	// Subdomains: Namen vor einer Domain, je Account (seit 2026-11-17; nil = aelteres ipv64). Limit -1 = unbegrenzt.
+	Subdomains *struct {
+		Used  int `json:"used"`
+		Limit int `json:"limit"`
+	} `json:"subdomains,omitempty"`
 	TrafficMB struct {
 		Used   float64 `json:"used"`
 		OldCDN float64 `json:"old_cdn"`

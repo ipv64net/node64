@@ -1234,6 +1234,8 @@
       "servers_hint": "Gilt nur für diesen Proxy-Host. DNS und Tunnel stellen sich binnen Minuten um, die bleibenden Verbindungen laufen weiter.",
       "servers_saved": "Gespeichert: {list} mit {n} Verbindung(en) je Server. DNS und Tunnel stellen sich binnen Minuten um.",
       "servers_failed": "Server-Anzahl nicht gespeichert: {error}",
+      "q_sub": "Subdomains: {used} von {limit}",
+      "q_sub_free": "Subdomains: {used} (unbegrenzt)",
       "q_old": "{n} davon im alten CDN",
       "q_bw_free": "Bandbreite unbegrenzt",
       "q_short": "Reicht bei gleichem Verbrauch nur bis etwa {date} (Prognose {n} im Monat).",

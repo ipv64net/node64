@@ -164,6 +164,8 @@ type hostRow struct {
 // onlineQuota: Kontingent unter der Liste (zwei Kacheln; Traffic in Byte, altes CDN mitgezaehlt).
 type onlineQuota struct {
 	Used, Limit, OldCDN, Mbit int
+	HasSub                    bool // ipv64 meldet Subdomains (Domains zaehlen je Domain, Namen davor als Subdomains)
+	Sub, SubLimit             int  // SubLimit -1 = unbegrenzt
 	Traffic, TrafficLimit     int64
 	DomPct, TrafficPct        int       // Fuellstand in Prozent (0-100)
 	DomBar, TrafficBar        float64   // Breite der Balken (bei Verbrauch mindestens 1 %, sonst unsichtbar)
@@ -178,6 +180,9 @@ type onlineQuota struct {
 func newOnlineQuota(q ipv64api.CDN64Quota, now time.Time) *onlineQuota {
 	o := &onlineQuota{Used: q.Domains.Used, Limit: q.Domains.Limit, OldCDN: q.Domains.OldCDN, Traffic: int64(q.TrafficMB.Used * (1 << 20)),
 		TrafficLimit: int64(q.TrafficMB.Limit) << 20, Mbit: q.BandwidthMbit}
+	if q.Subdomains != nil {
+		o.HasSub, o.Sub, o.SubLimit = true, q.Subdomains.Used, q.Subdomains.Limit
+	}
 	pct := func(a, b int64) int {
 		if b <= 0 {
 			if a > 0 {

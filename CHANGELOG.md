@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Das CDN64-Kontingent zählt jetzt Domains und Subdomains getrennt (Free 1 Domain und 2 Subdomains, Home/Supporter 5 und 5, Business und Company 10 bzw. 25 Domains mit unbegrenzt vielen Subdomains); die Kachel zeigt beides.
+
 ## 1.7.7 – 2026-11-17
 
 - PROXY64: Live-Anzeigen hingen seit 1.7.6 (z. B. Dockhand-Live-Status und -Logs, Server-Sent Events und Streams über HTTP/2) – behoben (Forum 5202; CDN64 Modus 2 und 3 mit cdn64-edge 0.22.7).
