@@ -2,6 +2,9 @@
 
 ## 1.56.9 – 2026-11-17
 
+### Behoben
+- Ländersperre „nur diese Länder zulassen“: Netze auf der Freigabeliste gelten jetzt auch für Zugriffe, deren Herkunft Docker verdeckt (Gateway des Bridge-Netzes, Forum 5189). Für die echte Herkunft der Besucher bleibt `network_mode: host` der richtige Weg (#187).
+
 ### Geändert
 - CDN64-Kontingent: ipv64.net zählt CDN64-Namen jetzt nach Domains und Subdomains (z. B. `test.ipv64.de` = 1 Domain, `nas.test.ipv64.de` = 1 Subdomain; Free 1 Domain und 2 Subdomains, Home/Supporter 5 und 5, Business und Company 10 bzw. 25 Domains mit unbegrenzt vielen Subdomains). Die Kachel CDN-Domains zeigt die Subdomains mit an.
 

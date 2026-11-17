@@ -2,6 +2,9 @@
 
 ## 1.56.9 – 2026-11-17
 
+### Fixed
+- Country block "allow only these countries": networks on the allow list now also apply to requests whose origin Docker hides (gateway of the bridge network, forum 5189). For the real origin of visitors `network_mode: host` remains the right way (#187).
+
 ### Changed
 - CDN64 quota: ipv64.net now counts CDN64 names by domains and subdomains (e.g. `test.ipv64.de` = 1 domain, `nas.test.ipv64.de` = 1 subdomain; Free 1 domain and 2 subdomains, Home/Supporter 5 and 5, Business and Company 10 and 25 domains with unlimited subdomains). The CDN domains tile also shows the subdomains.
 

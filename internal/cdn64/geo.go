@@ -127,6 +127,15 @@ func (m *Module) geoBlockedBy(mode string, countries []string, ip netip.Addr) bo
 	}
 	ip = ip.Unmap()
 	g := &m.bl.geo
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	// Ausnahmen zuerst: Wer ein Netz ausdruecklich freigibt (z. B. das Docker-Netz), meint auch das Gateway darin
+	// (Forum 5189 - vorher wies "nur zulassen" das Gateway trotz Ausnahme ab)
+	for _, p := range g.allow {
+		if ip.IsValid() && p.Contains(ip) {
+			return false
+		}
+	}
 	if !ip.IsValid() || localnet.MaskedGateway(ip) { // Herkunft unbekannt (Docker-Gateway): "nur zulassen" sperrt
 		if mode == geoAllow {
 			g.blocked.Add(1)
@@ -136,13 +145,6 @@ func (m *Module) geoBlockedBy(mode string, countries []string, ip netip.Addr) bo
 	}
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || cgnat.Contains(ip) {
 		return false
-	}
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	for _, p := range g.allow {
-		if p.Contains(ip) {
-			return false
-		}
 	}
 	if cc, ok := geoLocate(ip); ok { // Standort bekannt: nur er zaehlt (#139)
 		block := slices.Contains(countries, cc)

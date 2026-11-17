@@ -48,6 +48,16 @@ func TestDockerGatewayOrigin(t *testing.T) {
 	if !m.geoBlocked(allow, gw) || m.geoBlocked(block, gw) {
 		t.Fatal("country block: unknown origin must be blocked by \"allow only\" and pass \"block\"")
 	}
+	// ausdruecklich freigegebenes Netz (Ausnahme, z. B. das Docker-Netz) gilt auch fuer das Gateway (Forum 5189)
+	m.bl.geo.mu.Lock()
+	m.bl.geo.allow = []netip.Prefix{netip.MustParsePrefix("172.16.0.0/12")}
+	m.bl.geo.mu.Unlock()
+	if m.geoBlocked(allow, gw) {
+		t.Fatal("country block \"allow only\": the docker gateway inside an allowed network must pass")
+	}
+	m.bl.geo.mu.Lock()
+	m.bl.geo.allow = nil
+	m.bl.geo.mu.Unlock()
 	// Hinweis auf der Seite
 	if body := renderHosts(t, listData{Kind: KindProxy}); strings.Contains(body, "cdn64.gw_masked") {
 		t.Fatal("hint without gateway requests")
