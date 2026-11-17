@@ -441,10 +441,14 @@ func TestTrapDNSFailureKeepsHost(t *testing.T) {
 	if err := m.store.SaveAccess(ctx, &Access{HostUID: h.UID, Type: "snmp", Config: cfg, Secret: m.box.Encrypt(snmp.Secret{Community: "dns-c"}.String()), Enabled: true}, false, SystemActor); err != nil {
 		t.Fatal(err)
 	}
+	// Unter syncMu: ein Abgleich im Hintergrund (Anstoss durch Start/SaveHost), der die Hosts noch vor SaveAccess
+	// gelesen hat, wuerde sonst den eben gesetzten Stand als "Host ohne Traps" vergessen (wackelte im CI).
+	m.traps.syncMu.Lock()
 	m.traps.mu.Lock()
 	m.traps.addrs[h.UID] = trapAddrs{address: h.Address, list: []netip.Addr{netip.MustParseAddr("127.0.0.1")}} // frueher aufgeloest
 	m.traps.mu.Unlock()
 	m.traps.restore(h.UID, &hostTraps{Pending: 1, Total: 1, List: []trapEntry{{Time: time.Now(), Version: "2c", TrapOID: ".1.3.6.1.4.1.9999.0.1"}}})
+	m.traps.syncMu.Unlock()
 	m.syncTraps(ctx)
 	if st := m.trapStatus(ctx); st.Active != 1 || !st.Running {
 		t.Fatalf("host with DNS failure dropped: %+v", st)
