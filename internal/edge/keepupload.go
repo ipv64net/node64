@@ -28,10 +28,12 @@ const (
 )
 
 // KeepUpload vor dem Weiterreichen aufrufen: den gelieferten ResponseWriter weiterreichen, die Funktion danach
-// aufrufen (immer). Ohne Body und bei "Expect: 100-continue" (der Client schickt den Body nach einer fruehen Antwort
-// gar nicht erst) bleibt alles, wie es ist.
+// aufrufen (immer). Ohne Upload und bei "Expect: 100-continue" (der Client schickt den Body nach einer fruehen
+// Antwort gar nicht erst) bleibt alles, wie es ist. Ohne Upload heisst auch Laenge 0: HTTP/2 liefert selbst einem GET
+// ohne Inhalt einen Body (nur HTTP/1.1 http.NoBody) - den liest niemand, die Antwort blieb bis zum Ende bzw. 64 KB
+// liegen und Live-Verbindungen (Server-Sent Events, Streams; Forum 5202, Dockhand) hingen (1.7.6).
 func KeepUpload(w http.ResponseWriter, r *http.Request) (http.ResponseWriter, func()) {
-	if r.Body == nil || r.Body == http.NoBody || strings.EqualFold(r.Header.Get("Expect"), "100-continue") {
+	if r.Body == nil || r.Body == http.NoBody || r.ContentLength == 0 || strings.EqualFold(r.Header.Get("Expect"), "100-continue") {
 		return w, func() {}
 	}
 	k := &keepBody{ReadCloser: r.Body}
@@ -101,10 +103,16 @@ type holdWriter struct {
 
 func (h *holdWriter) holding() bool { return !h.open && !h.k.eof.Load() }
 
+// stream: Event-Stream (Server-Sent Events) - nie zurueckhalten.
+func (h *holdWriter) stream() bool {
+	return strings.HasPrefix(strings.ToLower(h.Header().Get("Content-Type")), "text/event-stream")
+}
+
 func (h *holdWriter) WriteHeader(code int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if code < 200 || !h.holding() { // 1xx immer sofort
+	// 1xx und Event-Streams (Antwort laeuft neben dem Upload weiter, z. B. Fortschritt) immer sofort
+	if code < 200 || !h.holding() || h.stream() {
 		h.releaseLocked()
 		h.ResponseWriter.WriteHeader(code)
 		return
@@ -117,7 +125,7 @@ func (h *holdWriter) WriteHeader(code int) {
 func (h *holdWriter) Write(b []byte) (int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.holding() && len(h.buf)+len(b) <= keepHold {
+	if h.holding() && !h.stream() && len(h.buf)+len(b) <= keepHold {
 		if h.code == 0 {
 			h.code = http.StatusOK
 		}

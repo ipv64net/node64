@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: live views hung since 1.7.6 (e.g. Dockhand live status and logs, server-sent events and streams over HTTP/2) – fixed (forum 5202; CDN64 modes 2 and 3 with cdn64-edge 0.22.7).
+
 - CDN64 servers (cdn64-edge 0.22.6, already rolled out): UDP port mapper (e.g. WireGuard) – downloads often did not get going at all or only at a few Mbit/s in all modes; the reflection protection no longer chokes the start.
 
 - Monitor64: Windows agent 0.1.10 – "Reboot required" is no longer permanently "yes" just because Windows wants to delete leftover files on the next start (PendingFileRenameOperations); the reason is readable.

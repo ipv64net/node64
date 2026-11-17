@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.56.8 – 2026-11-17
+
+### Behoben
+- Live-Anzeigen hingen seit 1.7.6 (Forum 5202, z. B. Dockhand: Live-Status, Logs): Antworten auf Anfragen ohne Upload blieben über HTTP/2 bis zum Ende bzw. 64 KB liegen – Server-Sent Events und Streams kamen nicht an. HTTP/2 liefert auch einem GET ohne Inhalt einen leeren Upload, den die Behebung für den Speedtest-Upload aus 1.56.7 fälschlich abwartete. Jetzt gilt nur ein echter Upload als Upload, und Event-Streams gehen immer sofort durch. Für Namen in CDN64 Modus 2 und 3 behebt cdn64-edge 0.22.7 dasselbe.
+
 ## 1.56.7 – 2026-11-16
 
 ### Behoben

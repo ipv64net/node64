@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.56.8 – 2026-11-17
+
+### Fixed
+- Live views hung since 1.7.6 (forum 5202, e.g. Dockhand: live status, logs): answers to requests without an upload were held back over HTTP/2 until the end or 64 KB – server-sent events and streams did not arrive. HTTP/2 gives even a GET without content an empty upload, which the speed test upload fix from 1.56.7 wrongly waited for. Now only a real upload counts as one, and event streams always go through at once. For names in CDN64 modes 2 and 3, cdn64-edge 0.22.7 fixes the same.
+
 ## 1.56.7 – 2026-11-16
 
 ### Fixed

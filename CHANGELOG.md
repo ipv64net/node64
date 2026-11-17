@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Live-Anzeigen hingen seit 1.7.6 (z. B. Dockhand-Live-Status und -Logs, Server-Sent Events und Streams über HTTP/2) – behoben (Forum 5202; CDN64 Modus 2 und 3 mit cdn64-edge 0.22.7).
+
 - CDN64-Server (cdn64-edge 0.22.6, schon ausgerollt): UDP-Portmapper (z. B. WireGuard) – Downloads kamen in allen Modi oft gar nicht oder nur mit wenigen Mbit/s in Gang (Forum 5110); der Reflexionsschutz würgt den Anlauf nicht mehr ab.
 
 - Monitor64: Windows-Agent 0.1.10 – „Neustart nötig“ steht nicht mehr dauerhaft auf „ja“, nur weil Windows beim nächsten Start Dateireste löschen will (PendingFileRenameOperations); der Grund ist lesbar.
