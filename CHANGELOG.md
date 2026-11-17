@@ -8,6 +8,13 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Monitor64: Linux-Agent 0.1.11 startet auch auf Raspberry Pi OS 32 Bit mit 64-Bit-Kernel (z. B. Raspberry Pi 3B+, vorher „status=31/SYS“); bestehende Installationen den Installationsbefehl erneut ausführen (Forum 5205).
 - PROXY64: Das CDN64-Kontingent zählt jetzt Domains und Subdomains getrennt (Free 1 Domain und 2 Subdomains, Home/Supporter 5 und 5, Business und Company 10 bzw. 25 Domains mit unbegrenzt vielen Subdomains); die Kachel zeigt beides.
 - DNS64: Die Gerätetabelle unter Gerätegruppen sortiert die Spalte „Gruppe“ nach der gewählten Gruppe (#207).
+- PROXY64: Ländersperre „nur diese Länder zulassen“ – Netze auf der Freigabeliste gelten jetzt auch, wenn Docker die Herkunft verdeckt (Forum 5189, #187).
+- Healthchecks: Übersicht, Detailseite und `/api/metrics` öffnen bei großen Datenbanken wieder sofort statt nach rund 13 s (#197).
+- Healthchecks: HTTPS- und Zertifikats-Checks vertrauen den eigenen CAs der Zertifikatsverwaltung (#190).
+- Healthchecks: Eine neu beigetretene Cluster-Node bekommt auch die schon vorhandenen Checks (#194).
+- Healthchecks: Der Statusseiten-Editor scrollt beim Verschieben per Maus am Rand mit (#196).
+- Benachrichtigungen: SMTP meldet sich bei Servern, die nur `AUTH LOGIN` anbieten (z. B. Hosted Exchange), mit LOGIN an statt mit „5.7.4 Unrecognized authentication type“ abzubrechen (#205).
+- Einstellungen: Unter „Mein Konto“ erscheint der Knopf „Passkey anlegen“ wieder (#206).
 
 ## 1.7.7 – 2026-11-17
 
