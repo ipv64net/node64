@@ -760,13 +760,7 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 		}
 	}
 	if user := ch.Config["user"]; user != "" {
-		var auth smtp.Auth
-		if okAuth, kinds := c.Extension("AUTH"); okAuth && strings.Contains(kinds, "CRAM-MD5") && security == "none" {
-			auth = smtp.CRAMMD5Auth(user, ch.Config["password"])
-		} else {
-			auth = smtp.PlainAuth("", user, ch.Config["password"], host)
-		}
-		if err := c.Auth(auth); err != nil {
+		if err := c.Auth(smtpAuthFor(c, security, user, ch.Config["password"], host)); err != nil {
 			return fmt.Errorf("auth: %w", err)
 		}
 	}
@@ -793,6 +787,60 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 		return smtpErr("data", addr, security, err)
 	}
 	return c.Quit()
+}
+
+// smtpAuthFor waehlt das Anmeldeverfahren nach dem, was der Server unter AUTH anbietet: PLAIN (Standard), LOGIN fuer
+// Server ohne PLAIN (z. B. Hosted Exchange mit "AUTH LOGIN NTLM" - vorher 5.7.4 Unrecognized authentication type,
+// #205), CRAM-MD5 ohne Verschluesselung. Wie PLAIN schickt LOGIN das Passwort nur ueber TLS (bzw. an localhost).
+func smtpAuthFor(c *smtp.Client, security, user, password, host string) smtp.Auth {
+	_, kinds := c.Extension("AUTH")
+	has := func(k string) bool {
+		for _, f := range strings.Fields(strings.ToUpper(kinds)) {
+			if f == k {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case has("CRAM-MD5") && security == "none":
+		return smtp.CRAMMD5Auth(user, password)
+	case !has("PLAIN") && has("LOGIN"):
+		return &loginAuth{user: user, password: password, host: host}
+	}
+	return smtp.PlainAuth("", user, password, host)
+}
+
+// loginAuth: SMTP AUTH LOGIN (Benutzer und Passwort einzeln auf Rueckfrage des Servers, Base64 macht net/smtp).
+type loginAuth struct {
+	user, password, host string
+	step                 int
+}
+
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	if !server.TLS && server.Name != "localhost" && server.Name != "127.0.0.1" && server.Name != "::1" {
+		return "", nil, errors.New("unencrypted connection")
+	}
+	if server.Name != a.host {
+		return "", nil, errors.New("wrong host name")
+	}
+	a.step = 0
+	return "LOGIN", nil, nil
+}
+
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if !more {
+		return nil, nil
+	}
+	q := strings.ToLower(string(fromServer))
+	a.step++
+	switch {
+	case strings.Contains(q, "username"), strings.Contains(q, "user name"), a.step == 1 && !strings.Contains(q, "password"):
+		return []byte(a.user), nil
+	case strings.Contains(q, "password"), a.step == 2:
+		return []byte(a.password), nil
+	}
+	return nil, fmt.Errorf("unexpected server challenge %q", fromServer)
 }
 
 // smtpErr: Schritt und Server in die Meldung; Zeitueberschreitung als "timeout" statt "context deadline exceeded", dazu
