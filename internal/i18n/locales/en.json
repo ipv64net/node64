@@ -4323,7 +4323,7 @@
       "entries": "Entries {from}–{to} of {total}",
       "page": "Page {n} of {of}",
       "live_paused": "Live paused (page 1 only)",
-      "list_limit": "Not fully loaded: all lists together have more than 4 million rules (memory limit). Choose fewer or smaller lists.",
+      "list_limit": "Not fully loaded: all lists together have more than {n} rules – the limit depends on the memory of the device or container (4 to 32 million). Choose fewer or smaller lists or give the container more memory.",
       "list_ip": "Contains IP addresses instead of domains – DNS64 blocks names. IP lists belong in PROXY64 → Blocklists or the firewall.",
       "list_skipped": "{n} lines without a DNS rule not used (e.g. browser rules or IP addresses)",
       "flush_confirm": "Flush the cache? The next queries go to the upstream servers again.",

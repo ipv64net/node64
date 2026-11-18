@@ -26,8 +26,9 @@ type Matcher struct {
 }
 
 // maxRules: so viele Regeln (alle Listen zusammen, mit Ausnahmen) haelt ein Matcher hoechstens - sonst reichten
-// 64 Listen zu je 64 MB fuer einen Speicherueberlauf auf kleinen Geraeten (Variable fuer Tests).
-var maxRules = 4_000_000
+// 64 Listen zu je 64 MB fuer einen Speicherueberlauf auf kleinen Geraeten. Richtet sich nach dem Speicher
+// (rulelimit.go: 4 bis 32 Millionen; Variable fuer Tests).
+var maxRules = autoMaxRules()
 
 // MaxLists is the number of lists one matcher can tell apart (bits of the mask).
 const MaxLists = 64

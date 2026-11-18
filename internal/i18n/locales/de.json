@@ -4323,7 +4323,7 @@
       "entries": "Einträge {from}–{to} von {total}",
       "page": "Seite {n} von {of}",
       "live_paused": "Live pausiert (nur Seite 1)",
-      "list_limit": "Nicht vollständig geladen: Alle Listen zusammen haben mehr als 4 Millionen Regeln (Grenze für den Speicher). Weniger oder kleinere Listen wählen.",
+      "list_limit": "Nicht vollständig geladen: Alle Listen zusammen haben mehr als {n} Regeln – die Grenze richtet sich nach dem Arbeitsspeicher des Geräts bzw. Containers (4 bis 32 Millionen). Weniger oder kleinere Listen wählen oder dem Container mehr Speicher geben.",
       "list_ip": "Enthält IP-Adressen statt Domains – DNS64 sperrt Namen. IP-Listen gehören in PROXY64 → Blocklisten bzw. die Firewall.",
       "list_skipped": "{n} Zeilen ohne DNS-Regel nicht übernommen (z. B. Browser-Regeln oder IP-Adressen)",
       "flush_confirm": "Cache leeren? Die nächsten Anfragen gehen dann wieder an die Upstream-Server.",

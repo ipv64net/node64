@@ -468,7 +468,7 @@
 			var status = tr.querySelector(".l-status");
 			status.replaceChildren();
 			if (l.error) { status.append(el("span", { "class": "badge text-bg-danger text-wrap", title: l.error }, t("error") + ": " + l.error)); }
-			else if (loaded && l.hint === "rule_limit") { status.append(el("span", { "class": "badge text-bg-warning text-wrap", title: t("list_limit") }, t("list_limit"))); }
+			else if (loaded && l.hint === "rule_limit") { var lim = t("list_limit", { n: nf.format(l.limit || 4000000) }); status.append(el("span", { "class": "badge text-bg-warning text-wrap", title: lim }, lim)); } // Grenze nach dem Speicher
 			else if (loaded && l.hint === "ip_list") { status.append(el("span", { "class": "badge text-bg-warning text-wrap", title: t("list_ip") }, t("list_ip"))); } // #164
 			else if (loaded) { status.append(el("span", { "class": "badge text-bg-success" }, t("active"))); }
 			else { status.append(el("span", { "class": "badge text-bg-secondary" }, t("loading"))); }

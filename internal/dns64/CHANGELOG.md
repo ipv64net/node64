@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.44.0 – unveröffentlicht
+
+### Geändert
+- Blocklisten: Die Gesamtgrenze aller Listen richtet sich jetzt nach dem Arbeitsspeicher des Geräts bzw. der Speichergrenze des Containers statt fest 4 Millionen Regeln: ein Viertel des Speichers, mindestens 4 und höchstens 32 Millionen Regeln (32-Bit-Systeme höchstens 8 Millionen) – z. B. rund 16 Millionen bei 8 GB. Eine Regel braucht gut 38 Byte; beim Neuladen steht der neue Satz kurz neben dem alten. Der Hinweis „Nicht vollständig geladen“ nennt die geltende Grenze.
+
 ## 1.43.1 – 2026-11-17
 
 ### Behoben

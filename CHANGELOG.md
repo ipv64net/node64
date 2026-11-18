@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- DNS64: Die Grenze für Blocklisten-Regeln richtet sich nach dem Arbeitsspeicher statt fest 4 Millionen – 4 bis 32 Millionen, z. B. rund 16 Millionen bei 8 GB.
 - Monitor64: „Als gelöst markieren“ erscheint bei Problemen nur noch, wo es wirkt – bei einem Wert, der weiter nicht passt, öffnete die nächste Abfrage das Problem sofort neu (Quittierung weg); dort hilft Quittieren, gelöst wird automatisch.
 
 ## 1.7.8 – 2026-11-17
