@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.57.0 – unveröffentlicht
+
+### Neu
+- CDN64-Kontingent: Die Startseiten-Karte, der Einrichtungs-Assistent und die Metriken zeigen neben den CDN-Domains jetzt auch die CDN-Subdomains (Namen unter einer Domain, die schon in CDN64 ist; je Account, z. B. Free 2, Home/Supporter 5, ab Business unbegrenzt).
+
+### Behoben
+- Ist ein Kontingent erreicht, nennt PROXY64 jetzt die richtige Grenze – CDN-Domains, CDN-Subdomains, Portmapper oder Tunnel. Vorher hieß jede Grenze „Das Kontingent an CDN-Domains ist belegt“, auch wenn die Subdomains oder Portmapper voll waren.
+
 ## 1.56.9 – 2026-11-17
 
 ### Behoben

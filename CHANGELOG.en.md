@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Account classes and dashboard: new row "CDN subdomains" (Free 2, Home/Supporter 5, unlimited from Business); the dashboard shows the usage.
+- PROXY64: when a limit is reached, the right limit is named (CDN domains, subdomains, port mappings or tunnels) instead of always "CDN domains used up"; card and wizard show the subdomains.
 ## 1.7.9 – 2026-11-18
 
 - Monitor64: switch "Query SMART values" on Proxmox VE, PBS, TrueNAS and agent accesses – when off, sleeping hard disks stay in standby (Proxmox VE woke them about every 30 minutes, #215).

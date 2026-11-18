@@ -82,7 +82,7 @@ type Overview struct {
 
 // Reihenfolge der Anzeige; hc_* kommen aus /hc2/account (Healthchecks 2.0), sonst aus /me.
 var limitOrder = []string{"dyndns_domains", "own_domains", "dyndns_updates_24h", "hc_points", "hc_checks_today", "sms_24h",
-	"failover_policies", "failover_monitors", "failover_rules", "cdn_domains", "cdn_traffic_gb", "vpn_traffic_gb", "dns64_clients"}
+	"failover_policies", "failover_monitors", "failover_rules", "cdn_domains", "cdn_subdomains", "cdn_traffic_gb", "vpn_traffic_gb", "dns64_clients"}
 
 type usage struct {
 	Used  float64  `json:"used"`
@@ -162,11 +162,19 @@ func (c *Client) overview(ctx context.Context, key string) (*Overview, error) {
 	return ov, nil
 }
 
-// cdnUsage traegt Domains und Traffic (MB -> GB) aus dem CDN-Kontingent ein.
+// cdnUsage traegt Domains, Subdomains und Traffic (MB -> GB) aus dem CDN-Kontingent ein.
 func cdnUsage(src map[string]usage, q CDN64Quota) {
 	dl, tl := float64(q.Domains.Limit), float64(q.TrafficMB.Limit)/1024
 	src["cdn_domains"] = usage{Used: float64(q.Domains.Used), Limit: &dl}
 	src["cdn_traffic_gb"] = usage{Used: q.TrafficMB.Used / 1024, Limit: &tl}
+	if s := q.Subdomains; s != nil { // Namen vor einer Domain, je Account (Limit -1 = unbegrenzt)
+		u := usage{Used: float64(s.Used)}
+		if s.Limit >= 0 {
+			sl := float64(s.Limit)
+			u.Limit = &sl
+		}
+		src["cdn_subdomains"] = u
+	}
 }
 
 type overviewCache struct {

@@ -40,6 +40,7 @@
       "other": "Weiteres"
     },
     "limit": {
+      "cdn_subdomains": "CDN-Subdomains (Namen unter einer Domain)",
       "dyndns_domains": "DynDNS-Domains",
       "own_domains": "Eigene Domains (DNS)",
       "cdn_tunnel_sessions": "Parallele Tunnel-Verbindungen je Server",
@@ -360,6 +361,7 @@
     "hc_hint": "Optional, nur für Healthchecks: Abgleich über die hub-Server (Online-Messungen, Live-Zustände, Benachrichtigungen über ipv64).",
     "mismatch": "Der API-Key gehört zu einem anderen Account als der Healthchecks-Sync.",
     "limit": {
+      "cdn_subdomains": "CDN-Subdomains",
       "dyndns_domains": "DynDNS-Domains",
       "own_domains": "Eigene Domains",
       "dyndns_updates_24h": "DynDNS-Updates (24 h)",
@@ -1219,6 +1221,7 @@
       "month_conns": "{n} Verbindungen",
       "month_rejected": "{n} abgewiesen",
       "quota_line": "CDN-Kontingent: {used} von {limit} Domains (altes CDN mitgezählt) · Traffic diesen Monat {traffic} von {tlimit}",
+      "q_subdomains": "CDN-Subdomains",
       "q_domains": "CDN-Domains",
       "q_traffic": "CDN-Traffic diesen Monat",
       "q_servers": "CDN64-Server",
@@ -1280,6 +1283,10 @@
       "route_error": "Der Name wird in dieser Node nicht an den Host gegeben: {error}. Besucher landen woanders (z. B. bei DNS64/DoH). Den Namen dort entfernen oder einen anderen Namen nehmen.",
       "wait_edges": "Die Server übernehmen die neue Einstellung, Test wird wiederholt …",
       "e": {
+        "limit_reached_domains": "Das Kontingent an CDN-Domains deiner Account-Klasse ist belegt (altes und neues CDN zusammen). Weitere Namen unter einer Domain, die schon in CDN64 ist, zählen als Subdomain.",
+        "limit_reached_subdomains": "Das Kontingent an CDN-Subdomains deiner Account-Klasse ist belegt. Subdomains sind Namen unter einer Domain, die schon in CDN64 ist – mehr gibt es mit einer höheren Account-Klasse (ab Business unbegrenzt).",
+        "limit_reached_mappings": "Das Kontingent an Portmappern deiner Account-Klasse ist belegt (altes und neues CDN zusammen).",
+        "limit_reached_tunnels": "Die Höchstzahl an Tunneln für deinen Account ist erreicht.",
         "no_api_key": "Kein ipv64-Account verbunden. Unter Einstellungen › ipv64 den API-Key eintragen und danach hier weitermachen.",
         "port_in_use": "Auf den Servern ist kein passender Port frei.",
         "mapping_exists": "Dieser Port ist für den Namen schon gemappt.",
@@ -1288,7 +1295,7 @@
         "api_key_rejected": "ipv64 lehnt den API-Key ab (abgelaufen oder widerrufen). Unter Einstellungen › ipv64 einen gültigen Key eintragen.",
         "ipv64_unreachable": "ipv64.net ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",
         "plan_not_allowed": "CDN64 gehört nicht zu deiner Account-Klasse.",
-        "limit_reached": "Das Kontingent an CDN-Domains deiner Account-Klasse ist belegt (altes und neues CDN zusammen).",
+        "limit_reached": "Ein Kontingent deiner Account-Klasse ist ausgeschöpft (CDN-Domains, -Subdomains, Portmapper oder Tunnel). Mehr gibt es mit einer höheren Account-Klasse.",
         "traffic_limit_reached": "Der CDN-Traffic dieses Monats ist aufgebraucht. Ab dem nächsten Monat oder mit einer höheren Account-Klasse geht es weiter.",
         "domain_not_in_account": "Der Name liegt in keiner Domain deines ipv64-Accounts. Zuerst die Domain bei ipv64 anlegen.",
         "cname_exists": "Für den Namen gibt es bei ipv64 einen CNAME. Diesen zuerst entfernen.",

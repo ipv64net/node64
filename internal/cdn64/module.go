@@ -50,7 +50,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.56.9"
+	Version = "1.57.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -389,7 +389,21 @@ func quotaStats(q *onlineQuota) []module.CardStat {
 	if q.Short {
 		tr.HintKey, tr.HintDate, tr.HintBytes, tr.HintClass = "cdn64.online.q_short", q.EmptyAt, q.Projected, "text-warning-emphasis"
 	}
-	return []module.CardStat{dom, tr}
+	out := []module.CardStat{dom}
+	if q.HasSub { // Subdomains je Account (unbegrenzt: nur die Zahl)
+		if q.SubLimit < 0 {
+			out = append(out, module.CardStat{LabelKey: "cdn64.online.q_subdomains", Value: int64(q.Sub)})
+		} else {
+			pct := 0.0
+			if q.SubLimit > 0 {
+				pct = min(100, float64(q.Sub)*100/float64(q.SubLimit))
+			} else if q.Sub > 0 {
+				pct = 100
+			}
+			out = append(out, row("cdn64.online.q_subdomains", int64(q.Sub), int64(q.SubLimit), module.BarWidth(pct, q.Sub > 0), module.BarClassOf(pct, false)))
+		}
+	}
+	return append(out, tr)
 }
 
 // edgeError: ein Port des Eingangs, den CDN64 braucht, ist nicht offen.

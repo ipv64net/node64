@@ -31,6 +31,7 @@ var ErrUnauthorized = errors.New("API key rejected by ipv64")
 type APIError struct {
 	Status     int
 	Code       string // z. B. limit_reached, domain_not_in_account
+	Limit      string // bei limit_reached: welche Grenze (CDN64: domains, subdomains, mappings, tunnels; leer = keine Angabe)
 	Detail     string
 	RetryAfter time.Duration // aus Retry-After (bisher nur HoneypotReport), 0 = keine Angabe
 }
@@ -52,6 +53,15 @@ func ErrorCode(err error) string {
 	var e *APIError
 	if errors.As(err, &e) {
 		return e.Code
+	}
+	return ""
+}
+
+// ErrorLimit liefert bei limit_reached die betroffene Grenze ("" = keine Angabe bzw. kein API-Fehler).
+func ErrorLimit(err error) string {
+	var e *APIError
+	if errors.As(err, &e) {
+		return e.Limit
 	}
 	return ""
 }
@@ -198,9 +208,10 @@ func (c *Client) do(ctx context.Context, method, key, path string, in any, out a
 		var p struct {
 			Detail string `json:"detail"`
 			Code   string `json:"code"`
+			Limit  string `json:"limit"`
 		}
 		if json.Unmarshal(body, &p) == nil {
-			e.Detail, e.Code = p.Detail, p.Code
+			e.Detail, e.Code, e.Limit = p.Detail, p.Code, p.Limit
 		}
 		return e
 	}

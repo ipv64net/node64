@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Account-Klassen und Startseite: neue Zeile „CDN-Subdomains“ (Free 2, Home/Supporter 5, ab Business unbegrenzt); die Startseite zeigt den Verbrauch.
+- PROXY64: Bei einem erreichten Kontingent steht die richtige Grenze da (CDN-Domains, -Subdomains, Portmapper oder Tunnel) statt immer „CDN-Domains belegt“; Karte und Assistent zeigen die Subdomains.
 ## 1.7.9 – 2026-11-18
 
 - Monitor64: Schalter „SMART-Werte abfragen“ an den Zugängen Proxmox VE, PBS, TrueNAS und Agent – aus bleiben schlafende Festplatten im Ruhezustand (Proxmox VE weckte sie etwa alle 30 Minuten, #215).

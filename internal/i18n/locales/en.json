@@ -40,6 +40,7 @@
       "other": "More"
     },
     "limit": {
+      "cdn_subdomains": "CDN subdomains (names below a domain)",
       "dyndns_domains": "DynDNS domains",
       "own_domains": "Own domains (DNS)",
       "cdn_tunnel_sessions": "Parallel tunnel connections per server",
@@ -360,6 +361,7 @@
     "hc_hint": "Optional, only for healthchecks: sync via the hub servers (online checks, live states, notifications via ipv64).",
     "mismatch": "The API key belongs to a different account than the healthchecks sync.",
     "limit": {
+      "cdn_subdomains": "CDN subdomains",
       "dyndns_domains": "DynDNS domains",
       "own_domains": "Own domains",
       "dyndns_updates_24h": "DynDNS updates (24 h)",
@@ -1219,6 +1221,7 @@
       "month_conns": "{n} connections",
       "month_rejected": "{n} rejected",
       "quota_line": "CDN quota: {used} of {limit} domains (old CDN included) · traffic this month {traffic} of {tlimit}",
+      "q_subdomains": "CDN subdomains",
       "q_domains": "CDN domains",
       "q_traffic": "CDN traffic this month",
       "q_servers": "CDN64 servers",
@@ -1280,6 +1283,10 @@
       "route_error": "This node does not route the name to the host: {error}. Visitors end up elsewhere (e.g. DNS64/DoH). Remove the name there or use another name.",
       "wait_edges": "The servers are picking up the new setting, testing again …",
       "e": {
+        "limit_reached_domains": "The CDN domain limit of your account class is used up (old and new CDN together). More names below a domain that is already in CDN64 count as subdomains.",
+        "limit_reached_subdomains": "The CDN subdomain limit of your account class is used up. Subdomains are names below a domain that is already in CDN64 – a higher account class gives you more (unlimited from Business).",
+        "limit_reached_mappings": "The port mapping limit of your account class is used up (old and new CDN together).",
+        "limit_reached_tunnels": "The maximum number of tunnels for your account is reached.",
         "no_api_key": "No ipv64 account connected. Enter the API key under Settings › ipv64, then continue here.",
         "port_in_use": "No suitable port is free on the servers.",
         "mapping_exists": "This port is already mapped for the name.",
@@ -1288,7 +1295,7 @@
         "api_key_rejected": "ipv64 rejects the API key (expired or revoked). Enter a valid key under Settings › ipv64.",
         "ipv64_unreachable": "ipv64.net is not reachable right now. Please try again later.",
         "plan_not_allowed": "CDN64 is not part of your account class.",
-        "limit_reached": "The CDN domain quota of your account class is used up (old and new CDN together).",
+        "limit_reached": "A limit of your account class is used up (CDN domains, subdomains, port mappings or tunnels). A higher account class gives you more.",
         "traffic_limit_reached": "This month's CDN traffic is used up. It continues next month or with a higher account class.",
         "domain_not_in_account": "The name is not part of a domain in your ipv64 account. Add the domain at ipv64 first.",
         "cname_exists": "The name has a CNAME record at ipv64. Remove it first.",

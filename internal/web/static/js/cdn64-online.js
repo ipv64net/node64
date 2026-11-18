@@ -104,6 +104,9 @@
 	function quota(s, q) {
 		if (!q) { return; }
 		s.line(t("quota", { used: q.domains.used, limit: q.domains.limit, traffic: (q.traffic_mb.used / 1024).toFixed(1), tlimit: Math.round(q.traffic_mb.limit / 1024) }));
+		if (q.subdomains) { // Namen unter einer Domain, die schon in CDN64 ist (-1 = unbegrenzt)
+			s.line(q.subdomains.limit < 0 ? t("q_sub_free", { used: q.subdomains.used }) : t("q_sub", { used: q.subdomains.used, limit: q.subdomains.limit }));
+		}
 	}
 
 	function account() {

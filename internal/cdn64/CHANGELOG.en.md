@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.57.0 – unreleased
+
+### Added
+- CDN64 quota: the dashboard card, the setup wizard and the metrics now show the CDN subdomains next to the CDN domains (names below a domain that is already in CDN64; per account, e.g. Free 2, Home/Supporter 5, unlimited from Business).
+
+### Fixed
+- When a limit is reached, PROXY64 now names the right one – CDN domains, CDN subdomains, port mappings or tunnels. Before, every limit read "The CDN domain limit is used up", even when subdomains or port mappings were full.
+
 ## 1.56.9 – 2026-11-17
 
 ### Fixed

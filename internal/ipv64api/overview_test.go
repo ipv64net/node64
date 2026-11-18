@@ -10,13 +10,13 @@ import (
 
 // Account-Uebersicht: CDN-Domains und -Traffic aus /cdn64o (altes und neues CDN, Monat), ohne die Route aus /me.
 func TestOverviewCDNQuota(t *testing.T) {
-	withCDN := true
+	withCDN, sub := true, ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/me":
 			_, _ = io.WriteString(w, `{"data":{"email":"t@example.com","plan":{"name":"Supporter"},"usage":{"cdn_domains":{"used":1,"limit":10},"cdn_traffic_gb":{"used":0.2,"limit":100}}}}`)
 		case r.URL.Path == "/cdn64o" && withCDN:
-			_, _ = io.WriteString(w, `{"data":{"quota":{"domains":{"used":3,"old_cdn":1,"limit":10},"traffic_mb":{"used":409.6,"old_cdn":204.8,"limit":102400},"bandwidth_mbit":0},"hosts":[]}}`)
+			_, _ = io.WriteString(w, `{"data":{"quota":{"domains":{"used":3,"old_cdn":1,"limit":10}`+sub+`,"traffic_mb":{"used":409.6,"old_cdn":204.8,"limit":102400},"bandwidth_mbit":0},"hosts":[]}}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"status":404,"code":"not_found","detail":"no such route"}`)
@@ -42,6 +42,16 @@ func TestOverviewCDNQuota(t *testing.T) {
 	if tr := l["cdn_traffic_gb"]; tr.Used != 0.4 || tr.Max != 100 || tr.Pct() != 0 || tr.BarPct() != 1 || !tr.GB() {
 		t.Fatalf("traffic: %+v pct %d bar %v", tr, tr.Pct(), tr.BarPct())
 	}
+	// Subdomains (seit 2026-11-17): eigene Zeile, -1 = unbegrenzt
+	sub = `,"subdomains":{"used":2,"limit":5}`
+	if s := get()["cdn_subdomains"]; s.Used != 2 || s.Max != 5 || s.Unlimited {
+		t.Fatalf("subdomains: %+v", s)
+	}
+	sub = `,"subdomains":{"used":7,"limit":-1}`
+	if s := get()["cdn_subdomains"]; s.Used != 7 || !s.Unlimited {
+		t.Fatalf("subdomains unbegrenzt: %+v", s)
+	}
+	sub = ""
 	withCDN = false
 	l = get()
 	if d, tr := l["cdn_domains"], l["cdn_traffic_gb"]; d.Used != 1 || tr.Used != 0.2 {
@@ -81,6 +91,40 @@ func TestLimitFullClass(t *testing.T) {
 	} {
 		if c.l.Pct() != c.pct || c.l.Full() != c.full || c.l.Warn() != c.warn || c.l.BarClass() != c.class {
 			t.Errorf("%+v: pct %d full %v warn %v class %s", c.l, c.l.Pct(), c.l.Full(), c.l.Warn(), c.l.BarClass())
+		}
+	}
+}
+
+// limit_reached mit Angabe der Grenze (CDN64: domains, subdomains, mappings, tunnels) bleibt im Fehler erhalten.
+func TestErrorLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"status":403,"code":"limit_reached","detail":"CDN subdomain limit of your plan is reached (5 of 5 subdomains).","limit":"subdomains"}`)
+	}))
+	defer srv.Close()
+	err := NewClient(srv.URL, "test").do(context.Background(), http.MethodPost, testKey, "/cdn64o/hosts", map[string]string{}, nil)
+	if ErrorCode(err) != "limit_reached" || ErrorLimit(err) != "subdomains" {
+		t.Fatalf("code %q limit %q (%v)", ErrorCode(err), ErrorLimit(err), err)
+	}
+	if ErrorLimit(nil) != "" {
+		t.Fatal("ErrorLimit(nil)")
+	}
+}
+
+// Account-Klassen: Zeile CDN-Subdomains direkt nach den CDN-Domains, eingebaut Free 2, Home/Supporter 5, sonst unbegrenzt.
+func TestPlansSubdomains(t *testing.T) {
+	idx := map[string]int{}
+	for i, r := range PlanOrder {
+		idx[r[1]] = i
+	}
+	if i, ok := idx["cdn_subdomains"]; !ok || i != idx["cdn_domains"]+1 {
+		t.Fatalf("PlanOrder: %v", PlanOrder)
+	}
+	want := map[string]int{"free": 2, "supporter": 5, "business": -1, "company": -1}
+	for _, p := range builtinPlans {
+		n, ok := p.Limits["cdn_subdomains"]
+		if !ok || (want[p.Key] < 0) != (n == nil) || (n != nil && *n != want[p.Key]) {
+			t.Errorf("%s: %v", p.Key, n)
 		}
 	}
 }

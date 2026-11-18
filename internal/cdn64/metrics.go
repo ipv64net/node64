@@ -95,6 +95,10 @@ func (m *Module) onlineMetrics(ctx context.Context, w *metrics.Writer) {
 	q := r.Data.Quota
 	w.Gauge("node64_cdn64_online_domains_used", "CDN domains used by the account (old CDN included)", float64(q.Domains.Used))
 	w.Gauge("node64_cdn64_online_domains_limit", "CDN domains allowed by the account class", float64(q.Domains.Limit))
+	if s := q.Subdomains; s != nil {
+		w.Gauge("node64_cdn64_online_subdomains_used", "CDN subdomains used by the account (names below a domain in CDN64)", float64(s.Used))
+		w.Gauge("node64_cdn64_online_subdomains_limit", "CDN subdomains allowed by the account class (-1 = unlimited)", float64(s.Limit))
+	}
 	w.Gauge("node64_cdn64_online_traffic_used_bytes", "CDN traffic of the account this month", q.TrafficMB.Used*1048576)
 	w.Gauge("node64_cdn64_online_traffic_limit_bytes", "CDN traffic allowed per month", float64(q.TrafficMB.Limit)*1048576)
 	for _, h := range r.Data.Hosts {

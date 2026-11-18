@@ -138,6 +138,12 @@ func onlineCode(err error) string {
 		return "api_key_rejected"
 	}
 	if c := ipv64api.ErrorCode(err); c != "" {
+		if c == "limit_reached" { // welche Grenze: eigener Text je Art (Domains, Subdomains, Portmapper, Tunnel)
+			switch l := ipv64api.ErrorLimit(err); l {
+			case "domains", "subdomains", "mappings", "tunnels":
+				return c + "_" + l
+			}
+		}
 		return c
 	}
 	if strings.Contains(err.Error(), "not reachable") || strings.Contains(err.Error(), "timeout") {
@@ -853,7 +859,7 @@ func (m *Module) onlineFail(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	case code == "no_api_key" || code == "not_configured" || code == "mode_not_available" || code == "not_online":
 		st = http.StatusConflict
-	case code == "api_key_rejected" || code == "plan_not_allowed" || code == "limit_reached" || code == "traffic_limit_reached" || code == "tunnel_blocked":
+	case code == "api_key_rejected" || code == "plan_not_allowed" || strings.HasPrefix(code, "limit_reached") || code == "traffic_limit_reached" || code == "tunnel_blocked":
 		st = http.StatusForbidden
 	}
 	writeJSON(w, st, map[string]string{"error": err.Error(), "code": code, "text": m.onlineText(r, code, err.Error())})
@@ -1313,7 +1319,7 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	if m.g.T == nil {
 		return "{}"
 	}
-	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf", "link_rtt", "link_loss", "loss_warn",
+	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "q_sub", "q_sub_free", "connect", "tcp", "udp_buf", "link_rtt", "link_loss", "loss_warn",
 		"skipped", "untrusted", "dns_ok", "dns_wait", "done", "partial", "failed", "hint_lan", "check_created", "check_failed", "working",
 		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint", "via_quic", "via_quic443", "via_tls",
 		"pause_confirm"}
