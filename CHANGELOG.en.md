@@ -4,17 +4,19 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.9 – 2026-11-18
+
 - Monitor64: switch "Query SMART values" on Proxmox VE, PBS, TrueNAS and agent accesses – when off, sleeping hard disks stay in standby (Proxmox VE woke them about every 30 minutes, #215).
-- Notifications: SMTP senders with a display name ("Monitoring <monitoring@example.com>") work – sending used to fail with "501 Invalid domain name"; the name now shows as sender (#209).
-- Notifications: Matrix rooms from room version 12 (room ID without ":server") can be entered (#212).
-- Healthchecks: status pages load instantly – after the cache expires the page is rebuilt in the background instead of making the visitor wait 1–2 s.
-- DNS64: the limit for blocklist rules follows the memory instead of a fixed 4 million – 4 to 32 million, e.g. about 16 million with 8 GB.
 - Monitor64: reminders go to the currently configured channels instead of those of the first message (after switching from SMS to the app the reminder still came by SMS).
 - Monitor64: small pulsing state dot next to "Monitor64" in the navigation (green, yellow-orange, red).
 - Monitor64: values can be confirmed as "fine" (e.g. SSD wear 100 %) – until the value gets worse or for good; previously only for state rules.
 - Monitor64: the overview shows the hosts right below the counters ("Problems" and "Recent" cards removed, new "Problems" counter card); the tile sparkline is labelled CPU · 24 h.
 - Monitor64: clicking a service opens a dialog with a large history chart and all values as a table (including SMART); settings and thresholds via the gear in the row, also as a dialog.
 - Monitor64: "Mark as resolved" only appears on problems where it has an effect – for a value that is still not fine the next poll reopened the problem right away (acknowledgement gone); acknowledge it there, it is resolved automatically.
+- DNS64: the limit for blocklist rules follows the memory instead of a fixed 4 million – 4 to 32 million, e.g. about 16 million with 8 GB.
+- Healthchecks: status pages load instantly – after the cache expires the page is rebuilt in the background instead of making the visitor wait 1–2 s.
+- Notifications: SMTP senders with a display name ("Monitoring <monitoring@example.com>") work – sending used to fail with "501 Invalid domain name"; the name now shows as sender (#209).
+- Notifications: Matrix rooms from room version 12 (room ID without ":server") can be entered (#212).
 
 ## 1.7.8 – 2026-11-17
 

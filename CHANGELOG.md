@@ -4,17 +4,19 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.9 – 2026-11-18
+
 - Monitor64: Schalter „SMART-Werte abfragen“ an den Zugängen Proxmox VE, PBS, TrueNAS und Agent – aus bleiben schlafende Festplatten im Ruhezustand (Proxmox VE weckte sie etwa alle 30 Minuten, #215).
-- Benachrichtigungen: SMTP-Absender mit Anzeigenamen („Monitoring <monitoring@example.com>“) funktionieren – vorher brach der Versand mit „501 Invalid domain name“ ab; der Name erscheint jetzt als Absender (#209).
-- Benachrichtigungen: Matrix-Räume ab Raumversion 12 (Raum-ID ohne „:server“) lassen sich eintragen (#212).
-- Healthchecks: Statusseiten laden sofort – nach Ablauf des Zwischenspeichers wird im Hintergrund neu gerechnet statt den Besucher 1–2 s warten zu lassen.
-- DNS64: Die Grenze für Blocklisten-Regeln richtet sich nach dem Arbeitsspeicher statt fest 4 Millionen – 4 bis 32 Millionen, z. B. rund 16 Millionen bei 8 GB.
 - Monitor64: Erinnerungen gehen an die aktuell eingestellten Kanäle statt an die der ersten Meldung (nach dem Umstellen von SMS auf die App kam die Erinnerung weiter per SMS).
 - Monitor64: kleiner pulsierender Zustandspunkt neben „Monitor64“ in der Navigation (grün, gelb-orange, rot).
 - Monitor64: Messwerte lassen sich als „in Ordnung“ bestätigen (z. B. SSD-Verschleiß 100 %) – bis der Wert schlechter wird oder dauerhaft; bisher nur bei Zustandsregeln.
 - Monitor64: Übersicht zeigt die Hosts direkt unter den Zählern (Karten „Probleme“ und „Zuletzt“ entfallen, neue Zähler-Karte „Probleme“); die Mini-Kurve der Kacheln ist als CPU · 24 Std. beschriftet.
 - Monitor64: Klick auf einen Dienst öffnet einen Dialog mit großem Verlauf und allen Werten als Tabelle (auch SMART); Einstellungen und Schwellen über das Zahnrad in der Zeile, ebenfalls als Dialog.
 - Monitor64: „Als gelöst markieren“ erscheint bei Problemen nur noch, wo es wirkt – bei einem Wert, der weiter nicht passt, öffnete die nächste Abfrage das Problem sofort neu (Quittierung weg); dort hilft Quittieren, gelöst wird automatisch.
+- DNS64: Die Grenze für Blocklisten-Regeln richtet sich nach dem Arbeitsspeicher statt fest 4 Millionen – 4 bis 32 Millionen, z. B. rund 16 Millionen bei 8 GB.
+- Healthchecks: Statusseiten laden sofort – nach Ablauf des Zwischenspeichers wird im Hintergrund neu gerechnet statt den Besucher 1–2 s warten zu lassen.
+- Benachrichtigungen: SMTP-Absender mit Anzeigenamen („Monitoring <monitoring@example.com>“) funktionieren – vorher brach der Versand mit „501 Invalid domain name“ ab; der Name erscheint jetzt als Absender (#209).
+- Benachrichtigungen: Matrix-Räume ab Raumversion 12 (Raum-ID ohne „:server“) lassen sich eintragen (#212).
 
 ## 1.7.8 – 2026-11-17
 

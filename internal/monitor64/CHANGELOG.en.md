@@ -1,6 +1,6 @@
 # Monitor64 – Changes
 
-## 0.1.24 – unreleased
+## 0.1.24 – 2026-11-18
 
 New:
 

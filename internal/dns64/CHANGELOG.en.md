@@ -1,6 +1,6 @@
 # Changes – DNS64
 
-## 1.44.0 – unreleased
+## 1.44.0 – 2026-11-18
 
 ### Changed
 - Blocklists: the overall limit of all lists now follows the memory of the device or the memory limit of the container instead of a fixed 4 million rules: a quarter of the memory, at least 4 and at most 32 million rules (32-bit systems at most 8 million) – e.g. about 16 million with 8 GB. A rule takes a little over 38 bytes; while reloading, the new set briefly sits next to the old one. The hint "Not fully loaded" names the limit in effect.
