@@ -46,8 +46,9 @@ func (s *Store) UpdateService(ctx context.Context, hostUID, key string, p svcPat
 	return affected(res, err)
 }
 
-// clearAccepted entfernt erledigte Ausnahmen "in Ordnung, bis sich der Zustand aendert" (eval.Rule.Accepted) aus den
-// Schwellen "nur dieser Dienst" - die Bedingung ist entfallen, der naechste Eintritt meldet wieder.
+// clearAccepted entfernt erledigte Ausnahmen "in Ordnung, bis sich der Zustand aendert" (eval.Rule.Accepted bzw.
+// AcceptedAt bei Zahlenwerten) aus den Schwellen "nur dieser Dienst" - die Bedingung ist entfallen, der naechste
+// Eintritt meldet wieder.
 func (m *Module) clearAccepted(ctx context.Context, hostUID string, r *ServiceRow, rules map[string]eval.Rule, kinds []string) {
 	next := make(map[string]eval.Rule, len(rules))
 	for k, v := range rules {
@@ -55,7 +56,7 @@ func (m *Module) clearAccepted(ctx context.Context, hostUID string, r *ServiceRo
 	}
 	for _, k := range kinds {
 		v := next[k]
-		v.Accepted = nil
+		v.Accepted, v.AcceptedAt = nil, nil
 		if v.Empty() {
 			delete(next, k)
 		} else {

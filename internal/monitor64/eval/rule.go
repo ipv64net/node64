@@ -151,6 +151,10 @@ type Rule struct {
 	// Ordnung") und meldet nichts, bis die Bedingung wieder entfaellt; dann entfernt die Runde die Ausnahme, der
 	// naechste Eintritt meldet wieder. Dauerhaft nicht melden ist Severity "off".
 	Accepted *bool `json:"accepted,omitempty"`
+	// AcceptedAt: nur Stufe "dieser Dienst", Zahlenwerte - der Wert ist bis zu diesem Stand gewollt ("SSD-Verschleiss
+	// 100 % ist in Ordnung"): bis dahin meldet die Regel nichts. Wird der Wert schlechter (Richtung der Regel) oder
+	// faellt er unter die Warnschwelle, entfernt die Runde die Ausnahme. Dauerhaft nicht melden ist Warn/Crit "off".
+	AcceptedAt *float64 `json:"accepted_at,omitempty"`
 }
 
 // Validate prueft eine Regel auf offensichtliche Fehler (nicht endliche Zahlen, negative Werte).
@@ -159,6 +163,9 @@ func (r Rule) Validate() error {
 		if l != nil && !l.Off && (math.IsNaN(l.V) || math.IsInf(l.V, 0)) {
 			return fmt.Errorf("eval: %s ist keine endliche Zahl", name)
 		}
+	}
+	if r.AcceptedAt != nil && (math.IsNaN(*r.AcceptedAt) || math.IsInf(*r.AcceptedAt, 0)) {
+		return errors.New("eval: accepted_at ist keine endliche Zahl")
 	}
 	if r.Hyst != nil && (math.IsNaN(*r.Hyst) || math.IsInf(*r.Hyst, 0) || *r.Hyst < 0) {
 		return errors.New("eval: Hysterese muss >= 0 sein")

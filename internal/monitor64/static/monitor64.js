@@ -881,7 +881,7 @@ function pageHost() {
 		});
 		if (s.vanished) { html += '<div class="small text-warning-emphasis"><i class="bi bi-question-diamond"></i> ' + esc(L('host.vanished')) + '</div>'; }
 		// als gewollt bestaetigter Zustand ("Port ohne Link ist in Ordnung, bis sich das aendert")
-		(s.accepted || []).forEach(function (k) { html += '<div class="small text-success-emphasis"><i class="bi bi-check2-circle"></i> ' + esc(L('host.accepted_state', { k: kindLabel(k) })) + '</div>'; });
+		(s.accepted || []).forEach(function (k) { html += '<div class="small text-success-emphasis"><i class="bi bi-check2-circle"></i> ' + esc(acceptedText(s, k, 'host')) + '</div>'; });
 		return html;
 	}
 	// pendText: "seit N Min. ueber X" – im Modus "GB frei" ist die Schwelle in GB frei.
@@ -1246,26 +1246,7 @@ function pageHost() {
 		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
 		html += pendHTML(s);
-		// Zustand ist gewollt (z. B. Port ohne Link): bis sich der Zustand aendert oder dauerhaft nicht melden
-		var acc = '', accBtn = function (k, mode, cls, icon, label) {
-			return '<button class="btn ' + cls + ' btn-sm" type="button" data-sd-accept="' + mode + '" data-k="' + esc(k) + '"><i class="bi ' + icon + '"></i> ' + esc(label) + '</button>';
-		};
-		(s.firing || []).forEach(function (k) {
-			acc += '<div class="lvl active mb-2"><div class="small mb-2">' + esc(L('sd.accept_q', { k: kindLabel(k) })) + '</div><div class="d-flex flex-wrap gap-2">' +
-				accBtn(k, 'change', 'btn-outline-success', 'bi-check2-circle', L('sd.accept_change')) + accBtn(k, 'always', 'btn-outline-secondary', 'bi-bell-slash', L('sd.accept_always')) +
-				'</div><div class="small text-body-secondary mt-2">' + esc(L('sd.accept_hint')) + '</div></div>';
-		});
-		(s.accepted || []).forEach(function (k) {
-			acc += '<div class="lvl mb-2 d-flex flex-wrap align-items-center gap-2"><span class="small flex-grow-1"><i class="bi bi-check2-circle text-success"></i> ' + esc(L('sd.accepted_change', { k: kindLabel(k) })) + '</span>' +
-				accBtn(k, '', 'btn-outline-secondary', 'bi-arrow-counterclockwise', L('sd.accept_clear')) + '</div>';
-		});
-		rules.forEach(function (r) {
-			if (r.state && r.service && r.service.severity === 'off') {
-				acc += '<div class="lvl mb-2 d-flex flex-wrap align-items-center gap-2"><span class="small flex-grow-1"><i class="bi bi-bell-slash text-body-secondary"></i> ' + esc(L('sd.accepted_always', { k: kindLabel(r.kind) })) + '</span>' +
-					accBtn(r.kind, '', 'btn-outline-secondary', 'bi-arrow-counterclockwise', L('sd.accept_clear')) + '</div>';
-			}
-		});
-		if (acc) { html += '<h6 class="mt-2">' + esc(L('sd.accept_title')) + '</h6>' + acc; }
+		html += acceptHTML(s); // Zustand gewollt (Port ohne Link, SSD-Verschleiss 100 % ...)
 		if (rules.length) {
 			html += '<h6 class="mt-2">' + esc(rules.length > 1 ? L('sd.thresholds') : L('sd.threshold')) + ' <span class="small text-body-secondary fw-normal">– ' + esc(L('sd.threshold_sub')) + '</span></h6>';
 			rules.forEach(function (r, i) { html += ruleBlock(s, r, i); });
@@ -1291,12 +1272,7 @@ function pageHost() {
 		var blocks = $$('[data-rk]', body).map(function (el, i) { return initBlock(el, rules[i], s); });
 		var svcURL = '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/service';
 		function after(msg) { return function () { toast(msg); closeDetail(); return reload(); }; }
-		$$('[data-sd-accept]', body).forEach(function (b) {
-			b.onclick = function () {
-				var mode = b.dataset.sdAccept;
-				lock(b, function () { return api('PUT', svcURL, { key: s.key, accept: { kind: b.dataset.k, mode: mode } }).then(after(mode ? L('sd.accept_toast') : L('sd.accept_cleared_toast'))); }).catch(fail);
-			};
-		});
+		bindAccept(body, s, function (msg) { return after(msg)(); });
 		$$('[data-sd-reset]', body).forEach(function (b) {
 			b.onclick = function () {
 				var rq = { key: s.key, rules: {} };
@@ -1371,6 +1347,54 @@ function pageHost() {
 		el.addEventListener('hidden.bs.modal', function () { fn(); }, { once: true });
 		md.hide();
 	}
+	// "Zustand gewollt?": meldende Regeln als in Ordnung bestaetigen bzw. Ausnahmen aufheben - Zustandsregeln (Port
+	// ohne Link: bis sich der Zustand aendert) und Zahlenwerte (SSD-Verschleiss 100 %: bis der Wert schlechter wird);
+	// "dauerhaft" schaltet die Regel an diesem Dienst ab.
+	function ruleOfKind(s, k) { var r = null; (s.rules || []).forEach(function (x) { if (x.kind === k) { r = x; } }); return r; }
+	function metricOfKind(s, k) { var r = null; (s.metrics || []).forEach(function (m) { if ((m.rule_kind || m.rule) === k) { r = m; } }); return r; }
+	function isNumKind(s, k) { var r = ruleOfKind(s, k); return !!(r && !r.state); }
+	function acceptedText(s, k, scope) {
+		var r = ruleOfKind(s, k), m = metricOfKind(s, k), at = r && r.service ? r.service.accepted_at : undefined;
+		if (isNumKind(s, k) && at !== undefined && at !== null) {
+			var v = fmtVal(at, m ? m.unit : '');
+			return scope === 'host' ? L('host.accepted_num', { k: kindLabel(k), v: v }) : L('sd.accepted_change_num', { k: kindLabel(k), v: v });
+		}
+		return scope === 'host' ? L('host.accepted_state', { k: kindLabel(k) }) : L('sd.accepted_change', { k: kindLabel(k) });
+	}
+	function acceptHTML(s) {
+		var acc = '', accBtn = function (k, mode, cls, icon, label) {
+			return '<button class="btn ' + cls + ' btn-sm" type="button" data-sd-accept="' + mode + '" data-k="' + esc(k) + '"><i class="bi ' + icon + '"></i> ' + esc(label) + '</button>';
+		};
+		(s.firing || []).forEach(function (k) {
+			var num = isNumKind(s, k), m = num ? metricOfKind(s, k) : null;
+			acc += '<div class="lvl active mb-2"><div class="small mb-2">' + esc(num ? L('sd.accept_q_num', { k: kindLabel(k), v: m ? fmtVal(m.value, m.unit) : '–' }) : L('sd.accept_q', { k: kindLabel(k) })) + '</div><div class="d-flex flex-wrap gap-2">' +
+				accBtn(k, 'change', 'btn-outline-success', 'bi-check2-circle', L(num ? 'sd.accept_change_num' : 'sd.accept_change')) + accBtn(k, 'always', 'btn-outline-secondary', 'bi-bell-slash', L('sd.accept_always')) +
+				'</div><div class="small text-body-secondary mt-2">' + esc(L(num ? 'sd.accept_hint_num' : 'sd.accept_hint')) + '</div></div>';
+		});
+		(s.accepted || []).forEach(function (k) {
+			acc += '<div class="lvl mb-2 d-flex flex-wrap align-items-center gap-2"><span class="small flex-grow-1"><i class="bi bi-check2-circle text-success"></i> ' + esc(acceptedText(s, k, 'sd')) + '</span>' +
+				accBtn(k, '', 'btn-outline-secondary', 'bi-arrow-counterclockwise', L('sd.accept_clear')) + '</div>';
+		});
+		(s.rules || []).forEach(function (r) {
+			var sv = r.service || {};
+			if ((r.state && sv.severity === 'off') || (!r.state && sv.warn === 'off' && sv.crit === 'off')) {
+				acc += '<div class="lvl mb-2 d-flex flex-wrap align-items-center gap-2"><span class="small flex-grow-1"><i class="bi bi-bell-slash text-body-secondary"></i> ' + esc(L('sd.accepted_always', { k: kindLabel(r.kind) })) + '</span>' +
+					accBtn(r.kind, '', 'btn-outline-secondary', 'bi-arrow-counterclockwise', L('sd.accept_clear')) + '</div>';
+			}
+		});
+		return acc ? '<h6 class="mt-2">' + esc(L('sd.accept_title')) + '</h6>' + acc : '';
+	}
+	// bindAccept: Knoepfe aus acceptHTML; done(meldung) schliesst den Dialog und laedt neu
+	function bindAccept(box, s, done) {
+		$$('[data-sd-accept]', box).forEach(function (b) {
+			b.onclick = function () {
+				var mode = b.dataset.sdAccept;
+				lock(b, function () {
+					return api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/service', { key: s.key, accept: { kind: b.dataset.k, mode: mode } }).then(function () { return done(mode ? L('sd.accept_toast') : L('sd.accept_cleared_toast')); });
+				}).catch(fail);
+			};
+		});
+	}
 	// pendHTML: Schwelle ueberschritten, Meldung erst nach der Dauer (Fortschritt bis zur Meldung)
 	function pendHTML(s) {
 		var mt = s.primary >= 0 ? s.metrics[s.primary] : null;
@@ -1407,7 +1431,7 @@ function pageHost() {
 		(s.metrics || []).forEach(function (m) {
 			if ((m.rule_kind || m.rule) === 'fs.trend_days' && m.value < 1e5) { html += '<div class="alert alert-danger py-2 small"><i class="bi bi-graph-up-arrow"></i> ' + esc(L('sd.trend', { n: fmtNum(m.value, 1) })) + '</div>'; }
 		});
-		(s.accepted || []).forEach(function (k) { html += '<div class="small text-success-emphasis mb-2"><i class="bi bi-check2-circle"></i> ' + esc(L('host.accepted_state', { k: kindLabel(k) })) + '</div>'; });
+		html += acceptHTML(s); // meldet gerade: hier als in Ordnung bestaetigen bzw. Ausnahme aufheben
 		// Verlauf: Zeitraum und (bei mehreren) Messgroesse waehlbar
 		if (list.length) {
 			if (!list.some(function (m) { return m.name === SI.metric; })) { SI.metric = (mt || list[0]).name; }
@@ -1452,6 +1476,7 @@ function pageHost() {
 				lock(b, function () { return api('POST', '/api/monitor64/problems/action', { host: uid, key: s.key, action: a, comment: '' }).then(function () { toast(a === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast')); closeInfo(); return reload(); }); }).catch(fail);
 			};
 		});
+		bindAccept($('#m64-si-body'), s, function (msg) { toast(msg); closeInfo(); return reload(); });
 		$$('[data-si-range]').forEach(function (b) { b.onclick = function () { SI.range = b.dataset.siRange; $$('[data-si-range]').forEach(function (x) { x.classList.toggle('active', x === b); }); infoChart(s); }; });
 		var sel = $('#m64-si-metric');
 		if (sel) { sel.onchange = function () { SI.metric = sel.value; infoChart(s); }; }

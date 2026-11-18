@@ -1264,6 +1264,84 @@ type acceptIn struct {
 	Mode string `json:"mode"` // change, always, ""
 }
 
+// acceptState: Zustandsregel - "change" bis sich der Zustand aendert (die Runde entfernt die Ausnahme), "always"
+// dauerhaft nicht melden (Severity off), "" aufheben.
+func acceptState(rule *eval.Rule, mode string) error {
+	off := eval.SevOff
+	switch mode {
+	case "change":
+		t := true
+		rule.Accepted = &t
+		if rule.Severity != nil && *rule.Severity == eval.SevOff {
+			rule.Severity = nil
+		}
+	case "always":
+		rule.Accepted, rule.Severity = nil, &off
+	case "":
+		rule.Accepted = nil
+		if rule.Severity != nil && *rule.Severity == eval.SevOff {
+			rule.Severity = nil
+		}
+	default:
+		return errBad("accept_mode")
+	}
+	return nil
+}
+
+// acceptNumber: Zahlenwert - "change" in Ordnung bis zum aktuellen Wert (wird er schlechter, meldet die Regel
+// wieder), "always" dauerhaft nicht melden (Warnung und Kritisch aus), "" aufheben. cur: aktueller Wert (nil =
+// unbekannt).
+func acceptNumber(rule *eval.Rule, mode string, cur *float64) error {
+	off := eval.Limit{Off: true}
+	isOff := func(l *eval.Limit) bool { return l != nil && l.Off }
+	clearOff := func() { // nur das von "always" gesetzte Paar zuruecknehmen
+		if isOff(rule.Warn) && isOff(rule.Crit) {
+			rule.Warn, rule.Crit = nil, nil
+		}
+		if isOff(rule.WarnFree) && isOff(rule.CritFree) {
+			rule.WarnFree, rule.CritFree = nil, nil
+		}
+	}
+	switch mode {
+	case "change":
+		if cur == nil {
+			return errBad("accept_value")
+		}
+		v := *cur
+		clearOff()
+		rule.AcceptedAt = &v
+	case "always":
+		w, c, wf, cf := off, off, off, off
+		rule.AcceptedAt, rule.Warn, rule.Crit, rule.WarnFree, rule.CritFree = nil, &w, &c, &wf, &cf
+	case "":
+		rule.AcceptedAt = nil
+		clearOff()
+	default:
+		return errBad("accept_mode")
+	}
+	return nil
+}
+
+// metricValue: aktueller Wert der Messgroesse mit dieser Regel-Art an einem Dienst (aus dem Stand der Runde).
+func (m *Module) metricValue(hostUID, key, kind string) *float64 {
+	v := m.viewOf(hostUID)
+	if v == nil {
+		return nil
+	}
+	for _, s := range v.Services {
+		if s.Key != key {
+			continue
+		}
+		for _, mt := range s.Metrics {
+			if firstNonEmpty(mt.RuleKind, mt.Metric.Rule) == kind {
+				x := mt.Value
+				return &x
+			}
+		}
+	}
+	return nil
+}
+
 // ruleChangeIn ist die Aenderung der Stufe "dieser Host" fuer eine Regel-Art.
 type ruleChangeIn struct {
 	Rule  *eval.Rule `json:"rule"`  // null bzw. leer = entfernen
@@ -1399,28 +1477,19 @@ func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if a := in.Accept; a != nil {
 		rk, known := ruleKindOf(a.Kind)
-		if !known || !rk.State || !slices.Contains(m.ruleKindsOfService(h.UID, row), a.Kind) {
-			m.fail(w, r, errBad("rule_kind", "kind", a.Kind, "error", "no state rule of this service"))
+		if !known || !slices.Contains(m.ruleKindsOfService(h.UID, row), a.Kind) {
+			m.fail(w, r, errBad("rule_kind", "kind", a.Kind, "error", "no rule of this service"))
 			return
 		}
 		rule := svcRules[a.Kind]
-		off := eval.SevOff
-		switch a.Mode {
-		case "change": // bis sich der Zustand aendert (die Runde entfernt die Ausnahme)
-			t := true
-			rule.Accepted = &t
-			if rule.Severity != nil && *rule.Severity == eval.SevOff {
-				rule.Severity = nil
-			}
-		case "always": // dauerhaft nicht melden
-			rule.Accepted, rule.Severity = nil, &off
-		case "": // aufheben
-			rule.Accepted = nil
-			if rule.Severity != nil && *rule.Severity == eval.SevOff {
-				rule.Severity = nil
-			}
-		default:
-			m.fail(w, r, errBad("accept_mode"))
+		var err error
+		if rk.State {
+			err = acceptState(&rule, a.Mode)
+		} else {
+			err = acceptNumber(&rule, a.Mode, m.metricValue(h.UID, row.Key, a.Kind))
+		}
+		if err != nil {
+			m.fail(w, r, err)
 			return
 		}
 		if rule.Empty() {

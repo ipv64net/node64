@@ -6233,7 +6233,8 @@
       "pending_state": "{s} ab {t} ({k})",
       "address_secret_title": "Neue Adresse",
       "address_secret_ok": "Speichern und Geheimnisse entfernen",
-      "accepted_state": "{k}: gewollt, bis sich der Zustand ändert"
+      "accepted_state": "{k}: gewollt, bis sich der Zustand ändert",
+      "accepted_num": "{k}: in Ordnung bis {v}"
     },
     "acc": {
       "type": "Art",
@@ -6401,6 +6402,10 @@
       "accepted_change": "„{k}“ gilt als in Ordnung, bis sich der Zustand ändert",
       "accepted_always": "„{k}“ wird an diesem Dienst dauerhaft nicht gemeldet",
       "accept_clear": "Aufheben",
+      "accept_q_num": "„{k}“ meldet gerade ({v}). Ist dieser Wert in Ordnung?",
+      "accept_change_num": "In Ordnung, bis der Wert schlechter wird",
+      "accept_hint_num": "„Bis der Wert schlechter wird“: Bis zum aktuellen Wert meldet die Regel nichts mehr, der Dienst gilt als OK (z. B. SSD-Verschleiß 100 % bei einer Platte, die weiterläuft). Wird der Wert schlechter oder kommt er unter die Warnschwelle zurück, gilt die Schwelle wieder. „Dauerhaft“: Warnung und Kritisch sind an diesem Dienst aus, bis du es zurücknimmst.",
+      "accepted_change_num": "„{k}“ gilt bis {v} als in Ordnung",
       "accept_toast": "Zustand als in Ordnung übernommen",
       "accept_cleared_toast": "Ausnahme aufgehoben",
       "settings": "Einstellungen und Schwellen"
@@ -7016,7 +7021,8 @@
       "backup_max_age_h": "Höchstalter der Backups: 1 bis 8760 Stunden (nur Proxmox Backup Server).",
       "site": "Site ungültig (Buchstaben, Ziffern, - und _; nur beim Zugang UniFi).",
       "address_secret": "Neue Adresse: Die Zugänge {list} würden ihr gespeichertes Geheimnis an die neue Adresse senden (ihr Ziel ist nicht über Fingerabdruck bzw. Hostschlüssel gebunden). Beim Speichern werden diese Geheimnisse entfernt – danach am Zugang neu eingeben.",
-      "accept_mode": "Ungültige Angabe für „Zustand in Ordnung“ (change, always oder leer)."
+      "accept_mode": "Ungültige Angabe für „Zustand in Ordnung“ (change, always oder leer).",
+      "accept_value": "Der aktuelle Wert ist nicht bekannt – bitte nach der nächsten Abfrage noch einmal versuchen."
     },
     "quote": "„{t}“",
     "err_session": "Sitzung abgelaufen oder keine Berechtigung – bitte die Seite neu laden und neu anmelden.",

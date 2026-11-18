@@ -617,6 +617,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 		}
 		onBattery := upsOnBattery(g.svc)
+		var numDone []string // erledigte Ausnahmen "in Ordnung bis zu diesem Wert" (Zahlenwerte)
 		// Zahlenwerte
 		for _, mt := range metrics {
 			if ok && mt.Name != "trend_days" {
@@ -638,9 +639,24 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				if mt.Rule == model.RuleUPSRuntime && !onBattery {
 					e = withoutLimits(e) // Restlaufzeit zaehlt nur auf Batterie; im Netzbetrieb OK beobachten (Tracker haengt nicht)
 				}
+				// "in Ordnung bis zu diesem Wert" (Ausnahme am Dienst, z. B. SSD-Verschleiss 100 %): bis dahin keine Stufe;
+				// wird der Wert schlechter oder faellt er unter die Warnschwelle, ist die Ausnahme erledigt
+				if a := hostRules[mt.Rule].AcceptedAt; a != nil {
+					if acceptWorse(e, *a, mt.Value) || acceptRecovered(e, mt.Value) {
+						numDone = append(numDone, mt.Rule)
+					} else {
+						e = withoutLimits(e)
+						if !slices.Contains(sv.Accepted, mt.Rule) {
+							sv.Accepted = append(sv.Accepted, mt.Rule)
+						}
+					}
+				}
 				mv.Status = tr.Observe(e, eval.Sample{At: now, Value: mt.Value, Free: free})
 				mv.RuleKind = mt.Rule
 				ms = append(ms, eval.MetricStatus{Name: mt.Name, Status: mv.Status, Notify: e.Notify()})
+				if (mv.Status.State == eval.Warn || mv.Status.State == eval.Crit) && !slices.Contains(sv.Firing, mt.Rule) {
+					sv.Firing = append(sv.Firing, mt.Rule) // meldet gerade: im Dialog als "in Ordnung" bestaetigbar
+				}
 			}
 			sv.Metrics = append(sv.Metrics, mv)
 		}
@@ -709,7 +725,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		sort.Strings(kindList)
 		// bestaetigte Zustaende, deren Bedingung entfallen ist (bzw. deren Regel-Art der Dienst nicht mehr hat): Ausnahme
 		// entfernen, damit der naechste Eintritt wieder meldet
-		var accDone []string
+		accDone := numDone
 		if ok || !r.VanishedAt.IsZero() {
 			for k, hr := range hostRules {
 				if hr.Accepted != nil && *hr.Accepted && !kinds[k] {
@@ -937,6 +953,34 @@ func upsOnBattery(s model.Service) bool {
 }
 
 // withoutLimits: dieselbe Regel ohne Schwellen (Messung wird als OK beobachtet).
+// acceptWorse: der Wert ist schlechter als der als gewollt bestaetigte (Richtung der Regel, Hysterese als Spielraum,
+// damit leichtes Schwanken die Ausnahme nicht beendet).
+func acceptWorse(e eval.Effective, at, v float64) bool {
+	if e.Dir == eval.Down {
+		return v < at-e.Hyst
+	}
+	return v > at+e.Hyst
+}
+
+// acceptRecovered: der Wert ist wieder unter der Warnschwelle (bzw. ohne Warnschwelle unter der kritischen) - die
+// Ausnahme wird nicht mehr gebraucht. Im Modus "GB frei" endet sie nur, wenn der Wert schlechter wird.
+func acceptRecovered(e eval.Effective, v float64) bool {
+	if e.Mode == eval.ModeFree {
+		return false
+	}
+	l := e.Warn
+	if l.Off {
+		l = e.Crit
+	}
+	if l.Off {
+		return true
+	}
+	if e.Dir == eval.Down {
+		return v > l.V
+	}
+	return v < l.V
+}
+
 func withoutLimits(e eval.Effective) eval.Effective {
 	off := eval.Limit{Off: true}
 	e.Warn, e.Crit, e.WarnFree, e.CritFree = off, off, off, off

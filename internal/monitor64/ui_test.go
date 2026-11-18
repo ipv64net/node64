@@ -250,7 +250,7 @@ func TestTextsComplete(t *testing.T) {
 			}
 		}
 	}
-	for _, code := range []string{"json", "internal", "not_found", "not_running", "name", "address", "kind", "rule", "target", "channel", "maint_time", "interval", "workers", "cluster_node", "still_failing"} {
+	for _, code := range []string{"json", "internal", "not_found", "not_running", "name", "address", "kind", "rule", "target", "channel", "maint_time", "interval", "workers", "cluster_node", "still_failing", "accept_value", "accept_mode"} {
 		keys = append(keys, "monitor64.err."+code)
 	}
 	for _, lang := range []string{"de", "en"} {

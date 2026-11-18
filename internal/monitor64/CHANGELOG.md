@@ -2,6 +2,10 @@
 
 ## 0.1.24 – unveröffentlicht
 
+Neu:
+
+- „Wert in Ordnung“: Meldet ein Messwert (z. B. SSD-Verschleiß 100 % bei einer NVMe, die weiterläuft), lässt er sich im Info-Dialog des Dienstes oder in den Einstellungen als in Ordnung bestätigen – „bis der Wert schlechter wird“ (bis zum aktuellen Wert gilt der Dienst als OK; wird der Wert schlechter oder kommt er unter die Warnschwelle zurück, gilt die Schwelle wieder) oder „dauerhaft nicht melden“ (Warnung und Kritisch an diesem Dienst aus). Bisher ging das nur für Zustandsregeln wie „Port ohne Link“; bei Werten, die nicht über 100 % steigen können, ließ sich die Schwelle nicht passend setzen. API: `accept` beim Ändern eines Dienstes nimmt jetzt auch Regel-Arten mit Zahlenwerten.
+
 Geändert:
 
 - Übersicht: Die Karten „Probleme“ und „Zuletzt“ sind weg – direkt unter den Zählern stehen jetzt die Hosts (Kacheln oder Liste). Neu ist eine Zähler-Karte „Probleme“ (offen, davon nicht quittiert), ein Klick führt zum Reiter Probleme.

@@ -2,6 +2,10 @@
 
 ## 0.1.24 – unreleased
 
+New:
+
+- "Value is fine": when a value reports (e.g. SSD wear 100 % on an NVMe that keeps running), it can be confirmed as fine in the service info dialog or in the settings – "until the value gets worse" (up to the current value the service counts as OK; if the value gets worse or drops back below the warning threshold, the threshold applies again) or "never report" (warning and critical off on this service). So far this only worked for state rules such as "port without link"; for values that cannot exceed 100 % no suitable threshold could be set. API: `accept` when changing a service now also takes rule kinds with numeric values.
+
 Changed:
 
 - Overview: the "Problems" and "Recent" cards are gone – the hosts (tiles or list) now come right below the counters. A new counter card "Problems" (open, of which not acknowledged) leads to the Problems tab.

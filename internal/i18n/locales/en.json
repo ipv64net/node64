@@ -6233,7 +6233,8 @@
       "pending_state": "{s} from {t} ({k})",
       "address_secret_title": "New address",
       "address_secret_ok": "Save and remove secrets",
-      "accepted_state": "{k}: intended until the state changes"
+      "accepted_state": "{k}: intended until the state changes",
+      "accepted_num": "{k}: fine up to {v}"
     },
     "acc": {
       "type": "Type",
@@ -6401,6 +6402,10 @@
       "accepted_change": "\"{k}\" counts as fine until the state changes",
       "accepted_always": "\"{k}\" is never reported on this service",
       "accept_clear": "Undo",
+      "accept_q_num": "\"{k}\" is reporting ({v}). Is this value fine?",
+      "accept_change_num": "Fine until the value gets worse",
+      "accept_hint_num": "\"Until the value gets worse\": up to the current value the rule no longer reports and the service counts as OK (e.g. SSD wear 100 % on a disk that keeps running). If the value gets worse or drops back below the warning threshold, the threshold applies again. \"Never\": warning and critical are off on this service until you undo it.",
+      "accepted_change_num": "\"{k}\" counts as fine up to {v}",
       "accept_toast": "State accepted as fine",
       "accept_cleared_toast": "Exception removed",
       "settings": "Settings and thresholds"
@@ -7016,7 +7021,8 @@
       "backup_max_age_h": "Maximum backup age: 1 to 8760 hours (Proxmox Backup Server only).",
       "site": "Invalid site (letters, digits, - and _; UniFi access only).",
       "address_secret": "New address: the accesses {list} would send their stored secret to the new address (their target is not bound by fingerprint or host key). Saving removes these secrets – enter them again at the access afterwards.",
-      "accept_mode": "Invalid value for \"state is fine\" (change, always or empty)."
+      "accept_mode": "Invalid value for \"state is fine\" (change, always or empty).",
+      "accept_value": "The current value is not known – please try again after the next poll."
     },
     "quote": "“{t}”",
     "err_session": "Session expired or not permitted – please reload the page and sign in again.",

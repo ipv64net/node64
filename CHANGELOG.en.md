@@ -5,6 +5,7 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - DNS64: the limit for blocklist rules follows the memory instead of a fixed 4 million – 4 to 32 million, e.g. about 16 million with 8 GB.
+- Monitor64: values can be confirmed as "fine" (e.g. SSD wear 100 %) – until the value gets worse or for good; previously only for state rules.
 - Monitor64: the overview shows the hosts right below the counters ("Problems" and "Recent" cards removed, new "Problems" counter card); the tile sparkline is labelled CPU · 24 h.
 - Monitor64: clicking a service opens a dialog with a large history chart and all values as a table (including SMART); settings and thresholds via the gear in the row, also as a dialog.
 - Monitor64: "Mark as resolved" only appears on problems where it has an effect – for a value that is still not fine the next poll reopened the problem right away (acknowledgement gone); acknowledge it there, it is resolved automatically.
