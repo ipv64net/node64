@@ -6161,7 +6161,12 @@
       "r_maint": "Wartung eingetragen: {n}",
       "r_maint_end": "Wartung beendet: {n}",
       "maint_problems": "Im Wartungsfenster: {n} Probleme auf {h} Hosts",
-      "r_migrated": "{n} migriert"
+      "r_migrated": "{n} migriert",
+      "prob_open": "{n} nicht quittiert",
+      "prob_all_acked": "alle quittiert",
+      "spark_cap": "CPU · 24 Std.",
+      "spark_max": "max. {v} %",
+      "spark_title": "Mini-Verlauf: CPU-Auslastung der letzten 24 Stunden"
     },
     "chart": {
       "range": "Zeitraum",
@@ -6192,7 +6197,7 @@
       "resume": "Abfragen fortsetzen",
       "delete": "Entfernen",
       "services": "Dienste",
-      "click_hint": "Klick öffnet Verlauf und Schwelle",
+      "click_hint": "Klick zeigt Verlauf und alle Werte, Zahnrad öffnet Einstellungen und Schwellen",
       "accesses": "Zugänge",
       "access_add": "Zugang hinzufügen",
       "acc_off": "aus",
@@ -6397,7 +6402,25 @@
       "accepted_always": "„{k}“ wird an diesem Dienst dauerhaft nicht gemeldet",
       "accept_clear": "Aufheben",
       "accept_toast": "Zustand als in Ordnung übernommen",
-      "accept_cleared_toast": "Ausnahme aufgehoben"
+      "accept_cleared_toast": "Ausnahme aufgehoben",
+      "settings": "Einstellungen und Schwellen"
+    },
+    "si": {
+      "history": "Verlauf",
+      "metric": "Messgröße",
+      "metrics": "Messwerte",
+      "details": "Angaben",
+      "since": "Zustand seit",
+      "category": "Bereich",
+      "interval": "Abfrage alle",
+      "checked": "Letzte Abfrage",
+      "report": "Meldung",
+      "show_only": "nur anzeigen, meldet nicht",
+      "notify": "meldet bei Warnung bzw. Kritisch",
+      "key": "Schlüssel",
+      "smart": "SMART-Werte",
+      "traps": "Letzte Traps",
+      "of_size": "von {s}"
     },
     "f": {
       "name": "Name",

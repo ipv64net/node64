@@ -162,7 +162,7 @@ func TestPagesRender(t *testing.T) {
 		path, page string
 		wants      []string
 	}{
-		{"/monitor64", "overview", []string{`data-m64-page="overview"`, `id="m64-stats"`, `id="m64-problems"`, `id="m64-recent"`, `id="m64-hosts"`, `href="/monitor64/new"`, "monitor64.ov.add", `nas\u003c01\u003e`}},
+		{"/monitor64", "overview", []string{`data-m64-page="overview"`, `id="m64-stats"`, `id="m64-hosts"`, `href="/monitor64/new"`, "monitor64.ov.add", `nas\u003c01\u003e`}},
 		{"/monitor64/host/" + h.UID, "host", []string{`data-m64-page="host"`, `data-host="` + h.UID + `"`, `nas&lt;01&gt;`, `id="m64-svcs"`, `id="m64-charts"`, `data-range="1y"`, `id="m64-detail"`, `data-act="discover"`, `data-act="delete"`, `"secret_set":true`}},
 		{"/monitor64/problems", "problems", []string{`data-m64-page="problems"`, `data-tab="closed"`, `id="m64-who"`, `id="m64-csv"`, `id="m64-pb"`}},
 		{"/monitor64/maintenance", "maintenance", []string{`data-m64-page="maint"`, `id="m64-maint-new"`, `id="m64-maint-list"`}},

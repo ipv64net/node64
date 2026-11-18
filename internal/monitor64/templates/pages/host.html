@@ -40,7 +40,7 @@
 	<div class="card mb-3">
 		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.services"}}</span><span class="badge text-bg-secondary ms-2" id="m64-svc-count">0</span><span class="ms-auto small text-body-secondary d-none d-sm-inline">{{.T "monitor64.host.click_hint"}}</span></div>
 		<div class="table-responsive"><table class="table table-hover mb-0 svc-table" data-nosort>
-			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.service"}}</th><th>{{.T "monitor64.col.value"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.h24"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.thresholds"}}</th><th class="d-none d-xl-table-cell">{{.T "monitor64.col.access"}}</th></tr></thead>
+			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.service"}}</th><th>{{.T "monitor64.col.value"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.h24"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.thresholds"}}</th><th class="d-none d-xl-table-cell">{{.T "monitor64.col.access"}}</th><th style="width:2.75rem"><span class="visually-hidden">{{.T "monitor64.sd.settings"}}</span></th></tr></thead>
 			<tbody id="m64-svcs"></tbody>
 		</table></div>
 	</div>
@@ -54,12 +54,24 @@
 		<div class="card-body small" id="m64-cl-body"><div class="fw-semibold">{{$.T "monitor64.cluster.by" "n" .OwnerLabel}}</div></div>
 	</div>{{end}}
 </div>
-<div class="offcanvas offcanvas-end m64-detail" tabindex="-1" id="m64-detail" aria-labelledby="m64-sd-title">
-	<div class="offcanvas-header border-bottom">
-		<div class="min-w-0"><div class="small text-body-secondary" id="m64-sd-host"></div><h5 class="offcanvas-title text-truncate" id="m64-sd-title"></h5></div>
-		<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="{{.T "monitor64.close"}}"></button>
-	</div>
-	<div class="offcanvas-body" id="m64-sd-body"></div>
+<div class="modal fade m64-detail" tabindex="-1" id="m64-detail" aria-labelledby="m64-sd-title" aria-hidden="true">
+	<div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+		<div class="modal-header">
+			<div class="min-w-0"><div class="small text-body-secondary" id="m64-sd-host"></div><h5 class="modal-title text-truncate" id="m64-sd-title"></h5></div>
+			<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "monitor64.close"}}"></button>
+		</div>
+		<div class="modal-body" id="m64-sd-body"></div>
+	</div></div>
+</div>
+<div class="modal fade m64-info" tabindex="-1" id="m64-info" aria-labelledby="m64-si-title" aria-hidden="true">
+	<div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+		<div class="modal-header">
+			<div class="min-w-0"><div class="small text-body-secondary" id="m64-si-host"></div><h5 class="modal-title text-truncate" id="m64-si-title"></h5></div>
+			<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "monitor64.close"}}"></button>
+		</div>
+		<div class="modal-body" id="m64-si-body"></div>
+		<div class="modal-footer" id="m64-si-foot"></div>
+	</div></div>
 </div>
 {{template "m64-bottom" .}}
 {{end}}

@@ -56,6 +56,7 @@
 .spark.s-warn polyline { stroke: #e0a800; } .spark.s-warn polygon { fill: rgba(var(--bs-warning-rgb), .15); }
 .spark.s-crit polyline { stroke: var(--bs-danger); } .spark.s-crit polygon { fill: rgba(var(--bs-danger-rgb), .1); }
 .spark-cell { width: 120px; }
+.spark-cap { display: flex; justify-content: space-between; gap: .5rem; font-size: .72rem; color: var(--bs-secondary-color); margin-top: .1rem; } /* Kachel: was die Mini-Kurve zeigt */
 
 /* Host-Seite */
 .access-chip { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--bs-border-color); border-radius: 50rem; padding: .15rem .6rem; font-size: .8rem; }
@@ -78,8 +79,8 @@
 .src-own { color: var(--n64-accent-text, var(--bs-primary)); font-weight: 600; }
 
 /* Detail */
-.m64-detail { --bs-offcanvas-width: min(560px, 100vw); }
-.m64-detail .chart-box { height: 170px; }
+.chart-box.chart-lg { height: 320px; } /* Info-Dialog eines Dienstes */
+@media (max-width: 575.98px) { .chart-box.chart-lg { height: 220px; } }
 .lvl { border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .6rem .8rem; margin-bottom: .5rem; }
 .lvl.active { border-color: var(--n64-accent-text, var(--bs-primary)); box-shadow: 0 0 0 .15rem rgba(var(--bs-primary-rgb), .15); }
 .lvl-head { display: flex; justify-content: space-between; align-items: center; font-size: .85rem; }

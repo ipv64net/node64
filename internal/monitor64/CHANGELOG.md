@@ -2,6 +2,13 @@
 
 ## 0.1.24 – unveröffentlicht
 
+Geändert:
+
+- Übersicht: Die Karten „Probleme“ und „Zuletzt“ sind weg – direkt unter den Zählern stehen jetzt die Hosts (Kacheln oder Liste). Neu ist eine Zähler-Karte „Probleme“ (offen, davon nicht quittiert), ein Klick führt zum Reiter Probleme.
+- Übersicht, Kacheln: Unter der Mini-Kurve steht, was sie zeigt – „CPU · 24 Std.“ mit dem Höchstwert.
+- Host-Seite: Ein Klick auf einen Dienst öffnet einen Dialog in der Mitte mit großem Verlauf (Zeitraum 6 Std. bis 1 Jahr, bei mehreren Messgrößen wählbar), allen Messwerten als Tabelle (Wert, Zustand, Schwellen) und den Angaben zum Dienst (Zustand seit, Zugang, Abfrage, Meldung, Quittierung, Schlüssel); bei Platten mit SMART stehen die SMART-Werte, beim Dienst „Traps“ die letzten Traps darunter. Quittieren geht direkt im Dialog.
+- Host-Seite: Einstellungen und Schwellen öffnet das Zahnrad am Ende jeder Dienst-Zeile (oder der Knopf im Info-Dialog) – ebenfalls als Dialog in der Mitte statt als Seitenleiste.
+
 Fehlerbehebungen:
 
 - Probleme: „Als gelöst markieren“ tat bei einem Wert, der weiter nicht passt, scheinbar nichts – das Problem wurde geschlossen, die sofort angestoßene Abfrage eröffnete es aber gleich neu (neue Startzeit, Quittierung weg, Erinnerungen wieder an). Der Knopf erscheint jetzt nur noch, wo er wirkt: bei Traps, pausierten Hosts, Hosts ohne aktuellen Stand und Diensten eines nicht erreichbaren Hosts; sonst steht dort der Hinweis, dass das Problem automatisch gelöst wird. Die API lehnt das Lösen in diesem Fall mit 409 `still_failing` ab statt still zu „gelingen“.

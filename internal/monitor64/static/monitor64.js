@@ -553,8 +553,10 @@ function pageOverview() {
 	var sparks = {}, CLV = D.cluster || { refs: {} };
 	function clRef(h) { return (CLV.refs || {})[h.uid] || null; }
 	function clOn() { return !!(CLV.active || Object.keys(CLV.refs || {}).length); }
-	function statCard(cls, label, val, sub, icon) {
-		return '<div class="col-6 col-md-3"><div class="card stat ' + cls + '"><div class="card-body"><div class="stat-text"><div class="stat-label">' + esc(label) + '</div><div class="stat-value">' + esc(String(val)) + '</div><div class="stat-sub">' + esc(sub) + '</div></div><i class="bi ' + icon + ' stat-icon"></i></div></div></div>';
+	// statCard: kleine Zaehler-Karte; href = die Karte ist ein Link (Probleme), col = Spaltenklassen
+	function statCard(cls, label, val, sub, icon, href, col) {
+		var tg = href ? 'a' : 'div';
+		return '<div class="' + (col || 'col-6 col-lg') + '"><' + tg + ' class="card stat h-100 ' + cls + '"' + (href ? ' href="' + esc(href) + '"' : '') + '><div class="card-body"><div class="stat-text"><div class="stat-label">' + esc(label) + '</div><div class="stat-value">' + esc(String(val)) + '</div><div class="stat-sub">' + esc(sub) + '</div></div><i class="bi ' + icon + ' stat-icon"></i></div></' + tg + '></div>';
 	}
 	function meter(m) {
 		var cls = m.state === 'crit' ? 'crit' : m.state === 'warn' ? 'warn' : '';
@@ -577,7 +579,11 @@ function pageOverview() {
 		else {
 			body = (h.meters || []).map(meter).join('');
 			if (!body && h.text) { body = '<div class="small text-body-secondary mt-2 text-truncate">' + esc(tx(h.text)) + '</div>'; }
-			if (sparks[h.uid]) { body += '<div class="mt-2">' + spark(sparks[h.uid], st === 'ok' ? '' : 's-' + st) + '</div>'; }
+			if (sparks[h.uid]) { // Mini-Verlauf: CPU-Auslastung der letzten 24 Std. (sonst raetselt man, was die Kurve zeigt)
+				var sv = sparks[h.uid], smax = Math.max.apply(null, sv);
+				body += '<div class="mt-2" title="' + esc(L('ov.spark_title')) + '">' + spark(sv, st === 'ok' ? '' : 's-' + st) +
+					'<div class="spark-cap"><span>' + esc(L('ov.spark_cap')) + '</span><span>' + esc(L('ov.spark_max', { v: fmtNum(smax, 0) })) + '</span></div></div>';
+			}
 		}
 		if (note) { body += '<div class="small text-body-secondary mt-2" data-cl-note><i class="bi bi-diagram-3"></i> ' + esc(note) + '</div>'; }
 		var extra = '';
@@ -596,39 +602,16 @@ function pageOverview() {
 			'<td class="svc-val">' + (h.has_cpu ? fmtNum(h.cpu, 0) + ' %' : '–') + '</td><td class="svc-val">' + (h.has_ram ? fmtNum(h.ram, 0) + ' %' : '–') + '</td>' +
 			'<td>' + (h.problems ? stBadge(st, String(h.problems)) : '<span class="text-body-secondary small">–</span>') + '</td></tr>';
 	}
-	function probRow(p) {
-		var title = p.unreach ? L('ov.unreachable') : tx(p.name);
-		var icon = p.maint ? '<i class="bi bi-cone-striped text-body-secondary" title="' + esc(L('ov.maint')) + '"></i>' : '<span class="st-dot ' + (p.acked ? 'st-ack' : 'st-' + esc(p.state === 'unreachable' ? 'unknown' : p.state)) + '" title="' + esc(stLabel(p.state)) + '"></span>';
-		return '<div class="prob-row' + (p.acked ? ' acked' : '') + '" data-host="' + esc(p.host_uid) + '" data-key="' + esc(p.key) + '" role="link" tabindex="0">' + icon +
-			'<div class="prob-main"><a class="prob-title d-block text-reset text-decoration-none" href="' + esc(hostURL(p.host_uid, p.key)) + '" tabindex="-1">' + esc(p.host) + ' · ' + esc(title) + '</a><div class="prob-sub">' + esc(tx(p.detail)) + '</div></div>' +
-			'<span class="prob-since d-none d-sm-inline">' + (p.acked ? '<i class="bi bi-check2"></i> ' + esc(L('ov.acked')) : esc(since(p.since))) + '</span>' +
-			'<button class="btn btn-sm btn-outline-secondary" type="button" data-ack="' + (p.acked ? 'unack' : 'ack') + '" title="' + esc(p.acked ? L('ov.unack') : L('ov.ack_hint')) + '" aria-label="' + esc(p.acked ? L('ov.unack') : L('ov.ack')) + '"><i class="bi ' + (p.acked ? 'bi-arrow-counterclockwise' : 'bi-check2') + '"></i></button></div>';
-	}
-	function recentRow(r) {
-		var icon = 'bi-arrow-repeat text-success', t = '', sub = '';
-		var name = (r.host || '') + (r.name ? ' · ' + tx(r.name) : '');
-		switch (r.kind) {
-		case 'ok': t = L('ov.r_ok', { n: name }); sub = L('ov.r_ok_sub'); break;
-		case 'resolved': icon = 'bi-person-check text-primary'; t = L('ov.r_resolved', { n: name }); sub = L('ov.r_by', { w: whoTxt(r.by) }) + (r.text ? ' – ' + quote(r.text) : ''); break;
-		case 'maint': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint', { n: tx(r.text || '') }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
-		case 'maint_end': icon = 'bi-cone-striped text-body-secondary'; t = L('ov.r_maint_end', { n: tx(r.text || '') }); sub = L('ov.r_by', { w: whoTxt(r.by) }); break;
-		case 'migrated': icon = 'bi-arrow-left-right text-primary'; t = L('ov.r_migrated', { n: name }); sub = tx(r.text || ''); break;
-		}
-		var href = r.kind === 'migrated' && r.host_uid ? hostURL(r.host_uid, r.key || '') : '/monitor64/problems?status=closed';
-		return '<div class="prob-row" data-goto="' + esc(href) + '" role="link" tabindex="0"><i class="bi ' + icon + '"></i><div class="prob-main"><div class="prob-title">' + esc(t) + '</div><div class="prob-sub">' + esc(sub) + '</div></div><span class="prob-since">' + esc(ago(r.at)) + '</span></div>';
-	}
 	function render() {
 		var c = data.counts || {};
 		var total = (c.ok || 0) + (c.warn || 0) + (c.crit || 0) + (c.unknown || 0);
-		$('#m64-stats').innerHTML = statCard('stat-down', ST.crit, c.crit || 0, L('ov.services'), 'bi-x-octagon') + statCard('stat-warn', ST.warn, c.warn || 0, L('ov.services'), 'bi-exclamation-triangle') +
+		// Probleme: Karte fuehrt zum Reiter Probleme (Hosts im Wartungsfenster zaehlen nicht, #142)
+		var real = data.problems.filter(function (p) { return !p.maint; }), open = real.filter(function (p) { return !p.acked; }).length;
+		$('#m64-stats').innerHTML = statCard(open ? 'stat-down' : real.length ? 'stat-warn' : 'stat-ok', L('ov.problems'), real.length,
+			real.length ? (open ? L('ov.prob_open', { n: open }) : L('ov.prob_all_acked')) : L('ov.no_problems'), 'bi-bell', '/monitor64/problems', 'col-12 col-lg') +
+			statCard('stat-down', ST.crit, c.crit || 0, L('ov.services'), 'bi-x-octagon') + statCard('stat-warn', ST.warn, c.warn || 0, L('ov.services'), 'bi-exclamation-triangle') +
 			statCard('stat-muted', ST.unknown, c.unknown || 0, data.unreachable ? L('ov.unreachable_n', { n: data.unreachable }) : L('ov.services'), 'bi-question-circle') +
 			statCard('stat-ok', ST.ok, c.ok || 0, L('ov.totals', { h: data.hosts.length, s: total }), 'bi-check-circle');
-		// Probleme von Hosts im Wartungsfenster eingeklappt am Ende (#142): echte Probleme gehen nicht unter
-		var real = data.problems.filter(function (p) { return !p.maint; }), inMaint = data.problems.filter(function (p) { return p.maint; });
-		$('#m64-prob-count').textContent = String(real.length);
-		$('#m64-problems').innerHTML = (real.length ? real.map(probRow).join('') : '<div class="p-3 small text-body-secondary"><i class="bi bi-check-circle text-success"></i> ' + esc(L('ov.no_problems')) + '</div>') +
-			maintGroup(inMaint, probRow, 'div');
-		$('#m64-recent').innerHTML = data.recent.length ? data.recent.map(recentRow).join('') : '<div class="p-3 small text-body-secondary">' + esc(L('ov.no_recent')) + '</div>';
 		var groups = data.groups || [];
 		if (OV.group !== null && groups.indexOf(OV.group) < 0) { OV.group = null; }
 		$('#m64-groups').innerHTML = '<span class="chip' + (OV.group === null ? ' active' : '') + '" data-group-all="1" role="button" tabindex="0" aria-pressed="' + (OV.group === null) + '">' + esc(L('ov.all')) + '</span>' +
@@ -669,35 +652,19 @@ function pageOverview() {
 		clOrphans(CLV.orphans, function () { return api('GET', '/api/monitor64/cluster/views').then(function (v) { CLV = v || CLV; render(); refresh(); }); }); // Cluster: verwaiste Hosts
 	}
 	function hostURL(uid, key) { return '/monitor64/host/' + encodeURIComponent(uid) + (key ? '#svc=' + encodeURIComponent(key) : ''); }
-	function go(el) {
-		if (el.dataset.goto) { location.href = el.dataset.goto; return; }
-		location.href = hostURL(el.dataset.host, el.dataset.key);
-	}
 	root.addEventListener('click', function (ev) {
-		var b = ev.target.closest('[data-ack]');
-		if (b) {
-			ev.stopPropagation();
-			var r = b.closest('.prob-row');
-			lock(b, function () {
-				return api('POST', '/api/monitor64/problems/action', { host: r.dataset.host, key: r.dataset.key, action: b.dataset.ack, comment: '' }).then(function () {
-					toast(b.dataset.ack === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast'));
-					refresh();
-				});
-			}).catch(fail);
-			return;
-		}
 		var g = ev.target.closest('[data-group],[data-group-all]');
 		if (g) { OV.group = g.dataset.groupAll ? null : g.dataset.group; store('groupsel', JSON.stringify(OV.group)); render(); return; }
 		var v = ev.target.closest('[data-view]');
 		if (v) { OV.view = v.dataset.view; store('view', OV.view); render(); return; }
 		if (ev.target.closest('a[href]')) { return; } // echte Links oeffnet der Browser (auch im neuen Tab)
-		var t = ev.target.closest('[data-host],[data-goto]');
-		if (t && t.closest('#m64')) { go(t); }
+		var t = ev.target.closest('[data-host]');
+		if (t && t.closest('#m64')) { location.href = hostURL(t.dataset.host); }
 	});
 	root.addEventListener('keydown', function (ev) {
 		if (ev.key !== 'Enter' && ev.key !== ' ') { return; }
 		if (ev.target.closest('button, a, input, select, textarea')) { return; } // Knoepfe (z. B. Quittieren) bedient der Browser selbst
-		var t = ev.target.closest('[data-host],[data-goto],[data-group],[data-group-all]');
+		var t = ev.target.closest('[data-host],[data-group],[data-group-all]');
 		if (t) { ev.preventDefault(); t.click(); }
 	});
 	$('#m64-only-prob').onchange = function () { OV.only = this.checked; store('only', OV.only ? '1' : '0'); render(); };
@@ -937,7 +904,7 @@ function pageHost() {
 		cats.forEach(function (c) {
 			var rows = list.filter(function (s) { return s.category === c; });
 			if (!rows.length) { return; }
-			html += '<tr class="svc-cat"><td colspan="6">' + esc((D.cats || {})[c] || c) + '</td></tr>';
+			html += '<tr class="svc-cat"><td colspan="7">' + esc((D.cats || {})[c] || c) + '</td></tr>';
 			rows.forEach(function (s) {
 				var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state;
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
@@ -945,10 +912,11 @@ function pageHost() {
 					(s.detail === 'smart' ? ' <button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1 fw-normal" type="button" data-smart="' + esc(s.key) + '" title="' + esc(L('smart.btn_title')) + '"><i class="bi bi-table"></i> SMART</button>' : '') +
 					(s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
 					'<td class="d-none d-lg-table-cell spark-cell">' + (sparks[s.key] ? spark(sparks[s.key], st === 'ok' ? '' : 's-' + st) : '') + '</td>' +
-					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary text-nowrap">' + esc(tx(s.via || '')) + '</td></tr>';
+					'<td class="d-none d-md-table-cell thr">' + thrCell(s) + '</td><td class="d-none d-xl-table-cell small text-body-secondary text-nowrap">' + esc(tx(s.via || '')) + '</td>' +
+					'<td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button" data-cfg="' + esc(s.key) + '" title="' + esc(L('sd.settings')) + '" aria-label="' + esc(L('sd.settings')) + '"><i class="bi bi-gear"></i></button></td></tr>';
 			});
 		});
-		if (!list.length) { html = '<tr><td colspan="6" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
+		if (!list.length) { html = '<tr><td colspan="7" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
 		setHTML($('#m64-svcs'), html);
 	}
 	// openSmart: alle zuletzt gelesenen SMART-Werte einer Platte als Dialog (liegen nur im Speicher der Node).
@@ -1138,8 +1106,8 @@ function pageHost() {
 		setHTML(el, names.length ? '<i class="bi bi-diagram-3"></i> ' + esc(L('cluster.chart_missing', { n: names.join(', ') })) : '');
 	}
 
-	// Dienst-Details (Offcanvas): Verlauf, je Messgroesse bzw. Zustandsregel die Stufen der Schwelle mit eigener
-	// Einstellung "dieser Host", Soll-Zustand, Erweitert
+	// Einstellungen eines Dienstes (Dialog, Zahnrad in der Zeile): je Messgroesse bzw. Zustandsregel die Stufen der
+	// Schwelle mit eigener Einstellung "dieser Host", Soll-Zustand, Erweitert. Verlauf und Werte zeigt openInfo.
 	var sdChart = null, sdGen = 0;
 	function lvlBox(active, icon, title, vals) {
 		return '<div class="lvl' + (active ? ' active' : '') + '"><div class="lvl-head"><span><i class="bi ' + icon + '"></i> ' + title + '</span><span class="lvl-vals">' + vals + '</span></div></div>';
@@ -1273,23 +1241,11 @@ function pageHost() {
 		detailFor = key;
 		$('#m64-sd-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
 		$('#m64-sd-title').textContent = svcName(s);
-		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, lv = s.levels, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
+		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
 		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(tx(s.text || '')) + '</span></div>';
 		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
-		if (mt && mt.status && (mt.status.pending === 'warn' || mt.status.pending === 'crit') && toDate(mt.status.pending_since)) {
-			var p = mt.status, ps = toDate(p.pending_since), pa = toDate(p.pending_at), need = pa ? (pa.getTime() - ps.getTime()) / 60000 : 1, done = (Date.now() - ps.getTime()) / 60000;
-			html += '<div class="pend mb-3"><div class="small mb-1"><i class="bi bi-hourglass-split"></i> ' + esc(pendText(p, mt.unit, isFree(lv))) + '</div><div class="progress" style="height:.35rem"><div class="progress-bar bg-warning" style="width:' + Math.min(100, Math.round(done / Math.max(need, 1) * 100)) + '%"></div></div><div class="small text-body-secondary mt-1">' + esc(L('sd.pending_hint')) + '</div></div>';
-		}
-		(s.metrics || []).forEach(function (m) {
-			if ((m.rule_kind || m.rule) === 'fs.trend_days' && m.value < 1e5) { html += '<div class="alert alert-danger py-2 small"><i class="bi bi-graph-up-arrow"></i> ' + esc(L('sd.trend', { n: fmtNum(m.value, 1) })) + '</div>'; }
-		});
-		var chartMetric = mt || ((s.metrics || []).length ? s.metrics[0] : null);
-		if (s.kind === 'traps') { // letzte Traps statt Diagramm
-			chartMetric = null;
-			html += '<div class="mb-3" id="m64-sd-traps"><span class="spinner-border spinner-border-sm"></span></div>';
-		}
-		if (chartMetric) { html += '<div class="chart-box mb-1"><canvas id="m64-sd-chart"></canvas><div class="zoom-sel"></div></div><div class="small text-warning-emphasis mb-3" id="m64-sd-chart-note"></div>'; }
+		html += pendHTML(s);
 		// Zustand ist gewollt (z. B. Port ohne Link): bis sich der Zustand aendert oder dauerhaft nicht melden
 		var acc = '', accBtn = function (k, mode, cls, icon, label) {
 			return '<button class="btn ' + cls + ' btn-sm" type="button" data-sd-accept="' + mode + '" data-k="' + esc(k) + '"><i class="bi ' + icon + '"></i> ' + esc(label) + '</button>';
@@ -1355,9 +1311,11 @@ function pageHost() {
 					lock(b, function () { return api('POST', '/api/monitor64/problems/action', { host: uid, key: s.key, action: a, comment: '' }).then(after(a === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast'))); }).catch(fail);
 				} else if (a === 'ignore') {
 					lock(b, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [s.key], state: -1 }).then(after(L('sd.ignored_toast'))); }).catch(fail);
-				} else if (a === 'remove') {
-					confirmBox(L('sd.remove'), L('sd.remove_confirm', { n: svcName(s) }), L('sd.remove'), function () {
-						return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/remove', { keys: [s.key] }).then(after(L('sd.removed_toast'))).catch(fail);
+				} else if (a === 'remove') { // Rueckfrage erst nach dem Schliessen (Dialoge stapeln sich nicht sauber)
+					hideThen(document.getElementById('m64-detail'), function () {
+						confirmBox(L('sd.remove'), L('sd.remove_confirm', { n: svcName(s) }), L('sd.remove'), function () {
+							return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/remove', { keys: [s.key] }).then(after(L('sd.removed_toast'))).catch(fail);
+						});
 					});
 				} else if (a === 'save') { lock(b, save).catch(fail); }
 			};
@@ -1380,29 +1338,14 @@ function pageHost() {
 			if (Object.keys(req).length === 1) { closeDetail(); return Promise.resolve(); }
 			return api('PUT', svcURL, req).then(after(L('sd.saved_toast')));
 		}
-		var oc = window.bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('m64-detail'));
-		oc.show();
-		if (s.kind === 'traps') { loadTraps(key); }
-		if (sdChart) { sdChart.destroy(); sdChart = null; }
-		if (chartMetric) {
-			var gen = ++sdGen;
-			api('GET', '/api/monitor64/series?host=' + encodeURIComponent(uid) + '&s=' + encodeURIComponent(s.key + '|' + chartMetric.name) + '&range=24h').then(function (res) {
-				var cv = document.getElementById('m64-sd-chart');
-				if (!cv || detailFor !== key || gen !== sdGen) { return; }
-				if (sdChart) { sdChart.destroy(); sdChart = null; }
-				clMissing(res, {}, document.getElementById('m64-sd-chart-note'));
-				var u = unitFmt(chartMetric.unit), w = null, c = null;
-				if (lv && lv.eff.mode !== 'free' && chartMetric === mt) { w = lim(lv.eff.warn); c = lim(lv.eff.crit); } // Schwellen in der Einheit der Messgroesse
-				sdChart = lineChart(cv, { from: res.from, to: res.to, warn: w, crit: c, fmt: u.fmt, max: chartMetric.unit === '%' ? 100 : undefined, series: [{ label: svcName(s), data: toPoints(res.series[0] || {}, u.factor) }] });
-			}).catch(function (e) { if (gen === sdGen) { chartFail(document.getElementById('m64-sd-chart'), e); } });
-		}
+		window.bootstrap.Modal.getOrCreateInstance(document.getElementById('m64-detail')).show();
 	}
 	// loadTraps zeigt die letzten Traps des Hosts im Dienst "traps" (Texte vom Geraet, immer escaped).
 	function loadTraps(key) {
 		var trapsURL = '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/traps';
 		api('GET', trapsURL).then(function (r) {
-			var box = document.getElementById('m64-sd-traps');
-			if (!box || detailFor !== key) { return; }
+			var box = document.getElementById('m64-si-traps');
+			if (!box || infoFor !== key) { return; }
 			var html = '<div class="d-flex align-items-center small mb-1"><span class="me-auto text-body-secondary">' + esc(L('sd.traps_pending', { n: r.pending, t: r.total })) + '</span>' +
 				(r.pending ? '<button class="btn btn-sm btn-link p-0" type="button" data-traps-reset><i class="bi bi-arrow-counterclockwise"></i> ' + esc(L('sd.traps_reset')) + '</button>' : '') + '</div>';
 			if (r.rejected) { html += '<div class="small text-warning-emphasis mb-1"><i class="bi bi-shield-x"></i> ' + esc(L('sd.traps_rejected', { n: r.rejected, r: r.reject_reason || '', at: fmtTime(r.rejected_at) })) + '</div>'; }
@@ -1416,12 +1359,134 @@ function pageHost() {
 			}).join('') + '</div>' : '<div class="small text-body-secondary">' + esc(L('sd.traps_none')) + '</div>';
 			box.innerHTML = html;
 			var rb = $('[data-traps-reset]', box);
-			if (rb) { rb.onclick = function () { lock(rb, function () { return api('POST', trapsURL + '/reset').then(function () { toast(L('sd.traps_reset_toast')); closeDetail(); return reload(); }); }).catch(fail); }; }
-		}).catch(function (e) { var box = document.getElementById('m64-sd-traps'); if (box) { box.innerHTML = '<span class="small text-danger">' + esc(tx(e.message)) + '</span>'; } });
+			if (rb) { rb.onclick = function () { lock(rb, function () { return api('POST', trapsURL + '/reset').then(function () { toast(L('sd.traps_reset_toast')); closeInfo(); return reload(); }); }).catch(fail); }; }
+		}).catch(function (e) { var box = document.getElementById('m64-si-traps'); if (box) { box.innerHTML = '<span class="small text-danger">' + esc(tx(e.message)) + '</span>'; } });
 	}
-	function closeDetail() { var oc = window.bootstrap.Offcanvas.getInstance(document.getElementById('m64-detail')); if (oc) { oc.hide(); } detailFor = null; }
-	document.getElementById('m64-detail').addEventListener('hidden.bs.offcanvas', function () {
-		detailFor = null;
+	function closeDetail() { var md = window.bootstrap.Modal.getInstance(document.getElementById('m64-detail')); if (md) { md.hide(); } detailFor = null; }
+	document.getElementById('m64-detail').addEventListener('hidden.bs.modal', function () { detailFor = null; });
+	// hideThen: Dialog schliessen, danach fn (Bootstrap stapelt Dialoge nicht sauber uebereinander)
+	function hideThen(el, fn) {
+		var md = window.bootstrap.Modal.getInstance(el);
+		if (!md || !el.classList.contains('show')) { fn(); return; }
+		el.addEventListener('hidden.bs.modal', function () { fn(); }, { once: true });
+		md.hide();
+	}
+	// pendHTML: Schwelle ueberschritten, Meldung erst nach der Dauer (Fortschritt bis zur Meldung)
+	function pendHTML(s) {
+		var mt = s.primary >= 0 ? s.metrics[s.primary] : null;
+		if (!(mt && mt.status && (mt.status.pending === 'warn' || mt.status.pending === 'crit') && toDate(mt.status.pending_since))) { return ''; }
+		var p = mt.status, ps = toDate(p.pending_since), pa = toDate(p.pending_at), need = pa ? (pa.getTime() - ps.getTime()) / 60000 : 1, done = (Date.now() - ps.getTime()) / 60000;
+		return '<div class="pend mb-3"><div class="small mb-1"><i class="bi bi-hourglass-split"></i> ' + esc(pendText(p, mt.unit, isFree(s.levels))) + '</div><div class="progress" style="height:.35rem"><div class="progress-bar bg-warning" style="width:' + Math.min(100, Math.round(done / Math.max(need, 1) * 100)) + '%"></div></div><div class="small text-body-secondary mt-1">' + esc(L('sd.pending_hint')) + '</div></div>';
+	}
+
+	// Info-Dialog eines Dienstes (Klick auf die Zeile): Verlauf gross, alle Messwerte und Angaben als Tabelle,
+	// dazu SMART-Werte bzw. die letzten Traps. Einstellungen und Schwellen oeffnet das Zahnrad (openDetail).
+	var infoFor = null, SI = { range: '24h', metric: '' };
+	function chartable(s) { return s.kind === 'traps' ? [] : (s.metrics || []).filter(function (m) { return typeof m.value === 'number'; }); }
+	function metricLabel(m) { var k = m.rule_kind || m.rule; return k ? kindLabel(k) : m.name; }
+	function ruleFor(s, name) { var r = null; (s.rules || []).forEach(function (x) { if (x.metric && x.metric === name) { r = x; } }); return r; }
+	// maxText: Groesse zur Messgroesse (Max ist die Groesse in Bytes, z. B. Dateisystem bei "belegt in %")
+	function maxText(m) {
+		if (!m.max || (m.unit !== '%' && m.unit !== 'B')) { return ''; }
+		return ' <span class="fw-normal text-body-secondary">' + esc(m.unit === '%' ? L('si.of_size', { s: fmtBytes(m.max) }) : '/ ' + fmtBytes(m.max)) + '</span>';
+	}
+	function infoRow(label, val) { return val ? '<tr><th class="text-body-secondary fw-normal" style="width:35%">' + esc(label) + '</th><td>' + val + '</td></tr>' : ''; }
+	function openInfo(key) {
+		var s = null;
+		H.services.forEach(function (x) { if (x.key === key) { s = x; } });
+		if (!s) { return; }
+		infoFor = key;
+		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, list = chartable(s);
+		$('#m64-si-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
+		$('#m64-si-title').textContent = svcName(s);
+		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span class="fw-semibold">' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + '</span>' + (s.text ? '<span class="text-body-secondary">' + esc(tx(s.text)) + '</span>' : '') +
+			(s.ack ? '<span class="small text-primary"><i class="bi bi-check2-square"></i> ' + esc(L('ov.acked')) + '</span>' : '') + '</div>';
+		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
+		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
+		html += pendHTML(s);
+		(s.metrics || []).forEach(function (m) {
+			if ((m.rule_kind || m.rule) === 'fs.trend_days' && m.value < 1e5) { html += '<div class="alert alert-danger py-2 small"><i class="bi bi-graph-up-arrow"></i> ' + esc(L('sd.trend', { n: fmtNum(m.value, 1) })) + '</div>'; }
+		});
+		(s.accepted || []).forEach(function (k) { html += '<div class="small text-success-emphasis mb-2"><i class="bi bi-check2-circle"></i> ' + esc(L('host.accepted_state', { k: kindLabel(k) })) + '</div>'; });
+		// Verlauf: Zeitraum und (bei mehreren) Messgroesse waehlbar
+		if (list.length) {
+			if (!list.some(function (m) { return m.name === SI.metric; })) { SI.metric = (mt || list[0]).name; }
+			html += '<div class="d-flex flex-wrap align-items-center gap-2 mb-2"><h6 class="mb-0 me-auto">' + esc(L('si.history')) + '</h6>' +
+				(list.length > 1 ? '<select class="form-select form-select-sm w-auto" id="m64-si-metric" aria-label="' + esc(L('si.metric')) + '">' + list.map(function (m) { return '<option value="' + esc(m.name) + '"' + (m.name === SI.metric ? ' selected' : '') + '>' + esc(metricLabel(m)) + '</option>'; }).join('') + '</select>' : '') +
+				'<div class="btn-group btn-group-sm" role="group" aria-label="' + esc(L('chart.range')) + '">' + Object.keys(RANGES).map(function (r) { return '<button class="btn btn-outline-secondary' + (r === SI.range ? ' active' : '') + '" type="button" data-si-range="' + r + '">' + esc(RANGES[r]) + '</button>'; }).join('') + '</div></div>' +
+				'<div class="chart-box chart-lg mb-1" id="m64-si-chart-box"></div><div class="small text-warning-emphasis mb-3" id="m64-si-chart-note"></div>';
+		}
+		if (s.kind === 'traps') { html += '<h6>' + esc(L('si.traps')) + '</h6><div class="mb-3" id="m64-si-traps"><span class="spinner-border spinner-border-sm"></span></div>'; }
+		// alle Messwerte
+		if ((s.metrics || []).length) {
+			html += '<h6>' + esc(L('si.metrics')) + '</h6><div class="table-responsive"><table class="table table-sm small align-middle mb-3"><thead><tr><th>' + esc(L('si.metric')) + '</th><th class="text-end">' + esc(L('col.value')) + '</th><th>' + esc(L('col.state')) + '</th><th>' + esc(L('col.thresholds')) + '</th></tr></thead><tbody>' +
+				s.metrics.map(function (m) {
+					var r = ruleFor(s, m.name), ms = m.status || {};
+					return '<tr><td>' + esc(metricLabel(m)) + (m.rule_kind || m.rule ? ' <span class="text-body-tertiary">' + esc(m.name) + '</span>' : '') + '</td><td class="text-end text-nowrap fw-semibold">' + esc(fmtVal(m.value, m.unit)) + maxText(m) + '</td>' +
+						'<td>' + (r && ms.state ? stBadge(ms.state) : '<span class="text-body-tertiary">–</span>') + '</td><td>' + (r && !r.state ? thrVals(r.eff, m.unit) : '<span class="text-body-tertiary">–</span>') + '</td></tr>';
+				}).join('') + '</tbody></table></div>';
+		}
+		// Angaben zum Dienst
+		var ack = s.ack ? esc(whoTxt(s.ack.by)) + (s.ack.at ? ' · ' + esc(fmtTime(s.ack.at)) : '') + (s.ack.comment ? ' – ' + esc(quote(s.ack.comment)) : '') : '';
+		html += '<h6>' + esc(L('si.details')) + '</h6><div class="table-responsive"><table class="table table-sm small mb-3"><tbody>' +
+			infoRow(L('si.since'), s.since && st !== 'ok' ? esc(fmtTime(s.since)) + ' <span class="text-body-secondary">(' + esc(since(s.since)) + ')</span>' : '') +
+			infoRow(L('si.category'), esc((D.cats || {})[s.category] || s.category || '')) +
+			infoRow(L('col.access'), esc(tx(s.via || ''))) +
+			infoRow(L('si.interval'), esc(fmtDur(H.host.interval_sec))) +
+			infoRow(L('si.checked'), H.checked ? esc(fmtTime(H.checked)) + ' <span class="text-body-secondary">(' + esc(ago(H.checked)) + ')</span>' : '') +
+			infoRow(L('si.report'), s.show_only ? esc(L('si.show_only')) : esc(L('si.notify'))) +
+			infoRow(L('ov.acked'), ack) +
+			infoRow(L('si.key'), '<code>' + esc(s.key) + '</code>') + '</tbody></table></div>';
+		if (s.detail === 'smart') { html += '<h6>' + esc(L('si.smart')) + '</h6><div id="m64-si-smart"><span class="spinner-border spinner-border-sm"></span></div>'; }
+		$('#m64-si-body').innerHTML = html;
+		// Fuss: Quittieren, Einstellungen, Schliessen
+		var canAck = st !== 'ok' && s.since, foot = $('#m64-si-foot');
+		foot.innerHTML = (canAck && !s.ack ? '<button class="btn btn-outline-secondary btn-sm" type="button" data-si="ack"><i class="bi bi-check2"></i> ' + esc(L('ov.ack')) + '</button>' : '') +
+			(s.ack ? '<button class="btn btn-outline-secondary btn-sm" type="button" data-si="unack"><i class="bi bi-arrow-counterclockwise"></i> ' + esc(L('ov.unack')) + '</button>' : '') +
+			'<button class="btn btn-outline-secondary btn-sm me-auto" type="button" data-si="cfg"><i class="bi bi-gear"></i> ' + esc(L('sd.settings')) + '</button>' +
+			'<button class="btn btn-primary btn-sm" type="button" data-bs-dismiss="modal">' + esc(L('close')) + '</button>';
+		$$('[data-si]', foot).forEach(function (b) {
+			b.onclick = function () {
+				var a = b.dataset.si;
+				if (a === 'cfg') { hideThen(document.getElementById('m64-info'), function () { openDetail(key); }); return; }
+				lock(b, function () { return api('POST', '/api/monitor64/problems/action', { host: uid, key: s.key, action: a, comment: '' }).then(function () { toast(a === 'ack' ? L('ov.acked_toast') : L('ov.unacked_toast')); closeInfo(); return reload(); }); }).catch(fail);
+			};
+		});
+		$$('[data-si-range]').forEach(function (b) { b.onclick = function () { SI.range = b.dataset.siRange; $$('[data-si-range]').forEach(function (x) { x.classList.toggle('active', x === b); }); infoChart(s); }; });
+		var sel = $('#m64-si-metric');
+		if (sel) { sel.onchange = function () { SI.metric = sel.value; infoChart(s); }; }
+		window.bootstrap.Modal.getOrCreateInstance(document.getElementById('m64-info')).show();
+		if (list.length) { infoChart(s); }
+		if (s.kind === 'traps') { loadTraps(key); }
+		if (s.detail === 'smart') {
+			api('GET', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/smart?key=' + encodeURIComponent(key)).then(function (r) {
+				var box = document.getElementById('m64-si-smart');
+				if (box && infoFor === key) { box.innerHTML = smartHTML(r.smart || {}); }
+			}).catch(function (e) { var box = document.getElementById('m64-si-smart'); if (box) { box.innerHTML = '<span class="small text-danger">' + esc(tx(e.message)) + '</span>'; } });
+		}
+	}
+	// infoChart laedt den Verlauf der gewaehlten Messgroesse; Schwellen nur bei der Messgroesse mit Schwelle (Einheit passt)
+	function infoChart(s) {
+		var m = null, mt = s.primary >= 0 ? s.metrics[s.primary] : null, lv = s.levels;
+		chartable(s).forEach(function (x) { if (x.name === SI.metric) { m = x; } });
+		var box = document.getElementById('m64-si-chart-box');
+		if (!m || !box) { return; }
+		var gen = ++sdGen;
+		if (sdChart) { sdChart.destroy(); sdChart = null; }
+		box.innerHTML = '<canvas id="m64-si-chart"></canvas>';
+		api('GET', '/api/monitor64/series?host=' + encodeURIComponent(uid) + '&s=' + encodeURIComponent(s.key + '|' + m.name) + '&range=' + encodeURIComponent(SI.range)).then(function (res) {
+			var cv = document.getElementById('m64-si-chart');
+			if (!cv || infoFor !== s.key || gen !== sdGen) { return; }
+			if (sdChart) { sdChart.destroy(); sdChart = null; }
+			clMissing(res, {}, document.getElementById('m64-si-chart-note'));
+			var u = unitFmt(m.unit), w = null, c = null;
+			if (lv && lv.eff.mode !== 'free' && mt && m.name === mt.name) { w = lim(lv.eff.warn); c = lim(lv.eff.crit); }
+			sdChart = lineChart(cv, { from: res.from, to: res.to, warn: w, crit: c, fmt: u.fmt, max: m.unit === '%' ? 100 : undefined, series: [{ label: metricLabel(m), data: toPoints(res.series[0] || {}, u.factor) }] });
+		}).catch(function (e) { if (gen === sdGen) { chartFail(document.getElementById('m64-si-chart'), e); } });
+	}
+	function closeInfo() { var md = window.bootstrap.Modal.getInstance(document.getElementById('m64-info')); if (md) { md.hide(); } infoFor = null; }
+	document.getElementById('m64-info').addEventListener('hidden.bs.modal', function () {
+		infoFor = null;
 		sdGen++;
 		if (sdChart) { sdChart.destroy(); sdChart = null; }
 		if (location.hash.indexOf('#svc=') === 0) { history.replaceState(null, '', location.pathname); }
@@ -1717,8 +1782,10 @@ function pageHost() {
 		}
 		var sb = ev.target.closest('[data-smart]');
 		if (sb) { lock(sb, function () { return openSmart(sb.dataset.smart); }).catch(fail); return; }
+		var cf = ev.target.closest('[data-cfg]');
+		if (cf) { openDetail(cf.dataset.cfg); return; }
 		var tr = ev.target.closest('tr[data-svc]');
-		if (tr) { history.replaceState(null, '', '#svc=' + encodeURIComponent(tr.dataset.svc)); openDetail(tr.dataset.svc); }
+		if (tr) { history.replaceState(null, '', '#svc=' + encodeURIComponent(tr.dataset.svc)); openInfo(tr.dataset.svc); }
 	});
 	root.addEventListener('keydown', function (ev) {
 		if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('tr[data-svc]')) { ev.preventDefault(); ev.target.click(); }
@@ -1730,11 +1797,11 @@ function pageHost() {
 		if (location.hash.indexOf('#svc=') !== 0) { return; }
 		var key;
 		try { key = decodeURIComponent(location.hash.slice(5)); } catch (e) { return; } // kaputter Link: sonst liefen Neuladen und hashchange nicht
-		openDetail(key);
+		openInfo(key);
 	}
 	openHash();
 	window.addEventListener('hashchange', openHash); // Link auf einen Dienst derselben Seite (kein Neuladen)
-	setInterval(function () { if (!document.hidden && !detailFor && !(modalEl && modalEl.classList.contains('show'))) { reload().catch(failQuiet); } }, 15000);
+	setInterval(function () { if (!document.hidden && !detailFor && !infoFor && !(modalEl && modalEl.classList.contains('show'))) { reload().catch(failQuiet); } }, 15000);
 	setInterval(function () { if (!document.hidden) { loadSparks(); } }, 300000);
 }
 

@@ -6161,7 +6161,12 @@
       "r_maint": "Maintenance added: {n}",
       "r_maint_end": "Maintenance ended: {n}",
       "maint_problems": "In maintenance: {n} problems on {h} hosts",
-      "r_migrated": "{n} migrated"
+      "r_migrated": "{n} migrated",
+      "prob_open": "{n} not acknowledged",
+      "prob_all_acked": "all acknowledged",
+      "spark_cap": "CPU · 24 h",
+      "spark_max": "max {v} %",
+      "spark_title": "Sparkline: CPU usage over the last 24 hours"
     },
     "chart": {
       "range": "Time range",
@@ -6192,7 +6197,7 @@
       "resume": "Resume polling",
       "delete": "Remove",
       "services": "Services",
-      "click_hint": "Click opens history and threshold",
+      "click_hint": "Click shows history and all values, the gear opens settings and thresholds",
       "accesses": "Access methods",
       "access_add": "Add access",
       "acc_off": "off",
@@ -6397,7 +6402,25 @@
       "accepted_always": "\"{k}\" is never reported on this service",
       "accept_clear": "Undo",
       "accept_toast": "State accepted as fine",
-      "accept_cleared_toast": "Exception removed"
+      "accept_cleared_toast": "Exception removed",
+      "settings": "Settings and thresholds"
+    },
+    "si": {
+      "history": "History",
+      "metric": "Metric",
+      "metrics": "Values",
+      "details": "Details",
+      "since": "State since",
+      "category": "Area",
+      "interval": "Polled every",
+      "checked": "Last poll",
+      "report": "Alerting",
+      "show_only": "display only, no alerts",
+      "notify": "alerts on warning or critical",
+      "key": "Key",
+      "smart": "SMART values",
+      "traps": "Recent traps",
+      "of_size": "of {s}"
     },
     "f": {
       "name": "Name",
