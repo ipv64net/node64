@@ -1153,7 +1153,8 @@ function pageHost() {
 		sv += lv.std && lv.std['for'] ? ' · ' + esc(durLabel(lv.std['for'])) : '';
 		var html = '<div class="rule-block mb-3" data-rk="' + esc(lv.kind) + '"><div class="d-flex align-items-baseline gap-2 mb-1"><span class="fw-semibold me-auto">' + esc(kindLabel(lv.kind)) + '</span>' + (mt ? '<span class="small">' + esc(fmtVal(mt.value, mt.unit)) + '</span>' : '') + '</div>' +
 			lvlBox(!grp && !own, 'bi-globe2', esc(L('sd.lvl_std')), sv) +
-			lvlBox(grp, 'bi-tags', lv.override ? esc(targetLabel(lv.override.target_type, lv.override.target)) + ' <span class="text-body-tertiary small">' + esc(L('sd.ovr_no', { n: lv.override.index + 1 })) + '</span>' : esc(L('sd.lvl_ovr')), lv.override ? ruleVals(lv.override.rule, e, unit) : '<span class="text-body-tertiary">' + esc(L('sd.none')) + '</span>');
+			// Gruppe / Tags nur, wenn fuer diesen Dienst eine Abweichung greift (sonst nimmt die leere Zeile nur Platz)
+			(lv.override ? lvlBox(grp, 'bi-tags', esc(targetLabel(lv.override.target_type, lv.override.target)) + ' <span class="text-body-tertiary small">' + esc(L('sd.ovr_no', { n: lv.override.index + 1 })) + '</span>', ruleVals(lv.override.rule, e, unit)) : '');
 		html += '<div class="lvl' + (own ? ' active' : '') + '"><div class="lvl-head mb-2"><span><i class="bi bi-hdd"></i> ' + esc(L('sd.lvl_host')) + '</span>' +
 			(own ? '<button class="btn btn-link btn-sm p-0" type="button" data-sd-reset="' + esc(lv.kind) + '"><i class="bi bi-arrow-counterclockwise"></i> ' + esc(L('sd.reset')) + '</button>' : '<span class="text-body-tertiary small">' + esc(L('sd.not_set')) + '</span>') + '</div>';
 		if (lv.state) {
@@ -1249,7 +1250,8 @@ function pageHost() {
 		html += acceptHTML(s); // Zustand gewollt (Port ohne Link, SSD-Verschleiss 100 % ...)
 		if (rules.length) {
 			html += '<h6 class="mt-2">' + esc(rules.length > 1 ? L('sd.thresholds') : L('sd.threshold')) + ' <span class="small text-body-secondary fw-normal">– ' + esc(L('sd.threshold_sub')) + '</span></h6>';
-			rules.forEach(function (r, i) { html += ruleBlock(s, r, i); });
+			// mehrere Schwellen: im breiten Dialog nebeneinander (weniger scrollen)
+			html += rules.length > 1 ? '<div class="row g-3">' + rules.map(function (r, i) { return '<div class="col-xl-6">' + ruleBlock(s, r, i) + '</div>'; }).join('') + '</div>' : ruleBlock(s, rules[0], 0);
 		}
 		if (s.guest) {
 			html += '<h6 class="mt-3">' + esc(L('sd.soll')) + '</h6><div class="lvl active"><div class="btn-group btn-group-sm mb-2" role="group">' +

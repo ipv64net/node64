@@ -169,3 +169,4 @@ tr.clickable { cursor: pointer; }
 }
 /* Dienst-Details: je Regel-Art ein Block */
 .m64-detail .rule-block + .rule-block { border-top: 1px solid var(--bs-border-color); padding-top: .75rem; }
+.m64-detail .row > [class*="col-"] > .rule-block { height: 100%; margin-bottom: 0 !important; padding: .75rem; border: 1px solid var(--bs-border-color); border-radius: .5rem; } /* mehrere Schwellen nebeneinander */

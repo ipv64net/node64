@@ -17,6 +17,7 @@ Changed:
 - Overview: the "Problems" and "Recent" cards are gone – the hosts (tiles or list) now come right below the counters. A new counter card "Problems" (open, of which not acknowledged) leads to the Problems tab.
 - Overview, tiles: below the sparkline it now says what it shows – "CPU · 24 h" with the maximum.
 - Host page: clicking a service opens a centred dialog with a large history chart (range 6 h to 1 year, selectable metric when there are several), all values as a table (value, state, thresholds) and the service details (state since, access, polling, alerting, acknowledgement, key); disks with SMART show the SMART values, the "Traps" service the recent traps below. Acknowledging works right in the dialog.
+- Settings and thresholds: the "Group / tags" row only appears when an override applies to the service; the dialog is wider, several thresholds sit side by side.
 - Host page: settings and thresholds open from the gear at the end of each service row (or the button in the info dialog) – also as a centred dialog instead of a side panel.
 
 ## 0.1.23 – 2026-11-17

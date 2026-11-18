@@ -17,6 +17,7 @@ Geändert:
 - Übersicht: Die Karten „Probleme“ und „Zuletzt“ sind weg – direkt unter den Zählern stehen jetzt die Hosts (Kacheln oder Liste). Neu ist eine Zähler-Karte „Probleme“ (offen, davon nicht quittiert), ein Klick führt zum Reiter Probleme.
 - Übersicht, Kacheln: Unter der Mini-Kurve steht, was sie zeigt – „CPU · 24 Std.“ mit dem Höchstwert.
 - Host-Seite: Ein Klick auf einen Dienst öffnet einen Dialog in der Mitte mit großem Verlauf (Zeitraum 6 Std. bis 1 Jahr, bei mehreren Messgrößen wählbar), allen Messwerten als Tabelle (Wert, Zustand, Schwellen) und den Angaben zum Dienst (Zustand seit, Zugang, Abfrage, Meldung, Quittierung, Schlüssel); bei Platten mit SMART stehen die SMART-Werte, beim Dienst „Traps“ die letzten Traps darunter. Quittieren geht direkt im Dialog.
+- Einstellungen und Schwellen: Die Zeile „Gruppe / Tags“ erscheint nur noch, wenn für den Dienst eine Abweichung greift; der Dialog ist breiter, mehrere Schwellen stehen nebeneinander.
 - Host-Seite: Einstellungen und Schwellen öffnet das Zahnrad am Ende jeder Dienst-Zeile (oder der Knopf im Info-Dialog) – ebenfalls als Dialog in der Mitte statt als Seitenleiste.
 
 ## 0.1.23 – 2026-11-17
