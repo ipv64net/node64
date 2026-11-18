@@ -219,6 +219,10 @@ func TestTextsComplete(t *testing.T) {
 	if len(keys) < 200 {
 		t.Fatalf("only %d script texts found", len(keys))
 	}
+	// Schluessel nur woertlich: L(x ? 'a' : 'b') findet textKeys nicht, der Text fehlt dann im Browser
+	if bad := regexp.MustCompile(`\bL\([^')]*\?\s*'`).Find(bundleJS); bad != nil {
+		t.Fatalf("Text-Schluessel nicht woertlich: %s", bad)
+	}
 	for _, k := range ruleKinds {
 		keys = append(keys, "monitor64.kind."+kindKey(k.Kind))
 	}

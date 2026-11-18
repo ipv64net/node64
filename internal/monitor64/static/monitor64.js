@@ -1368,8 +1368,8 @@ function pageHost() {
 		(s.firing || []).forEach(function (k) {
 			var num = isNumKind(s, k), m = num ? metricOfKind(s, k) : null;
 			acc += '<div class="lvl active mb-2"><div class="small mb-2">' + esc(num ? L('sd.accept_q_num', { k: kindLabel(k), v: m ? fmtVal(m.value, m.unit) : '–' }) : L('sd.accept_q', { k: kindLabel(k) })) + '</div><div class="d-flex flex-wrap gap-2">' +
-				accBtn(k, 'change', 'btn-outline-success', 'bi-check2-circle', L(num ? 'sd.accept_change_num' : 'sd.accept_change')) + accBtn(k, 'always', 'btn-outline-secondary', 'bi-bell-slash', L('sd.accept_always')) +
-				'</div><div class="small text-body-secondary mt-2">' + esc(L(num ? 'sd.accept_hint_num' : 'sd.accept_hint')) + '</div></div>';
+				accBtn(k, 'change', 'btn-outline-success', 'bi-check2-circle', (num ? L('sd.accept_change_num') : L('sd.accept_change'))) + accBtn(k, 'always', 'btn-outline-secondary', 'bi-bell-slash', L('sd.accept_always')) +
+				'</div><div class="small text-body-secondary mt-2">' + esc((num ? L('sd.accept_hint_num') : L('sd.accept_hint'))) + '</div></div>';
 		});
 		(s.accepted || []).forEach(function (k) {
 			acc += '<div class="lvl mb-2 d-flex flex-wrap align-items-center gap-2"><span class="small flex-grow-1"><i class="bi bi-check2-circle text-success"></i> ' + esc(acceptedText(s, k, 'sd')) + '</span>' +
@@ -1957,7 +1957,7 @@ function pageProblems() {
 					// von Hand loesen nur, wo es wirkt: passt der Wert weiter nicht, eroeffnet die naechste Runde das Problem neu
 					(p.failing ? '' : '<button class="btn btn-sm btn-outline-secondary" type="button" data-pa="resolve"><i class="bi bi-person-check"></i> ' + esc(L('pb.resolve')) + '</button>') +
 					(p.host_gone ? '' : '<a class="btn btn-sm btn-outline-secondary" href="/monitor64/host/' + encodeURIComponent(p.host_uid) + (p.key ? '#svc=' + encodeURIComponent(p.key) : '') + '">' + esc(L('pb.to_host')) + '</a>') + '</div>' +
-					'<div class="small text-body-secondary mt-2">' + esc(L(p.failing ? 'pb.ack_hint_failing' : 'pb.ack_hint')) + '</div>';
+					'<div class="small text-body-secondary mt-2">' + esc((p.failing ? L('pb.ack_hint_failing') : L('pb.ack_hint'))) + '</div>';
 			} else {
 				right = '<div class="small fw-semibold mb-1">' + esc(L('pb.result')) + '</div><div class="small">' + esc(howText(p)) + '</div><div class="small text-body-secondary mt-1">' + esc(L('pb.result_sub', { d: fmtDur(p.duration), a: fmtTime(p.opened), b: fmtTime(p.closed) })) + '</div>' +
 					(p.host_gone ? '' : '<a class="btn btn-sm btn-outline-secondary mt-2" href="/monitor64/host/' + encodeURIComponent(p.host_uid) + '">' + esc(L('pb.to_host')) + '</a>');
