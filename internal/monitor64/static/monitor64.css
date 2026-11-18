@@ -60,6 +60,8 @@
 
 /* Host-Seite */
 .access-chip { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--bs-border-color); border-radius: 50rem; padding: .15rem .6rem; font-size: .8rem; }
+button.access-chip { background: transparent; color: inherit; cursor: pointer; } /* Kopf der Host-Seite: Klick oeffnet "Zugang bearbeiten" */
+button.access-chip:hover, button.access-chip:focus-visible { border-color: var(--bs-primary); background: var(--bs-tertiary-bg); }
 .access-chip .bi-check-circle-fill { color: var(--bs-success); }
 .access-chip .bi-x-circle-fill { color: var(--bs-danger); }
 .chart-box { position: relative; height: 190px; }

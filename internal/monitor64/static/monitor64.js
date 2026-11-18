@@ -828,7 +828,9 @@ function pageHost() {
 		setHTML($('#m64-host-head'), '<div class="d-flex align-items-center gap-2"><i class="bi ' + esc(H.icon) + ' fs-4 text-body-secondary"></i><h1 class="h3 mb-0">' + esc(h.name) + '</h1>' + badge + '</div>' +
 			'<div class="text-body-secondary small mt-1">' + esc(kl) + ' · ' + esc(h.address) + (h.group ? ' · ' + esc(L('host.group')) + ' ' + esc(h.group) : '') + ' ' + (h.tags || []).map(tag).join('') +
 			(H.checked ? ' · ' + esc(L('host.checked', { t: ago(H.checked) })) : '') + '</div>' +
-			'<div class="d-flex flex-wrap gap-2 mt-2">' + H.accesses.map(function (a) { return '<span class="access-chip access-row">' + accState(a) + esc(accLabel(a.type)) + '</span>'; }).join('') +
+			'<div class="d-flex flex-wrap gap-2 mt-2">' + H.accesses.map(function (a) { // Klick: Zugang bearbeiten (Port, SMART ...)
+				return '<button type="button" class="access-chip access-row" data-acc-open="' + esc(a.uid) + '" title="' + esc(L('acc.edit')) + '">' + accState(a) + esc(accLabel(a.type)) + ' <i class="bi bi-pencil small text-body-tertiary"></i></button>';
+			}).join('') +
 			'<a href="#" class="small align-self-center" data-act="access-add"><i class="bi bi-plus"></i> ' + esc(L('host.access_add')) + '</a></div>');
 		var pl = $('[data-pause-label]');
 		if (pl) { pl.textContent = h.paused ? L('host.resume') : L('host.pause'); }
@@ -949,7 +951,7 @@ function pageHost() {
 				'<div class="small text-body-secondary text-truncate">' + esc(accSummary(a)) + (a.hostkey ? ' · ' + esc(L('acc.hostkey')) + ' <code>' + esc(a.hostkey) + '</code>' : '') + '</div>' +
 				(a.error ? '<div class="small text-danger-emphasis">' + esc(tx(a.error)) + '</div>' : '') + agentAccLine(a.agent) + '</div>' +
 				'<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" data-acc-act="test"><i class="bi bi-plug"></i> ' + esc(L('acc.test')) + '</button>' +
-				'<button class="btn btn-outline-secondary" type="button" data-acc-act="edit" title="' + esc(L('acc.edit')) + '" aria-label="' + esc(L('acc.edit')) + '"><i class="bi bi-pencil"></i></button>' +
+				'<button class="btn btn-outline-secondary" type="button" data-acc-act="edit" title="' + esc(L('acc.edit')) + '"><i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">' + esc(L('acc.edit_short')) + '</span></button>' +
 				(a.hostkey ? '<button class="btn btn-outline-secondary" type="button" data-acc-act="hostkey" title="' + esc(L('acc.hostkey_reset')) + '" aria-label="' + esc(L('acc.hostkey_reset')) + '"><i class="bi bi-key"></i></button>' : '') +
 				'<button class="btn btn-outline-secondary" type="button" data-acc-act="delete" title="' + esc(L('acc.delete')) + '" aria-label="' + esc(L('acc.delete')) + '"><i class="bi bi-trash"></i></button></div></div>';
 		}).join('');
@@ -1812,6 +1814,12 @@ function pageHost() {
 		var ig = ev.target.closest('[data-ign]');
 		if (ig) {
 			lock(ig, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [ig.dataset.ign], state: 1 }).then(function () { toast(L('host.adopted_toast', { n: 1 })); return reload(); }); }).catch(fail);
+			return;
+		}
+		var ao = ev.target.closest('[data-acc-open]');
+		if (ao) {
+			var oa = H.accesses.filter(function (x) { return x.uid === ao.dataset.accOpen; })[0];
+			if (oa) { accessDialog(oa); }
 			return;
 		}
 		var sb = ev.target.closest('[data-smart]');

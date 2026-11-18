@@ -6240,6 +6240,7 @@
       "accepted_num": "{k}: in Ordnung bis {v}"
     },
     "acc": {
+      "edit_short": "Bearbeiten",
       "read_smart": "SMART-Werte abfragen",
       "read_smart_hint": "Aus: keine SMART-Abfrage – schlafende Festplatten bleiben im Ruhezustand (Proxmox VE weckt sie für SMART etwa alle 30 Minuten auf). Die Platten erscheinen weiter, aber ohne Zustand, Temperatur, Verschleiß und Sektorfehler.",
       "no_smart_short": "ohne SMART",

@@ -5,6 +5,7 @@
 New:
 
 - Proxmox VE, PBS, TrueNAS and agent accesses: switch "Query SMART values" (edit access). When off, Monitor64 no longer queries SMART and sleeping hard disks stay in standby – Proxmox VE used to wake them for SMART about every 30 minutes (disk list with `skipsmart`, no `disks/smart`). The disks remain as services, without health, temperature, wear and sector errors. The SSH access keeps its "Read SMART" switch (#215).
+- Host page: the accesses in the header (e.g. "Proxmox VE") open "Edit access" on click; in the "Accesses" card the button is labelled "Edit" instead of showing only a pencil.
 - Navigation: next to "Monitor64" a small pulsing dot shows the overall state – green all fine, yellow-orange warning (or unknown), red critical or a host unreachable. Paused hosts, hosts in a maintenance window and display-only services do not count; when collapsed, the dot sits at the icon.
 - "Value is fine": when a value reports (e.g. SSD wear 100 % on an NVMe that keeps running), it can be confirmed as fine in the service info dialog or in the settings – "until the value gets worse" (up to the current value the service counts as OK; if the value gets worse or drops back below the warning threshold, the threshold applies again) or "never report" (warning and critical off on this service). So far this only worked for state rules such as "port without link"; for values that cannot exceed 100 % no suitable threshold could be set. API: `accept` when changing a service now also takes rule kinds with numeric values.
 

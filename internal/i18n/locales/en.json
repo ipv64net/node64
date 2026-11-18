@@ -6240,6 +6240,7 @@
       "accepted_num": "{k}: fine up to {v}"
     },
     "acc": {
+      "edit_short": "Edit",
       "read_smart": "Query SMART values",
       "read_smart_hint": "Off: no SMART query – sleeping hard disks stay in standby (Proxmox VE wakes them for SMART about every 30 minutes). The disks still show up, but without health, temperature, wear and sector errors.",
       "no_smart_short": "without SMART",
