@@ -724,3 +724,39 @@ func TestClusterOwnerWatched(t *testing.T) {
 		t.Fatalf("without seen: owner %q", o)
 	}
 }
+
+// #215: "SMART-Werte abfragen" aus - disks/list mit skipsmart=1 (Proxmox ruft sonst smartctl ohne "-n standby" auf
+// und weckt schlafende Platten), kein disks/smart; die Platten bleiben als Dienste ohne SMART-Werte.
+func TestPVENoSmart(t *testing.T) {
+	f, cfg := pveFake(t)
+	f.ok("/nodes/pve1/disks/list?skipsmart=1", "@pve/disks_list.json")
+	cfg.NoSmart = true
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	p := newTestPVE(t, cfg, &now)
+	svcs, err := p.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if f.count("/nodes/pve1/disks/list?skipsmart=1") != 1 || f.count("/nodes/pve1/disks/list") != 0 {
+		t.Fatalf("disks/list: skipsmart %d, ohne %d", f.count("/nodes/pve1/disks/list?skipsmart=1"), f.count("/nodes/pve1/disks/list"))
+	}
+	for _, d := range []string{"/dev/nvme0n1", "/dev/sda", "/dev/sdb"} {
+		if n := f.count("/nodes/pve1/disks/smart?disk=" + d); n != 0 {
+			t.Fatalf("disks/smart %s abgefragt: %d", d, n)
+		}
+	}
+	disks := 0
+	for _, s := range svcs {
+		if s.Kind == "disk" {
+			disks++
+			for _, fct := range s.Facts {
+				if strings.HasPrefix(fct.Code, "smart") {
+					t.Errorf("%s: SMART-Fakt ohne SMART-Abfrage: %+v", s.Key, fct)
+				}
+			}
+		}
+	}
+	if disks == 0 {
+		t.Fatal("Platten fehlen ohne SMART")
+	}
+}

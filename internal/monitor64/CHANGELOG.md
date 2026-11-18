@@ -4,6 +4,7 @@
 
 Neu:
 
+- Zugänge Proxmox VE, PBS, TrueNAS und Agent: Schalter „SMART-Werte abfragen“ (Zugang bearbeiten). Aus fragt Monitor64 keine SMART-Werte mehr ab, schlafende Festplatten bleiben im Ruhezustand – Proxmox VE hat sie für SMART bisher etwa alle 30 Minuten aufgeweckt (Platten mit `skipsmart`, kein `disks/smart`). Die Platten bleiben als Dienste, ohne Zustand, Temperatur, Verschleiß und Sektorfehler. Der SSH-Zugang hat seinen Schalter „SMART lesen“ wie bisher (#215).
 - Navigation: Neben „Monitor64“ zeigt ein kleiner pulsierender Punkt den Gesamtzustand – grün alles in Ordnung, gelb-orange Warnung (oder Unbekannt), rot Kritisch bzw. ein Host nicht erreichbar. Pausierte Hosts, Hosts im Wartungsfenster und reine Anzeige-Dienste zählen nicht; eingeklappt sitzt der Punkt am Symbol.
 - „Wert in Ordnung“: Meldet ein Messwert (z. B. SSD-Verschleiß 100 % bei einer NVMe, die weiterläuft), lässt er sich im Info-Dialog des Dienstes oder in den Einstellungen als in Ordnung bestätigen – „bis der Wert schlechter wird“ (bis zum aktuellen Wert gilt der Dienst als OK; wird der Wert schlechter oder kommt er unter die Warnschwelle zurück, gilt die Schwelle wieder) oder „dauerhaft nicht melden“ (Warnung und Kritisch an diesem Dienst aus). Bisher ging das nur für Zustandsregeln wie „Port ohne Link“; bei Werten, die nicht über 100 % steigen können, ließ sich die Schwelle nicht passend setzen. API: `accept` beim Ändern eines Dienstes nimmt jetzt auch Regel-Arten mit Zahlenwerten.
 

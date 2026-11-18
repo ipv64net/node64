@@ -50,6 +50,7 @@ type PVEConfig struct {
 	Timeout      time.Duration // ganze Runde (0 = DefaultTimeout)
 	SmartEvery   time.Duration // 0 = DefaultSmartEvery
 	UpdatesEvery time.Duration // 0 = DefaultUpdatesEvery
+	NoSmart      bool          // SMART nicht abfragen (disks/list mit skipsmart, kein disks/smart; #215)
 	// Seen: gemeinsam fuer alle PVE-Zugaenge einer Node64 (nil = jede Node online gilt als ueberwacht). Die
 	// clusterweiten Dienste bewertet die kleinste Node-ID unter den Nodes, die hier gerade erfolgreich abgefragt
 	// werden - nicht eine Node, die in Monitor64 fehlt, pausiert oder deren API nicht antwortet.
@@ -376,7 +377,7 @@ func (p *PVE) Collect(ctx context.Context) ([]model.Service, error) {
 	out = append(out, clusterWide(cw, node, p.owner)...)
 	out = append(out, p.storages(ctx, nodePath, part)...)
 	out = append(out, p.zfs(ctx, nodePath, part)...)
-	out = append(out, p.disks.collect(ctx, p.client, node, now, p.cfg.SmartEvery, func(d diskEntry) string {
+	out = append(out, p.disks.collect(ctx, p.client, node, now, p.cfg.SmartEvery, p.cfg.NoSmart, func(d diskEntry) string {
 		return firstNonEmpty(d.DevPath, "/dev/"+d.dev())
 	}, part)...)
 	out = append(out, p.guests(ctx, node, now, part)...)

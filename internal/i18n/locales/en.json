@@ -3390,7 +3390,7 @@
       "verify_tls": "Verify certificate",
       "verify_tls_hint": "Only turn off if Home Assistant uses a self-signed certificate in your LAN.",
       "room": "Room",
-      "room_hint": "Room ID (!abc123:matrix.org, in Element under room settings → Advanced) or alias (#my-room:matrix.org). The bot account has to be in the room.",
+      "room_hint": "Room ID (!abc123:matrix.org, for new rooms from room version 12 just !abc123…; in Element under room settings → Advanced) or alias (#my-room:matrix.org). The bot account has to be in the room.",
       "matrix_token_hint": "Access token of a dedicated bot account (Element: Settings → Help & About → Access token). It works like a password and is stored encrypted.",
       "device_key": "Device token",
       "device_key_hint": "Starts with NTFY-DEVICE-. It acts like a password and is stored encrypted.",
@@ -6240,6 +6240,9 @@
       "accepted_num": "{k}: fine up to {v}"
     },
     "acc": {
+      "read_smart": "Query SMART values",
+      "read_smart_hint": "Off: no SMART query – sleeping hard disks stay in standby (Proxmox VE wakes them for SMART about every 30 minutes). The disks still show up, but without health, temperature, wear and sector errors.",
+      "no_smart_short": "without SMART",
       "type": "Type",
       "enabled": "enabled",
       "port": "Port",
@@ -6950,6 +6953,8 @@
       "traps_user": "v3 user {u}"
     },
     "err": {
+      "no_smart": "\"Query SMART values\" is only available for Proxmox VE, PBS, TrueNAS and the agent.",
+      "smart": "\"Read SMART\" is only available for the SSH access.",
       "json": "Invalid request: {error}",
       "internal": "Internal error – details in the node log.",
       "not_found": "Not found (maybe removed in the meantime).",

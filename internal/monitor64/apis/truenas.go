@@ -50,6 +50,7 @@ type TrueNASConfig struct {
 	API        string        // TrueNASAuto, TrueNASRPC, TrueNASREST
 	Timeout    time.Duration // ganze Runde (0 = DefaultTimeout)
 	SmartEvery time.Duration // Temperaturen und SMART-Tests (0 = DefaultSmartEvery)
+	NoSmart    bool          // SMART nicht abfragen: keine Temperaturen und SMART-Tests (#215)
 }
 
 // Wege fuer TrueNASConfig.API.
@@ -803,7 +804,7 @@ func (t *TrueNAS) disks(ctx context.Context, cl tnCaller, now time.Time, topo ma
 	if every <= 0 {
 		every = DefaultSmartEvery
 	}
-	if t.slowAt.IsZero() || now.Sub(t.slowAt) >= every {
+	if !t.cfg.NoSmart && (t.slowAt.IsZero() || now.Sub(t.slowAt) >= every) {
 		t.slowAt = now
 		temps, err := tnTemps(ctx, cl)
 		switch {

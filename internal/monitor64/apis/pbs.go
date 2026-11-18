@@ -35,6 +35,7 @@ type PBSConfig struct {
 	Timeout      time.Duration
 	SmartEvery   time.Duration
 	UpdatesEvery time.Duration
+	NoSmart      bool // SMART nicht abfragen (wie PVEConfig.NoSmart)
 }
 
 func (c PBSConfig) system() proxmox.System {
@@ -165,7 +166,7 @@ func (p *PBS) Collect(ctx context.Context) ([]model.Service, error) {
 	}
 	out = append(out, p.backupServices(now)...)
 	out = append(out, p.jobs(ctx, now, use, useErr == nil, part)...)
-	out = append(out, p.disks.collect(ctx, p.client, pbsNode, now, p.cfg.SmartEvery, func(d diskEntry) string { return d.dev() }, part)...)
+	out = append(out, p.disks.collect(ctx, p.client, pbsNode, now, p.cfg.SmartEvery, p.cfg.NoSmart, func(d diskEntry) string { return d.dev() }, part)...)
 	sortServices(out)
 	return out, part.result()
 }

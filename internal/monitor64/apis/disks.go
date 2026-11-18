@@ -22,8 +22,9 @@ type slowDisks struct {
 
 // collect liefert die Platten-Dienste; faellig alle every, sonst der letzte Stand. Schlaegt disks/list fehl, bleibt
 // der vorige Stand stehen (Dienste verschwinden nicht, naechste Runde neu) und der Fehler geht an part. param baut den Wert fuer
-// ?disk= (Proxmox VE: /dev/sda, PBS: sda).
-func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string, now time.Time, every time.Duration,
+// ?disk= (Proxmox VE: /dev/sda, PBS: sda). noSmart: Platten ohne SMART - disks/list mit skipsmart=1 und kein
+// disks/smart; Proxmox ruft dafuer smartctl ohne "-n standby" auf und weckt schlafende Platten (#215).
+func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string, now time.Time, every time.Duration, noSmart bool,
 	param func(diskEntry) string, part *partial) []model.Service {
 	if every <= 0 {
 		every = DefaultSmartEvery
@@ -36,7 +37,11 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 	}
 	base := "/nodes/" + url.PathEscape(node) + "/disks"
 	var list []diskEntry
-	if err := c.Get(ctx, base+"/list", &list); err != nil {
+	listPath := base + "/list"
+	if noSmart {
+		listPath += "?skipsmart=1"
+	}
+	if err := c.Get(ctx, listPath, &list); err != nil {
 		part.add("disks/list", err, "disk:")
 		if !s.at.IsZero() && now.Sub(s.at) > 4*every {
 			s.svcs = nil // keine ewig alten Werte
@@ -54,6 +59,12 @@ func (s *slowDisks) collect(ctx context.Context, c *proxmox.Client, node string,
 		idx[i] = i
 	}
 	var authOnce sync.Once
+	if noSmart {
+		idx = nil
+		for i := range list { // Zustand und Verschleiss stammen aus SMART: ohne Abfrage nicht werten
+			list[i].Health, list[i].Status, list[i].Wearout = "", "", optNum{}
+		}
+	}
 	runParallel(ctx, idx, func(ctx context.Context, i int) {
 		var r smartResp
 		if err := c.Get(ctx, base+"/smart?disk="+url.QueryEscape(param(list[i])), &r); err != nil {

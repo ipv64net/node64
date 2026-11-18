@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Schalter „SMART-Werte abfragen“ an den Zugängen Proxmox VE, PBS, TrueNAS und Agent – aus bleiben schlafende Festplatten im Ruhezustand (Proxmox VE weckte sie etwa alle 30 Minuten, #215).
 - Benachrichtigungen: SMTP-Absender mit Anzeigenamen („Monitoring <monitoring@example.com>“) funktionieren – vorher brach der Versand mit „501 Invalid domain name“ ab; der Name erscheint jetzt als Absender (#209).
 - Benachrichtigungen: Matrix-Räume ab Raumversion 12 (Raum-ID ohne „:server“) lassen sich eintragen (#212).
 - Healthchecks: Statusseiten laden sofort – nach Ablauf des Zwischenspeichers wird im Hintergrund neu gerechnet statt den Besucher 1–2 s warten zu lassen.

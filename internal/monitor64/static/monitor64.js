@@ -73,6 +73,8 @@ var DEVSPEC = {
 	unifi: { url: 'https://{a}', user: true, extra: ['site'] }
 };
 // devPin: Art mit Fingerabdruck (Pin) im Formular.
+// Zugangsarten mit dem Schalter "SMART-Werte abfragen" (Server: smartSwitch; SSH hat eigenen Schalter, standardmaessig aus)
+var SMARTSW = ['pve', 'pbs', 'truenas', 'agent'];
 function devPin(t) { return DEVAPI.indexOf(t) >= 0 && !DEVSPEC[t].nopin; }
 // urlHost: Host-Teil einer URL aus der Adresse eines Hosts - ein Port der Adresse entfaellt, IPv6 kommt in Klammern
 // ("nas:2222" -> "nas", "2001:db8::1" und "[2001:db8::1]:22" -> "[2001:db8::1]").
@@ -937,6 +939,7 @@ function pageHost() {
 		if (c.node) { p.push(L('new.node_short', { n: c.node })); }
 		if (c.pin && !(DEVSPEC[a.type] && DEVSPEC[a.type].nopin)) { p.push(L('acc.pinned')); }
 		if (c.smart) { p.push('SMART'); }
+		if (c.no_smart) { p.push(L('acc.no_smart_short')); }
 		if (a.secret_set) { p.push(L('acc.secret_set')); }
 		return p.join(' · ');
 	}
@@ -1549,6 +1552,8 @@ function pageHost() {
 			'<div class="col-md-4" data-af="agent ssh"><label class="form-label" for="m64-af-port">' + esc(L('acc.port')) + '</label><input class="form-control" id="m64-af-port" type="number" min="0" max="65535" value="' + esc(c.port || '') + '" placeholder="' + esc(t === 'ssh' ? '22' : String(D.port || 6465)) + '"></div>' +
 			'<div class="col-md-8" data-af="ssh ' + DEVAPI.filter(function (x) { return DEVSPEC[x].user; }).join(' ') + '"><label class="form-label" for="m64-af-user">' + esc(L('acc.user')) + '</label><input class="form-control" id="m64-af-user" maxlength="32" value="' + esc(c.user || '') + '" placeholder="monitor64"></div>' +
 			'<div class="col-12" data-af="ssh"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-smart"' + (c.smart ? ' checked' : '') + '><label class="form-check-label small" for="m64-af-smart">' + esc(L('new.smart')) + '</label></div></div>' +
+			// SMART-Werte abfragen (#215): aus = schlafende Platten bleiben im Ruhezustand (Proxmox weckt sie sonst)
+			'<div class="col-12" data-af="' + SMARTSW.join(' ') + '"><div class="form-check"><input class="form-check-input" type="checkbox" id="m64-af-readsmart"' + (c.no_smart ? '' : ' checked') + '><label class="form-check-label small" for="m64-af-readsmart">' + esc(L('acc.read_smart')) + '</label></div><div class="form-text">' + esc(L('acc.read_smart_hint')) + '</div></div>' +
 			'<div class="col-12" data-af="pve pbs docker ' + DEVAPI.join(' ') + '"><label class="form-label" for="m64-af-url">URL</label><input class="form-control" id="m64-af-url" maxlength="512" value="' + esc(c.url || '') + '" placeholder="https://10.0.0.21:8006"><div class="form-text" data-af="docker">' + esc(L('new.docker_hint')) + '</div></div>' +
 			'<div class="col-md-6" data-af="pve pbs"><label class="form-label" for="m64-af-tid">' + esc(L('new.token_id')) + '</label><input class="form-control" id="m64-af-tid" maxlength="128" value="' + esc(c.token_id || '') + '" placeholder="monitor@pve!node64"></div>' +
 			'<div class="col-md-6" data-af="pve"><label class="form-label" for="m64-af-node">' + esc(L('new.node')) + '</label><input class="form-control" id="m64-af-node" maxlength="64" value="' + esc(c.node || '') + '"></div>' +
@@ -1587,6 +1592,7 @@ function pageHost() {
 			if (devPin(t)) { cfg.pin = $('#m64-af-pin', body).value.trim(); }
 			Object.keys(m).forEach(function (x) { cfg[x] = m[x]; });
 		}
+		if (SMARTSW.indexOf(t) >= 0 && !$('#m64-af-readsmart', body).checked) { cfg.no_smart = true; }
 		var secret = t === 'docker' ? $('#m64-af-dsecret', body).value.trim() : $('#m64-af-secret', body).value;
 		if (t === 'snmp') {
 			var sr = snmpRead(function (id) {
@@ -1669,6 +1675,7 @@ function pageHost() {
 		if (t === 'pve' || t === 'pbs') { o.token_id = c.token_id || ''; }
 		if (t === 'pve') { o.node = c.node || ''; }
 		if (t === 'pbs' && c.backup_max_age_h) { o.backup_max_age_h = c.backup_max_age_h; }
+		if (SMARTSW.indexOf(t) >= 0 && c.no_smart) { o.no_smart = true; }
 		if (DEVAPI.indexOf(t) >= 0) {
 			o.url = c.url || '';
 			if (devPin(t)) { o.pin = c.pin || ''; }

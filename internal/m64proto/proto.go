@@ -53,6 +53,10 @@ const (
 	SecWinSvc  = "winsvc" // Windows (Phase 2)
 )
 
+// AllSections sind alle Abschnitte von collect (z. B. "alle ausser SMART" anfragen; unbekannte uebergeht der Agent).
+var AllSections = []string{SecCPU, SecMem, SecLoad, SecFS, SecDisk, SecNet, SecBond, SecSmart, SecRAID, SecZFS, SecTemp, SecSystemd,
+	SecUpdates, SecReboot, SecLocal, SecWinSvc}
+
 // Info beschreibt Agent und Host (Antwort auf "info").
 type Info struct {
 	V        int      `json:"v"`

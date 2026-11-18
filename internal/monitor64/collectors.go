@@ -95,6 +95,8 @@ type accessConfig struct {
 	Port  int    `json:"port,omitempty"`
 	User  string `json:"user,omitempty"`
 	Smart bool   `json:"smart,omitempty"` // SSH: SMART per sudo smartctl
+	// NoSmart: SMART nicht abfragen (Proxmox VE, PBS, TrueNAS, Agent; #215) - schlafende Platten bleiben im Ruhezustand
+	NoSmart bool `json:"no_smart,omitempty"`
 	// API-Zugaenge (Proxmox VE, PBS, Docker)
 	URL     string `json:"url,omitempty"`
 	TokenID string `json:"token_id,omitempty"`
@@ -121,6 +123,36 @@ type accessConfig struct {
 	Profiles    []string         `json:"profiles,omitempty"`     // feste Profile (leer = automatisch)
 	Traps       bool             `json:"traps,omitempty"`        // Traps dieses Hosts annehmen
 	TrapEngine  string           `json:"trap_engine_id,omitempty"`
+}
+
+// noSmartSections: alle Abschnitte ausser SMART (Zugang mit NoSmart).
+var noSmartSections = func() []string {
+	var out []string
+	for _, s := range m64proto.AllSections {
+		if s != m64proto.SecSmart {
+			out = append(out, s)
+		}
+	}
+	return out
+}()
+
+// dropSmart entfernt SMART samt Hinweisen und Fehlern des Abschnitts aus einem Bericht.
+func dropSmart(rep *m64proto.Report) {
+	if rep == nil {
+		return
+	}
+	rep.SMART = nil
+	rep.Errors = slices.DeleteFunc(rep.Errors, func(e m64proto.SectionErr) bool { return e.Section == m64proto.SecSmart })
+	rep.Notes = slices.DeleteFunc(rep.Notes, func(n m64proto.SectionNote) bool { return n.Section == m64proto.SecSmart })
+}
+
+// smartSwitch: Zugangsarten mit dem Schalter "SMART-Werte abfragen" (NoSmart; SSH hat Smart, standardmaessig aus).
+func smartSwitch(typ string) bool {
+	switch typ {
+	case "pve", "pbs", "truenas", "agent":
+		return true
+	}
+	return false
 }
 
 // newCollector baut den Sammler eines Zugangs.
@@ -171,7 +203,7 @@ func (m *Module) newCollector(ctx context.Context, h *Host, a *Access) (collecto
 		if _, err := ref.agent(ac); err != nil {
 			return nil, err
 		}
-		return &agentCollector{ref: ref, cfg: ac}, nil
+		return &agentCollector{ref: ref, cfg: ac, noSmart: cfg.NoSmart}, nil
 	}
 	sc := transport.SSHConfig{Addr: accessAddr(h.Address, cfg.Port, 22), User: firstNonEmpty(cfg.User, "monitor64"), OnHostKey: onKey}
 	if secret != "" {
@@ -269,9 +301,10 @@ func (r *poolRef) close() {
 
 // agentCollector fragt den Monitor64-Agent ab.
 type agentCollector struct {
-	ref  *poolRef
-	cfg  transport.AgentConfig
-	prev *m64proto.Report
+	ref     *poolRef
+	cfg     transport.AgentConfig
+	prev    *m64proto.Report
+	noSmart bool // SMART nicht abfragen (alle Abschnitte ausser smart; im Push-Betrieb verworfen)
 }
 
 // peer: tatsaechlich verbundene Adresse und Art des Hostschluessels (fuer "Verbindung testen").
@@ -289,9 +322,16 @@ func (a *agentCollector) collect(ctx context.Context) ([]model.Service, error) {
 	}
 	ctx, cancel := withReserve(ctx)
 	defer cancel()
-	rep, err := c.Collect(ctx)
+	var secs []string
+	if a.noSmart {
+		secs = noSmartSections
+	}
+	rep, err := c.Collect(ctx, secs...)
 	if err != nil {
 		return nil, err // vom Transport schon gekuerzt/bereinigt bzw. *TimeoutError
+	}
+	if a.noSmart { // Push-Betrieb: der Agent schickt alles
+		dropSmart(rep)
 	}
 	out := MapReport(a.prev, rep)
 	a.prev = rep

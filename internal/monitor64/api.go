@@ -342,6 +342,10 @@ func cleanAccessConfig(typ string, raw json.RawMessage) (json.RawMessage, error)
 		return nil, errBad("api")
 	case c.Session && typ != "redfish":
 		return nil, errBad("session")
+	case c.NoSmart && !smartSwitch(typ):
+		return nil, errBad("no_smart")
+	case c.Smart && typ != "ssh":
+		return nil, errBad("smart")
 	}
 	if c.Site = strings.TrimSpace(c.Site); c.Site != "" && (typ != "unifi" || !apis.ValidUnifiSite(c.Site)) {
 		return nil, errBad("site")

@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: switch "Query SMART values" on Proxmox VE, PBS, TrueNAS and agent accesses – when off, sleeping hard disks stay in standby (Proxmox VE woke them about every 30 minutes, #215).
 - Notifications: SMTP senders with a display name ("Monitoring <monitoring@example.com>") work – sending used to fail with "501 Invalid domain name"; the name now shows as sender (#209).
 - Notifications: Matrix rooms from room version 12 (room ID without ":server") can be entered (#212).
 - Healthchecks: status pages load instantly – after the cache expires the page is rebuilt in the background instead of making the visitor wait 1–2 s.

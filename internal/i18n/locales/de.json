@@ -3390,7 +3390,7 @@
       "verify_tls": "Zertifikat prüfen",
       "verify_tls_hint": "Nur abschalten, wenn Home Assistant im LAN ein selbst signiertes Zertifikat nutzt.",
       "room": "Raum",
-      "room_hint": "Raum-ID (!abc123:matrix.org, in Element unter Raumeinstellungen → Erweitert) oder Alias (#mein-raum:matrix.org). Das Bot-Konto muss im Raum sein.",
+      "room_hint": "Raum-ID (!abc123:matrix.org, bei neuen Räumen ab Raumversion 12 nur !abc123…; in Element unter Raumeinstellungen → Erweitert) oder Alias (#mein-raum:matrix.org). Das Bot-Konto muss im Raum sein.",
       "matrix_token_hint": "Zugriffstoken eines eigenen Bot-Kontos (Element: Einstellungen → Hilfe & Info → Zugriffstoken). Es wirkt wie ein Passwort und wird verschlüsselt gespeichert.",
       "device_key": "Geräte-Token",
       "device_key_hint": "Beginnt mit NTFY-DEVICE-. Er wirkt wie ein Passwort und wird verschlüsselt gespeichert.",
@@ -6240,6 +6240,9 @@
       "accepted_num": "{k}: in Ordnung bis {v}"
     },
     "acc": {
+      "read_smart": "SMART-Werte abfragen",
+      "read_smart_hint": "Aus: keine SMART-Abfrage – schlafende Festplatten bleiben im Ruhezustand (Proxmox VE weckt sie für SMART etwa alle 30 Minuten auf). Die Platten erscheinen weiter, aber ohne Zustand, Temperatur, Verschleiß und Sektorfehler.",
+      "no_smart_short": "ohne SMART",
       "type": "Art",
       "enabled": "aktiv",
       "port": "Port",
@@ -6950,6 +6953,8 @@
       "traps_user": "v3-Benutzer {u}"
     },
     "err": {
+      "no_smart": "„SMART-Werte abfragen“ gibt es nur bei Proxmox VE, PBS, TrueNAS und dem Agent.",
+      "smart": "„SMART lesen“ gibt es nur beim SSH-Zugang.",
       "json": "Ungültige Anfrage: {error}",
       "internal": "Interner Fehler – Details im Log der Node.",
       "not_found": "Nicht gefunden (vielleicht inzwischen entfernt).",
