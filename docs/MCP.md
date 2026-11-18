@@ -56,8 +56,8 @@ kein zusätzlicher Port, gleiches TLS-Zertifikat. Node64 arbeitet zustandslos (k
 
 1. *Einstellungen → KI-Schnittstelle (MCP)* → **Einschalten**.
 2. **Schlüssel anlegen:** Name (z. B. „Claude Code Laptop“) und Bereiche, die gelesen werden dürfen: Node,
-   Healthchecks, Monitor64, DNS64, PROXY64, Honeypot64, Sonar64, DynDNS, Zertifikate, Benachrichtigungen, Audit-Log
-   und Logs. `api_reference` hat jeder Schlüssel (liest nur die mitgelieferte API-Beschreibung).
+   Healthchecks, Monitor64, IPAM64, DNS64, PROXY64, Honeypot64, Sonar64, DynDNS, Zertifikate, Benachrichtigungen,
+   Audit-Log und Logs. `api_reference` hat jeder Schlüssel (liest nur die mitgelieferte API-Beschreibung).
 3. Die Seite zeigt die Adresse (`https://<node>:<port>/mcp`) und fertige Schnipsel mit dem neuen Schlüssel.
 
 ### Zertifikat
@@ -164,6 +164,10 @@ Alle Werkzeuge tragen `readOnlyHint: true`, `destructiveHint: false`. Zeiten sin
 | Monitor64 | `monitor64_overview`, `monitor64_host`, `monitor64_problems`, `monitor64_maintenance` | Hosts, Dienste mit Messwerten, Probleme, Wartungen |
 | Monitor64 | `monitor64_config` | `part`: `rules` (Schwellen, Abweichungen), `notify`, `settings`, `traps`, `agent` (Verteilung), `cluster` |
 | Monitor64 | `monitor64_details` | `part`: `problem` (Ablauf), `accesses` (Zugänge ohne Geheimnisse, gefundene und ignorierte Dienste), `smart`, `traps`, `series` (Verlauf), `cluster_host` |
+| IPAM64 | `ipam64_overview` | Präfixe (Baum mit VLAN, Status, DHCP-Bereich, Zone, Belegung, Konflikte), Bereiche, Netzwerk-Scan |
+| IPAM64 | `ipam64_addresses` | belegte Adressen aus allen Quellen (auch anderer Cluster-Mitglieder, Quelle `cluster`); Filter Präfix, Text |
+| IPAM64 | `ipam64_conflicts` | Konflikte (doppelte Adresse, fremde MAC, Vergabe gegen feste Adresse, `double` im Cluster), Hinweise, unbekannte Geräte |
+| IPAM64 | `ipam64_available` | nächste freie Adressen eines Präfixes |
 | DNS64 | `dns64_summary` | Anfragen, Blockquote, Cache, Clients, Upstreams (ohne URLs), Pause |
 | DNS64 | `dns64_top` | Top geblockt / erlaubt / Clients |
 | DNS64 | `dns64_query_log` | Suche nach Client und/oder Domain, Status, Zeitraum (Minuten); `limit` bis 200 |
@@ -187,7 +191,7 @@ Alle Werkzeuge tragen `readOnlyHint: true`, `destructiveHint: false`. Zeiten sin
 | Benachrichtigungen | `recent_notifications` | Zustellungen (ok/fehlgeschlagen) und Kanäle ohne Zugangsdaten |
 | Benachrichtigungen | `notification_channels` | `part`: `channels` (nur Namen der gesetzten Felder), `ipv64` (Kanäle bei ipv64), `types` (Felder je Typ, welche sensibel sind) |
 | Node | `node_config` | `part`: `settings`, `update` (Selbst-Update), `link` (ipv64, offene Konflikte), `ipv64` (zentraler Key: Plan, Ablauf), `overview`, `ports`, `logging`, `retention` |
-| Node | `cluster_status` | Mitglieder des Clusters ohne Kopplungscode |
+| Node | `cluster_status` | Mitglieder des Clusters (Zustand, Grund einer Aussetzung) ohne Kopplungscode |
 | Audit-Log und Logs | `audit_log` | Audit-Log mit Filter Bereich, Seiten über `before` |
 | Audit-Log und Logs | `node_logs` | letzte Logzeilen, Filter Stufe, Modul, Text |
 | jeder Schlüssel | `api_reference` | Wegweiser zur REST-API aus `openapi.json`: Module (Tags), Operationen je Modul bzw. Suche (Methode, Pfad, Kurzbeschreibung, Parameter, Felder des Rumpfs), mit `path` alle Einzelheiten |
@@ -265,3 +269,7 @@ Fehler eines Werkzeugs (z. B. Check nicht gefunden, Modul gestoppt) kommen als W
   `dns64_summary` mit Zeitverlauf, `dns64_dhcp` mit IPv6-Router-Advertisement. Neuer Bereich `sonar64` (bestehende
   Schlüssel bleiben gültig). Werkzeug `api_reference` (jeder Schlüssel) und Prompt `plan_change`: Änderungen macht die
   KI über die REST-API mit einem API-Key. 44 Werkzeuge.
+- **2026-11-18:** Monitor64 liefert bei Diensten die meldenden und bestätigten Regeln (`firing`, `accepted`), bei
+  Problemen `still_failing` und `in_maintenance`; DNS64 bei Listen `hint`/`skipped`/`limit` und bei Einträgen und
+  festen DHCP-Adressen `origin` (IPAM64); PROXY64 bei Streams `online_name` und `cdn64_error`. `api_reference` kennt
+  die Module IPAM64 und Benutzerverwaltung, `audit_log` den Bereich `ipam64`.

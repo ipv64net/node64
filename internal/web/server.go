@@ -74,7 +74,8 @@ type Deps struct {
 type Server struct {
 	Deps
 	log        *slog.Logger
-	ldapSynced time.Time // letzter Abgleich der LDAP-Gruppen (nur housekeeping)
+	ldapSynced time.Time                      // letzter Abgleich der LDAP-Gruppen (nur housekeeping)
+	ldapResult atomic.Pointer[ldapSyncResult] // Ergebnis des letzten Abgleichs (Metriken), nil = keiner
 	mux        *http.ServeMux
 	handler    http.Handler
 	pages      map[string]*template.Template

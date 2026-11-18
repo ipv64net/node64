@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/metrics"
 )
@@ -27,6 +28,7 @@ func TestAPIMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	a.s.ldapResult.Store(&ldapSyncResult{OK: false, LastOK: time.Unix(1700000000, 0)}) // letzter Abgleich gescheitert
 	resp, _ := a.get(t, "/api/metrics")
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("no auth: %d", resp.StatusCode)
@@ -50,6 +52,8 @@ func TestAPIMetrics(t *testing.T) {
 		"node64_database_bytes ",
 		"node64_ping_answers 42",
 		"node64_scrape_duration_seconds ",
+		"node64_ldap_sync_ok 0\n",
+		"node64_ldap_sync_last_success_seconds 1.7e+09\n",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in\n%s", want, body)

@@ -1,5 +1,12 @@
 # Monitor64 – Changes
 
+## 0.1.25
+
+New:
+
+- Prometheus: `node64_monitor_problems_open` and `node64_monitor_problems_unacked` – open problems held by this node and how many of them are not acknowledged (in a cluster each problem counts only on the responsible node).
+- AI interface (MCP): `monitor64_host` shows per service the rules reporting right now and those confirmed as fine, `monitor64_problems` whether a problem still persists and whether it is in a maintenance window.
+
 ## 0.1.24 – 2026-11-18
 
 New:

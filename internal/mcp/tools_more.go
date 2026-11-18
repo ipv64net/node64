@@ -24,7 +24,7 @@ func moreTools() []Tool {
 			Desc:   "Configuration of one status page as stored (layout, theme, options, sections and entries with their check or Monitor64 source) and its notices (announcements with updates). Never includes the page password.",
 			Schema: schema([]string{"page"}, pStr("page", "Page id, slug or exact title (from list_status_pages).", 120)), Run: statusPageDetails},
 		{Name: "cluster_status", Area: AreaNode, Title: "Cluster status",
-			Desc:   "Cluster of this node: members with name, address, online, version, last seen, last error and synced areas, plus the synced modules. Never includes pairing codes.",
+			Desc:   "Cluster of this node: members with name, address, online, state (active or suspended, with reason), version, last seen, last error and synced areas, plus the synced modules. Never includes pairing codes.",
 			Schema: noArgs, Run: clusterStatus},
 	}
 }
@@ -96,7 +96,7 @@ func dhcpLeases(c *call, a map[string]any) (map[string]any, error) {
 			if strconv.FormatInt(i64(r, "scope_id"), 10) != id || !hit(str(r, "ip"), str(r, "mac"), str(r, "name")) {
 				continue
 			}
-			fixed = append(fixed, obj{"ip": str(r, "ip"), "mac": str(r, "mac"), "name": clean(str(r, "name"), 120), "comment": clean(str(r, "comment"), 200)})
+			fixed = append(fixed, obj{"ip": str(r, "ip"), "mac": str(r, "mac"), "name": clean(str(r, "name"), 120), "comment": clean(str(r, "comment"), 200), "origin": str(r, "origin")})
 		}
 		if len(fixed) > 0 {
 			n["fixed"] = fixed

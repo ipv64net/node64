@@ -7,6 +7,10 @@ Short summary of what changes per version. Details per module are in the node un
 - Healthchecks: pulsing state dot next to "Healthchecks" in the navigation (green, yellow-orange, red) like for Monitor64.
 - Account classes and dashboard: new row "CDN subdomains" (Free 2, Home/Supporter 5, unlimited from Business); the dashboard shows the usage.
 - PROXY64: when a limit is reached, the right limit is named (CDN domains, subdomains, port mappings or tunnels) instead of always "CDN domains used up"; card and wizard show the subdomains.
+- Prometheus: new values for the cluster (suspended members with reason, open user and ACME conflicts), the group sync with AD/LDAP (succeeded, last success) and open problems in Monitor64.
+- AI interface (MCP): IPAM64 in the description and in `api_reference`, plus user management; more fields for Monitor64, DNS64 (list hints, records from IPAM64) and PROXY64 streams (CDN64).
+- Local API: description (`openapi.json`) completed for Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, environment and cluster; `GET /api/group` also returns role, disabled and source for user conflicts.
+
 ## 1.7.9 – 2026-11-18
 
 - Monitor64: switch "Query SMART values" on Proxmox VE, PBS, TrueNAS and agent accesses – when off, sleeping hard disks stay in standby (Proxmox VE woke them about every 30 minutes, #215).

@@ -64,7 +64,7 @@ func userConflictsAPI(list []userConflictRow) []map[string]any {
 		vs := make([]map[string]any, 0, len(c.Versions))
 		for _, v := range c.Versions {
 			vs = append(vs, map[string]any{"uid": v.UID, "node_id": v.Node, "node_name": v.Name, "created_at": v.CreatedAt, "two_fa": v.TwoFA,
-				"sso_accounts": v.Identities, "own": v.Own})
+				"sso_accounts": v.Identities, "own": v.Own, "role": v.Role, "disabled": v.Disabled, "source": v.Source}) // wie die Wahlkarte der Oberflaeche
 		}
 		out = append(out, map[string]any{"username": c.Username, "versions": vs})
 	}

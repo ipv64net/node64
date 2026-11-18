@@ -268,9 +268,16 @@ func (s *Server) ldapRecheck(ctx context.Context, u *store.User) (bool, string) 
 // ldapSyncGroups gleicht die Gruppen aller Benutzer aus LDAP mit dem Verzeichnis ab (housekeeping, stuendlich). So
 // enden Rollen aus Gruppen auch ohne neue Anmeldung (Passkey, API-/MCP-Keys, laufende Sitzungen). Bei einem Fehler
 // bleibt alles, wie es ist; die Gruppen laufen dann nach store.ExtMaxAgeLDAP ab.
+// ldapSyncResult: letzter Gruppenabgleich fuer die Metriken (node64_ldap_sync_*).
+type ldapSyncResult struct {
+	OK     bool
+	LastOK time.Time // letzter erfolgreicher Abgleich (null = noch keiner)
+}
+
 func (s *Server) ldapSyncGroups(ctx context.Context) {
 	cfg := authcfg.LoadLDAP(ctx, s.Store)
 	if !cfg.Enabled {
+		s.ldapResult.Store(nil)
 		return
 	}
 	users, err := s.Store.Users(ctx)
@@ -285,13 +292,20 @@ func (s *Server) ldapSyncGroups(ctx context.Context) {
 		}
 	}
 	if len(list) == 0 {
+		s.ldapResult.Store(nil) // nichts abzugleichen
 		return
 	}
 	found, err := ldapauth.Lookup(s.ldapContext(ctx), cfg, s.ldapBindPassword(cfg), names)
 	if err != nil {
 		s.log.Warn("ldap group sync failed, last state kept", "err", ldapReason(err))
+		res := &ldapSyncResult{}
+		if old := s.ldapResult.Load(); old != nil {
+			res.LastOK = old.LastOK
+		}
+		s.ldapResult.Store(res)
 		return
 	}
+	s.ldapResult.Store(&ldapSyncResult{OK: true, LastOK: time.Now()})
 	for _, u := range list {
 		groups, reason := s.ldapCheckedGroups(ctx, u, found[u.Username])
 		sorted := slices.Clone(groups)

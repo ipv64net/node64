@@ -19,7 +19,7 @@ func apiRefTools() []Tool {
 	return []Tool{
 		{Name: "api_reference", Area: AreaAll, Title: "REST API reference",
 			Desc: "How to change things on this node: MCP is read-only, changes go through the node's REST API under /api with an API key of the node (not the MCP key). " +
-				"Without tag: the modules (tags) of the API with their number of operations and how to authenticate. With tag (node, certs, cluster, link, healthchecks, notifications, dyndns, dns64, proxy64, honeypot, sonar64, monitor64) and/or search: the operations in short form " +
+				"Without tag: the modules (tags) of the API with their number of operations and how to authenticate. With tag (node, certs, cluster, link, healthchecks, notifications, dyndns, dns64, proxy64, honeypot, sonar64, monitor64, ipam64, users) and/or search: the operations in short form " +
 				"(method, path, summary, parameters, request body fields; * = required). With path (e.g. /api/dyndns/targets/{id}): full details of the operations on that path including field types, allowed values and descriptions.",
 			Schema: schema(nil, pStr("tag", "Module of the API (see description); empty = overview.", 40), pStr("search", "Only operations whose path, summary or description contains this text.", 100),
 				pEnum("method", "Only this HTTP method.", "", "GET", "POST", "PUT", "PATCH", "DELETE"), pStr("path", "Exact path of one endpoint for full details, with or without /api prefix.", 200),
@@ -33,7 +33,8 @@ var apiTagAlias = map[string]string{
 	"node": "Node", "certs": "Ports & Zertifikate", "certificates": "Ports & Zertifikate", "ports": "Ports & Zertifikate", "cluster": "Cluster",
 	"link": "Verknüpfung", "sync": "Verknüpfung", "healthchecks": "Healthchecks", "notifications": "Benachrichtigungen", "channels": "Benachrichtigungen",
 	"dyndns": "DynDNS", "dns64": "DNS64", "dhcp": "DNS64", "proxy64": "PROXY64", "cdn64": "PROXY64", "honeypot": "Honeypot64", "honeypot64": "Honeypot64",
-	"sonar64": "Sonar64", "monitor64": "Monitor64",
+	"sonar64": "Sonar64", "monitor64": "Monitor64", "ipam64": "IPAM64", "ipam": "IPAM64", "users": "Benutzerverwaltung", "benutzer": "Benutzerverwaltung",
+	"groups": "Benutzerverwaltung", "ldap": "Benutzerverwaltung",
 }
 
 var apiMethods = []string{"get", "post", "put", "patch", "delete"}

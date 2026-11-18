@@ -98,7 +98,7 @@ func nodeConfig(c *call, a map[string]any) (map[string]any, error) {
 			out["untrusted"] = obj{"last_error": clean(le, 200)}
 		}
 		if cf, err := c.getArr("/api/link/conflicts", nil); err == nil { // ohne die beiden Fassungen (darin stehen u. a. Check-Parameter)
-			out["open_conflicts"] = pickList(cf, 100, "id", "entity", "entity_id", "name", "local_op", "server_revision", "created_at")
+			out["open_conflicts"] = pickList(cf, 100, "id", "entity", "entity_id", "name", "local_op", "server_revision", "created_at", "error")
 		}
 	case "ipv64":
 		k, err := c.getObj("/api/ipv64", nil)

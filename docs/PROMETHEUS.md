@@ -48,8 +48,13 @@ beim API-Key „zuletzt benutzt“. Falsche Keys bremst Node64 wie bei der übri
 | `node64_link_outbox`, `node64_link_conflicts` | | noch nicht übertragene Einträge, offene Konflikte |
 | `node64_link_last_sync_seconds` | | letzter Abgleich (Unix-Zeit) |
 | `node64_link_online_checks_today`, `node64_link_online_checks_limit` | | Online-Messungen heute / Tageslimit (0 = keins) |
-| `node64_group_members`, `node64_group_members_online` | | lokale Gruppe |
-| `node64_group_member_up` | `node_id`, `node_name` | Mitglied erreichbar |
+| `node64_group_members`, `node64_group_members_online`, `node64_group_members_suspended` | | Mitglieder des Clusters (ohne diese Node), davon erreichbar bzw. ausgesetzt |
+| `node64_group_member_up` | `node_id`, `node_name` | Mitglied erreichbar (ausgesetzt zählt als 0) |
+| `node64_group_member_suspended` | `node_id`, `node_name`, `reason` | immer 1, nur für ausgesetzte Mitglieder; Gründe wie in [CLUSTER.md](CLUSTER.md) |
+| `node64_group_user_conflicts` | | Benutzernamen, die es im Cluster mehrfach als verschiedene Benutzer gibt (Wahl offen) |
+| `node64_group_acme_conflict` | | 1 = Nodes des Clusters nutzen verschiedene ACME-Konten (Wahl offen) |
+| `node64_ldap_sync_ok` | | letzter stündlicher Gruppenabgleich mit AD/LDAP gelungen, 1/0; fehlt ohne AD/LDAP oder ohne Benutzer daraus |
+| `node64_ldap_sync_last_success_seconds` | | letzter erfolgreicher Gruppenabgleich (Unix-Zeit) |
 | `node64_mcp_enabled` | | MCP-Schnittstelle (KI-Anwendungen) eingeschaltet, 1/0 ([MCP.md](MCP.md)) |
 | `node64_mcp_calls_total` | `tool`, `result` (`ok`, `error`) | Werkzeugaufrufe über MCP seit dem Start (Counter) |
 | `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_sys_bytes`, `go_gc_cycles_total` | | Laufzeit von Go |
@@ -151,11 +156,25 @@ Labels je Host: `host_id` (bleibt gleich), `host` (erster Name), `kind` (`proxy`
 | `node64_cdn64_online_host_status` | `name`, `mode`, `status` | Zustand bei ipv64 (immer 1): `active`, `pending`, `blocked` |
 | `node64_cdn64_online_host_traffic_month_bytes` | `name` | Traffic über srv07/srv08 im Monat |
 | `node64_cdn64_online_domains_used`, `…_domains_limit` | | CDN-Domains des Accounts (altes CDN zählt mit) |
+| `node64_cdn64_online_subdomains_used`, `…_subdomains_limit` | | CDN-Subdomains des Accounts (-1 = unbegrenzt) |
 | `node64_cdn64_online_traffic_used_bytes`, `…_traffic_limit_bytes` | | CDN-Traffic des Accounts im Monat |
 | `node64_cdn64_online_last_sync_seconds`, `node64_cdn64_online_sync_ok` | | letzter Abgleich mit ipv64 (Unix-Zeit) und ob er klappte |
 
 Die Werte von CDN64 (`node64_cdn64_online_*`) stammen aus dem letzten Abgleich der Node (jede Minute), nicht aus einer Abfrage bei
 ipv64.
+
+## Monitor64
+
+Labels je Host: `host`, `group`, dazu `tags` (kommagetrennt, abschaltbar). Je Dienst zusätzlich `service` (Name,
+englisch) und `key`. Im Cluster liefert nur die Node Werte, die den Host gerade überwacht. Die ganze Ausgabe lässt
+sich in den Einstellungen von Monitor64 abschalten.
+
+| Metrik | Labels | Bedeutung |
+|---|---|---|
+| `node64_monitor_host_up` | Host | 1 erreichbar, 0 nicht |
+| `node64_monitor_state` | Host, `service`, `key` | 0 OK, 1 Warnung, 2 Kritisch, 3 Unbekannt |
+| `node64_monitor_value` | Host, `service`, `key`, `metric`, `unit` | Messwert eines Dienstes |
+| `node64_monitor_problems_open`, `node64_monitor_problems_unacked` | | offene Probleme, die diese Node führt, davon nicht quittiert |
 
 ## Zertifikate
 
@@ -198,6 +217,17 @@ groups:
       - alert: Node64CDN64TunnelDown
         expr: node64_cdn64_online_edge_connected == 0
         for: 3m
+      - alert: Node64ClusterMemberSuspended
+        expr: node64_group_member_suspended == 1
+        annotations:
+          summary: "Cluster-Mitglied {{ $labels.node_name }} ausgesetzt ({{ $labels.reason }})"
+      - alert: Node64LDAPSyncFailed
+        expr: node64_ldap_sync_ok == 0
+        annotations:
+          summary: "Gruppenabgleich mit AD/LDAP scheitert"
+      - alert: Node64MonitorProblems
+        expr: node64_monitor_problems_unacked > 0
+        for: 10m
       - alert: Node64HubDisconnected
         expr: node64_link_linked == 1 and node64_link_connected == 0
         for: 10m

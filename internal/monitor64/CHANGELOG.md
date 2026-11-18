@@ -1,5 +1,12 @@
 # Monitor64 – Änderungen
 
+## 0.1.25
+
+Neu:
+
+- Prometheus: `node64_monitor_problems_open` und `node64_monitor_problems_unacked` – offene Probleme, die diese Node führt, und davon nicht quittierte (im Cluster zählt jedes Problem nur bei der zuständigen Node).
+- KI-Schnittstelle (MCP): `monitor64_host` zeigt je Dienst die gerade meldenden und die als in Ordnung bestätigten Regeln, `monitor64_problems` ob ein Problem noch besteht und ob es im Wartungsfenster liegt.
+
 ## 0.1.24 – 2026-11-18
 
 Neu:

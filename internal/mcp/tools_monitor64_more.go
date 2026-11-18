@@ -191,7 +191,7 @@ func (c *call) m64HostUID(ref string) (string, error) {
 
 // m64AccessConfig: Positivliste der Konfiguration eines Zugangs. Nie: Passwort/Geheimnis (gibt die API ohnehin
 // nicht aus), Community, token (Wegweiser des Push-Agents), token_id, eigene OIDs.
-var m64AccessConfigFields = []string{"port", "user", "smart", "url", "node", "pin", "backup_max_age_h", "site", "ups", "tls", "api", "session", "mode",
+var m64AccessConfigFields = []string{"port", "user", "smart", "no_smart", "url", "node", "pin", "backup_max_age_h", "site", "ups", "tls", "api", "session", "mode",
 	"snmp_version", "level", "auth_proto", "priv_proto", "context", "profiles", "traps", "trap_engine_id"}
 
 func m64Details(c *call, a map[string]any) (map[string]any, error) {

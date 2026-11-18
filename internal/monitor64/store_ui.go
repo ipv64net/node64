@@ -599,3 +599,11 @@ func (s *Store) openUnackedCount(ctx context.Context) int {
 	_ = s.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM m64_problems WHERE closed_at = '' AND ack = '' AND deleted = 0`).Scan(&n)
 	return n
 }
+
+// problemCounts: offene und davon nicht quittierte Probleme, die diese Node fuehrt (Metriken; im Cluster fuehrt die
+// zustaendige Node ein Problem, so zaehlt jedes nur einmal).
+func (s *Store) problemCounts(ctx context.Context, node string) (open, unacked int) {
+	_ = s.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(CASE WHEN ack = '' THEN 1 ELSE 0 END), 0)
+		FROM m64_problems WHERE closed_at = '' AND deleted = 0 AND node_id = ?`, node).Scan(&open, &unacked)
+	return open, unacked
+}

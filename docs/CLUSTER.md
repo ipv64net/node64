@@ -561,6 +561,8 @@ Ping nach dem Update der anderen Node von selbst wieder aktiv (gestaffeltes Upda
 
 - Oberfläche `/cluster`, API `GET /api/group` (je Mitglied `online`, `state`, `reason`, `sync`, `last_seen`,
   `last_error`).
-- Prometheus: `node64_group_members`, `node64_group_members_online`, `node64_group_member_up{node_id,node_name}`.
+- Prometheus: `node64_group_members`, `node64_group_members_online`, `node64_group_members_suspended`,
+  `node64_group_member_up{node_id,node_name}`, `node64_group_member_suspended{node_id,node_name,reason}`,
+  `node64_group_user_conflicts`, `node64_group_acme_conflict` ([PROMETHEUS.md](PROMETHEUS.md)).
 - Log (Modul `peer`): „cluster member suspended/resumed“, „peer request rejected“, „cluster entries updated“;
   Abholfehler auf Debug. Audit-Bereich `sync` (Aktionen `peer.*`).

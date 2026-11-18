@@ -3,7 +3,7 @@
   "info": {
     "title": "Node64 – lokale API",
     "version": "1.2.0",
-    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log.\n\nZu viele ungültige API-Keys von einer Adresse: 429 mit Retry-After (5 Versuche, dann einer je 30 s). Audit-Einträge per API-Key tragen die Herkunft api:<Key-Name>.\n\n**Nur in der Oberfläche (bewusst):** Passwort, 2FA, Passkeys, das Verknüpfen von SSO-Identitäten und die Anmelde-Konfiguration (OIDC-Anbieter, Forward-Auth). Ein API-Key soll keinen Anmeldeweg schaffen oder ändern können."
+    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required`, `invalid api key` bzw. `user disabled` (Benutzer gesperrt); 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 403 `read-only user` bei Änderungen durch einen Benutzer mit der Rolle „Nur lesen“ und bei reinen Admin-Bereichen (Benutzer, Gruppen, Anmeldung, Cluster, Sicherung); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log.\n\nZu viele ungültige API-Keys von einer Adresse: 429 mit Retry-After (5 Versuche, dann einer je 30 s). Audit-Einträge per API-Key tragen die Herkunft api:<Key-Name>.\n\n**Nur in der Oberfläche (bewusst):** das eigene Passwort, die eigene 2FA, Passkeys, das Verknüpfen eigener SSO-Identitäten und die Anmelde-Konfiguration (OIDC-Anbieter, Forward-Auth). **Admin-Keys:** Der API-Key eines Administrators kann Benutzer (auch mit Passwort) und Gruppen verwalten, AD/LDAP und die SSO-Anlage einstellen und Environment-Zugänge anlegen – er hat damit die Rechte eines Administrators und ist entsprechend zu schützen; Keys von Benutzern mit „Nur lesen“ ändern nichts (403 `read-only user`)."
   },
   "servers": [
     {
@@ -1136,6 +1136,16 @@
             "type": "boolean",
             "readOnly": true,
             "description": "per dynamischem Update angelegt"
+          },
+          "ref": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Bezug in der Herkunft (IPAM64: UID der Adresse)"
+          },
+          "origin": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Herkunft: leer = von Hand, `docker`, `ipam64` (von IPAM64 verwaltet: nur dort änderbar)"
           }
         },
         "required": [
@@ -1250,7 +1260,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>, forward:<Domain>, rewrite:<Ziel>, answer:<Werte> (eigener Eintrag: gelieferte Antwort, z. B. answer:10.0.0.5, 10.0.0.6; nur answer: = NODATA)"
+            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>, forward:<Domain>, rewrite:<Ziel>, answer:<Werte> (eigener Eintrag: gelieferte Antwort, z. B. answer:10.0.0.5, 10.0.0.6; nur answer: = NODATA), rebind (DNS-Rebinding-Schutz: öffentlicher Name mit privater Antwort)"
           },
           "rcode": {
             "type": "string"
@@ -1298,6 +1308,22 @@
           },
           "failures": {
             "type": "integer"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Bei `rule_limit`: geltende Gesamtgrenze der Regeln (nach dem Arbeitsspeicher, 4 bis 32 Millionen)"
+          },
+          "skipped": {
+            "type": "integer",
+            "description": "Zeilen ohne DNS-Regel (nicht erkannt, z. B. Browser-Regeln)"
+          },
+          "hint": {
+            "type": "string",
+            "enum": [
+              "ip_list",
+              "rule_limit"
+            ],
+            "description": "Hinweis: `ip_list` = enthält IP-Adressen statt Domains; `rule_limit` = Gesamtgrenze aller Listen erreicht, von dieser Liste fehlen Regeln"
           }
         }
       },
@@ -2568,6 +2594,19 @@
               "v2"
             ],
             "description": "nur TCP: PROXY-Protokoll zum Ziel (#52), \"\" = aus, v1 = Text, v2 = binär (wie HAProxy send-proxy/send-proxy-v2). Der Kopf mit der echten Besucher-Adresse (auch über CDN64) geht vor allen Daten an das Ziel; nur einschalten, wenn das Ziel ihn erwartet (z. B. Postfix/Dovecot bei mailcow). Bei reinen UDP-Streams oder unbekannten Werten 422; ändern startet den Stream nicht neu"
+          },
+          "cdn64_error": {
+            "type": "string",
+            "readOnly": true,
+            "description": "CDN64: Fehler beim Anmelden der Ports (Code wie CDNOnlineError.code, z. B. limit_reached_mappings)"
+          },
+          "cdn64_ports": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "type": "object"
+            },
+            "description": "CDN64: angemeldete Ports der Server (Portmapper Modus 1/2)"
           }
         }
       },
@@ -2844,7 +2883,7 @@
               "block",
               "allow"
             ],
-            "description": "Ländersperre: leer = aus, block = diese Länder sperren, allow = nur diese Länder zulassen. Entschieden wird nach dem Standort der Adresse (Länderdaten von ipv64.net nach DB-IP), für Adressen ohne Standort nach den Länderlisten der Registrierungsstellen (allow greift dann erst, wenn alle Listen geladen sind). Private Netze und die Ausnahmen der Blocklisten werden nie gesperrt. Welches Land gilt: GET /cdn64/geo/lookup."
+            "description": "Ländersperre: leer = aus, block = diese Länder sperren, allow = nur diese Länder zulassen. Entschieden wird nach dem Standort der Adresse (Länderdaten von ipv64.net nach DB-IP), für Adressen ohne Standort nach den Länderlisten der Registrierungsstellen (allow greift dann erst, wenn alle Listen geladen sind). Private Netze und die Ausnahmen der Blocklisten werden nie gesperrt – mit einer Ausnahme: Zugriffe über das Docker-Gateway (Bridge-Netz, echte Herkunft unbekannt) sperrt `allow`, außer das Netz steht in den Ausnahmen. Welches Land gilt: GET /cdn64/geo/lookup."
           },
           "geo_countries": {
             "type": "array",
@@ -3599,7 +3638,7 @@
           },
           "code": {
             "type": "string",
-            "description": "z. B. no_api_key, api_key_rejected, ipv64_unreachable, plan_not_allowed, limit_reached, traffic_limit_reached, tunnel_blocked, not_configured"
+            "description": "z. B. no_api_key, api_key_rejected, ipv64_unreachable, plan_not_allowed, limit_reached (Grenze ohne Angabe), limit_reached_domains, limit_reached_subdomains, limit_reached_mappings, limit_reached_tunnels, traffic_limit_reached, tunnel_blocked, not_configured"
           },
           "text": {
             "type": "string",
@@ -3705,6 +3744,19 @@
                   }
                 }
               },
+              "subdomains": {
+                "type": "object",
+                "description": "Subdomains: Namen unter einer Domain, die schon in CDN64 ist, je Account (fehlt bei älterem ipv64)",
+                "properties": {
+                  "used": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "-1 = unbegrenzt"
+                  }
+                }
+              },
               "traffic_mb": {
                 "type": "object",
                 "properties": {
@@ -3759,7 +3811,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Fehlercode von ipv64 (z. B. domain_not_in_account, cname_exists, limit_reached) oder wildcard_name"
+            "description": "Fehlercode von ipv64 (z. B. domain_not_in_account, cname_exists, limit_reached_domains, limit_reached_subdomains) oder wildcard_name"
           },
           "error": {
             "type": "string"
@@ -5442,6 +5494,16 @@
           "group_id": {
             "type": "integer",
             "description": "nur beim Anlegen: MAC zusätzlich in diese Gerätegruppe aufnehmen"
+          },
+          "ref": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Bezug in der Herkunft (IPAM64: UID der Adresse)"
+          },
+          "origin": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Herkunft: leer = von Hand, `docker`, `ipam64` (von IPAM64 verwaltet: nur dort änderbar)"
           }
         },
         "required": [
@@ -6074,6 +6136,10 @@
           "accepted": {
             "type": "boolean",
             "description": "Nur Stufe „dieser Dienst“, Zustandsregeln: der aktuelle Zustand ist gewollt und meldet nichts, bis die Bedingung entfällt – dann entfernt Monitor64 die Ausnahme selbst (setzen über `accept` beim Ändern des Dienstes)"
+          },
+          "accepted_at": {
+            "type": "number",
+            "description": "Nur Stufe „dieser Dienst“, Zahlenregeln: der Wert ist bis zu diesem Stand gewollt (z. B. SSD-Verschleiß 100 %) und meldet nichts. Wird er schlechter (Richtung der Regel, Hysterese als Spielraum) oder fällt er unter die Warnschwelle, entfernt Monitor64 die Ausnahme selbst (setzen über `accept` beim Ändern des Dienstes)."
           }
         }
       },
@@ -6379,7 +6445,11 @@
           },
           "smart": {
             "type": "boolean",
-            "description": "SSH: SMART per sudo smartctl"
+            "description": "SSH: SMART per sudo smartctl (nur beim SSH-Zugang, sonst 400 `smart`)"
+          },
+          "no_smart": {
+            "type": "boolean",
+            "description": "SMART-Werte nicht abfragen (Proxmox VE, PBS, TrueNAS, Agent; sonst 400 `no_smart`): schlafende Festplatten bleiben im Ruhezustand. Die Platten bleiben als Dienste, ohne Zustand, Temperatur, Verschleiß und Sektorfehler (Proxmox: disks/list mit skipsmart, kein disks/smart)."
           },
           "url": {
             "type": "string",
@@ -7427,14 +7497,14 @@
             "items": {
               "type": "string"
             },
-            "description": "Zustandsregeln, die gerade melden (Warnung/Kritisch)"
+            "description": "Regel-Arten, die gerade melden (Warnung/Kritisch): Zustands- und Zahlenregeln; per `accept` als in Ordnung bestätigbar"
           },
           "accepted": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Zustandsregeln, deren Bedingung gilt, die aber als gewollt bestätigt sind (bis sich der Zustand ändert)"
+            "description": "Regel-Arten, die als in Ordnung bestätigt sind: Zustandsregeln (bis sich der Zustand ändert) und Zahlenregeln (bis zum Wert in `accepted_at`)"
           },
           "pending": {
             "type": "array",
@@ -7935,11 +8005,11 @@
           },
           "accept": {
             "type": "object",
-            "description": "Zustand einer Zustandsregel dieses Dienstes ist in Ordnung (z. B. Port ohne Link)",
+            "description": "Zustand einer Regel dieses Dienstes ist in Ordnung: Zustandsregeln (z. B. Port ohne Link) bis sich der Zustand ändert, Zahlenregeln (z. B. SSD-Verschleiß 100 %) bis zum aktuellen Wert",
             "properties": {
               "kind": {
                 "type": "string",
-                "description": "Zustandsregel, z. B. if.down"
+                "description": "Regel-Art des Dienstes: Zustandsregel (z. B. if.down) oder Zahlenregel (z. B. ssd.wear); eine Art, die der Dienst nicht hat, ergibt 400 `rule_kind`"
               },
               "mode": {
                 "type": "string",
@@ -7948,7 +8018,7 @@
                   "always",
                   ""
                 ],
-                "description": "`change`: bis sich der Zustand ändert; `always`: dauerhaft nicht melden (Schwere `off`); leer: Ausnahme aufheben"
+                "description": "`change`: Zustandsregel bis sich der Zustand ändert; Zahlenregel bis zum aktuellen Wert (setzt `accepted_at`; wird der Wert schlechter oder fällt er unter die Warnschwelle, endet die Ausnahme). `always`: dauerhaft nicht melden (Zustandsregel: Schwere `off`; Zahlenregel: Warnung und Kritisch `off`). Leer: Ausnahme aufheben. Ein `rules`-Eintrag für dieselbe Art ersetzt die Regel des Dienstes samt Ausnahme."
               }
             },
             "required": [
@@ -8132,6 +8202,10 @@
               "maint": {
                 "type": "boolean",
                 "description": "Offen und der Host steht gerade im Wartungsfenster (die Liste führt diese Probleme am Ende)"
+              },
+              "failing": {
+                "type": "boolean",
+                "description": "Offen und der Wert passt laut aktuellem Stand weiter nicht: von Hand lösen geht nicht (409 `still_failing`), das Problem löst sich selbst, sobald der Wert wieder passt"
               }
             }
           }
@@ -9472,6 +9546,10 @@
           },
           "fingerprint": {
             "type": "string"
+          },
+          "sums_sha256": {
+            "type": "string",
+            "description": "SHA-256 der signierten SHA256SUMS dieser Node (leer = noch keine); steht im Installationsbefehl (--sums-sha256)"
           }
         }
       },
@@ -10171,6 +10249,21 @@
               "active",
               "off"
             ]
+          },
+          "dyn_parent": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Dynamisches Präfix (Wurzel), in dem dieses Präfix liegt"
+          },
+          "dyn_index": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Präfix-ID innerhalb des dynamischen Präfixes (Bits zwischen Wurzel und eigenem Präfix, hex)"
+          },
+          "dyn_source": {
+            "type": "string",
+            "readOnly": true,
+            "description": "`auto` = dynamisches IPv6-Präfix vom Provider: wechselt es, nummeriert IPAM64 Präfixe, Bereiche und Adressen darin um"
           }
         }
       },
@@ -10542,7 +10635,8 @@
                 "healthchecks",
                 "monitor64",
                 "proxy",
-                "scan"
+                "scan",
+                "cluster"
               ]
             }
           },
@@ -10997,6 +11091,28 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "name": "area",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "login",
+                "settings",
+                "healthchecks",
+                "monitor64",
+                "dyndns",
+                "cdn64",
+                "dns64",
+                "ipam64",
+                "certs",
+                "sync",
+                "honeypot",
+                "mcp"
+              ]
+            },
+            "description": "Nur dieser Bereich (login umfasst auch Benutzer, Gruppen, Anmelde-Einstellungen und Environment)"
           }
         ],
         "responses": {
@@ -14435,7 +14551,7 @@
             }
           },
           "400": {
-            "description": "Ungültig"
+            "description": "Ungültig; von IPAM64 verwaltete Einträge (`origin: ipam64`) lassen sich nur in IPAM64 ändern"
           },
           "404": {
             "description": "Nicht gefunden"
@@ -15596,7 +15712,7 @@
                     },
                     "code": {
                       "type": "string",
-                      "description": "offener Kopplungscode"
+                      "description": "offener Kopplungscode (nur für Administratoren)"
                     },
                     "code_expires": {
                       "type": "string",
@@ -15704,6 +15820,98 @@
                     "https_port": {
                       "type": "integer",
                       "description": "eigener HTTPS-Port dieser Node, 0 = keiner (der Cluster nutzt dann den HTTP-Port, der auch TLS spricht)"
+                    },
+                    "acme_accounts": {
+                      "type": "array",
+                      "description": "Verschiedene ACME-Konten im Cluster: eines für alle wählen mit POST /group/acme (Fingerabdruck)",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "thumbprint": {
+                            "type": "string"
+                          },
+                          "node_id": {
+                            "type": "string"
+                          },
+                          "node_name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "ca": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "own": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "user_conflicts": {
+                      "type": "array",
+                      "description": "Gleichnamige Benutzer, die im Cluster verschieden sind: eine Fassung wählen mit POST /group/users",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "username": {
+                            "type": "string"
+                          },
+                          "versions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "uid": {
+                                  "type": "string"
+                                },
+                                "node_id": {
+                                  "type": "string",
+                                  "description": "leer = diese Node"
+                                },
+                                "node_name": {
+                                  "type": "string"
+                                },
+                                "created_at": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "two_fa": {
+                                  "type": "boolean"
+                                },
+                                "sso_accounts": {
+                                  "type": "integer",
+                                  "description": "verknüpfte SSO-Identitäten"
+                                },
+                                "own": {
+                                  "type": "boolean",
+                                  "description": "Fassung dieser Node"
+                                },
+                                "role": {
+                                  "type": "string",
+                                  "description": "eigene Rolle (ältere Node: admin)"
+                                },
+                                "disabled": {
+                                  "type": "boolean",
+                                  "description": "gesperrt"
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "local",
+                                    "ldap",
+                                    "oidc"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -17503,7 +17711,7 @@
                     "items": {
                       "type": "string"
                     },
-                    "description": "Bereiche aus GET /mcp: node, healthchecks, monitor64, dns64, proxy64, honeypot, sonar64, dyndns, certs, notifications, audit (je nur lesen)"
+                    "description": "Bereiche aus GET /mcp: node, healthchecks, monitor64, ipam64, dns64, proxy64, honeypot, sonar64, dyndns, certs, notifications, audit (je nur lesen)"
                   }
                 },
                 "required": [
@@ -18650,7 +18858,7 @@
           "Cluster"
         ],
         "summary": "Environment: diese Node, Cluster-Mitglieder und hinzugefügte Nodes mit Status",
-        "description": "Hinzugefügte Nodes werden beim Aufruf parallel abgefragt (je höchstens 3 s): mit Zugangsschlüssel über die gebundenen Endpunkte der anderen Node, sonst über deren /api/health.",
+        "description": "Status der hinzugefügten Nodes (mit Zugangsschlüssel über die gebundenen Endpunkte der anderen Node, sonst über deren /api/health; je höchstens 3 s): 30 s frisch aus dem Speicher, bis 10 min ebenfalls aus dem Speicher, während im Hintergrund neu gefragt wird; älter wird gewartet. Ein abgelehnter Schlüssel (widerrufen, Benutzer gesperrt) wird 10 min nicht neu versucht.",
         "responses": {
           "200": {
             "description": "Liste",
@@ -23837,7 +24045,7 @@
             }
           },
           "403": {
-            "description": "Key abgelehnt, Klasse ohne CDN, Tunnel gesperrt",
+            "description": "Key abgelehnt, Klasse ohne CDN, Tunnel gesperrt oder Höchstzahl der Tunnel erreicht (`limit_reached_tunnels`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -25237,7 +25445,7 @@
             }
           },
           "403": {
-            "description": "nicht erlaubt",
+            "description": "nicht erlaubt: Klasse ohne CDN, Kontingent voll (`limit_reached_domains`, `limit_reached_subdomains`), Traffic aufgebraucht (`traffic_limit_reached`) oder Tunnel gesperrt",
             "content": {
               "application/json": {
                 "schema": {
@@ -28847,7 +29055,7 @@
             }
           },
           "400": {
-            "description": "Ungültig"
+            "description": "Ungültig; von IPAM64 verwaltete Einträge (`origin: ipam64`) lassen sich nur in IPAM64 ändern"
           },
           "404": {
             "description": "Nicht gefunden"
@@ -29821,7 +30029,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`, `address`",
+            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `no_smart`, `smart`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`, `address`",
             "content": {
               "application/json": {
                 "schema": {
@@ -29902,7 +30110,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `name`, `address`, `kind`, `tags`, `too_many` sowie die Codes der Zugänge (`json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`)",
+            "description": "Ungültig, z. B. `name`, `address`, `kind`, `tags`, `too_many` sowie die Codes der Zugänge (`json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `no_smart`, `smart`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -30002,7 +30210,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `json`, `name`, `address`, `kind`, `tags`",
+            "description": "Ungültig, z. B. `json`, `name`, `address`, `kind`, `tags`, `address_secret` (neue Adresse, Zugänge mit Geheimnis ohne festes Ziel: mit `clear_secrets: true` erneut senden)",
             "content": {
               "application/json": {
                 "schema": {
@@ -30191,7 +30399,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`",
+            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `no_smart`, `smart`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`",
             "content": {
               "application/json": {
                 "schema": {
@@ -30433,7 +30641,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `json`, `soll`, `report`, `too_many` (mehr als 32 Arten), `scope`, `rule_kind`",
+            "description": "Ungültig, z. B. `json`, `soll`, `report`, `too_many` (mehr als 32 Arten), `scope`, `rule_kind`, `accept_mode`, `accept_value` (aktueller Wert der Zahlenregel unbekannt)",
             "content": {
               "application/json": {
                 "schema": {
@@ -30495,7 +30703,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`",
+            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `no_smart`, `smart`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`",
             "content": {
               "application/json": {
                 "schema": {
@@ -30597,7 +30805,7 @@
             }
           },
           "400": {
-            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`",
+            "description": "Ungültig, z. B. `json`, `access_type`, `config`, `port`, `user`, `token_id`, `node`, `pin`, `url`, `metrics`, `ups`, `tls`, `api`, `session`, `no_smart`, `smart`, `mode`, `token`, `hostkey`, `secret`, `snmp_secret`",
             "content": {
               "application/json": {
                 "schema": {
@@ -30886,7 +31094,7 @@
           "Monitor64"
         ],
         "summary": "Problem quittieren, kommentieren oder lösen",
-        "description": "Wirkt auf das offene Problem von Host und Dienst: `ack` quittieren, `unack` Quittierung aufheben, `comment` kommentieren, `resolve` als gelöst markieren (danach sofort neu bewertet). Quittieren bzw. Lösen des Dienstes „traps“ setzt die offenen Traps zurück.",
+        "description": "Wirkt auf das offene Problem von Host und Dienst: `ack` quittieren, `unack` Quittierung aufheben, `comment` kommentieren, `resolve` als gelöst markieren (danach sofort neu bewertet). Quittieren bzw. Lösen des Dienstes „traps“ setzt die offenen Traps zurück. Lösen geht nur, wo sich das Problem nicht selbst lösen kann: Traps, pausierte Hosts, Hosts ohne aktuellen Stand und Dienste eines nicht erreichbaren Hosts; sonst 409 `still_failing`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -30920,6 +31128,16 @@
           },
           "404": {
             "description": "Kein offenes (bzw. bei `unack` kein quittiertes) Problem (`not_found`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Monitor64Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`still_failing`: Der Wert passt weiter nicht – als gelöst markiert käme das Problem sofort wieder (quittieren statt lösen)",
             "content": {
               "application/json": {
                 "schema": {
@@ -32911,6 +33129,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "nur für Administratoren (`read-only user`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -32919,7 +33147,7 @@
           "Benutzerverwaltung"
         ],
         "summary": "AD/LDAP-Anbindung ändern",
-        "description": "Ersetzt die ganze Einstellung. Das Bind-Passwort wird verschlüsselt gespeichert; leer = unverändert. Ein Benutzer aus dem Verzeichnis wird beim ersten Anmelden angelegt, wenn er in einer Node64-Gruppe mit passender LDAP-Zuordnung ist.",
+        "description": "Ersetzt die ganze Einstellung. Das Bind-Passwort wird verschlüsselt gespeichert; leer = unverändert, solange Server, Dienstkonto und TLS-Einstellungen gleich bleiben (sonst 422 mit `field: bind_password`). Ein Benutzer aus dem Verzeichnis wird beim ersten Anmelden angelegt, wenn er in einer Node64-Gruppe mit passender LDAP-Zuordnung ist.",
         "requestBody": {
           "required": true,
           "content": {
@@ -33063,7 +33291,7 @@
             }
           },
           "422": {
-            "description": "Ungültige Angabe",
+            "description": "Ungültige Angabe (`field` nennt das Feld; `bind_password`: nach einer Änderung von Server, Dienstkonto oder TLS-Einstellung muss das Bind-Passwort erneut mitkommen)",
             "content": {
               "application/json": {
                 "schema": {
@@ -33079,6 +33307,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "nur für Administratoren (`read-only user`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -33089,7 +33327,7 @@
           "Benutzerverwaltung"
         ],
         "summary": "Verbindung testen",
-        "description": "Verbindet, meldet das Dienstkonto an und sucht optional einen Benutzer (ohne dessen Passwort): DN, Gruppen und passende Node64-Gruppen. Ohne config gilt die gespeicherte Einstellung; mit config wird nichts gespeichert (bind_password leer = das gespeicherte).",
+        "description": "Verbindet, meldet das Dienstkonto an und sucht optional einen Benutzer (ohne dessen Passwort): DN, Gruppen und passende Node64-Gruppen. Ohne config gilt die gespeicherte Einstellung; mit config wird nichts gespeichert (bind_password leer = das gespeicherte, nur bei gleichem Server, Dienstkonto und TLS).",
         "requestBody": {
           "required": false,
           "content": {
@@ -33253,7 +33491,7 @@
             }
           },
           "422": {
-            "description": "Ungültige Angabe",
+            "description": "Ungültige Angabe (`bind_password`: mit geändertem Server, Dienstkonto oder TLS erneut nötig)",
             "content": {
               "application/json": {
                 "schema": {
@@ -33266,6 +33504,16 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur für Administratoren (`read-only user`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -33296,6 +33544,16 @@
                       "description": "Name des Gruppen-Claims im ID-Token (leer = groups)"
                     }
                   }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur für Administratoren (`read-only user`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -33363,6 +33621,16 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nur für Administratoren (`read-only user`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

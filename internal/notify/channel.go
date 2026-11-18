@@ -254,7 +254,7 @@ func (c *Channel) validate(keepSecrets bool) error {
 	if c.Type == TypeMatrix {
 		c.Config["server"] = strings.TrimRight(c.Config["server"], "/")
 		if !matrixRoom.MatchString(c.Config["room"]) {
-			return errors.New("room must be a room ID (!abc:example.org) or an alias (#room:example.org)")
+			return errors.New("room must be a room ID (!abc:example.org, from room version 12 also !abc without server) or an alias (#room:example.org)")
 		}
 	}
 	if c.Type == TypeApp {

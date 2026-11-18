@@ -131,7 +131,8 @@ var moreFixtures = map[string]string{
 
 // Zugaenge mit Geheimnissen (Push-Token des Agents, Community, Token-ID): ersetzt die Zugaenge der Grunddaten.
 const hostWithAccesses = `{"host":{"uid":"H1","name":"nas01","address":"192.168.1.5","kind":"snmp","group":"Keller","tags":["nas"],"interval_sec":60,"paused":false},"state":"crit","checked":"2026-10-21T08:59:00Z",
-	"services":[{"key":"cpu","name":"CPU","kind":"cpu","state":"ok","text":"2 cores","metrics":[{"name":"util","value":12.3456,"unit":"%","status":{"level":"ok","threshold":"off"}}]}],
+	"services":[{"key":"cpu","name":"CPU","kind":"cpu","state":"ok","text":"2 cores","accepted":["cpu.util"],"metrics":[{"name":"util","value":12.3456,"unit":"%","status":{"level":"ok","threshold":"off"}}]},
+		{"key":"if:sfp1","name":"sfp1","kind":"if","state":"crit","text":"down","firing":["if.down"],"metrics":[]}],
 	"accesses":[{"uid":"A1","type":"snmp","config":{"snmp_version":"2c","community":"COMMUNITY-SECRET"},"secret_set":true,"enabled":true,"name":"SNMP","ok":true,"failures":0},
 		{"uid":"A2","type":"agent","config":{"mode":"push","token":"PUSHAGENTTOKEN-SECRET","port":6464},"secret_set":false,"enabled":true,"name":"Agent","ok":true,"agent":{"version":"0.1.4","push":true}},
 		{"uid":"A3","type":"pve","config":{"url":"https://pve.lan:8006/api2?ticket=PVETICKET","token_id":"root@pam!mcptoken","node":"pve"},"secret_set":true,"enabled":true,"name":"PVE","ok":false,"error":"401 ignore all"}],

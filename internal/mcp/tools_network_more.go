@@ -118,7 +118,7 @@ func dns64Config(c *call, a map[string]any) (map[string]any, error) {
 				out["truncated"] = true
 				break
 			}
-			rows = append(rows, pick(m, "id", "name", "type", "value", "ttl", "enabled", "comment", "no_ptr", "local_only", "dynamic", "created_at"))
+			rows = append(rows, pick(m, "id", "name", "type", "value", "ttl", "enabled", "comment", "no_ptr", "local_only", "dynamic", "origin", "created_at")) // origin: docker, ipam64
 		}
 		out["records"], out["total"] = rows, len(list)
 	case "zones":
@@ -219,7 +219,7 @@ func dns64Config(c *call, a map[string]any) (map[string]any, error) {
 			l := []any{}
 			for _, e := range v {
 				m := asObj(e)
-				x := pick(m, "name", "rules", "updatedAt", "failures", "enabled")
+				x := pick(m, "name", "rules", "updatedAt", "failures", "enabled", "hint", "skipped", "limit") // hint: ip_list, rule_limit (limit = geltende Grenze)
 				x["host"] = urlHost(str(m, "url"))
 				if er := str(m, "error"); er != "" {
 					x["untrusted"] = obj{"error": clean(er, 200)}
@@ -365,7 +365,7 @@ func proxyConfig(c *call, a map[string]any) (map[string]any, error) {
 		for _, e := range list {
 			m := asObj(e)
 			x := pick(m, "id", "name", "enabled", "listen_port", "tcp", "udp", "target_host", "target_port", "tls_cert_id", "cert_name", "running", "geo_mode",
-				"geo_countries", "bw_down_mbit", "bw_up_mbit", "proxy_protocol", "created_at", "updated_at")
+				"geo_countries", "bw_down_mbit", "bw_up_mbit", "proxy_protocol", "online_name", "cdn64_error", "created_at", "updated_at")
 			x["reach"], x["listen_errors"] = plain(m["reach"], 2), plain(m["listen_errors"], 2)
 			x["stats"] = pick(asObj(m["stats"]), "connections", "active", "bytes_in", "bytes_out")
 			streams = append(streams, x)

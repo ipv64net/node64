@@ -49,6 +49,9 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 			}
 		}
 	}
+	open, unacked := m.store.problemCounts(ctx, m.nodeID())
+	w.Gauge("node64_monitor_problems_open", "Monitor64: offene Probleme, die diese Node fuehrt", float64(open))
+	w.Gauge("node64_monitor_problems_unacked", "Monitor64: davon nicht quittiert", float64(unacked))
 }
 
 // promUnit: Einheit als Label-Wert ohne Sonderzeichen.

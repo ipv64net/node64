@@ -7,6 +7,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Healthchecks: pulsierender Zustandspunkt neben „Healthchecks“ in der Navigation (grün, gelb-orange, rot) wie bei Monitor64.
 - Account-Klassen und Startseite: neue Zeile „CDN-Subdomains“ (Free 2, Home/Supporter 5, ab Business unbegrenzt); die Startseite zeigt den Verbrauch.
 - PROXY64: Bei einem erreichten Kontingent steht die richtige Grenze da (CDN-Domains, -Subdomains, Portmapper oder Tunnel) statt immer „CDN-Domains belegt“; Karte und Assistent zeigen die Subdomains.
+- Prometheus: neue Werte für den Cluster (ausgesetzte Mitglieder mit Grund, offene Benutzer- und ACME-Konflikte), den Gruppenabgleich mit AD/LDAP (gelungen, letzter Erfolg) und offene Probleme in Monitor64.
+- KI-Schnittstelle (MCP): IPAM64 in der Beschreibung und in `api_reference`, dazu die Benutzerverwaltung; mehr Felder bei Monitor64, DNS64 (Hinweise zu Listen, Einträge aus IPAM64) und PROXY64-Streams (CDN64).
+- Lokale API: Beschreibung (`openapi.json`) für Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, Environment und Cluster vervollständigt; `GET /api/group` liefert bei Benutzer-Konflikten auch Rolle, gesperrt und Herkunft.
+
 ## 1.7.9 – 2026-11-18
 
 - Monitor64: Schalter „SMART-Werte abfragen“ an den Zugängen Proxmox VE, PBS, TrueNAS und Agent – aus bleiben schlafende Festplatten im Ruhezustand (Proxmox VE weckte sie etwa alle 30 Minuten, #215).

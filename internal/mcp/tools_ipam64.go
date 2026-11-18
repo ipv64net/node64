@@ -14,18 +14,26 @@ func ipam64Tools() []Tool {
 			Desc:   "IPAM64 prefixes (IPv4/IPv6 tree with VLAN, status, DHCP range from DNS64, DNS zone, utilisation, conflicts), address ranges and the state of the network scan.",
 			Schema: noArgs, Run: ipam64Overview},
 		{Name: "ipam64_addresses", Area: AreaIPAM64, Title: "IPAM64 addresses", Untrusted: true,
-			Desc: "Used addresses merged from IPAM64, DHCP, local DNS, Monitor64, Healthchecks, PROXY64 and the neighbour table: name, MAC, vendor, kind, status, state, sources, last seen.",
+			Desc: "Used addresses merged from IPAM64, DHCP, local DNS, Monitor64, Healthchecks, PROXY64, the neighbour table and other cluster members (source cluster): name, MAC, vendor, kind, status, state, sources, last seen.",
 			Schema: schema(nil, pStr("prefix", "Only this prefix, e.g. 192.168.1.0/24.", 49), pStr("query", "Search in IP, name, MAC, description.", 64),
 				pInt("limit", "Maximum number of addresses.", 100, 1, 1000)),
 			Run: ipam64Addresses},
 		{Name: "ipam64_conflicts", Area: AreaIPAM64, Title: "IPAM64 conflicts", Untrusted: true,
-			Desc:   "Conflicts (duplicate address, foreign MAC on a fixed address, lease versus fixed address), hints and unknown devices found by IPAM64.",
+			Desc:   "Conflicts (duplicate address, foreign MAC on a fixed address, lease versus fixed address, the same address on two cluster members: double), hints and unknown devices found by IPAM64.",
 			Schema: noArgs, Run: ipam64Conflicts},
 		{Name: "ipam64_available", Area: AreaIPAM64, Title: "IPAM64 free addresses",
 			Desc:   "Next free addresses in a prefix (not used, not in the DHCP range, not in ranges kept free).",
 			Schema: schema([]string{"prefix"}, pStr("prefix", "Prefix, e.g. 192.168.1.0/24.", 49), pInt("count", "Number of addresses.", 5, 1, 50)),
 			Run:    ipam64Available},
 	}
+}
+
+// poolText: DHCP-Bereich als "von-bis" (ohne DHCP leer statt "-").
+func poolText(p map[string]any) string {
+	if a, b := str(p, "pool_start"), str(p, "pool_end"); a != "" || b != "" {
+		return a + "-" + b
+	}
+	return ""
 }
 
 func ipam64Overview(c *call, _ map[string]any) (map[string]any, error) {
@@ -37,7 +45,7 @@ func ipam64Overview(c *call, _ map[string]any) (map[string]any, error) {
 	for _, e := range asArr(po["prefixes"]) {
 		p := asObj(e)
 		prefixes = append(prefixes, obj{"prefix": str(p, "prefix"), "name": clean(str(p, "name"), 64), "status": str(p, "status"), "vlan": i64(p, "vlan"),
-			"parent": str(p, "parent"), "dynamic": boolean(p, "dynamic"), "dhcp": boolean(p, "dhcp"), "pool": str(p, "pool_start") + "-" + str(p, "pool_end"),
+			"parent": str(p, "parent"), "dynamic": boolean(p, "dynamic"), "dhcp": boolean(p, "dhcp"), "pool": poolText(p),
 			"dns_zone": str(p, "dns_zone"), "used": i64(p, "used"), "size": i64(p, "size"), "used_pct": p["used_pct"], "conflicts": i64(p, "conflicts"),
 			"in_ipam": str(p, "uid") != ""})
 	}

@@ -60,15 +60,31 @@ func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 
 	if s.Peer != nil {
 		if list, err := s.Peer.Members(ctx); err == nil {
-			online := 0
+			online, suspended := 0, 0
 			for _, x := range list {
 				if x.Online() {
 					online++
 				}
-				m.Gauge("node64_group_member_up", "Mitglied der lokalen Gruppe erreichbar.", metrics.Bool(x.Online()), "node_id", x.NodeID, "node_name", x.Name)
+				m.Gauge("node64_group_member_up", "Cluster-Mitglied erreichbar (ausgesetzt zaehlt als nicht erreichbar).", metrics.Bool(x.Online()), "node_id", x.NodeID, "node_name", x.Name)
+				if x.State == "suspended" {
+					suspended++
+					m.Gauge("node64_group_member_suspended", "Cluster-Mitglied ausgesetzt (Grund als Label).", 1, "node_id", x.NodeID, "node_name", x.Name, "reason", x.Reason)
+				}
 			}
-			m.Gauge("node64_group_members", "Mitglieder der lokalen Gruppe (ohne diese Node).", float64(len(list)))
-			m.Gauge("node64_group_members_online", "Erreichbare Mitglieder der lokalen Gruppe.", float64(online))
+			m.Gauge("node64_group_members", "Mitglieder des Clusters (ohne diese Node).", float64(len(list)))
+			m.Gauge("node64_group_members_online", "Erreichbare Mitglieder des Clusters.", float64(online))
+			m.Gauge("node64_group_members_suspended", "Ausgesetzte Mitglieder des Clusters.", float64(suspended))
+			if len(list) > 0 {
+				m.Gauge("node64_group_user_conflicts", "Offene Benutzer-Konflikte im Cluster (gleicher Name, verschiedene Benutzer).", float64(len(s.userChoices(ctx, list))))
+				m.Gauge("node64_group_acme_conflict", "Nodes des Clusters nutzen verschiedene ACME-Konten (Wahl offen).", metrics.Bool(s.acmeChoices(ctx, list) != nil))
+			}
+		}
+	}
+
+	if r := s.ldapResult.Load(); r != nil {
+		m.Gauge("node64_ldap_sync_ok", "Letzter stuendlicher Abgleich der Gruppen mit AD/LDAP gelungen.", metrics.Bool(r.OK))
+		if !r.LastOK.IsZero() {
+			m.Gauge("node64_ldap_sync_last_success_seconds", "Letzter erfolgreicher Abgleich mit AD/LDAP (Unix-Zeit).", float64(r.LastOK.Unix()))
 		}
 	}
 
