@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 3.2.7 – unveröffentlicht
+
+### Behoben
+- Statusseiten luden alle 30 Sekunden einmal 1–2 s lang, bei Online-Checks mit vielen Messungen fremder Messstellen auch länger: Nach Ablauf des Zwischenspeichers rechnete der nächste Aufruf die Seite neu und wartete darauf. Jetzt bekommt er sofort den letzten Stand (höchstens 5 Minuten alt), die Seite wird dabei im Hintergrund neu gerechnet. Änderungen an der Seite und Ankündigungen erscheinen wie bisher sofort.
+
 ## 3.2.6 – 2026-11-17
 
 ### Behoben

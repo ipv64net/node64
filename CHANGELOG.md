@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Statusseiten laden sofort – nach Ablauf des Zwischenspeichers wird im Hintergrund neu gerechnet statt den Besucher 1–2 s warten zu lassen.
 - DNS64: Die Grenze für Blocklisten-Regeln richtet sich nach dem Arbeitsspeicher statt fest 4 Millionen – 4 bis 32 Millionen, z. B. rund 16 Millionen bei 8 GB.
 - Monitor64: Erinnerungen gehen an die aktuell eingestellten Kanäle statt an die der ersten Meldung (nach dem Umstellen von SMS auf die App kam die Erinnerung weiter per SMS).
 - Monitor64: kleiner pulsierender Zustandspunkt neben „Monitor64“ in der Navigation (grün, gelb-orange, rot).

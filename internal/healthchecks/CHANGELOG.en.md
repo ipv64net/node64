@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 3.2.7 – unreleased
+
+### Fixed
+- Status pages took 1–2 s to load once every 30 seconds, longer for online checks with many measurements from other locations: after the cache expired, the next request rebuilt the page and waited for it. Now it gets the last state at once (at most 5 minutes old) while the page is rebuilt in the background. Changes to the page and notices still show up immediately.
+
 ## 3.2.6 – 2026-11-17
 
 ### Fixed

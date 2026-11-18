@@ -513,11 +513,29 @@ func TestStatusCache(t *testing.T) {
 	if v3 == v1 || len(v3.Notices) != 1 || v3.Notices[0].Title != "Wartung Router" {
 		t.Fatalf("flush on notice: %+v", v3.Notices)
 	}
-	// nach 30 s neu gerechnet
+	// nach 30 s: sofort der letzte Stand, neu gerechnet im Hintergrund
 	later := now.Add(31 * time.Second)
 	statusNow = func() time.Time { return later }
-	if v4, _ := m.statusView(ctx, p, "de"); v4 == v3 {
-		t.Fatal("view must expire after 30 s")
+	if v4, _ := m.statusView(ctx, p, "de"); v4 != v3 {
+		t.Fatal("expired view must be served at once while it is refreshed")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		v5, _ := m.statusView(ctx, p, "de")
+		if v5 != v3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("view not refreshed in the background")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// zu alt (statusStaleMax): der Besucher wartet auf die neue Sicht
+	v6, _ := m.statusView(ctx, p, "de")
+	much := later.Add(statusStaleMax + time.Second)
+	statusNow = func() time.Time { return much }
+	if v7, _ := m.statusView(ctx, p, "de"); v7 == v6 {
+		t.Fatal("view older than statusStaleMax must be rebuilt synchronously")
 	}
 }
 

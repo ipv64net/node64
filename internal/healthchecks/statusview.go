@@ -16,7 +16,9 @@ import (
 
 // Statusseiten: Berechnung der oeffentlichen Sicht. Gerechnet wird nur auf Abruf, das Ergebnis bleibt 30 s je
 // (Seite, Sprache) im Speicher; Aenderungen an Seiten und Ankuendigungen leeren den Speicher (Store.OnStatusChange).
-// Ohne Abruf kostet eine Statusseite nichts (kein Hintergrundjob). Die oeffentlichen Routen stehen in statuspublic.go.
+// Danach bekommt der naechste Besucher bis statusStaleMax sofort den letzten Stand, die Sicht wird dabei einmal im
+// Hintergrund neu gerechnet (bei vielen Messungen fremder Messstellen dauert das 1-2 s). Ohne Abruf kostet eine
+// Statusseite nichts (kein Hintergrundjob). Die oeffentlichen Routen stehen in statuspublic.go.
 //
 // Zustand eines Eintrags (aktuell, aus dem Laufzeitzustand wie in der Liste):
 //   pausiert -> paused; Wartung laeuft -> maintenance; noch nie gemessen (pending) oder seit 3 Intervallen nicht
@@ -43,8 +45,9 @@ import (
 
 const (
 	statusCacheTTL     = 30 * time.Second
-	statusDownUptime   = 95.0 // unter diesem Wert ist ein Tag (bzw. eine Stunde) rot
-	statusDownMinutes  = 15   // ab so vielen Minuten Stoerung ist ein Tag (bzw. eine Stunde) rot
+	statusStaleMax     = 5 * time.Minute // aelterer Stand: der Besucher wartet auf die Berechnung
+	statusDownUptime   = 95.0            // unter diesem Wert ist ein Tag (bzw. eine Stunde) rot
+	statusDownMinutes  = 15              // ab so vielen Minuten Stoerung ist ein Tag (bzw. eine Stunde) rot
 	statusHistory      = 30 * 24 * time.Hour
 	statusMaintAhead   = 7 * 24 * time.Hour
 	statusMaxIncidents = 100 // Stoerungen in der Sicht (neueste zuerst)
@@ -79,6 +82,8 @@ type statusEntry struct {
 	v     *StatusView
 	err   error
 	done  chan struct{}
+	// refreshing: abgelaufen, die neue Sicht wird im Hintergrund gerechnet (statusRefresh)
+	refreshing bool
 	// status.json fertig kodiert und gzip-komprimiert (einmal je Eintrag, beim ersten Abruf)
 	once     sync.Once
 	json, gz []byte
@@ -132,17 +137,29 @@ func (m *Module) statusEntryFor(ctx context.Context, p *StatusPage, lang string)
 	s := m.statusState()
 	key := statusKey{p.ID, lang}
 	s.mu.Lock()
-	if e := s.views[key]; e != nil && (!e.ready || statusNow().Sub(e.at) < statusCacheTTL) {
-		s.mu.Unlock()
-		select {
-		case <-e.done:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-		if e.err == nil {
+	if e := s.views[key]; e != nil {
+		age := statusNow().Sub(e.at)
+		switch {
+		case !e.ready || age < statusCacheTTL:
+			s.mu.Unlock()
+			select {
+			case <-e.done:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			if e.err == nil {
+				return e, nil
+			}
+			return nil, e.err
+		case e.err == nil && age < statusStaleMax:
+			// abgelaufen: letzten Stand sofort liefern, einmal im Hintergrund neu rechnen
+			if !e.refreshing {
+				e.refreshing = true
+				go m.statusRefresh(p, lang, key, e)
+			}
+			s.mu.Unlock()
 			return e, nil
 		}
-		return nil, e.err
 	}
 	e := &statusEntry{done: make(chan struct{})}
 	s.views[key] = e
@@ -159,6 +176,26 @@ func (m *Module) statusEntryFor(ctx context.Context, p *StatusPage, lang string)
 		return nil, err
 	}
 	return e, nil
+}
+
+// statusRefresh rechnet eine abgelaufene Sicht im Hintergrund neu und ersetzt den Eintrag - nur, wenn er noch
+// gilt (wurde der Speicher inzwischen geleert, z. B. weil die Seite geaendert wurde, rechnet der naechste Abruf selbst).
+func (m *Module) statusRefresh(p *StatusPage, lang string, key statusKey, old *statusEntry) {
+	v, err := m.buildStatusView(context.Background(), p, lang)
+	s := m.statusState()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.views[key] != old {
+		return
+	}
+	if err != nil {
+		old.refreshing = false // naechster Abruf versucht es erneut
+		m.log.Warn("status page refresh failed", "page", p.Slug, "err", err)
+		return
+	}
+	e := &statusEntry{ready: true, at: statusNow(), v: v, done: make(chan struct{})}
+	close(e.done)
+	s.views[key] = e
 }
 
 // statusLocation ist die Zeitzone der Node (Einstellung des Kerns), sonst die des Containers.

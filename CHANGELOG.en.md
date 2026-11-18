@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: status pages load instantly – after the cache expires the page is rebuilt in the background instead of making the visitor wait 1–2 s.
 - DNS64: the limit for blocklist rules follows the memory instead of a fixed 4 million – 4 to 32 million, e.g. about 16 million with 8 GB.
 - Monitor64: reminders go to the currently configured channels instead of those of the first message (after switching from SMS to the app the reminder still came by SMS).
 - Monitor64: small pulsing state dot next to "Monitor64" in the navigation (green, yellow-orange, red).
