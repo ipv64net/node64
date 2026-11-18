@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: pulsierender Zustandspunkt neben „Healthchecks“ in der Navigation (grün, gelb-orange, rot) wie bei Monitor64.
 - Account-Klassen und Startseite: neue Zeile „CDN-Subdomains“ (Free 2, Home/Supporter 5, ab Business unbegrenzt); die Startseite zeigt den Verbrauch.
 - PROXY64: Bei einem erreichten Kontingent steht die richtige Grenze da (CDN-Domains, -Subdomains, Portmapper oder Tunnel) statt immer „CDN-Domains belegt“; Karte und Assistent zeigen die Subdomains.
 ## 1.7.9 – 2026-11-18

@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 3.3.0 – unveröffentlicht
+
+### Neu
+- Navigation: Neben „Healthchecks“ zeigt ein kleiner pulsierender Punkt den Gesamtzustand wie bei Monitor64 – grün alles in Ordnung, gelb-orange eingeschränkt, stabilisierend oder ohne aktuelle Messung, rot gestört (auch flatternd). Pausierte Checks, noch nie gemessene und Checks im Wartungsfenster zählen nicht; ohne Checks kein Punkt.
+
 ## 3.2.7 – 2026-11-18
 
 ### Behoben
