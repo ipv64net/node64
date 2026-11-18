@@ -679,6 +679,21 @@ func fillTemplate(tpl string, m Message) string {
 // ---------------------------------------------------------------- SMTP
 
 // heloName: voller Rechnername, sonst die Domain der Absenderadresse.
+// smtpFrom zerlegt den Absender: "monitoring@example.com" oder mit Anzeigenamen "Monitoring <monitoring@example.com>"
+// (#209). EHLO und MAIL FROM bekommen nur die Adresse; ohne Namen heisst der Absender "Node64".
+func smtpFrom(raw string) (name, addr string) {
+	raw = strings.TrimSpace(raw)
+	if a, err := mail.ParseAddress(raw); err == nil {
+		name, addr = a.Name, a.Address
+	} else {
+		addr = raw // ungewoehnliche Schreibweise: unveraendert (der Server entscheidet)
+	}
+	if name == "" {
+		name = "Node64"
+	}
+	return name, addr
+}
+
 func heloName(from string) string {
 	if h, err := os.Hostname(); err == nil && strings.Contains(h, ".") {
 		return h
@@ -748,7 +763,8 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 	}
 	defer c.Close()
 	// EHLO mit einem richtigen Namen statt "localhost" (Spamfilter pruefen den HELO-Namen)
-	if err := c.Hello(heloName(ch.Config["from"])); err != nil {
+	fromName, from := smtpFrom(ch.Config["from"])
+	if err := c.Hello(heloName(from)); err != nil {
 		return smtpErr("ehlo", addr, security, err)
 	}
 	if security == "starttls" {
@@ -764,7 +780,6 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 			return fmt.Errorf("auth: %w", err)
 		}
 	}
-	from := ch.Config["from"]
 	if err := c.Mail(from); err != nil {
 		return fmt.Errorf("from: %w", err)
 	}
@@ -779,7 +794,7 @@ func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 		return smtpErr("data", addr, security, err)
 	}
 	subject, text, htmlBody := MailContent(m, MailBrand{Name: "Node64", ManageURL: manageURL(m.URL)})
-	buf := bytes.NewBuffer(BuildMail(mail.Address{Name: "Node64", Address: from}, tos, subject, text, htmlBody))
+	buf := bytes.NewBuffer(BuildMail(mail.Address{Name: fromName, Address: from}, tos, subject, text, htmlBody))
 	if _, err := wc.Write(buf.Bytes()); err != nil {
 		return smtpErr("data", addr, security, err)
 	}

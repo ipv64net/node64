@@ -115,6 +115,7 @@ func TestChatChannelValidate(t *testing.T) {
 	ok := []*Channel{
 		{Name: "m", Type: TypeMatrix, Config: map[string]string{"server": "https://matrix.example.org/", "token": "x", "room": "!abc:example.org"}},
 		{Name: "m", Type: TypeMatrix, Config: map[string]string{"token": "x", "room": "#alerts:example.org"}},
+		{Name: "m", Type: TypeMatrix, Config: map[string]string{"token": "x", "room": "!31hneApxJ_1o-63DmFrpeqnkFfWppnzWso1JvH3ogLM"}}, // Raumversion 12 (#212)
 		{Name: "s", Type: TypeSlack, Config: map[string]string{"webhook_url": "https://hooks.slack.com/services/T/B/x"}},
 		{Name: "t", Type: TypeTeams, Config: map[string]string{"webhook_url": "https://prod-01.westeurope.logic.azure.com/workflows/x"}},
 	}
@@ -128,6 +129,8 @@ func TestChatChannelValidate(t *testing.T) {
 	}
 	bad := []*Channel{
 		{Name: "m", Type: TypeMatrix, Config: map[string]string{"token": "x", "room": "alerts"}},
+		{Name: "m", Type: TypeMatrix, Config: map[string]string{"token": "x", "room": "#alerts"}}, // Alias braucht den Server
+		{Name: "m", Type: TypeMatrix, Config: map[string]string{"token": "x", "room": "!abc def"}},
 		{Name: "s", Type: TypeSlack, Config: map[string]string{"webhook_url": "http://hooks.slack.com/x"}},
 		{Name: "t", Type: TypeTeams, Config: map[string]string{"webhook_url": ""}},
 	}

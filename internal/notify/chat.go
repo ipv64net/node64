@@ -21,8 +21,8 @@ import (
 // (Workflows-Webhook „Wenn eine Teams-Webhookanforderung empfangen wird“, Adaptive Card). Die Farbe folgt dem
 // Statusbalken der Mails (rot Stoerung, gruen Entwarnung, orange Achtung, sonst Hinweis).
 
-// matrixRoom: Raum-ID (!abc:server) oder Alias (#raum:server).
-var matrixRoom = regexp.MustCompile(`^[!#][^:\s]+:[^\s]+$`)
+// matrixRoom: Raum-ID (!abc:server, ab Raumversion 12 ohne Server-Teil: !<Hash>, #212) oder Alias (#raum:server).
+var matrixRoom = regexp.MustCompile(`^(![^:\s]+(:[^\s]+)?|#[^:\s]+:[^\s]+)$`)
 
 // chatLines: Titel und Text als Zeilen (leere Zeilen weg).
 func chatLines(text string) []string {
