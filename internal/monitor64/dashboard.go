@@ -11,6 +11,41 @@ import (
 // Dashboard des Kerns: kleine Karte mit Kennzahlen (module.CardProvider) und die Probleme in der gemeinsamen Liste
 // "Letzte Stoerungen" mit den Healthchecks (module.IncidentProvider).
 
+// NavState: Gesamtzustand fuer den Punkt neben "Monitor64" in der Navigation (module.NavStateProvider) - aus dem
+// Stand im Speicher wie die Zaehler der Uebersicht. Pausierte Hosts, Hosts im Wartungsfenster und reine
+// Anzeige-Dienste zaehlen nicht; nicht erreichbar ist kritisch, Unbekannt eine Warnung. Ohne Hosts kein Punkt.
+func (m *Module) NavState() string {
+	vs := m.Views()
+	if len(vs) == 0 {
+		return ""
+	}
+	out := module.NavOK
+	for _, v := range vs {
+		if v.Host == nil || v.Host.Paused || v.Maint != nil {
+			continue
+		}
+		if v.View == eval.ViewUnreachable {
+			return module.NavCrit
+		}
+		if c := v.Cluster; c != nil && (c.Note == noteOwnerUnreachable || c.Note == noteNoData) {
+			out = module.NavWarn // Stand der zustaendigen Node fehlt: unbekannt
+			continue
+		}
+		for _, s := range v.Services {
+			if s.ShowOnly {
+				continue
+			}
+			switch s.State {
+			case eval.Crit:
+				return module.NavCrit
+			case eval.Warn, eval.Unknown:
+				out = module.NavWarn
+			}
+		}
+	}
+	return out
+}
+
 // Card liefert die Dashboard-Karte: Hosts, Dienste, offene Probleme nach Zustand, Wartung, letzte Stoerung.
 func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	c := &module.Card{TitleKey: "nav.monitor64", Icon: "bi-activity", Image: "monitor64.svg", Path: "/monitor64"}

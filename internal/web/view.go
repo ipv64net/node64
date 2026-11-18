@@ -86,6 +86,7 @@ type NavItem struct {
 	Active    bool
 	Hidden    bool   // Modul in den Einstellungen ausgeschaltet: nicht im Menue
 	Head      string // Ueberschrift der Gruppe vor diesem Punkt (Textschluessel), leer = keine
+	State     string // Gesamtzustand des Moduls als pulsierender Punkt (module.NavOK/NavWarn/NavCrit), leer = keiner
 }
 
 // Crumb ist ein Element der Brotkrumen in der Kopfzeile (URL leer = aktuelle Seite).
@@ -337,8 +338,16 @@ func (s *Server) nav(r *http.Request) []NavItem {
 	link := NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true, Sub: true}
 	for _, m := range s.Modules.List(r.Context()) {
 		// in der Navigation nur Symbole (auch eingeklappt); die Logos der Module stehen auf ihren Seiten
-		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Available: m.Info.Available, Enabled: m.Running,
-			Hidden: m.Info.Available && !m.Enabled})
+		it := NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Available: m.Info.Available, Enabled: m.Running,
+			Hidden: m.Info.Available && !m.Enabled}
+		if m.Running { // Zustandspunkt (z. B. Monitor64: gruen, gelb, rot)
+			if mod, ok := s.Modules.Get(m.Info.Name); ok {
+				if p, ok := mod.(module.NavStateProvider); ok {
+					it.State = p.NavState()
+				}
+			}
+		}
+		items = append(items, it)
 		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks (ohne sie kein Menuepunkt)
 			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true})
 			items = append(items, link)

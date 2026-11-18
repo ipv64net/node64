@@ -4,7 +4,13 @@
 
 New:
 
+- Navigation: next to "Monitor64" a small pulsing dot shows the overall state – green all fine, yellow-orange warning (or unknown), red critical or a host unreachable. Paused hosts, hosts in a maintenance window and display-only services do not count; when collapsed, the dot sits at the icon.
 - "Value is fine": when a value reports (e.g. SSD wear 100 % on an NVMe that keeps running), it can be confirmed as fine in the service info dialog or in the settings – "until the value gets worse" (up to the current value the service counts as OK; if the value gets worse or drops back below the warning threshold, the threshold applies again) or "never report" (warning and critical off on this service). So far this only worked for state rules such as "port without link"; for values that cannot exceed 100 % no suitable threshold could be set. API: `accept` when changing a service now also takes rule kinds with numeric values.
+
+Fixed:
+
+- Notifications: reminders of an open problem went to the channels of the first message, not to the current setting – anyone who switched critical from SMS to the app kept getting the daily reminder by SMS. Reminders (including "unreachable") now go to the configured channels; the all-clear still goes to everyone who knows the problem.
+- Problems: "Mark as resolved" seemed to do nothing for a value that is still not fine – the problem was closed, but the poll started right away opened it again (new start time, acknowledgement gone, reminders back on). The button now only appears where it has an effect: traps, paused hosts, hosts without a current state and services of an unreachable host; otherwise a hint says the problem is resolved automatically. The API rejects resolving in this case with 409 `still_failing` instead of silently "succeeding".
 
 Changed:
 
@@ -12,10 +18,6 @@ Changed:
 - Overview, tiles: below the sparkline it now says what it shows – "CPU · 24 h" with the maximum.
 - Host page: clicking a service opens a centred dialog with a large history chart (range 6 h to 1 year, selectable metric when there are several), all values as a table (value, state, thresholds) and the service details (state since, access, polling, alerting, acknowledgement, key); disks with SMART show the SMART values, the "Traps" service the recent traps below. Acknowledging works right in the dialog.
 - Host page: settings and thresholds open from the gear at the end of each service row (or the button in the info dialog) – also as a centred dialog instead of a side panel.
-
-Fixes:
-
-- Problems: "Mark as resolved" seemed to do nothing for a value that is still not fine – the problem was closed, but the poll started right away opened it again (new start time, acknowledgement gone, reminders back on). The button now only appears where it has an effect: traps, paused hosts, hosts without a current state and services of an unreachable host; otherwise a hint says the problem is resolved automatically. The API rejects resolving in this case with 409 `still_failing` instead of silently "succeeding".
 
 ## 0.1.23 – 2026-11-17
 

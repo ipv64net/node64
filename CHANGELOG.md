@@ -5,6 +5,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - DNS64: Die Grenze für Blocklisten-Regeln richtet sich nach dem Arbeitsspeicher statt fest 4 Millionen – 4 bis 32 Millionen, z. B. rund 16 Millionen bei 8 GB.
+- Monitor64: Erinnerungen gehen an die aktuell eingestellten Kanäle statt an die der ersten Meldung (nach dem Umstellen von SMS auf die App kam die Erinnerung weiter per SMS).
+- Monitor64: kleiner pulsierender Zustandspunkt neben „Monitor64“ in der Navigation (grün, gelb-orange, rot).
 - Monitor64: Messwerte lassen sich als „in Ordnung“ bestätigen (z. B. SSD-Verschleiß 100 %) – bis der Wert schlechter wird oder dauerhaft; bisher nur bei Zustandsregeln.
 - Monitor64: Übersicht zeigt die Hosts direkt unter den Zählern (Karten „Probleme“ und „Zuletzt“ entfallen, neue Zähler-Karte „Probleme“); die Mini-Kurve der Kacheln ist als CPU · 24 Std. beschriftet.
 - Monitor64: Klick auf einen Dienst öffnet einen Dialog mit großem Verlauf und allen Werten als Tabelle (auch SMART); Einstellungen und Schwellen über das Zahnrad in der Zeile, ebenfalls als Dialog.

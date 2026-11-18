@@ -356,3 +356,18 @@ tr.ipam-hit > * { --bs-table-bg-state: var(--bs-primary-bg-subtle); }
 .ipam-lvl-child { background: repeating-linear-gradient(45deg, var(--bs-tertiary-bg) 0 3px, var(--bs-secondary-bg) 3px 6px); }
 .ipam-map .ipam-cell { text-decoration: none; }
 @media (max-width: 767.98px) { .ipam-row { grid-template-columns: repeat(16, minmax(0, 1fr)); } .ipam-row .ipam-cell { font-size: .55rem; } }
+
+/* Zustandspunkt neben einem Menuepunkt (z. B. Monitor64): pulsiert in der Farbe des Zustands; eingeklappt am Symbol */
+.nav-state, .nav-mini .sidebar .nav-link[data-state]::after { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--n64-ns); animation: n64-ns-pulse 2s ease-out infinite; }
+.nav-state { margin-left: .45rem; vertical-align: middle; position: relative; top: -.05rem; }
+.nav-state.ok, .nav-link[data-state="ok"] { --n64-ns: var(--bs-success); --n64-ns-rgb: var(--bs-success-rgb); }
+.nav-state.warn, .nav-link[data-state="warn"] { --n64-ns: #f59c1a; --n64-ns-rgb: 245, 156, 26; }
+.nav-state.crit, .nav-link[data-state="crit"] { --n64-ns: var(--bs-danger); --n64-ns-rgb: var(--bs-danger-rgb); }
+.nav-mini .sidebar .nav-link[data-state] { position: relative; }
+.nav-mini .sidebar .nav-link[data-state]::after { content: ""; position: absolute; top: .3rem; right: calc(50% - .9rem); }
+@keyframes n64-ns-pulse {
+	0% { box-shadow: 0 0 0 0 rgba(var(--n64-ns-rgb), .6); }
+	70% { box-shadow: 0 0 0 .35rem rgba(var(--n64-ns-rgb), 0); }
+	100% { box-shadow: 0 0 0 0 rgba(var(--n64-ns-rgb), 0); }
+}
+@media (prefers-reduced-motion: reduce) { .nav-state, .nav-mini .sidebar .nav-link[data-state]::after { animation: none; } }

@@ -66,6 +66,9 @@
     }
   },
   "nav": {
+    "state_ok": "Alles in Ordnung",
+    "state_warn": "Warnung",
+    "state_crit": "Kritisch",
     "ipam64": "IPAM64",
     "group_overview": "Übersicht",
     "group_modules": "Module",

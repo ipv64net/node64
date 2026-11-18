@@ -367,12 +367,11 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 			hm.HostSent = at
 		}
 		if iv := rt.remind(Crit); iv > 0 && !r.HostAcked && !r.Quiet && at.Sub(hm.HostSent) >= iv {
-			chans := hm.HostChans
-			if len(chans) == 0 {
-				chans = rt.Route(Crit)
-			}
+			// Erinnerung an die Kanaele der aktuellen Einstellung (umgestellt, z. B. SMS -> App: ab jetzt die App);
+			// die Entwarnung bekommen alle, die die Meldung kennen
+			chans := rt.Route(Crit)
 			add(Line{Kind: LineUnreachable, State: Crit, Since: hm.UnreachAt}, chans)
-			hm.HostSent = at
+			hm.HostChans, hm.HostSent = union(hm.HostChans, chans), at
 		}
 
 	case hm.Unreach || afterMaint:
@@ -446,9 +445,12 @@ func (n *Notifier) Round(r Round, rt Routing) Result {
 					// In der Ruhezeit keine Erinnerung; sie kommt in der ersten Runde danach (LastSent bleibt).
 					break
 				}
-				chans := s.Chans
+				// an die Kanaele der aktuellen Einstellung, nicht an die der ersten Meldung (sonst bekaeme nach dem
+				// Umstellen von SMS auf die App weiter die SMS die Erinnerung); die Entwarnung geht an alle, die das
+				// Problem kennen (sent fuehrt sie zusammen)
+				chans := rt.Route(s.Cur)
 				if len(chans) == 0 {
-					chans = rt.Route(s.Cur)
+					break // fuer diese Schwere ist kein Kanal mehr eingestellt
 				}
 				l.Kind = LineReminder
 				add(l, chans)

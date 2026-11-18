@@ -282,6 +282,19 @@ type IncidentProvider interface {
 	DashIncidents(ctx context.Context, n int) []IncidentInfo
 }
 
+// NavStateProvider liefert den Gesamtzustand eines Moduls fuer einen kleinen Punkt neben seinem Menuepunkt
+// (NavOK, NavWarn, NavCrit; leer = kein Punkt). Wird bei jedem Seitenaufbau gefragt: schnell, ohne Datenbank.
+type NavStateProvider interface {
+	NavState() string
+}
+
+// Zustaende fuer NavStateProvider.
+const (
+	NavOK   = "ok"
+	NavWarn = "warn"
+	NavCrit = "crit"
+)
+
 // Status ist der Zustand eines Moduls fuer die Anzeige.
 type Status struct {
 	Info      Info

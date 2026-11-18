@@ -4,7 +4,13 @@
 
 Neu:
 
+- Navigation: Neben „Monitor64“ zeigt ein kleiner pulsierender Punkt den Gesamtzustand – grün alles in Ordnung, gelb-orange Warnung (oder Unbekannt), rot Kritisch bzw. ein Host nicht erreichbar. Pausierte Hosts, Hosts im Wartungsfenster und reine Anzeige-Dienste zählen nicht; eingeklappt sitzt der Punkt am Symbol.
 - „Wert in Ordnung“: Meldet ein Messwert (z. B. SSD-Verschleiß 100 % bei einer NVMe, die weiterläuft), lässt er sich im Info-Dialog des Dienstes oder in den Einstellungen als in Ordnung bestätigen – „bis der Wert schlechter wird“ (bis zum aktuellen Wert gilt der Dienst als OK; wird der Wert schlechter oder kommt er unter die Warnschwelle zurück, gilt die Schwelle wieder) oder „dauerhaft nicht melden“ (Warnung und Kritisch an diesem Dienst aus). Bisher ging das nur für Zustandsregeln wie „Port ohne Link“; bei Werten, die nicht über 100 % steigen können, ließ sich die Schwelle nicht passend setzen. API: `accept` beim Ändern eines Dienstes nimmt jetzt auch Regel-Arten mit Zahlenwerten.
+
+Behoben:
+
+- Benachrichtigung: Erinnerungen an ein offenes Problem gingen an die Kanäle der ersten Meldung, nicht an die aktuelle Einstellung – wer z. B. Kritisch von SMS auf die App umgestellt hat, bekam die tägliche Erinnerung weiter per SMS. Erinnerungen (auch „nicht erreichbar“) gehen jetzt an die eingestellten Kanäle; die Entwarnung bekommen weiterhin alle, die das Problem kennen.
+- Probleme: „Als gelöst markieren“ tat bei einem Wert, der weiter nicht passt, scheinbar nichts – das Problem wurde geschlossen, die sofort angestoßene Abfrage eröffnete es aber gleich neu (neue Startzeit, Quittierung weg, Erinnerungen wieder an). Der Knopf erscheint jetzt nur noch, wo er wirkt: bei Traps, pausierten Hosts, Hosts ohne aktuellen Stand und Diensten eines nicht erreichbaren Hosts; sonst steht dort der Hinweis, dass das Problem automatisch gelöst wird. Die API lehnt das Lösen in diesem Fall mit 409 `still_failing` ab statt still zu „gelingen“.
 
 Geändert:
 
@@ -12,10 +18,6 @@ Geändert:
 - Übersicht, Kacheln: Unter der Mini-Kurve steht, was sie zeigt – „CPU · 24 Std.“ mit dem Höchstwert.
 - Host-Seite: Ein Klick auf einen Dienst öffnet einen Dialog in der Mitte mit großem Verlauf (Zeitraum 6 Std. bis 1 Jahr, bei mehreren Messgrößen wählbar), allen Messwerten als Tabelle (Wert, Zustand, Schwellen) und den Angaben zum Dienst (Zustand seit, Zugang, Abfrage, Meldung, Quittierung, Schlüssel); bei Platten mit SMART stehen die SMART-Werte, beim Dienst „Traps“ die letzten Traps darunter. Quittieren geht direkt im Dialog.
 - Host-Seite: Einstellungen und Schwellen öffnet das Zahnrad am Ende jeder Dienst-Zeile (oder der Knopf im Info-Dialog) – ebenfalls als Dialog in der Mitte statt als Seitenleiste.
-
-Fehlerbehebungen:
-
-- Probleme: „Als gelöst markieren“ tat bei einem Wert, der weiter nicht passt, scheinbar nichts – das Problem wurde geschlossen, die sofort angestoßene Abfrage eröffnete es aber gleich neu (neue Startzeit, Quittierung weg, Erinnerungen wieder an). Der Knopf erscheint jetzt nur noch, wo er wirkt: bei Traps, pausierten Hosts, Hosts ohne aktuellen Stand und Diensten eines nicht erreichbaren Hosts; sonst steht dort der Hinweis, dass das Problem automatisch gelöst wird. Die API lehnt das Lösen in diesem Fall mit 409 `still_failing` ab statt still zu „gelingen“.
 
 ## 0.1.23 – 2026-11-17
 

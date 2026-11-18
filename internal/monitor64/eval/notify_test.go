@@ -637,3 +637,25 @@ func TestNotifyBetterAndReachableSeverity(t *testing.T) {
 		t.Fatalf("wieder erreichbar ohne Offenes: %+v", m)
 	}
 }
+
+// Umgestellt waehrend ein Problem offen ist (Kritisch erst per SMS, dann per App): die Erinnerung geht an die
+// aktuelle Einstellung, die Entwarnung an alle, die das Problem kennen.
+func TestNotifyReminderFollowsRouting(t *testing.T) {
+	g := newRig(t)
+	g.rt = ResolveRouting(NotifyConfig{Channels: []ChannelRoute{{ID: "sms", Crit: true}, {ID: "mail", Crit: true}}, RemindCrit: Dur(24 * time.Hour)}, nil, nas)
+	wantChans(t, "Crit", g.one(0, "fs:/", Crit), map[string][]LineKind{"sms": {LineProblem}, "mail": {LineProblem}})
+	g.rt = ResolveRouting(NotifyConfig{Channels: []ChannelRoute{{ID: "app", Crit: true}, {ID: "mail", Crit: true}}, RemindCrit: Dur(24 * time.Hour)}, nil, nas)
+	wantChans(t, "Erinnerung", g.one(24*60, "fs:/", Crit), map[string][]LineKind{"app": {LineReminder}, "mail": {LineReminder}})
+	wantChans(t, "Entwarnung", g.one(24*60+1, "fs:/", OK), map[string][]LineKind{"app": {LineOK}, "mail": {LineOK}, "sms": {LineOK}})
+	// kein Kanal mehr fuer Kritisch: keine Erinnerung
+	g.one(25*60, "fs:/", Crit)
+	g.rt = ResolveRouting(NotifyConfig{Channels: []ChannelRoute{{ID: "mail", Warn: true}}, RemindCrit: Dur(24 * time.Hour)}, nil, nas)
+	if res := g.one(50*60, "fs:/", Crit); len(res.Messages) != 0 {
+		t.Fatalf("Erinnerung ohne Kanal: %+v", res.Messages)
+	}
+	// nicht erreichbar: Erinnerung ebenfalls an die aktuelle Einstellung
+	g.rt = ResolveRouting(NotifyConfig{Channels: []ChannelRoute{{ID: "sms", Crit: true}}, RemindCrit: Dur(24 * time.Hour)}, nil, nas)
+	wantChans(t, "nicht erreichbar", g.one(60*60, "fs:/", Unknown, unreachable), map[string][]LineKind{"sms": {LineUnreachable}})
+	g.rt = ResolveRouting(NotifyConfig{Channels: []ChannelRoute{{ID: "app", Crit: true}}, RemindCrit: Dur(24 * time.Hour)}, nil, nas)
+	wantChans(t, "Erinnerung nicht erreichbar", g.one(84*60, "fs:/", Unknown, unreachable), map[string][]LineKind{"app": {LineUnreachable}})
+}
