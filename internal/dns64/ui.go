@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/lists", page(m.pageListsSave))
 	mux.Handle("POST /dns64/lists/add", page(m.pageListAdd))
 	mux.Handle("POST /dns64/lists/remove", page(m.pageListRemove))
+	mux.Handle("POST /dns64/lists/rename", page(m.pageListRename))
 	mux.Handle("POST /dns64/allowlist/import", page(m.pageAllowImport))
 	m.listUIRoutes(mux, page)
 	mux.Handle("POST /dns64/records", page(m.pageRecordAdd))
@@ -296,13 +298,22 @@ func (m *Module) pageUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 	m.apply(w, r, "/dns64/settings#upstreams", c, "dns64.upstream.add", s.URL)
 }
 
+// pageUpstreamRemove entfernt einen eigenen Upstream. Kennung ist die URL (eine Position verrutscht, wenn sich die
+// Liste inzwischen geaendert hat, z. B. per Cluster); eine Zahl gilt als Position (Seite einer aelteren Version).
 func (m *Module) pageUpstreamRemove(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
-	url := ""
-	if i := formInt(r, "remove"); i >= 0 && i < len(c.Upstreams) && c.Upstreams[i].Custom {
-		url = c.Upstreams[i].URL
-		c.Upstreams = append(c.Upstreams[:i], c.Upstreams[i+1:]...)
+	key := strings.TrimSpace(r.PostFormValue("remove"))
+	i := slices.IndexFunc(c.Upstreams, func(u upstreamSetting) bool { return u.URL == key })
+	if i < 0 {
+		i = formInt(r, "remove")
 	}
+	if i < 0 || i >= len(c.Upstreams) || !c.Upstreams[i].Custom {
+		m.g.Flash(w, r, "danger", m.g.T(r, "dns64.err.up_not_found"))
+		http.Redirect(w, r, "/dns64/settings#upstreams", http.StatusSeeOther)
+		return
+	}
+	url := c.Upstreams[i].URL
+	c.Upstreams = append(c.Upstreams[:i], c.Upstreams[i+1:]...)
 	m.apply(w, r, "/dns64/settings#upstreams", c, "dns64.upstream.remove", url)
 }
 
@@ -328,6 +339,46 @@ func (m *Module) pageListRemove(w http.ResponseWriter, r *http.Request) {
 		c.Lists = append(c.Lists[:i], c.Lists[i+1:]...)
 	}
 	m.apply(w, r, "/dns64/lists", c, "dns64.list.remove", url)
+}
+
+// pageListRename benennt eine eigene Blockliste um (#224); leer = Name aus der URL. Ohne Neustart des DNS-Dienstes:
+// die geladene Liste bekommt nur den neuen Namen.
+func (m *Module) pageListRename(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	c := m.loadConfig(ctx)
+	url := strings.TrimSpace(r.PostFormValue("url"))
+	i := slices.IndexFunc(c.Lists, func(l listSetting) bool { return l.URL == url && l.Custom })
+	if i < 0 {
+		m.g.Flash(w, r, "danger", m.g.T(r, "dns64.err.list_not_found"))
+		http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
+		return
+	}
+	name := cleanListName(r.PostFormValue("name"))
+	if name == "" {
+		name = listName(url)
+	}
+	old := c.Lists[i].Name
+	c.Lists[i].Name = name
+	if err := m.saveConfig(ctx, c); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+		http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
+		return
+	}
+	if e := m.running(); e != nil && e.lists != nil {
+		e.lists.Rename(url, name)
+	}
+	m.audit(r, "dns64.list.rename", url, old+" -> "+name)
+	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
+	http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
+}
+
+// cleanListName: Anzeigename einer Liste (eine Zeile, hoechstens 80 Zeichen).
+func cleanListName(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > 80 {
+		s = string(r[:80])
+	}
+	return s
 }
 
 // pageAllowImport uebernimmt Freigaben aus einer Liste (eine Domain je Zeile; allowlist.txt des alten

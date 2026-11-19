@@ -7,6 +7,26 @@
 			if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
 		});
 	});
+	// eigene Blockliste umbenennen (#224): Name abfragen und als Formular senden (leer = Name aus der URL)
+	document.querySelectorAll("[data-rename-list]").forEach(function (b) {
+		b.addEventListener("click", function () {
+			var name = window.prompt(b.getAttribute("data-prompt"), b.getAttribute("data-name") || "");
+			if (name === null) { return; }
+			var csrf = document.querySelector("input[name=_csrf]");
+			var f = document.createElement("form");
+			f.method = "post";
+			f.action = "/dns64/lists/rename";
+			[["_csrf", csrf ? csrf.value : ""], ["url", b.getAttribute("data-rename-list")], ["name", name]].forEach(function (kv) {
+				var i = document.createElement("input");
+				i.type = "hidden";
+				i.name = kv[0];
+				i.value = kv[1];
+				f.appendChild(i);
+			});
+			document.body.appendChild(f);
+			f.submit();
+		});
+	});
 	// laufender Zertifikatsabruf: Seite alle paar Sekunden neu laden, bis er fertig ist
 	var reload = document.querySelector("[data-dns64-reload]");
 	if (reload) { setTimeout(function () { location.reload(); }, 1000 * Number(reload.getAttribute("data-dns64-reload") || 3)); }

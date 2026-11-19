@@ -8,6 +8,13 @@ Short summary of what changes per version. Details per module are in the node un
 - Account classes and dashboard: new row "CDN subdomains" (Free 2, Home/Supporter 5, unlimited from Business); the dashboard shows the usage.
 - PROXY64: when a limit is reached, the right limit is named (CDN domains, subdomains, port mappings or tunnels) instead of always "CDN domains used up"; card and wizard show the subdomains.
 - Prometheus: new values for the cluster (suspended members with reason, open user and ACME conflicts), the group sync with AD/LDAP (succeeded, last success) and open problems in Monitor64.
+- Monitor64: switch "May be switched off" on the host – for devices that only run now and then, "unreachable" is not reported (#229).
+- Monitor64: "Never report" and "Fine" show the new state right after saving instead of after the next poll (#225).
+- DNS64: custom blocklists can be renamed (#224); IPv6 addresses without a name get the name of the IPv4 address of the same device (#223).
+- DNS64: messages after saving appear right above the section the page jumps to – a failed deletion of an upstream used to look like "nothing happens" (#231).
+- Healthchecks: website addresses without `http://`/`https://` are treated as `https://` (with certificate check); with a certificate warning, a redirect to unencrypted HTTP counts as down (#234).
+- PROXY64: after an internet outage the CDN64 tunnel no longer stays stuck on the TCP fallback, switches back to QUIC by itself and closes broken connections (e.g. WebSockets) towards the service right away.
+- Dashboard: the whole header of a card leads to its page, not only the arrow (#228).
 - AI interface (MCP): IPAM64 in the description and in `api_reference`, plus user management; more fields for Monitor64, DNS64 (list hints, records from IPAM64) and PROXY64 streams (CDN64).
 - Local API: description (`openapi.json`) completed for Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, environment and cluster; `GET /api/group` also returns role, disabled and source for user conflicts.
 

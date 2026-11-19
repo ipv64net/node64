@@ -71,6 +71,7 @@ type Host struct {
 	BackupNodes   []string  `json:"backup_nodes,omitempty"`
 	AgentAutoUpd  bool      `json:"agent_autoupdate"`
 	Paused        bool      `json:"paused"`
+	OfflineOK     bool      `json:"offline_ok"` // darf ausgeschaltet sein: nicht erreichbar wird nicht gemeldet (#229)
 	Notes         string    `json:"notes,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -136,17 +137,17 @@ func normTags(in []string) []string {
 	return out
 }
 
-const hostCols = `uid, name, address, kind, group_name, tags, interval_sec, owner_node, preferred_node, backup_nodes, agent_autoupd, paused, notes, created_at, updated_at`
+const hostCols = `uid, name, address, kind, group_name, tags, interval_sec, owner_node, preferred_node, backup_nodes, agent_autoupd, paused, offline_ok, notes, created_at, updated_at`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var tags, backups, created, updated string
-	var auto, paused int
-	if err := row.Scan(&h.UID, &h.Name, &h.Address, &h.Kind, &h.Group, &tags, &h.IntervalSec, &h.OwnerNode, &h.PreferredNode, &backups, &auto, &paused, &h.Notes, &created, &updated); err != nil {
+	var auto, paused, offline int
+	if err := row.Scan(&h.UID, &h.Name, &h.Address, &h.Kind, &h.Group, &tags, &h.IntervalSec, &h.OwnerNode, &h.PreferredNode, &backups, &auto, &paused, &offline, &h.Notes, &created, &updated); err != nil {
 		return nil, err
 	}
 	h.Tags, h.BackupNodes = parseList(tags), parseList(backups)
-	h.AgentAutoUpd, h.Paused = auto == 1, paused == 1
+	h.AgentAutoUpd, h.Paused, h.OfflineOK = auto == 1, paused == 1, offline == 1
 	h.CreatedAt, h.UpdatedAt = parseTS(created), parseTS(updated)
 	return &h, nil
 }
@@ -191,17 +192,21 @@ func (s *Store) SaveHost(ctx context.Context, h *Host, by Actor) error {
 	if h.Paused {
 		paused = 1
 	}
+	offline := 0
+	if h.OfflineOK {
+		offline = 1
+	}
 	if h.UID == "" {
 		h.UID = newUID()
-		_, err := s.st.Writer().ExecContext(ctx, `INSERT INTO m64_hosts (uid, name, address, kind, group_name, tags, interval_sec, owner_node, preferred_node, backup_nodes, agent_autoupd, paused, notes, created_at, created_by, updated_at, updated_by)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.UID, h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.OwnerNode, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, h.Notes, now, by.json(), now, by.json())
+		_, err := s.st.Writer().ExecContext(ctx, `INSERT INTO m64_hosts (uid, name, address, kind, group_name, tags, interval_sec, owner_node, preferred_node, backup_nodes, agent_autoupd, paused, offline_ok, notes, created_at, created_by, updated_at, updated_by)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.UID, h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.OwnerNode, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, offline, h.Notes, now, by.json(), now, by.json())
 		return err
 	}
 	// owner_node fuehrt der Cluster (cluster_owner.go), eine Aenderung am Host laesst sie stehen
-	res, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET name = ?, address = ?, kind = ?, group_name = ?, tags = ?, interval_sec = ?, preferred_node = ?, backup_nodes = ?, agent_autoupd = ?, paused = ?, notes = ?, updated_at = ?, updated_by = ?
+	res, err := s.st.Writer().ExecContext(ctx, `UPDATE m64_hosts SET name = ?, address = ?, kind = ?, group_name = ?, tags = ?, interval_sec = ?, preferred_node = ?, backup_nodes = ?, agent_autoupd = ?, paused = ?, offline_ok = ?, notes = ?, updated_at = ?, updated_by = ?
 		WHERE uid = ? AND deleted = 0`,
-		h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, h.Notes, now, by.json(), h.UID)
+		h.Name, h.Address, h.Kind, h.Group, jsonList(h.Tags), h.IntervalSec, h.PreferredNode, jsonList(h.BackupNodes), auto, paused, offline, h.Notes, now, by.json(), h.UID)
 	return affected(res, err)
 }
 

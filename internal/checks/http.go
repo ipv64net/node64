@@ -46,19 +46,30 @@ func (c *httpChecker) Type() Type {
 	return TypeHTTP
 }
 
-func parseURL(s string) (*url.URL, error) {
+// addScheme setzt vor eine Adresse ohne Schema das gegebene (IPv6 ohne Klammern bekommt welche: sonst gilt der
+// letzte Block als Port).
+func addScheme(s, scheme string) string {
 	s = strings.TrimSpace(s)
-	if !strings.Contains(s, "://") {
-		// IPv6 ohne Schema und Klammern (2001:db8::1[/pfad]): sonst gilt der letzte Block als Port
-		i := strings.IndexAny(s, "/?#")
-		if i < 0 {
-			i = len(s)
-		}
-		if a, err := netip.ParseAddr(s[:i]); err == nil && a.Is6() {
-			s = "[" + strings.Replace(s[:i], "%", "%25", 1) + "]" + s[i:] // Zone wie in einer URL kodieren
-		}
-		s = "http://" + s
+	if s == "" || strings.Contains(s, "://") {
+		return s
 	}
+	i := strings.IndexAny(s, "/?#")
+	if i < 0 {
+		i = len(s)
+	}
+	if a, err := netip.ParseAddr(s[:i]); err == nil && a.Is6() {
+		s = "[" + strings.Replace(s[:i], "%", "%25", 1) + "]" + s[i:] // Zone wie in einer URL kodieren
+	}
+	return scheme + "://" + s
+}
+
+// WithHTTPS: Eingabe aus Formular bzw. API ohne Schema gilt als https:// (#234) - mit Zertifikatspruefung und
+// Ablaufwarnung; wer unverschluesselt pruefen will, schreibt http:// davor. Gespeicherte Ziele ohne Schema bleiben
+// bei http:// (parseURL), bis der Check das naechste Mal gespeichert wird.
+func WithHTTPS(s string) string { return addScheme(s, "https") }
+
+func parseURL(s string) (*url.URL, error) {
+	s = addScheme(s, "http")
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("invalid url: %w", err)
@@ -212,6 +223,10 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 	defer resp.Body.Close()
 	details["status"] = resp.StatusCode
 	details["final_url"] = resp.Request.URL.String()
+	if u.Scheme == "https" && resp.Request.URL.Scheme != "https" && p.CertMinDays > 0 && !p.InsecureTLS {
+		// HTTPS verlangt (mit Zertifikatswarnung), aber auf unverschluesseltes HTTP umgeleitet: kein Zertifikat (#234)
+		return fail(ReasonTLSFailed, "redirected from https to unencrypted "+resp.Request.URL.Scheme+" (no certificate)", lat, details)
+	}
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		details["tls_version"] = tls.VersionName(resp.TLS.Version)
 		crt := resp.TLS.PeerCertificates[0]

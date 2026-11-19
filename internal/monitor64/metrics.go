@@ -39,7 +39,7 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 		if tags && len(h.Tags) > 0 {
 			base = append(base, "tags", strings.Join(h.Tags, ","))
 		}
-		w.Gauge("node64_monitor_host_up", "Monitor64: Host erreichbar (1) oder nicht (0)", metrics.Bool(v.View != eval.ViewUnreachable), base...)
+		w.Gauge("node64_monitor_host_up", "Monitor64: Host erreichbar (1) oder nicht (0)", metrics.Bool(v.View != eval.ViewUnreachable && v.View != eval.ViewOffline), base...)
 		for _, s := range v.Services {
 			sl := append(append([]string{}, base...), "service", name(s.Name), "key", s.Key)
 			w.Gauge("node64_monitor_state", "Monitor64: Zustand eines Dienstes (0=OK 1=Warnung 2=Kritisch 3=Unbekannt)", float64(s.State), sl...)

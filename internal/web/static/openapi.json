@@ -6303,6 +6303,10 @@
             "type": "boolean",
             "description": "Agent automatisch aktualisieren"
           },
+          "offline_ok": {
+            "type": "boolean",
+            "description": "Darf ausgeschaltet sein: nicht erreichbar heißt dann `view: offline` – keine Meldung, kein Problem"
+          },
           "paused": {
             "type": "boolean"
           },
@@ -6397,6 +6401,10 @@
               "null"
             ],
             "description": "Agent automatisch aktualisieren; fehlt bzw. null = unverändert (neu: true)"
+          },
+          "offline_ok": {
+            "type": "boolean",
+            "description": "Darf ausgeschaltet sein (fehlt = unverändert)"
           },
           "clear_secrets": {
             "type": "boolean",
@@ -7132,7 +7140,8 @@
               "crit",
               "unknown",
               "unreachable",
-              "maintenance"
+              "maintenance",
+              "offline"
             ]
           },
           "problems": {
@@ -7834,7 +7843,8 @@
               "crit",
               "unknown",
               "unreachable",
-              "maintenance"
+              "maintenance",
+              "offline"
             ]
           },
           "checked": {

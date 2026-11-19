@@ -362,7 +362,7 @@ function ago(s) { var d = toDate(s); return d ? L('time.ago', { d: fmtDur((Date.
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 var ST = { ok: L('state.ok'), warn: L('state.warn'), crit: L('state.crit'), unknown: L('state.unknown'), unreachable: L('state.unreachable') };
 function stLabel(s) { return ST[s] || s; }
-function stBadge(s, txt) { var c = s === 'unreachable' ? 'unknown' : s; return '<span class="st-badge ' + esc(c) + '">' + esc(txt || stLabel(s)) + '</span>'; }
+function stBadge(s, txt) { var c = s === 'unreachable' || s === 'offline' ? 'unknown' : s; return '<span class="st-badge ' + esc(c) + '">' + esc(txt || stLabel(s)) + '</span>'; }
 function tag(t) { return '<span class="tag">' + esc(t) + '</span>'; }
 function kindLabel(k) { return (D.kind_labels && D.kind_labels[k]) || k; }
 function kindMeta(k) { var r = null; (D.kinds || []).forEach(function (x) { if (x.kind === k) { r = x; } }); return r; }
@@ -399,10 +399,24 @@ function failQuiet(e) { if (e && e.session && !sessionShown) { sessionShown = tr
 // lock sperrt einen Knopf, bis die Aktion fertig ist (kein doppeltes Absenden per Doppelklick).
 function lock(btn, fn) {
 	if (btn && btn.disabled) { return Promise.resolve(); }
-	if (btn) { btn.disabled = true; }
+	var spin = null;
+	if (btn) { // sichtbar, dass die Aktion laeuft (Speichern wartet bis zu 8 s auf die neue Abfrage, #225)
+		btn.disabled = true;
+		btn.setAttribute('aria-busy', 'true');
+		spin = document.createElement('span');
+		spin.className = 'spinner-border spinner-border-sm me-1';
+		spin.setAttribute('aria-hidden', 'true');
+		btn.insertBefore(spin, btn.firstChild);
+	}
+	var done = function () {
+		if (!btn) { return; }
+		btn.disabled = false;
+		btn.removeAttribute('aria-busy');
+		if (spin && spin.parentNode) { spin.parentNode.removeChild(spin); }
+	};
 	var p;
 	try { p = Promise.resolve(fn()); } catch (e) { p = Promise.reject(e); }
-	return p.then(function (v) { if (btn) { btn.disabled = false; } return v; }, function (e) { if (btn) { btn.disabled = false; } throw e; });
+	return p.then(function (v) { done(); return v; }, function (e) { done(); throw e; });
 }
 
 // modal: Dialog mit eigenem Inhalt; buttons = [{label, cls, click(close)}].
@@ -564,7 +578,7 @@ function pageOverview() {
 		var cls = m.state === 'crit' ? 'crit' : m.state === 'warn' ? 'warn' : '';
 		return '<div class="meter"><span class="meter-label">' + esc(m.label === 'cpu' ? L('ov.m_cpu') : m.label === 'ram' ? L('ov.m_ram') : L('ov.m_disk')) + '</span><div class="bar"><span class="' + cls + '" style="width:' + Math.max(0, Math.min(100, m.value)) + '%"></span></div><span class="meter-val">' + fmtNum(m.value, 0) + ' %</span></div>';
 	}
-	function hostState(h) { return h.view === 'unreachable' ? 'unknown' : h.state; }
+	function hostState(h) { return h.view === 'unreachable' || h.view === 'offline' ? 'unknown' : h.state; }
 	function tile(h) {
 		var st = hostState(h), foot, ref = clRef(h), note = clNote(ref, CLV.self_name), away = ref && (ref.note === 'owner_unreachable' || ref.note === 'no_data');
 		if (away) { st = 'unknown'; }
@@ -572,12 +586,14 @@ function pageOverview() {
 		else if (h.maint) { foot = '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>'; }
 		else if (h.paused) { foot = '<span class="st-badge unknown"><i class="bi bi-pause-circle"></i> ' + esc(L('ov.paused')) + '</span>'; }
 		else if (h.view === 'unreachable') { foot = stBadge('unknown', L('state.unreachable')); }
+		else if (h.view === 'offline') { foot = '<span class="st-badge unknown"><i class="bi bi-power"></i> ' + esc(L('state.offline')) + '</span>'; }
 		else if (h.problems) { foot = stBadge(st, h.problems === 1 ? L('ov.problem_one') : L('ov.problem_n', { n: h.problems })); }
 		else if (!h.checked) { foot = '<span class="small text-body-secondary">' + esc(L('ov.waiting')) + '</span>'; }
 		else { foot = '<span class="small text-body-secondary">' + esc(L('ov.services_ok', { n: h.services })) + '</span>'; }
 		var body = '';
 		if (away) { body = ''; } // Stand der zustaendigen Node fehlt: nur der Hinweis
 		else if (h.view === 'unreachable') { body = '<div class="small text-body-secondary mt-2"><i class="bi bi-plug"></i> ' + esc(tx(h.unreach) || L('state.unreachable')) + '</div>'; }
+		else if (h.view === 'offline') { body = '<div class="small text-body-secondary mt-2"><i class="bi bi-power"></i> ' + esc(L('host.offline_hint')) + '</div>'; }
 		else {
 			body = (h.meters || []).map(meter).join('');
 			if (!body && h.text) { body = '<div class="small text-body-secondary mt-2 text-truncate">' + esc(tx(h.text)) + '</div>'; }
@@ -818,8 +834,8 @@ function pageHost() {
 		return a.ok ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-x-circle-fill" title="' + esc(tx(a.error || '')) + '"></i>';
 	}
 	function renderHead() {
-		var h = H.host, st = H.view === 'unreachable' ? 'unknown' : H.state;
-		var badge = H.view === 'maintenance' ? '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>' : H.view === 'unreachable' ? stBadge('unknown', L('state.unreachable')) : H.checked ? stBadge(st) : '<span class="st-badge unknown">' + esc(L('ov.waiting')) + '</span>';
+		var h = H.host, st = H.view === 'unreachable' || H.view === 'offline' ? 'unknown' : H.state;
+		var badge = H.view === 'maintenance' ? '<span class="st-badge maint"><i class="bi bi-cone-striped"></i> ' + esc(L('ov.maint')) + '</span>' : H.view === 'unreachable' ? stBadge('unknown', L('state.unreachable')) : H.view === 'offline' ? '<span class="st-badge unknown"><i class="bi bi-power"></i> ' + esc(L('state.offline')) + '</span>' : H.checked ? stBadge(st) : '<span class="st-badge unknown">' + esc(L('ov.waiting')) + '</span>';
 		if (h.paused) { badge += ' <span class="st-badge unknown"><i class="bi bi-pause-circle"></i> ' + esc(L('ov.paused')) + '</span>'; }
 		var ref = CH && CH.ref, away = clAway();
 		if (away && H.view !== 'maintenance') { badge = stBadge('unknown'); }
@@ -836,6 +852,7 @@ function pageHost() {
 		if (pl) { pl.textContent = h.paused ? L('host.resume') : L('host.pause'); }
 		var al = '';
 		if (H.maint) { al += '<div class="alert alert-warning py-2 small"><i class="bi bi-cone-striped"></i> ' + esc(L('host.in_maint', { r: H.maint.reason || '–', t: H.maint.end ? fmtTime(H.maint.end) : L('mt.until_ended') })) + '</div>'; }
+		if (H.view === 'offline' && !away) { al += '<div class="alert alert-secondary d-flex align-items-center gap-2"><i class="bi bi-power fs-5"></i><div><strong>' + esc(L('state.offline')) + '.</strong> ' + esc(L('host.offline_hint')) + '</div></div>'; }
 		if (H.view === 'unreachable' && !away) { al += '<div class="alert alert-secondary d-flex align-items-center gap-2"><i class="bi bi-plug fs-5"></i><div><strong>' + esc(L('state.unreachable')) + '.</strong> ' + esc(tx(H.unreach || '')) + ' ' + esc(L('host.unreach_hint')) + '</div></div>'; }
 		var note = clNote(ref, clSelf()), at = ref && !ref.here && toDate(ref.at);
 		if (note || at) {
@@ -866,7 +883,7 @@ function pageHost() {
 	function isFree(lv) { return !!(lv && lv.eff && lv.eff.mode === 'free'); }
 	function valueCell(s) {
 		var mt = s.primary >= 0 ? s.metrics[s.primary] : (s.metrics && s.metrics.length && !s.text ? s.metrics[0] : null);
-		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, html = '';
+		var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state, html = '';
 		if (mt) {
 			html = '<span class="fw-semibold">' + esc(fmtVal(mt.value, mt.unit)) + '</span>';
 			if (mt.unit === '%') { html += '<span class="bar"><span class="' + (st === 'ok' ? '' : esc(st)) + '" style="width:' + Math.max(0, Math.min(100, mt.value)) + '%"></span></span>'; }
@@ -910,7 +927,7 @@ function pageHost() {
 			if (!rows.length) { return; }
 			html += '<tr class="svc-cat"><td colspan="7">' + esc((D.cats || {})[c] || c) + '</td></tr>';
 			rows.forEach(function (s) {
-				var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state;
+				var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state;
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
 				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) +
 					(s.detail === 'smart' ? ' <button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1 fw-normal" type="button" data-smart="' + esc(s.key) + '" title="' + esc(L('smart.btn_title')) + '"><i class="bi bi-table"></i> SMART</button>' : '') +
@@ -1247,7 +1264,7 @@ function pageHost() {
 		detailFor = key;
 		$('#m64-sd-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
 		$('#m64-sd-title').textContent = svcName(s);
-		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
+		var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
 		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(tx(s.text || '')) + '</span></div>';
 		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
@@ -1427,7 +1444,7 @@ function pageHost() {
 		H.services.forEach(function (x) { if (x.key === key) { s = x; } });
 		if (!s) { return; }
 		infoFor = key;
-		var st = H.view === 'unreachable' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, list = chartable(s);
+		var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, list = chartable(s);
 		$('#m64-si-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
 		$('#m64-si-title').textContent = svcName(s);
 		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span class="fw-semibold">' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + '</span>' + (s.text ? '<span class="text-body-secondary">' + esc(tx(s.text)) + '</span>' : '') +
@@ -1536,11 +1553,12 @@ function pageHost() {
 			'<div class="col-md-6"><label class="form-label" for="m64-hf-tags">' + esc(L('f.tags')) + '</label><input class="form-control" id="m64-hf-tags" value="' + esc((h.tags || []).join(', ')) + '"><div class="form-text">' + esc(L('f.tags_hint')) + '</div></div>' +
 			'<div class="col-md-6"><label class="form-label" for="m64-hf-iv">' + esc(L('f.interval')) + '</label><select class="form-select" id="m64-hf-iv">' + intervalOpts(h.interval_sec) + '</select></div>' +
 			'<div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-hf-auto"' + (h.agent_autoupdate ? ' checked' : '') + '><label class="form-check-label" for="m64-hf-auto">' + esc(L('f.autoupdate')) + '</label></div></div>' +
+			'<div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-hf-offline"' + (h.offline_ok ? ' checked' : '') + '><label class="form-check-label" for="m64-hf-offline">' + esc(L('f.offline_ok')) + '</label></div><div class="form-text mt-0">' + esc(L('f.offline_ok_hint')) + '</div></div>' +
 			'<div class="col-12"><label class="form-label" for="m64-hf-notes">' + esc(L('f.notes')) + '</label><textarea class="form-control" id="m64-hf-notes" rows="2" maxlength="1000">' + esc(h.notes || '') + '</textarea></div></div>';
 	}
 	function hostFromForm(h) {
 		return { name: $('#m64-hf-name').value, address: $('#m64-hf-addr').value, kind: h.kind, group: $('#m64-hf-group').value, tags: $('#m64-hf-tags').value.split(/[,\s]+/).filter(Boolean),
-			interval_sec: parseInt($('#m64-hf-iv').value, 10), notes: $('#m64-hf-notes').value, paused: h.paused, agent_autoupdate: $('#m64-hf-auto').checked };
+			interval_sec: parseInt($('#m64-hf-iv').value, 10), notes: $('#m64-hf-notes').value, paused: h.paused, offline_ok: $('#m64-hf-offline').checked, agent_autoupdate: $('#m64-hf-auto').checked };
 	}
 	function hostPut(body) { return api('PUT', '/api/monitor64/hosts/' + encodeURIComponent(uid), body); }
 	function accessForm(a) {

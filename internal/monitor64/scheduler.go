@@ -52,6 +52,7 @@ type job struct {
 	next     time.Time
 	idx      int // Position im Heap, -1 = nicht eingeplant
 	running  atomic.Bool
+	again    bool // RunNow waehrend eines Laufs: danach sofort noch einmal (unter Scheduler.mu)
 	st       JobStats
 	gen      uint64 // Erzeugung: ein ersetzter Auftrag plant sich nicht neu ein
 }
@@ -169,10 +170,16 @@ func (s *Scheduler) Remove(key string) {
 	s.poke()
 }
 
-// RunNow stoesst einen Auftrag sofort an (z. B. Trap, "jetzt pruefen"); laeuft er schon, passiert nichts.
+// RunNow stoesst einen Auftrag sofort an (z. B. Trap, "jetzt pruefen"); laeuft er schon, folgt direkt danach ein
+// weiterer Lauf (eine eben gespeicherte Einstellung soll nicht erst im naechsten Intervall wirken, #225).
 func (s *Scheduler) RunNow(key string) {
 	s.mu.Lock()
 	j, ok := s.jobs[key]
+	if ok && j.running.Load() {
+		j.again = true
+		s.mu.Unlock()
+		return
+	}
 	if ok && j.idx >= 0 {
 		j.next = s.now()
 		heap.Fix(&s.h, j.idx)
@@ -309,5 +316,11 @@ func (s *Scheduler) exec(ctx context.Context, j *job) {
 	j.st.Runs++
 	j.st.LastRun = start
 	j.st.LastTook = took
+	again := j.again && j.gen != 0
+	j.again = false
+	j.running.Store(false) // unter mu: RunNow sieht entweder "laeuft" (und setzt again) oder startet selbst
 	s.mu.Unlock()
+	if again {
+		s.RunNow(j.key)
+	}
 }

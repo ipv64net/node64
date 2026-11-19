@@ -6,6 +6,11 @@ Neu:
 
 - Prometheus: `node64_monitor_problems_open` und `node64_monitor_problems_unacked` – offene Probleme, die diese Node führt, und davon nicht quittierte (im Cluster zählt jedes Problem nur bei der zuständigen Node).
 - KI-Schnittstelle (MCP): `monitor64_host` zeigt je Dienst die gerade meldenden und die als in Ordnung bestätigten Regeln, `monitor64_problems` ob ein Problem noch besteht und ob es im Wartungsfenster liegt.
+- Host bearbeiten: Schalter „Darf ausgeschaltet sein“ für Geräte, die nur ab und zu laufen (z. B. ein PC im Partykeller). Ist der Host nicht erreichbar, heißt er „ausgeschaltet“ – keine Meldung, kein Problem, er zählt weder in der Übersicht noch beim Punkt in der Navigation. Läuft er, gelten seine Dienste und Warnungen wie sonst (#229). API: `offline_ok` am Host, `view: offline`.
+
+Behoben:
+
+- „Dauerhaft nicht melden“ und „In Ordnung“ im Dienst-Dialog: Nach dem Speichern stand der Dienst noch bis zur nächsten Abfrage (bis zu einem Intervall) mit seiner Warnung in der Liste, sodass man den Knopf oft mehrfach drückte. Jetzt wartet das Speichern kurz auf die neue Abfrage (höchstens 8 s), der Knopf zeigt dabei einen Spinner, und die Seite zeigt gleich den neuen Zustand. Lief beim Speichern gerade eine Abfrage, ging der Anstoß bisher verloren; jetzt folgt direkt danach eine weitere (#225).
 
 ## 0.1.24 – 2026-11-18
 

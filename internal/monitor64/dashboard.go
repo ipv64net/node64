@@ -21,7 +21,7 @@ func (m *Module) NavState() string {
 	}
 	out := module.NavOK
 	for _, v := range vs {
-		if v.Host == nil || v.Host.Paused || v.Maint != nil {
+		if v.Host == nil || v.Host.Paused || v.Maint != nil || v.View == eval.ViewOffline { // ausgeschaltet (#229) zaehlt nicht
 			continue
 		}
 		if v.View == eval.ViewUnreachable {
@@ -65,7 +65,7 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 		}
 		for _, s := range v.Services {
 			services++
-			if down || v.Host.Paused || s.ShowOnly {
+			if down || v.Host.Paused || v.View == eval.ViewOffline || s.ShowOnly {
 				continue
 			}
 			switch s.State {

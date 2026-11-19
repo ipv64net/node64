@@ -879,6 +879,13 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	}
 	hres = eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs, Services: states})
 
+	// Host darf ausgeschaltet sein (#229): nicht erreichbar heisst "ausgeschaltet" - kein Problem, keine Meldung; die
+	// letzten Werte bleiben, beim naechsten Einschalten gilt wieder alles wie sonst
+	offline := h.OfflineOK && hres.Unreachable && !maint
+	if offline {
+		hres.View = eval.ViewOffline
+	}
+
 	// 4. Probleme und Benachrichtigung
 	unreachDetail := ""
 	if hres.Unreachable {
@@ -889,7 +896,16 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		unreachDetail = strings.Join(errs, "; ")
 	}
 	var hostMem []byte
-	if role == roleReport {
+	if offline {
+		if role == roleReport {
+			m.closeHostProblem(dbctx, h, open, now) // eben erst eingeschaltet, waehrend er schon nicht erreichbar war
+		}
+		m.notifyMu.Lock()
+		if m.notifier != nil { // Gedaechtnis der Meldungen bleibt, wie es ist
+			hostMem, _ = json.Marshal(m.notifier.Hosts[h.UID])
+		}
+		m.notifyMu.Unlock()
+	} else if role == roleReport {
 		m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
 		round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
 		if op := open[""]; op != nil {

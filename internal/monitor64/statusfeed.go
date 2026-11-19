@@ -489,7 +489,7 @@ func statusStateOf(h *Host, v *HostView, key string, inMaint bool) string {
 		return module.StatusMaintenance
 	case statusNoState(v):
 		return module.StatusUnknown
-	case v.View == eval.ViewUnreachable:
+	case v.View == eval.ViewUnreachable || v.View == eval.ViewOffline: // Statusseite: ausgeschaltet ist nicht erreichbar
 		return module.StatusUnreachable
 	}
 	if key != "" {

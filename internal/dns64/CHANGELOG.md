@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.45.0 – unveröffentlicht
+
+### Neu
+- Blocklisten: Eigene Listen lassen sich umbenennen (Stift neben dem Namen; leer = Name aus der Adresse). Der neue Name gilt sofort, auch im Abfrage-Log und bei „Domain prüfen“ – ohne Neustart des DNS-Dienstes und ohne die Liste neu zu laden (#224).
+
+### Behoben
+- Geräte, Abfrage-Log und Top-Clients: IPv6-Adressen ohne Namen (Datenschutz-Adressen, für die der Router keinen Namen kennt) bekommen den Namen der IPv4-Adresse desselben Geräts (gleiche MAC aus Nachbartabelle bzw. DHCP) (#223).
+- Eigener Upstream ließ sich scheinbar nicht löschen: Scheiterte das Speichern, stand die Meldung oben auf der Seite außer Sicht, weil die Seite zum Abschnitt „Upstreams“ springt. Meldungen nach dem Speichern erscheinen jetzt direkt über dem Abschnitt. Gelöscht wird über die Adresse des Upstreams statt über seine Position in der Liste (#231).
+
 ## 1.44.0 – 2026-11-18
 
 ### Geändert

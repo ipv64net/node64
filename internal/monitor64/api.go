@@ -135,6 +135,7 @@ type hostIn struct {
 	IntervalSec  int      `json:"interval_sec"`
 	Notes        string   `json:"notes"`
 	Paused       bool     `json:"paused"`
+	OfflineOK    *bool    `json:"offline_ok"` // nil = unveraendert
 	AgentAutoUpd *bool    `json:"agent_autoupdate"`
 	// ClearSecrets: neue Adresse bestaetigt - die Geheimnisse der Zugaenge, die sonst an die neue Adresse gingen,
 	// werden entfernt (danach neu eingeben)
@@ -253,6 +254,9 @@ func (in *hostIn) apply(h *Host, defInterval int) error {
 	}
 	h.Notes = cleanText(in.Notes, 1000)
 	h.Paused = in.Paused
+	if in.OfflineOK != nil {
+		h.OfflineOK = *in.OfflineOK
+	}
 	if in.AgentAutoUpd != nil {
 		h.AgentAutoUpd = *in.AgentAutoUpd
 	}
@@ -1531,7 +1535,7 @@ func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
 		m.reloadConfig(ctx)
 	}
 	m.audit(r, "service.update", h.Name+" · "+row.Key, strings.Join(details, " "))
-	m.repoll(h.UID)
+	m.repollWait(ctx, h.UID, repollWaitMax) // die Seite laedt danach neu und soll den neuen Zustand zeigen (#225)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -1604,6 +1608,40 @@ func (m *Module) repoll(uid string) {
 	}
 	if s := m.scheduler(); s != nil {
 		s.RunNow("host:" + uid)
+	}
+}
+
+// repollWaitMax: so lange wartet eine Aenderung an einem Dienst hoechstens auf die neue Abfragerunde.
+const repollWaitMax = 8 * time.Second
+
+// repollWait stoesst eine Runde an (wie repoll) und wartet bis zu d, bis eine danach begonnene Runde fertig ist - so
+// zeigt die Oberflaeche nach dem Speichern gleich den neuen Zustand statt bis zum naechsten Intervall den alten.
+// Ueberwacht eine andere Node den Host, wird nur weitergereicht.
+func (m *Module) repollWait(ctx context.Context, uid string, d time.Duration) {
+	if m.forwardRepoll(uid) {
+		return
+	}
+	s := m.scheduler()
+	if s == nil {
+		return
+	}
+	key := "host:" + uid
+	since := s.now()
+	s.RunNow(key)
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
+	end := time.After(d)
+	for {
+		if st, ok := s.Job(key); !ok || !st.LastRun.Before(since) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-end:
+			return
+		case <-t.C:
+		}
 	}
 }
 

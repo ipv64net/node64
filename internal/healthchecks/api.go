@@ -129,13 +129,18 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 	return out
 }
 
-// splitPort: Port aus dem Ziel (host:port) ins Port-Feld, nur fuer Eingaben aus Formular und API.
+// splitPort: Port aus dem Ziel (host:port) ins Port-Feld und https:// vor Web-Adressen ohne Schema, nur fuer Eingaben
+// aus Formular und API.
 func splitPort(c *Check, in *checkJSON) error {
 	params := in.Params
 	if len(params) == 0 {
 		params = c.Params
 	}
-	t, p, err := checks.SplitTargetPort(checks.Type(strings.ToLower(strings.TrimSpace(in.Type))), in.Target, params)
+	typ := checks.Type(strings.ToLower(strings.TrimSpace(in.Type)))
+	if typ == checks.TypeHTTP || typ == checks.TypeKeyword || typ == checks.TypeJSON { // ohne Schema: https:// (#234)
+		in.Target = checks.WithHTTPS(in.Target)
+	}
+	t, p, err := checks.SplitTargetPort(typ, in.Target, params)
 	if err != nil {
 		return err
 	}

@@ -250,6 +250,19 @@
 		}
 	});
 
+	// Meldung nach dem Speichern dort zeigen, wo die Seite hinspringt (Ruecksprung mit #abschnitt): oben stuende sie
+	// ausser Sicht, ein Fehler saehe aus wie "es passiert nichts" (#231)
+	(function () {
+		var fl = document.querySelector("[data-flash]"), id = location.hash.slice(1), target = null;
+		if (!fl || !id || id.indexOf("=") >= 0) { return; }
+		try { target = document.getElementById(decodeURIComponent(id)); } catch (e) { target = null; }
+		if (target && target.parentNode && !target.contains(fl)) {
+			fl.classList.add("mb-3");
+			target.parentNode.insertBefore(fl, target);
+			fl.scrollIntoView({ block: "center" });
+		}
+	})();
+
 	// Erfolgsmeldungen nach einigen Sekunden ausblenden
 	document.querySelectorAll(".alert-success.alert-dismissible").forEach(function (el) {
 		setTimeout(function () {

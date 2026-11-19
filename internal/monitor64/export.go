@@ -17,12 +17,16 @@ import (
 // nur bei Export mit Passwort, verschluesselt mit dem Export-Passwort. Problem-Historie und Verlauf sind nicht im
 // Konfig-Export (Historie im Backup, Verlauf im Backup "mit Statistik").
 
+// colDefaults: spaeter dazugekommene Spalten mit ihrem Wert, wenn ein Export bzw. eine Node einer aelteren Version
+// sie nicht liefert.
+var colDefaults = map[string]any{"offline_ok": int64(0)}
+
 // exportTables: Tabellen mit ihren Spalten (ohne id); uid ist der Schluessel beim Import.
 var exportTables = []struct {
 	name string
 	cols []string
 }{
-	{"m64_hosts", []string{"uid", "name", "address", "kind", "group_name", "tags", "interval_sec", "owner_node", "preferred_node", "backup_nodes", "agent_autoupd", "paused", "notes", "created_at", "created_by", "updated_at", "updated_by", "deleted"}},
+	{"m64_hosts", []string{"uid", "name", "address", "kind", "group_name", "tags", "interval_sec", "owner_node", "preferred_node", "backup_nodes", "agent_autoupd", "paused", "offline_ok", "notes", "created_at", "created_by", "updated_at", "updated_by", "deleted"}},
 	{"m64_access", []string{"uid", "host_uid", "type", "config", "secret", "hostkey", "enabled", "updated_at", "updated_by", "deleted"}},
 	{"m64_services", []string{"uid", "host_uid", "key", "name", "kind", "adopted", "vanished_at", "via", "host_rule", "soll", "report", "updated_at", "updated_by", "deleted"}},
 	{"m64_host_rules", []string{"uid", "host_uid", "kind", "rule", "updated_at", "updated_by", "deleted"}},
@@ -195,7 +199,10 @@ func upsertRow(ctx context.Context, tx *sql.Tx, table string, cols []string, row
 	args := make([]any, len(cols))
 	var sets []string
 	for i, c := range cols {
-		v := row[c]
+		v, ok := row[c]
+		if d, opt := colDefaults[c]; !ok && opt { // Export einer aelteren Version ohne diese Spalte
+			v = d
+		}
 		if f, ok := v.(float64); ok { // JSON-Zahlen
 			v = int64(f)
 		}

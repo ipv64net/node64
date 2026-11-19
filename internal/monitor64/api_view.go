@@ -160,13 +160,17 @@ func (m *Module) overview(ctx context.Context) ovData {
 			}
 			d.Problems = append(d.Problems, p)
 		}
+		away := v.View == eval.ViewOffline // darf ausgeschaltet sein (#229): weder Zaehler noch Probleme
 		var disk *ovMeter
 		for _, s := range v.Services {
 			svcNames[h.UID+"|"+s.Key] = s.Name
 			o.Services++
 			st := s.State
-			if unreach {
+			if unreach || away {
 				st = eval.Unknown
+			}
+			if away {
+				continue
 			}
 			d.Counts[stateName(st)]++
 			if s.Vanished {

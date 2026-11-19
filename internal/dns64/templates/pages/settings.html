@@ -130,7 +130,7 @@
 							<td class="ps-3"><input class="form-check-input" type="checkbox" name="on_{{$i}}" value="1"{{if $u.Enabled}} checked{{end}} aria-label="{{$u.Name}}"></td>
 							<td><b>{{$u.Name}}</b> {{if eq $u.Proto "DNS"}}<span class="badge text-bg-warning" title="{{$.T "dns64.settings.up_plain_title"}}">{{$.T "dns64.settings.up_plain"}}</span>{{else}}<span class="badge text-bg-info">{{$u.Proto}}</span>{{end}}{{if $u.Custom}} <span class="badge text-bg-light">{{$.T "dns64.custom"}}</span>{{end}}<div class="text-body-secondary text-break">{{$u.URL}}</div></td>
 							<td class="font-monospace text-break">{{range $j, $ip := $u.IPs}}{{if $j}}, {{end}}{{$ip}}{{end}}</td>
-							<td class="text-end pe-3">{{if $u.Custom}}<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/upstreams/remove" name="remove" value="{{$i}}" data-confirm="{{$.T "dns64.settings.up_remove_confirm" "name" $u.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>{{end}}</td>
+							<td class="text-end pe-3">{{if $u.Custom}}<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/upstreams/remove" name="remove" value="{{$u.URL}}" data-confirm="{{$.T "dns64.settings.up_remove_confirm" "name" $u.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>{{end}}</td>
 						</tr>{{end}}
 						</tbody>
 					</table>

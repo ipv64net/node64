@@ -66,6 +66,7 @@ const (
 	ViewUnknown     HostView = "unknown"
 	ViewUnreachable HostView = "unreachable"
 	ViewMaintenance HostView = "maintenance"
+	ViewOffline     HostView = "offline" // nicht erreichbar, darf aber ausgeschaltet sein (Host-Schalter, #229)
 )
 
 // HostResult ist der Zustand eines Hosts.

@@ -6,6 +6,11 @@ New:
 
 - Prometheus: `node64_monitor_problems_open` and `node64_monitor_problems_unacked` – open problems held by this node and how many of them are not acknowledged (in a cluster each problem counts only on the responsible node).
 - AI interface (MCP): `monitor64_host` shows per service the rules reporting right now and those confirmed as fine, `monitor64_problems` whether a problem still persists and whether it is in a maintenance window.
+- Edit host: switch "May be switched off" for devices that only run now and then (e.g. a PC in the basement). If the host is unreachable it is shown as "switched off" – no notification, no problem, and it counts neither in the overview nor for the dot in the navigation. While it runs, its services and warnings apply as usual (#229). API: `offline_ok` on the host, `view: offline`.
+
+Fixed:
+
+- "Never report" and "Fine" in the service dialog: after saving, the service stayed in the list with its warning until the next poll (up to one interval), so the button was often pressed several times. Saving now waits briefly for the new poll (at most 8 s), the button shows a spinner meanwhile, and the page shows the new state right away. If a poll was running while saving, the trigger used to be lost; now another poll follows right after it (#225).
 
 ## 0.1.24 – 2026-11-18
 

@@ -1,5 +1,14 @@
 # Changes – DNS64
 
+## 1.45.0 – unreleased
+
+### New
+- Blocklists: custom lists can be renamed (pencil next to the name; empty = name from the address). The new name applies at once, also in the query log and in "Check domain" – without restarting the DNS service and without reloading the list (#224).
+
+### Fixed
+- Devices, query log and top clients: IPv6 addresses without a name (privacy addresses the router has no name for) get the name of the IPv4 address of the same device (same MAC from the neighbour table or DHCP) (#223).
+- A custom upstream seemed impossible to delete: if saving failed, the message was shown at the top of the page out of sight because the page jumps to the "Upstreams" section. Messages after saving now appear right above the section. Deleting uses the address of the upstream instead of its position in the list (#231).
+
 ## 1.44.0 – 2026-11-18
 
 ### Changed

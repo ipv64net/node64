@@ -635,6 +635,7 @@ var clColSpecs = map[string]clColSpec{
 	"interval_sec":  {typ: 'i', lo: 0, hi: 86400},
 	"agent_autoupd": {typ: 'i', lo: 0, hi: 1},
 	"paused":        {typ: 'i', lo: 0, hi: 1},
+	"offline_ok":    {typ: 'i', lo: 0, hi: 1},
 	"enabled":       {typ: 'i', lo: 0, hi: 1},
 	"deleted":       {typ: 'i', lo: 0, hi: 1},
 	"adopted":       {typ: 'i', lo: -1, hi: 1},
@@ -669,6 +670,10 @@ func validateClRow(t *clTable, row map[string]any) error {
 	bad := func(c, why string) error { return fmt.Errorf("monitor64 cluster: %s: field %s %s", t.kind, c, why) }
 	for _, c := range t.cols {
 		v, ok := row[c]
+		if d, opt := colDefaults[c]; !ok && opt { // Node mit aelterer Version (Spalte kam spaeter dazu)
+			v, ok = d, true
+			row[c] = d
+		}
 		if !ok {
 			return bad(c, "missing")
 		}

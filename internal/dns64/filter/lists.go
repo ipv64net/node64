@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -275,6 +276,30 @@ func (m *Manager) SetGlobal(mask uint64) { m.notGlobal.Store(^mask) }
 
 // Global is the mask for devices without a group.
 func (m *Manager) Global() uint64 { return ^m.notGlobal.Load() }
+
+// Rename aendert den Anzeigenamen einer Liste ohne Neuaufbau (Grund im Abfrage-Log, Status, Suche); false = URL
+// nicht geladen.
+func (m *Manager) Rename(url, name string) bool {
+	m.rebuildMu.Lock()
+	defer m.rebuildMu.Unlock()
+	i := slices.IndexFunc(m.lists, func(l List) bool { return l.URL == url })
+	if i < 0 {
+		return false
+	}
+	m.lists[i].Name = name
+	if cur := m.cur.Load(); cur != nil && i < len(cur.names) {
+		n := *cur // Maps bleiben geteilt (nur gelesen), nur die Namen sind neu
+		n.names = slices.Clone(cur.names)
+		n.names[i] = name
+		m.cur.Store(&n)
+	}
+	m.mu.Lock()
+	if i < len(m.status) {
+		m.status[i].Name = name
+	}
+	m.mu.Unlock()
+	return true
+}
 
 func (m *Manager) Status() ([]ListStatus, time.Time) {
 	m.mu.RLock()

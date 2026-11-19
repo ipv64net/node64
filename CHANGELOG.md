@@ -8,6 +8,13 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Account-Klassen und Startseite: neue Zeile „CDN-Subdomains“ (Free 2, Home/Supporter 5, ab Business unbegrenzt); die Startseite zeigt den Verbrauch.
 - PROXY64: Bei einem erreichten Kontingent steht die richtige Grenze da (CDN-Domains, -Subdomains, Portmapper oder Tunnel) statt immer „CDN-Domains belegt“; Karte und Assistent zeigen die Subdomains.
 - Prometheus: neue Werte für den Cluster (ausgesetzte Mitglieder mit Grund, offene Benutzer- und ACME-Konflikte), den Gruppenabgleich mit AD/LDAP (gelungen, letzter Erfolg) und offene Probleme in Monitor64.
+- Monitor64: Schalter „Darf ausgeschaltet sein“ am Host – für Geräte, die nur ab und zu laufen, wird „nicht erreichbar“ nicht gemeldet (#229).
+- Monitor64: „Dauerhaft nicht melden“ und „In Ordnung“ zeigen nach dem Speichern gleich den neuen Zustand statt erst nach der nächsten Abfrage (#225).
+- DNS64: Eigene Blocklisten lassen sich umbenennen (#224); IPv6-Adressen ohne Namen bekommen den Namen der IPv4-Adresse desselben Geräts (#223).
+- DNS64: Meldungen nach dem Speichern stehen direkt über dem Abschnitt, zu dem die Seite springt – ein gescheitertes Löschen eines Upstreams sah vorher aus wie „es passiert nichts“ (#231).
+- Healthchecks: Website-Adressen ohne `http://`/`https://` gelten als `https://` (mit Zertifikatsprüfung); mit Zertifikatswarnung gilt eine Umleitung auf unverschlüsseltes HTTP als gestört (#234).
+- PROXY64: Der CDN64-Tunnel bleibt nach einem Ausfall der Internetverbindung nicht mehr auf dem TCP-Ausweichweg hängen, wechselt von selbst zurück auf QUIC und schließt abgebrochene Verbindungen (z. B. WebSockets) sofort auch zum Dienst.
+- Startseite: Der ganze Kopf einer Karte führt zur Seite, nicht nur der Pfeil (#228).
 - KI-Schnittstelle (MCP): IPAM64 in der Beschreibung und in `api_reference`, dazu die Benutzerverwaltung; mehr Felder bei Monitor64, DNS64 (Hinweise zu Listen, Einträge aus IPAM64) und PROXY64-Streams (CDN64).
 - Lokale API: Beschreibung (`openapi.json`) für Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, Environment und Cluster vervollständigt; `GET /api/group` liefert bei Benutzer-Konflikten auch Rolle, gesperrt und Herkunft.
 

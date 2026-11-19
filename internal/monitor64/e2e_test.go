@@ -202,6 +202,25 @@ func TestEndToEndAgent(t *testing.T) {
 	if last.Kind != notify.KindMonitorUnreachable {
 		t.Fatalf("expected unreachable alert, got %s", last.Kind)
 	}
+	// 6. Host darf ausgeschaltet sein (#229): "ausgeschaltet", das offene "nicht erreichbar" schliesst, keine Meldung
+	amu.Lock()
+	nAlerts := len(*alerts)
+	amu.Unlock()
+	rt.host.OfflineOK = true
+	m.poll(ctx, rt)
+	m.poll(ctx, rt)
+	if v := rt.getView(); v.View != eval.ViewOffline {
+		t.Fatalf("expected offline, got %s", v.View)
+	}
+	if m.loadOpen(ctx, h.UID)[""] != nil {
+		t.Fatal("unreachable problem still open although the host may be switched off")
+	}
+	amu.Lock()
+	got := len(*alerts)
+	amu.Unlock()
+	if got != nAlerts {
+		t.Fatalf("offline host sent %d alerts", got-nAlerts)
+	}
 	// Verlauf hat Werte
 	if err := m.seriesStore().Flush(ctx); err != nil {
 		t.Fatal(err)

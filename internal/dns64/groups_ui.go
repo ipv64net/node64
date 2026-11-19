@@ -53,6 +53,27 @@ func (m *Module) devices(ctx context.Context, e *engine) ([]deviceView, error) {
 		}
 		out = append(out, d)
 	}
+	// Ohne eigenen Namen (meist IPv6: Datenschutz-Adressen haben beim Router keinen PTR) den Namen einer anderen
+	// Adresse desselben Geraets (gleiche MAC, z. B. die IPv4-Adresse) nehmen (#223)
+	type macName struct {
+		name string
+		v4   bool
+	}
+	byMAC := map[string]macName{}
+	for _, d := range out {
+		if d.MAC == "" || d.Name == "" {
+			continue
+		}
+		v4 := !strings.Contains(d.IP, ":")
+		if cur, ok := byMAC[d.MAC]; !ok || (v4 && !cur.v4) { // der Name der IPv4-Adresse geht vor
+			byMAC[d.MAC] = macName{d.Name, v4}
+		}
+	}
+	for i := range out {
+		if out[i].Name == "" && out[i].MAC != "" {
+			out[i].Name = byMAC[out[i].MAC].name
+		}
+	}
 	return out, nil
 }
 

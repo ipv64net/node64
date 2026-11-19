@@ -77,6 +77,6 @@
 </div>{{end}}
 {{define "page_main"}}<main class="flex-grow-1 p-3 p-lg-4 content">
 	{{with .EnvFrom}}<div class="alert alert-info py-2 small d-flex flex-wrap align-items-center gap-2" id="env-from"><i class="bi bi-hdd-stack"></i> <span>{{$.T "environment.opened_from" "name" .FromName}}{{if ne .MaxRole "admin"}} · {{$.T "environment.read_only_badge"}}{{end}}</span>{{if .Back}}<a class="alert-link ms-auto" href="{{.Back}}"><i class="bi bi-arrow-left"></i> {{$.T "environment.back" "name" .FromName}}</a>{{end}}</div>{{end}}
-	{{if .Flash}}<div class="alert alert-{{.Flash.Kind}} alert-dismissible fade show" role="alert">{{.Flash.Text}}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{{end}}
+	{{if .Flash}}<div class="alert alert-{{.Flash.Kind}} alert-dismissible fade show" role="alert" data-flash>{{.Flash.Text}}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{{end}}
 	{{template "content" .}}
 </main>{{end}}

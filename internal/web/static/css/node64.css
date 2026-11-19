@@ -131,6 +131,8 @@ a.stat:hover { background: var(--bs-tertiary-bg); }
 .dash-editing .dash-tools { display: flex; }
 .dash-editing .dash-item > .card { outline: 2px dashed var(--bs-border-color); outline-offset: 2px; }
 .dash-editing .dash-item { cursor: grab; }
+#dash .card-header:has(> a > .bi-arrow-right) { cursor: pointer; } /* ganzer Kopf fuehrt zur Seite (#228) */
+.dash-editing #dash .card-header:has(> a > .bi-arrow-right) { cursor: inherit; }
 .dash-item.dash-hidden { display: none; }
 .dash-editing .dash-item.dash-hidden { display: block; opacity: .45; }
 .dash-item.dash-dragging { opacity: .4; }

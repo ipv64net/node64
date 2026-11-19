@@ -16,6 +16,14 @@
 	function t(k) { return T[k] || k; }
 	function items() { return Array.prototype.slice.call(grid.querySelectorAll(".dash-item")); }
 
+	// Ganzer Kartenkopf fuehrt zur Seite des Pfeils (#228); nicht beim Anpassen und nicht auf Knoepfen und Links im Kopf
+	grid.addEventListener("click", function (e) {
+		if (root.classList.contains("dash-editing") || e.target.closest("a, button, input, select, label")) { return; }
+		var head = e.target.closest(".card-header");
+		var link = head && head.querySelector("a[href] > .bi-arrow-right");
+		if (link) { location.href = link.parentNode.getAttribute("href"); }
+	});
+
 	// ---------- Anpassen ----------
 
 	function setEditing(on) {

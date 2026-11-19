@@ -130,6 +130,20 @@ func (m *Module) syncProblems(ctx context.Context, h *Host, open map[string]*ope
 	}
 }
 
+// closeHostProblem schliesst ein offenes "nicht erreichbar" des Hosts (Host darf ausgeschaltet sein, #229).
+func (m *Module) closeHostProblem(ctx context.Context, h *Host, open map[string]*openProblem, at time.Time) {
+	p := open[""]
+	if p == nil {
+		return
+	}
+	res, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = 'ok', closed_at = ?, closed_how = 'auto', closed_by = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`,
+		ts(at), SystemActor.json(), tsNow(), p.UID)
+	delete(open, "")
+	if n, _ := res.RowsAffected(); err == nil && n > 0 {
+		m.event(ctx, p.UID, h.UID, "", "ok", i18nText("monitor64.detail.offline_ok"), SystemActor, at)
+	}
+}
+
 // recordNotified merkt, an welche Kanaele ein Problem gemeldet wurde (Ablauf "gemeldet an ...").
 func (m *Module) recordNotified(ctx context.Context, h *Host, lines []eval.Line, at time.Time) {
 	if len(lines) == 0 {
@@ -230,7 +244,7 @@ func failingIn(v *HostView, svcKey string) bool {
 	if svcKey == "" {
 		return v.View == eval.ViewUnreachable
 	}
-	if v.View == eval.ViewUnreachable {
+	if v.View == eval.ViewUnreachable || v.View == eval.ViewOffline {
 		return false
 	}
 	for _, s := range v.Services {
