@@ -3,6 +3,7 @@
 ## 0.6.3 – unveröffentlicht
 
 - Präfix und Adresse bearbeiten: Beim Feld „Tags“ werden die schon vergebenen Tags vorgeschlagen (#193).
+- Adressen ohne Namen (nur in der Nachbartabelle gesehen, z. B. wenn die FRITZ!Box DHCP macht) bekommen den Rechnernamen, den DNS64 beim Router erfragt – wie in der Geräteliste von DNS64. Eigene Namen gehen vor (Forum 5228).
 
 ## 0.6.2 – 2026-11-15
 

@@ -4,8 +4,10 @@
 
 ### Added
 - Navigation: next to "Healthchecks" a small pulsing dot shows the overall state like for Monitor64 – green all fine, yellow-orange degraded, stabilizing or without a current measurement, red down (also flapping). Paused checks, checks never measured and checks in a maintenance window do not count; no dot without checks.
-
 - Check form: the "Tags" field suggests tags already in use (#193).
+
+### Fixed
+- Dashboard, "Last incidents": an open incident of a paused check is shown grey as "Paused" instead of red as down.
 
 ### Changed
 - Website, keyword and JSON checks: an address without `http://` or `https://` is saved as `https://` – the site then needs a valid certificate and the expiry warning applies. For unencrypted HTTP write `http://` in front. Existing checks stay as they are until they are saved again. With a certificate warning (days > 0), a redirect from HTTPS to unencrypted HTTP counts as down (#234).

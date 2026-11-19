@@ -366,6 +366,30 @@ func (m *Module) Snapshot(ctx context.Context) (*Snapshot, error) {
 	return s, nil
 }
 
+// routerNames: Adressen ohne Namen (z. B. nur in der Nachbartabelle gesehen, DHCP macht der Router) bekommen den
+// Rechnernamen, den DNS64 kennt - meist per Rueckwaertssuche beim Router (Forum 5228). Nur Anzeige: Bewertung und
+// Konflikte haengen nicht daran. DNS64 merkt sich die Antworten des Routers, das kostet je Aufbau also kaum etwas.
+func (m *Module) routerNames(ctx context.Context, all map[netip.Addr]*acc) {
+	if m.dns.Names == nil || !m.DNS64Running() {
+		return
+	}
+	var ips []string
+	for ip, a := range all {
+		if a.e.Name == "" && !ip.IsLinkLocalUnicast() {
+			ips = append(ips, ip.String())
+		}
+	}
+	if len(ips) == 0 {
+		return
+	}
+	names := m.dns.Names(ctx, ips)
+	for ip, a := range all {
+		if n := names[ip.String()]; n != "" && a.e.Name == "" {
+			a.name(n, "")
+		}
+	}
+}
+
 func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 	now := m.now()
 	nets, err := m.nets(ctx)
@@ -508,6 +532,7 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 			a.name(l.s.Name, l.s.Note)
 		}
 	}
+	m.routerNames(ctx, all)
 	for ip, a := range all {
 		n := snap.NetOf(ip)
 		e := a.e

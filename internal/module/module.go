@@ -269,6 +269,7 @@ type IncidentInfo struct {
 	StartedAt time.Time
 	EndedAt   time.Time
 	Open      bool
+	Paused    bool // Check pausiert: eine offene Stoerung ist nicht mehr aktuell (grau statt rot)
 	Message   string
 
 	Source   string // Titel-Schluessel des Moduls (Abzeichen in der gemeinsamen Liste), leer = Healthchecks

@@ -4,8 +4,10 @@
 
 ### Neu
 - Navigation: Neben „Healthchecks“ zeigt ein kleiner pulsierender Punkt den Gesamtzustand wie bei Monitor64 – grün alles in Ordnung, gelb-orange eingeschränkt, stabilisierend oder ohne aktuelle Messung, rot gestört (auch flatternd). Pausierte Checks, noch nie gemessene und Checks im Wartungsfenster zählen nicht; ohne Checks kein Punkt.
-
 - Check-Formular: Beim Feld „Tags“ werden die schon vergebenen Tags vorgeschlagen (#193).
+
+### Behoben
+- Startseite, „Letzte Störungen“: Eine offene Störung eines pausierten Checks steht grau als „Pausiert“ statt rot als gestört.
 
 ### Geändert
 - Website-, Keyword- und JSON-Checks: Eine Adresse ohne `http://` bzw. `https://` gilt beim Speichern als `https://` – die Seite muss dann ein gültiges Zertifikat haben, die Ablaufwarnung greift. Für unverschlüsseltes HTTP `http://` davorschreiben. Bestehende Checks bleiben, bis sie das nächste Mal gespeichert werden. Mit Zertifikatswarnung (Tage > 0) gilt eine Umleitung von HTTPS auf unverschlüsseltes HTTP als gestört (#234).

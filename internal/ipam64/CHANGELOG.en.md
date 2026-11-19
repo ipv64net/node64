@@ -3,6 +3,7 @@
 ## 0.6.3 – unreleased
 
 - Edit prefix and address: the "Tags" field suggests tags already in use (#193).
+- Addresses without a name (only seen in the neighbour table, e.g. when the FRITZ!Box does DHCP) get the host name DNS64 asks the router for – as in the DNS64 device list. Own names take precedence (forum 5228).
 
 ## 0.6.2 – 2026-11-15
 

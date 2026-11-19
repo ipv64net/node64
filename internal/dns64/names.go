@@ -30,6 +30,12 @@ func (m *Module) clientNames(ctx context.Context, e *engine, ips []string) map[s
 	return out
 }
 
+// ClientNames: Namen fuer Client-Adressen wie im Abfrage-Log (Gruppe, eigene Eintraege, Router; IPAM64). Laeuft
+// DNS64 nicht, kommen nur die eigenen Namen ohne Router.
+func (m *Module) ClientNames(ctx context.Context, ips []string) map[string]string {
+	return m.clientNames(ctx, m.running(), ips)
+}
+
 // namesByMAC: Adressen ohne Namen (meist IPv6-Datenschutz-Adressen, fuer die der Router keinen PTR hat) bekommen den
 // Namen einer IPv4-Adresse desselben Geraets (gleiche MAC laut Nachbartabelle bzw. DHCP, #223).
 func (m *Module) namesByMAC(ctx context.Context, e *engine, ips []string, out map[string]string) {

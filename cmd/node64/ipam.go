@@ -34,6 +34,7 @@ func newIPAM(st *store.Store, log *slog.Logger, modules *module.Registry, dns *d
 		Release:           dns.ReleaseIPAM,
 		Batch:             dns.IPAMBatch,
 		Check:             dns64.IPAMCheck,
+		Names:             dns.ClientNames, // Rechnernamen vom Router fuer Adressen ohne Namen (Forum 5228)
 		Entries: func(ctx context.Context) (ipam64.Owned, error) {
 			st, err := dns.IPAMEntries(ctx)
 			var o ipam64.Owned

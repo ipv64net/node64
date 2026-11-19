@@ -1351,8 +1351,10 @@ func (m *Module) Dashboard(ctx context.Context) (*module.DashboardInfo, error) {
 	}
 	info := &module.DashboardInfo{Module: Name, TitleKey: "nav.healthchecks", Image: "health64.svg", Path: "/healthchecks"}
 	names := map[string]string{}
+	paused := map[string]bool{}
 	for _, c := range list {
 		names[c.Token] = c.Name
+		paused[c.Token] = c.Paused
 		rt := m.liveRuntime(c)
 		if c.Paused { // pausierte Online-Checks laufen nicht im lokalen Scheduler
 			rt.State = scheduler.StatePaused
@@ -1374,7 +1376,8 @@ func (m *Module) Dashboard(ctx context.Context) (*module.DashboardInfo, error) {
 	}
 	inc, _ := m.st.Incidents(ctx, "", 8)
 	for _, i := range inc {
-		info.Incidents = append(info.Incidents, module.IncidentInfo{Name: names[i.Token], Path: "/healthchecks/" + i.Token, StartedAt: i.StartedAt, EndedAt: i.EndedAt, Open: i.Open, Message: i.Message})
+		info.Incidents = append(info.Incidents, module.IncidentInfo{Name: names[i.Token], Path: "/healthchecks/" + i.Token, StartedAt: i.StartedAt, EndedAt: i.EndedAt, Open: i.Open,
+			Paused: i.Open && paused[i.Token], Message: i.Message})
 	}
 	return info, nil
 }

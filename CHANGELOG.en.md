@@ -18,6 +18,8 @@ Short summary of what changes per version. Details per module are in the node un
 - Navigation: the version number at the bottom left links to the changes on GitHub (#147).
 - Monitor64: multiple selection of services on the host page – stop reporting, report again or ignore together, adopt ignored ones together (#182).
 - Healthchecks, Monitor64, IPAM64: entering tags suggests the ones already in use (#193).
+- IPAM64: addresses without a name get the host name from the router (via DNS64), e.g. with DHCP on the FRITZ!Box.
+- Dashboard: incidents of paused checks are shown grey as "Paused" under "Last incidents" instead of red.
 - AI interface (MCP): IPAM64 in the description and in `api_reference`, plus user management; more fields for Monitor64, DNS64 (list hints, records from IPAM64) and PROXY64 streams (CDN64).
 - Local API: description (`openapi.json`) completed for Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, environment and cluster; `GET /api/group` also returns role, disabled and source for user conflicts.
 

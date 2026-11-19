@@ -70,6 +70,9 @@ type DNS64 struct {
 	Batch func(ctx context.Context, fn func(context.Context) error) error
 	// Check liefert einen Kontext, in dem die Aufrufe nur pruefen und nichts schreiben (nil = ohne Vorpruefung)
 	Check func(ctx context.Context) context.Context
+	// Names: Rechnernamen, die DNS64 fuer Client-Adressen kennt (Geraetegruppe, eigene Eintraege, Rueckwaertssuche
+	// beim Router, z. B. FRITZ!Box) - fuer Adressen, zu denen IPAM64 sonst keinen Namen hat (nil = keine)
+	Names func(ctx context.Context, ips []string) map[string]string
 }
 
 // batch fuehrt fn als Stapel in DNS64 aus (Import, Assistent, Umnummerieren, Abgleich: tausende Adressen ohne
