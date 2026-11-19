@@ -8,6 +8,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/metrics"
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/procstat"
 )
 
 // apiMetrics: Kennzahlen von Kern und laufenden Modulen im Textformat von Prometheus (docs/PROMETHEUS.md).
@@ -30,6 +31,27 @@ func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 	m.Gauge("go_memstats_heap_alloc_bytes", "Belegter Heap.", float64(ms.HeapAlloc))
 	m.Gauge("go_memstats_sys_bytes", "Vom Betriebssystem bezogener Speicher.", float64(ms.Sys))
 	m.Counter("go_gc_cycles_total", "Abgeschlossene GC-Laeufe.", float64(ms.NumGC))
+
+	// Eigener Prozess und Speicherplatz (nur unter Linux): Namen wie beim ueblichen Prometheus-Prozess-Collector
+	m.Gauge("node64_cpu_cores", "Kerne, die Node64 nutzen kann.", float64(runtime.NumCPU()))
+	if ps, ok := procstat.Self(); ok {
+		m.Counter("process_cpu_seconds_total", "Verbrauchte CPU-Zeit des Prozesses (Anwendung und Kernel).", ps.CPUSeconds)
+		m.Gauge("process_resident_memory_bytes", "Belegter Arbeitsspeicher des Prozesses (RSS).", float64(ps.RSS))
+		m.Gauge("process_virtual_memory_bytes", "Virtueller Speicher des Prozesses.", float64(ps.VSize))
+		m.Gauge("process_threads", "Threads des Prozesses.", float64(ps.Threads))
+		m.Gauge("process_open_fds", "Offene Dateien und Verbindungen des Prozesses.", float64(ps.OpenFDs))
+		if ps.MaxFDs > 0 {
+			m.Gauge("process_max_fds", "Grenze fuer offene Dateien und Verbindungen.", float64(ps.MaxFDs))
+		}
+		m.Gauge("process_start_time_seconds", "Startzeit des Prozesses (Unix-Zeit).", float64(s.StartedAt.Unix()))
+	}
+	if lim, ok := procstat.MemoryLimit(); ok {
+		m.Gauge("node64_memory_limit_bytes", "Speichergrenze des Containers (fehlt ohne Grenze).", float64(lim))
+	}
+	if d, ok := procstat.DiskOf(s.Cfg.DataDir); ok {
+		m.Gauge("node64_data_disk_size_bytes", "Groesse des Dateisystems, auf dem das Datenverzeichnis liegt.", float64(d.Size))
+		m.Gauge("node64_data_disk_free_bytes", "Freier Speicherplatz fuer das Datenverzeichnis.", float64(d.Free))
+	}
 
 	for _, st := range s.Modules.List(ctx) {
 		if !st.Info.Available {

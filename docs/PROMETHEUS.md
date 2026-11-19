@@ -58,6 +58,13 @@ beim API-Key „zuletzt benutzt“. Falsche Keys bremst Node64 wie bei der übri
 | `node64_mcp_enabled` | | MCP-Schnittstelle (KI-Anwendungen) eingeschaltet, 1/0 ([MCP.md](MCP.md)) |
 | `node64_mcp_calls_total` | `tool`, `result` (`ok`, `error`) | Werkzeugaufrufe über MCP seit dem Start (Counter) |
 | `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_sys_bytes`, `go_gc_cycles_total` | | Laufzeit von Go |
+| `process_cpu_seconds_total` | | verbrauchte CPU-Zeit von Node64 (Counter); `rate(...)` ergibt die genutzten Kerne |
+| `process_resident_memory_bytes`, `process_virtual_memory_bytes` | | belegter Arbeitsspeicher (RSS) und virtueller Speicher von Node64 |
+| `process_threads`, `process_open_fds`, `process_max_fds` | | Threads, offene Dateien und Verbindungen, Grenze dafür |
+| `process_start_time_seconds` | | Start des Prozesses (Unix-Zeit), wie `node64_start_time_seconds` |
+| `node64_cpu_cores` | | Kerne, die Node64 nutzen kann |
+| `node64_memory_limit_bytes` | | Speichergrenze des Containers; fehlt ohne Grenze |
+| `node64_data_disk_size_bytes`, `node64_data_disk_free_bytes` | | Größe und freier Platz des Dateisystems, auf dem das Datenverzeichnis (`/data`) liegt |
 | `node64_scrape_duration_seconds` | | Dauer der Abfrage |
 
 ## Healthchecks

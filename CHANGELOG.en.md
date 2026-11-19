@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Prometheus: Node64 now also exposes the values of its own process (CPU time, memory, threads, open files) and the disk space of the data directory – a dashboard for Node64 itself no longer needs cAdvisor for that.
+
 ## 1.7.10 – 2026-11-19
 
 - Healthchecks: pulsing state dot next to "Healthchecks" in the navigation (green, yellow-orange, red) like for Monitor64.

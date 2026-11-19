@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,17 @@ func TestAPIMetrics(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in\n%s", want, body)
+		}
+	}
+	if runtime.GOOS == "linux" { // Prozesswerte und Speicherplatz gibt es nur unter Linux
+		for _, want := range []string{
+			"# TYPE process_cpu_seconds_total counter\nprocess_cpu_seconds_total ",
+			"process_resident_memory_bytes ", "process_open_fds ", "process_max_fds ", "process_threads ",
+			"node64_data_disk_size_bytes ", "node64_data_disk_free_bytes ", "node64_cpu_cores ",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("missing %q in\n%s", want, body)
+			}
 		}
 	}
 	// gestoppte Module liefern nichts

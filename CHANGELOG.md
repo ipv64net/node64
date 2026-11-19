@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Prometheus: Node64 liefert jetzt auch die Werte des eigenen Prozesses (CPU-Zeit, Arbeitsspeicher, Threads, offene Dateien) und den Speicherplatz des Datenverzeichnisses – ein Dashboard für Node64 selbst braucht dafür kein cAdvisor mehr.
+
 ## 1.7.10 – 2026-11-19
 
 - Healthchecks: pulsierender Zustandspunkt neben „Healthchecks“ in der Navigation (grün, gelb-orange, rot) wie bei Monitor64.
