@@ -1,6 +1,6 @@
 # Changes – PROXY64
 
-## 1.57.0 – unreleased
+## 1.57.0 – 2026-11-19
 
 ### Added
 - CDN64 quota: the dashboard card, the setup wizard and the metrics now show the CDN subdomains next to the CDN domains (names below a domain that is already in CDN64; per account, e.g. Free 2, Home/Supporter 5, unlimited from Business).

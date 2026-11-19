@@ -1,6 +1,6 @@
 # Changes – Healthchecks
 
-## 3.3.0 – unreleased
+## 3.3.0 – 2026-11-19
 
 ### Added
 - Navigation: next to "Healthchecks" a small pulsing dot shows the overall state like for Monitor64 – green all fine, yellow-orange degraded, stabilizing or without a current measurement, red down (also flapping). Paused checks, checks never measured and checks in a maintenance window do not count; no dot without checks.

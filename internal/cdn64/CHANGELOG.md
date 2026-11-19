@@ -1,6 +1,6 @@
 # Änderungen – PROXY64
 
-## 1.57.0 – unveröffentlicht
+## 1.57.0 – 2026-11-19
 
 ### Neu
 - CDN64-Kontingent: Die Startseiten-Karte, der Einrichtungs-Assistent und die Metriken zeigen neben den CDN-Domains jetzt auch die CDN-Subdomains (Namen unter einer Domain, die schon in CDN64 ist; je Account, z. B. Free 2, Home/Supporter 5, ab Business unbegrenzt).

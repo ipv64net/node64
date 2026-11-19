@@ -1,6 +1,6 @@
 # Changes – DNS64
 
-## 1.45.0 – unreleased
+## 1.45.0 – 2026-11-19
 
 ### New
 - Blocklists: custom lists can be renamed (pencil next to the name; empty = name from the address). The new name applies at once, also in the query log and in "Check domain" – without restarting the DNS service and without reloading the list (#224).

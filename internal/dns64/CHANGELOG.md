@@ -1,6 +1,6 @@
 # Änderungen – DNS64
 
-## 1.45.0 – unveröffentlicht
+## 1.45.0 – 2026-11-19
 
 ### Neu
 - Blocklisten: Eigene Listen lassen sich umbenennen (Stift neben dem Namen; leer = Name aus der Adresse). Der neue Name gilt sofort, auch im Abfrage-Log und bei „Domain prüfen“ – ohne Neustart des DNS-Dienstes und ohne die Liste neu zu laden (#224).
