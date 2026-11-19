@@ -201,21 +201,34 @@ func (e *Edge) passthrough(conn net.Conn, data []byte, rt *Route) {
 	Pipe(conn, up)
 }
 
-// Pipe kopiert in beide Richtungen, bis eine Seite schliesst, und schliesst dann beide.
+// Pipe kopiert in beide Richtungen, bis eine Seite schliesst, und schliesst dann beide. Nach einem sauberen Ende
+// wird halb geschlossen, nach einem Abbruch (Tunnel weg, Verbindung zurueckgesetzt) sofort beide Seiten ganz.
 func Pipe(a, b net.Conn) (ab, ba int64) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ba, _ = io.Copy(a, b)
-		closeWrite(a)
+		var err error
+		ba, err = io.Copy(a, b)
+		endCopy(a, b, err)
 	}()
-	ab, _ = io.Copy(b, a)
-	closeWrite(b)
+	var err error
+	ab, err = io.Copy(b, a)
+	endCopy(b, a, err)
 	wg.Wait()
 	_ = a.Close()
 	_ = b.Close()
 	return ab, ba
+}
+
+// endCopy beendet eine Richtung (src -> dst): sauberes Ende = dst halb schliessen, Fehler = beide ganz schliessen.
+func endCopy(dst, src net.Conn, err error) {
+	if err != nil {
+		_ = dst.Close()
+		_ = src.Close()
+		return
+	}
+	closeWrite(dst)
 }
 
 func closeWrite(c net.Conn) {

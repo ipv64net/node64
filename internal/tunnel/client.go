@@ -336,15 +336,43 @@ type errRejected struct{ msg string }
 
 func (e errRejected) Error() string { return "rejected by server: " + e.msg }
 
+// quicProbeEvery: so oft prueft eine Verbindung ueber den TCP-Ausweichweg, ob QUIC wieder geht (Variable fuer Tests).
+var quicProbeEvery = 5 * time.Minute
+
+// quicSwitchBusy: so lange nach dem ersten erfolgreichen Versuch wartet der Wechsel zurueck auf QUIC auf einen Moment
+// ohne offene Besucher-Streams (WebSockets, Downloads); danach wechselt er trotzdem (Variable fuer Tests).
+var quicSwitchBusy = 30 * time.Minute
+
 func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 	backoff := time.Second
-	quicFails := 0
+	udpBlocked := false // QUIC scheiterte, waehrend TCP ging (nicht: ganzes Netz weg)
 	var lastQUIC time.Time
-	port := 0 // zuletzt erfolgreicher Port (0 = noch keiner)
-	offs := 0 // Ablehnungen wegen der Grenze des Servers in Folge
+	port := 0        // zuletzt erfolgreicher Port (0 = noch keiner)
+	offs := 0        // Ablehnungen wegen der Grenze des Servers in Folge
+	var next Session // schon angemeldete Verbindung (Wechsel zurueck auf QUIC aus serve)
 	for ctx.Err() == nil {
-		useTCP := c.forceTCP || quicFails >= 2 && time.Since(lastQUIC) < 5*time.Minute // alle 5 Minuten QUIC erneut versuchen
-		sess, err := c.connect(ctx, e, slot, useTCP, port)
+		var sess Session
+		var err error
+		if next != nil {
+			sess, next = next, nil
+		} else {
+			useTCP := c.forceTCP || udpBlocked && time.Since(lastQUIC) < quicProbeEvery // QUIC regelmaessig erneut versuchen
+			sess, err = c.connect(ctx, e, slot, useTCP, port)
+			if !useTCP {
+				lastQUIC = time.Now()
+				if err == nil {
+					udpBlocked = false
+				} else if quicOnlyFailure(ctx, err) {
+					// QUIC scheitert: gleich in derselben Runde ueber TCP. Klappt das, ist UDP der Grund; scheitert auch
+					// TCP, ist das Netz weg - dann bleibt QUIC der erste Versuch, sobald es wieder da ist
+					if tsess, terr := c.connect(ctx, e, slot, true, port); terr == nil {
+						sess, err, udpBlocked = tsess, nil, true
+					} else if errors.Is(terr, errSlotOff) || errors.As(terr, new(errRejected)) {
+						err = terr
+					}
+				}
+			}
+		}
 		if errors.Is(err, errSlotOff) {
 			c.update(ctx, e.Name, slot, func(s *edgeState) { s.off, s.Connected, s.LastError = true, false, err.Error() })
 			c.cfg.Log.Info("tunnel: parallel session not allowed by the server", "edge", e.Name, "slot", slot)
@@ -371,19 +399,12 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 			if _, p, perr := net.SplitHostPort(sess.RemoteAddr().String()); perr == nil {
 				port, _ = strconv.Atoi(p)
 			}
-		}
-		if !useTCP {
-			lastQUIC = time.Now()
-			var rej errRejected
-			if err != nil && !errors.As(err, &rej) && ctx.Err() == nil {
-				quicFails++
-			} else if err == nil {
-				quicFails = 0
-			}
-		}
-		if err == nil {
 			start := time.Now()
-			c.serve(ctx, e, slot, sess)
+			next = c.serve(ctx, e, slot, sess, udpBlocked, port)
+			if next != nil { // nahtlos auf QUIC gewechselt: die neue Verbindung steht schon
+				udpBlocked, lastQUIC, backoff = false, time.Now(), time.Second
+				continue
+			}
 			if time.Since(start) > 30*time.Second {
 				backoff = time.Second
 			}
@@ -393,7 +414,7 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 			break
 		}
 		c.update(ctx, e.Name, slot, func(s *edgeState) {
-			s.LastError, s.UDPBlocked = err.Error(), quicFails >= 2
+			s.LastError, s.UDPBlocked = err.Error(), udpBlocked
 			if s.Connected || s.Since.IsZero() {
 				s.Since = time.Now()
 			}
@@ -407,8 +428,25 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 		}
 		backoff = min(backoff*2, time.Minute)
 	}
+	if next != nil {
+		_ = next.Close("shutdown")
+	}
 	c.update(ctx, e.Name, slot, func(s *edgeState) { s.Connected, s.sess = false, nil })
 }
+
+// quicOnlyFailure: ein gescheiterter QUIC-Versuch, bei dem sich ein Versuch ueber TCP lohnt - nicht bei Ablehnung
+// durch den Server (Token, Grenze), nicht ohne Adresse (Namensaufloesung, also das Netz, scheitert) und nicht beim
+// Beenden.
+func quicOnlyFailure(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil || errors.Is(err, errSlotOff) || errors.Is(err, errNoAddress) {
+		return false
+	}
+	var rej errRejected
+	return !errors.As(err, &rej)
+}
+
+// errNoAddress: der Name des Servers liess sich nicht aufloesen (meist: Netz weg).
+var errNoAddress = errors.New("no address")
 
 // addrs: Adressen des Servers, IPv6 zuerst (Zielgruppe nur IPv6), bei DNS-Fehler die hinterlegten IPs.
 func addrs(ctx context.Context, e Edge) []net.IP {
@@ -454,7 +492,7 @@ func (c *Client) connect(ctx context.Context, e Edge, slot int, useTCP bool, pre
 	}
 	ips := c.resolve(ctx, e)
 	if len(ips) == 0 {
-		return nil, fmt.Errorf("%s: no address", e.Host)
+		return nil, fmt.Errorf("%s: %w", e.Host, errNoAddress)
 	}
 	var lastErr error
 	for _, port := range ports {
@@ -553,11 +591,14 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string, slot int)
 	return nil
 }
 
-// serve nimmt Daten-Streams an, bis die Verbindung endet.
-func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
+// serve nimmt Daten-Streams an, bis die Verbindung endet. Laeuft sie ueber den TCP-Ausweichweg, prueft serve
+// regelmaessig, ob QUIC wieder geht, und meldet sich dann ueber QUIC neu an (der Server ersetzt die Verbindung
+// dieses Slots); die neue Verbindung kommt zurueck (sonst nil).
+func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session, udpBlocked bool, port int) Session {
 	c.update(ctx, e.Name, slot, func(s *edgeState) {
 		s.Connected, s.Transport, s.Addr, s.Since, s.LastError, s.sess, s.off = true, sess.Transport(), sess.RemoteAddr().String(), time.Now(), "", sess, false
 		s.RTTms = float64(sess.RTT().Microseconds()) / 1000
+		s.UDPBlocked = udpBlocked && sess.Transport() != "quic"
 		s.Reconnects++
 	})
 	c.cfg.Log.Info("tunnel: connected", "edge", e.Name, "slot", slot, "transport", sess.Transport(), "addr", sess.RemoteAddr().String())
@@ -587,10 +628,20 @@ func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
 		}
 	}
 	c.mu.Unlock()
+	var switched chan Session // Ergebnis von backToQUIC (genau ein Wert, nil = nicht gewechselt)
+	if sess.Transport() != "quic" && !c.forceTCP {
+		switched = make(chan Session, 1)
+		go func() { switched <- c.backToQUIC(sctx, e, slot, sess, es, port) }()
+	}
 	for {
 		st, err := sess.AcceptStream(sctx)
 		if err != nil {
-			return
+			if switched != nil {
+				// Ersetzt der Server die alte Verbindung, waehrend die neue sich gerade anmeldet, endet die alte vor
+				// der Rueckmeldung: auf das Ergebnis warten, sonst bliebe die neue Verbindung unbedient
+				return <-switched
+			}
+			return nil
 		}
 		go func() {
 			_ = st.SetReadDeadline(time.Now().Add(10 * time.Second))
@@ -608,6 +659,72 @@ func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
 			c.cfg.Handler(&countedStream{Stream: st, n: &es.streams}, h)
 		}()
 	}
+}
+
+// backToQUIC: Verbindung ueber TCP prueft alle quicProbeEvery, ob QUIC wieder geht (nach einem Ausfall oder einer
+// kurzen UDP-Stoerung soll der Tunnel nicht auf dem langsameren Weg bleiben). Gewechselt wird, sobald keine
+// Besucher-Streams offen sind - laufende WebSockets und Downloads brechen sonst ab -, spaetestens nach
+// quicSwitchBusy. Erst steht die neue Verbindung (der Server ersetzt damit die alte), dann endet die alte: kein
+// Moment ohne Tunnel.
+func (c *Client) backToQUIC(ctx context.Context, e Edge, slot int, old Session, es *edgeState, port int) Session {
+	t := time.NewTicker(quicProbeEvery)
+	defer t.Stop()
+	var since time.Time // QUIC geht seit (erster erfolgreicher Versuch)
+	check := time.Duration(0)
+	for {
+		var quick <-chan time.Time
+		if !since.IsZero() { // QUIC geht, wartet auf einen freien Moment: oefter nachsehen
+			check = min(max(check*2, time.Second), 15*time.Second)
+			quick = time.After(check)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-old.Done():
+			return nil
+		case <-t.C:
+		case <-quick:
+		}
+		if since.IsZero() {
+			if !c.quicReachable(ctx, e, port) {
+				continue
+			}
+			since = time.Now()
+		}
+		if es.streams.Load() > 0 && time.Since(since) < quicSwitchBusy {
+			continue
+		}
+		sess, err := c.connect(ctx, e, slot, false, port)
+		if err != nil {
+			since, check = time.Time{}, 0
+			continue
+		}
+		c.cfg.Log.Info("tunnel: back on QUIC", "edge", e.Name, "slot", slot, "open_streams", es.streams.Load())
+		_ = old.Close("quic")
+		return sess
+	}
+}
+
+// quicReachable: kurzer QUIC-Handschlag ohne Anmeldung (prueft nur, ob UDP zum Server durchkommt).
+func (c *Client) quicReachable(ctx context.Context, e Edge, port int) bool {
+	ips := c.resolve(ctx, e)
+	if len(ips) == 0 {
+		return false
+	}
+	if port == 0 {
+		port = e.Port
+		if port == 0 {
+			port = 7844
+		}
+	}
+	dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	qc, err := quic.DialAddr(dctx, hostPort(ips[0].String(), port), c.tlsConfig(e), QUICConfig())
+	if err != nil {
+		return false
+	}
+	_ = qc.CloseWithError(0, "probe")
+	return true
 }
 
 // countedStream zaehlt offene Streams bis zum Schliessen (der Handler darf asynchron weitermachen).

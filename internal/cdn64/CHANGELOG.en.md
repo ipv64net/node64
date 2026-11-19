@@ -7,6 +7,9 @@
 
 ### Fixed
 - When a limit is reached, PROXY64 now names the right one – CDN domains, CDN subdomains, port mappings or tunnels. Before, every limit read "The CDN domain limit is used up", even when subdomains or port mappings were full.
+- CDN64 tunnel after an internet outage: every failed attempt during the outage counted as "UDP blocked", afterwards the tunnel stayed on the slower TCP fallback and kept showing "UDP blocked". Now the node tries TCP right after a failed QUIC attempt; only if that works is UDP considered blocked – if the whole network is gone, QUIC stays the first attempt. While the tunnel runs over TCP it checks every 5 minutes whether QUIC works again and switches back seamlessly as soon as no visitor connection is open (after 30 minutes at the latest).
+- If the tunnel breaks in the middle of a connection (e.g. a WebSocket during a network outage), the node now closes the connection to the service at home right away as well. Before, it stayed open until the service sent something itself – with applications allowing one session per user this blocked the new connection.
+- TCP fallback: the tunnel keepalive has more time (30 instead of 15 s). With a slow upload and a lot of traffic (WebSockets, downloads) the tunnel otherwise broke and kept reconnecting under load.
 
 ## 1.56.9 – 2026-11-17
 

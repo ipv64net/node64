@@ -172,20 +172,34 @@ func readMsg(r *bufio.Reader, v any) error {
 func hostPort(host string, port int) string { return net.JoinHostPort(host, strconv.Itoa(port)) }
 
 // Join kopiert zwischen zwei Verbindungen in beide Richtungen (halbes Schliessen, wo moeglich) und schliesst danach
-// beide. Rueckgabe: Bytes a->b und b->a.
+// beide. Rueckgabe: Bytes a->b und b->a. Halb geschlossen wird nur nach einem sauberen Ende; bricht eine Seite ab
+// (z. B. der Tunnel nach einem Netzausfall), schliessen sofort beide - sonst bliebe die Verbindung zum Dienst offen,
+// bis der von sich aus sendet (WebSocket ohne Ping), und haelt dort eine Sitzung fest.
 func Join(a, b net.Conn) (ab, ba int64) {
 	done := make(chan struct{})
 	go func() {
-		ba, _ = io.Copy(a, b)
-		closeWrite(a)
+		var err error
+		ba, err = io.Copy(a, b)
+		endCopy(a, b, err)
 		close(done)
 	}()
-	ab, _ = io.Copy(b, a)
-	closeWrite(b)
+	var err error
+	ab, err = io.Copy(b, a)
+	endCopy(b, a, err)
 	<-done
 	_ = a.Close()
 	_ = b.Close()
 	return ab, ba
+}
+
+// endCopy beendet eine Richtung (src -> dst): sauberes Ende = dst halb schliessen, Fehler = beide ganz schliessen.
+func endCopy(dst, src net.Conn, err error) {
+	if err != nil {
+		_ = dst.Close()
+		_ = src.Close()
+		return
+	}
+	closeWrite(dst)
 }
 
 func closeWrite(c net.Conn) {

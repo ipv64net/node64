@@ -52,7 +52,7 @@ func yamuxConfig() *yamux.Config {
 	c := yamux.DefaultConfig()
 	c.AcceptBacklog = 1024
 	c.KeepAliveInterval = 10 * time.Second
-	c.ConnectionWriteTimeout = 15 * time.Second
+	c.ConnectionWriteTimeout = 30 * time.Second // auch fuer den Keepalive-Ping: bei langsamem Upload und vielen Streams steht er hinter Daten
 	c.MaxStreamWindowSize = 6 << 20
 	c.StreamOpenTimeout = 30 * time.Second
 	c.StreamCloseTimeout = 5 * time.Minute

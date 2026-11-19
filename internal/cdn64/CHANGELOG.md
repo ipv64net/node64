@@ -7,6 +7,9 @@
 
 ### Behoben
 - Ist ein Kontingent erreicht, nennt PROXY64 jetzt die richtige Grenze – CDN-Domains, CDN-Subdomains, Portmapper oder Tunnel. Vorher hieß jede Grenze „Das Kontingent an CDN-Domains ist belegt“, auch wenn die Subdomains oder Portmapper voll waren.
+- CDN64-Tunnel nach einem Ausfall der Internetverbindung: Jeder gescheiterte Versuch während des Ausfalls galt als „UDP blockiert“, danach blieb der Tunnel auf dem langsameren TCP-Ausweichweg und zeigte weiter „UDP blockiert“. Jetzt versucht die Node bei einem gescheiterten QUIC-Versuch sofort TCP; nur wenn das klappt, gilt UDP als gesperrt – fehlt das ganze Netz, bleibt QUIC der erste Versuch. Läuft der Tunnel über TCP, prüft er alle 5 Minuten, ob QUIC wieder geht, und wechselt nahtlos zurück, sobald keine Besucher-Verbindung offen ist (spätestens nach 30 Minuten).
+- Bricht der Tunnel mitten in einer Verbindung ab (z. B. ein WebSocket bei einem Netzausfall), schließt die Node jetzt sofort auch die Verbindung zum Dienst im Heimnetz. Vorher blieb sie offen, bis der Dienst von sich aus etwas sendete – bei Anwendungen mit einer Sitzung je Benutzer blockierte das die neue Verbindung.
+- TCP-Ausweichweg: Der Keepalive des Tunnels hat mehr Zeit (30 statt 15 s). Bei langsamem Upload und viel Verkehr (WebSockets, Downloads) brach der Tunnel sonst ab und baute sich unter Last immer wieder neu auf.
 
 ## 1.56.9 – 2026-11-17
 
