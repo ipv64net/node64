@@ -387,7 +387,7 @@ func TestHostKeyAlgorithms(t *testing.T) {
 
 	hk := newSigner(t)
 	ca := newSigner(t)
-	cert := &ssh.Certificate{Key: hk.PublicKey(), CertType: ssh.HostCert, ValidBefore: ssh.CertTimeInfinity}
+	cert := &ssh.Certificate{Key: hk.PublicKey(), CertType: ssh.HostCert, ValidPrincipals: []string{"127.0.0.1"}, ValidBefore: ssh.CertTimeInfinity}
 	if err := cert.SignCert(rand.Reader, ca); err != nil {
 		t.Fatal(err)
 	}

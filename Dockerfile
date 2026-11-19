@@ -28,7 +28,7 @@ RUN apk add --no-cache libcap && setcap cap_net_bind_service,cap_net_raw,cap_net
 
 # ---- CA-Zertifikate (Zeitzonen sind im Binary eingebettet). Laeuft auf der
 #      Build-Plattform, die Zertifikate sind architekturunabhaengig.
-FROM --platform=$BUILDPLATFORM alpine:3.22 AS certs
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS certs
 RUN apk add --no-cache ca-certificates
 
 # ---- Laufzeit: leeres Image, nur das Binary
