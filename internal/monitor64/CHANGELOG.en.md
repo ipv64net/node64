@@ -6,6 +6,8 @@ New:
 
 - Prometheus: `node64_monitor_problems_open` and `node64_monitor_problems_unacked` – open problems held by this node and how many of them are not acknowledged (in a cluster each problem counts only on the responsible node).
 - AI interface (MCP): `monitor64_host` shows per service the rules reporting right now and those confirmed as fine, `monitor64_problems` whether a problem still persists and whether it is in a maintenance window.
+- Host page: multiple selection of services – "Select" shows checkboxes, a filter by name and "All", "Filtered" and "None"; the selected services can be set to "do not report" (display only), "report again" or ignored together. Under "Ignored" several services can be adopted again at once. API: `POST /api/monitor64/hosts/{uid}/services/report` (#182).
+- Edit host: the "Tags" field suggests tags already in use (#193).
 - Edit host: switch "May be switched off" for devices that only run now and then (e.g. a PC in the basement). If the host is unreachable it is shown as "switched off" – no notification, no problem, and it counts neither in the overview nor for the dot in the navigation. While it runs, its services and warnings apply as usual (#229). API: `offline_ok` on the host, `view: offline`.
 
 Fixed:

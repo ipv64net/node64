@@ -112,6 +112,7 @@ type overviewData struct {
 	Err       string
 	AutoScan  int
 	AutoOpts  []int
+	TagList   []string // vorhandene Tags (Vorschlaege beim Eingeben, #193)
 	LastScan  time.Time
 	Scan      ScanStatus
 	DNS64     bool       // DNS64 laeuft (Uebergabe moeglich)
@@ -126,7 +127,7 @@ func (m *Module) overview(r *http.Request) (*overviewData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &overviewData{Nets: snap.Nets, AutoScan: m.AutoScan(ctx), AutoOpts: AutoScans, LastScan: m.LastScan(ctx), Scan: m.Scanning(), DNS64: m.DNS64Running(),
+	d := &overviewData{TagList: m.allTags(ctx), Nets: snap.Nets, AutoScan: m.AutoScan(ctx), AutoOpts: AutoScans, LastScan: m.LastScan(ctx), Scan: m.Scanning(), DNS64: m.DNS64Running(),
 		Form: Prefix{Status: StatusActive, Scan: ScanPassive}}
 	vlans := map[int]bool{}
 	for _, n := range snap.Nets {
@@ -201,6 +202,7 @@ type MapCell struct {
 }
 
 type prefixData struct {
+	TagList   []string // vorhandene Tags (Vorschlaege, #193)
 	Net       *Net
 	Prefix    *Prefix // Eintrag in IPAM64 (nil = nur DHCP-Netz)
 	View      string  // addresses (Raster und Liste) | ranges
@@ -413,7 +415,7 @@ func (m *Module) prefixPage(r *http.Request) (*prefixData, error) {
 	if n == nil {
 		return nil, ErrNotFound
 	}
-	d := &prefixData{Net: n, Counts: map[string]int{}, Query: strings.TrimSpace(q.Get("q")), Scan: m.Scanning(), Ranges: snap.RangesIn(n.Prefix)}
+	d := &prefixData{TagList: m.allTags(ctx), Net: n, Counts: map[string]int{}, Query: strings.TrimSpace(q.Get("q")), Scan: m.Scanning(), Ranges: snap.RangesIn(n.Prefix)}
 	if n.UID != "" {
 		if d.Prefix, err = m.prefixByUID(ctx, n.UID); err != nil {
 			return nil, err
@@ -562,6 +564,7 @@ func (m *Module) pagePrefix(w http.ResponseWriter, r *http.Request) {
 // ---- Adresse ----
 
 type addressData struct {
+	TagList []string // vorhandene Tags (Vorschlaege, #193)
 	Form    Address
 	New     bool
 	Entry   *Entry // was die Quellen ueber die Adresse wissen (nil = frei)
@@ -589,7 +592,7 @@ func (m *Module) addressPage(r *http.Request, ip string) (*addressData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &addressData{Net: snap.NetOf(a), Entry: snap.Entry(a), Roles: addrRoles, DNS64: m.DNS64Running()}
+	d := &addressData{TagList: m.allTags(ctx), Net: snap.NetOf(a), Entry: snap.Entry(a), Roles: addrRoles, DNS64: m.DNS64Running()}
 	if d.Net == nil {
 		return nil, ErrNoNet
 	}

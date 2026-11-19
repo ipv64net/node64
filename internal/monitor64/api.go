@@ -1252,6 +1252,50 @@ func (m *Module) servicesBulk(w http.ResponseWriter, r *http.Request, remove boo
 	writeJSON(w, http.StatusOK, map[string]any{"changed": n})
 }
 
+// svcReportIn: mehrere Dienste auf einmal melden ("") bzw. nur anzeigen ("show") (Mehrfachauswahl, #182).
+type svcReportIn struct {
+	Keys   []string `json:"keys"`
+	Report string   `json:"report"`
+}
+
+// apiServicesReport: POST Melden/Nur anzeigen fuer mehrere Dienste eines Hosts (eine Runde danach, wie beim
+// Aendern eines einzelnen Dienstes).
+func (m *Module) apiServicesReport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h, err := m.store.Host(ctx, r.PathValue("uid"))
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	var in svcReportIn
+	if err := decode(r, &in); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	if in.Report != "" && in.Report != "show" {
+		m.fail(w, r, errBad("report"))
+		return
+	}
+	if len(in.Keys) == 0 || len(in.Keys) > 5000 {
+		m.fail(w, r, errBad("keys"))
+		return
+	}
+	by := m.actor(r)
+	n := 0
+	for _, k := range in.Keys {
+		err := m.store.UpdateService(ctx, h.UID, k, svcPatch{Report: &in.Report}, by)
+		if err == nil {
+			n++
+		} else if !errors.Is(err, ErrNotFound) {
+			m.fail(w, r, err)
+			return
+		}
+	}
+	m.audit(r, "services.report", h.Name, fmt.Sprintf("uid=%s report=%s keys=%s", h.UID, firstNonEmpty(in.Report, "notify"), strings.Join(limitList(in.Keys, 10), ",")))
+	m.repollWait(ctx, h.UID, repollWaitMax)
+	writeJSON(w, http.StatusOK, map[string]any{"changed": n})
+}
+
 // svcUpdateIn aendert einen Dienst: Anzeigename, Soll-Zustand, Melden/Nur anzeigen und die Schwellen der Stufe
 // "dieser Host" je Regel-Art (eine Messgroesse bzw. Zustandsregel des Dienstes).
 type svcUpdateIn struct {

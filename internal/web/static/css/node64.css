@@ -131,6 +131,7 @@ a.stat:hover { background: var(--bs-tertiary-bg); }
 .dash-editing .dash-tools { display: flex; }
 .dash-editing .dash-item > .card { outline: 2px dashed var(--bs-border-color); outline-offset: 2px; }
 .dash-editing .dash-item { cursor: grab; }
+.svc-table:not(.sel-mode) .m64-sel-col { display: none; } /* Monitor64: Mehrfachauswahl der Dienste (#182) */
 #dash .card-header:has(> a > .bi-arrow-right) { cursor: pointer; } /* ganzer Kopf fuehrt zur Seite (#228) */
 .dash-editing #dash .card-header:has(> a > .bi-arrow-right) { cursor: inherit; }
 .dash-item.dash-hidden { display: none; }

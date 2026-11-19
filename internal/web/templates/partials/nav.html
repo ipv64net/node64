@@ -19,6 +19,6 @@
 	{{with .Plan}}<div><i class="bi bi-award text-primary"></i> <a class="text-body-secondary" href="/plans" title="{{$.T "plans.title"}}">{{$.T "nav.plan" "name" .}}</a></div>{{end}}
 	<div>{{if .APIOk}}<i class="bi bi-key-fill text-success"></i> {{.T "nav.api_ok"}}{{else if .API.Account}}<i class="bi bi-key text-warning"></i> <a class="text-body-secondary" href="/settings#ipv64">{{.T "nav.api_expired"}}</a>{{else}}<i class="bi bi-key"></i> <a class="text-body-secondary" href="/settings#ipv64">{{.T "nav.api_none"}}</a>{{end}}</div>
 	<div>{{if .Sync.Linked}}{{if .Sync.Connected}}<i class="bi bi-cloud-check-fill text-success"></i> {{.T "nav.connected"}}{{else}}<i class="bi bi-cloud-slash-fill text-warning"></i> {{.T "nav.disconnected"}}{{end}}{{else}}<i class="bi bi-cloud-slash"></i> {{.T "nav.standalone"}}{{end}}</div>
-	<div>{{.T "nav.version" "version" .Version}}</div>
+	<div><a class="text-body-secondary" href="{{if or (contains .Version "-") (eq .Version "dev")}}https://github.com/ipv64net/node64/blob/main/CHANGELOG.md{{else}}https://github.com/ipv64net/node64/releases/tag/v{{.Version}}{{end}}" target="_blank" rel="noopener" title="{{.T "nav.version_link"}}"><i class="bi bi-github"></i> {{.T "nav.version" "version" .Version}}</a></div>{{/* #147 */}}
 </div>
 {{end}}

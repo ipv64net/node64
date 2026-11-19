@@ -34,7 +34,7 @@
 					<div class="col-md-6"><label class="form-label small" for="ipam-a-mac">{{.T "ipam64.col.mac"}}</label>
 						<input class="form-control form-control-sm font-monospace" id="ipam-a-mac" name="mac" value="{{$f.MAC}}" placeholder="aa:bb:cc:dd:ee:ff" maxlength="17"></div>
 					<div class="col-md-6"><label class="form-label small" for="ipam-a-tags">{{.T "ipam64.col.tags"}}</label>
-						<input class="form-control form-control-sm" id="ipam-a-tags" name="tags" value="{{join $f.Tags " "}}" maxlength="330"></div>
+						<input class="form-control form-control-sm" id="ipam-a-tags" name="tags" value="{{join $f.Tags " "}}" maxlength="330" autocomplete="off" data-tag-list="ipam-tag-list" data-tag-sep=" "><datalist id="ipam-tag-list">{{range $d.TagList}}<option value="{{.}}">{{end}}</datalist></div>
 					<div class="col-12"><label class="form-label small" for="ipam-a-desc">{{.T "ipam64.col.description"}}</label>
 						<input class="form-control form-control-sm" id="ipam-a-desc" name="description" value="{{$f.Description}}" maxlength="200"></div>
 					<div class="col-12 border-top pt-2 mt-2 fw-semibold small"><i class="bi bi-diagram-3 text-primary"></i> {{.T "ipam64.addr.dns_title"}}</div>

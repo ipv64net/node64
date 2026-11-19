@@ -15,6 +15,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Healthchecks: Website-Adressen ohne `http://`/`https://` gelten als `https://` (mit Zertifikatsprüfung); mit Zertifikatswarnung gilt eine Umleitung auf unverschlüsseltes HTTP als gestört (#234).
 - PROXY64: Der CDN64-Tunnel bleibt nach einem Ausfall der Internetverbindung nicht mehr auf dem TCP-Ausweichweg hängen, wechselt von selbst zurück auf QUIC und schließt abgebrochene Verbindungen (z. B. WebSockets) sofort auch zum Dienst.
 - Startseite: Der ganze Kopf einer Karte führt zur Seite, nicht nur der Pfeil (#228).
+- Navigation: Die Versionsnummer unten links führt zu den Änderungen auf GitHub (#147).
+- Monitor64: Mehrfachauswahl der Dienste auf der Host-Seite – gemeinsam nicht melden, wieder melden oder ignorieren, ignorierte gemeinsam übernehmen (#182).
+- Healthchecks, Monitor64, IPAM64: Beim Eingeben von Tags werden die schon vergebenen vorgeschlagen (#193).
 - KI-Schnittstelle (MCP): IPAM64 in der Beschreibung und in `api_reference`, dazu die Benutzerverwaltung; mehr Felder bei Monitor64, DNS64 (Hinweise zu Listen, Einträge aus IPAM64) und PROXY64-Streams (CDN64).
 - Lokale API: Beschreibung (`openapi.json`) für Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, Environment und Cluster vervollständigt; `GET /api/group` liefert bei Benutzer-Konflikten auch Rolle, gesperrt und Herkunft.
 

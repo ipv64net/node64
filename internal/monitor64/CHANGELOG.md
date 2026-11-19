@@ -6,6 +6,8 @@ Neu:
 
 - Prometheus: `node64_monitor_problems_open` und `node64_monitor_problems_unacked` – offene Probleme, die diese Node führt, und davon nicht quittierte (im Cluster zählt jedes Problem nur bei der zuständigen Node).
 - KI-Schnittstelle (MCP): `monitor64_host` zeigt je Dienst die gerade meldenden und die als in Ordnung bestätigten Regeln, `monitor64_problems` ob ein Problem noch besteht und ob es im Wartungsfenster liegt.
+- Host-Seite: Mehrfachauswahl der Dienste – „Auswählen“ blendet Checkboxen, einen Filter nach Name sowie „Alle“, „Gefilterte“ und „Keine“ ein; die ausgewählten Dienste lassen sich gemeinsam „nicht melden“ (nur anzeigen), „wieder melden“ oder ignorieren. Unter „Ignoriert“ lassen sich mehrere Dienste auf einmal wieder übernehmen. API: `POST /api/monitor64/hosts/{uid}/services/report` (#182).
+- Host bearbeiten: Beim Feld „Tags“ werden die schon vergebenen Tags vorgeschlagen (#193).
 - Host bearbeiten: Schalter „Darf ausgeschaltet sein“ für Geräte, die nur ab und zu laufen (z. B. ein PC im Partykeller). Ist der Host nicht erreichbar, heißt er „ausgeschaltet“ – keine Meldung, kein Problem, er zählt weder in der Übersicht noch beim Punkt in der Navigation. Läuft er, gelten seine Dienste und Warnungen wie sonst (#229). API: `offline_ok` am Host, `view: offline`.
 
 Behoben:

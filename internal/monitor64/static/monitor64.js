@@ -925,11 +925,11 @@ function pageHost() {
 		cats.forEach(function (c) {
 			var rows = list.filter(function (s) { return s.category === c; });
 			if (!rows.length) { return; }
-			html += '<tr class="svc-cat"><td colspan="7">' + esc((D.cats || {})[c] || c) + '</td></tr>';
+			html += '<tr class="svc-cat"><td colspan="8">' + esc((D.cats || {})[c] || c) + '</td></tr>';
 			rows.forEach(function (s) {
 				var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state;
 				var badge = stBadge(st) + (s.show_only ? ' <i class="bi bi-eye text-body-tertiary" title="' + esc(L('rl.show')) + '"></i>' : '') + (s.ack ? ' <i class="bi bi-check2-square text-primary" title="' + esc(L('ov.acked')) + '"></i>' : '');
-				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) +
+				html += '<tr data-svc="' + esc(s.key) + '" tabindex="0"' + (s.vanished ? ' class="vanished"' : '') + '><td class="m64-sel-col"><input class="form-check-input" type="checkbox" data-svcsel="' + esc(s.key) + '"' + (SEL.keys[s.key] ? ' checked' : '') + ' aria-label="' + esc(svcName(s)) + '"></td><td>' + badge + '</td><td class="fw-semibold m64-svc-name">' + esc(svcName(s)) +
 					(s.detail === 'smart' ? ' <button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1 fw-normal" type="button" data-smart="' + esc(s.key) + '" title="' + esc(L('smart.btn_title')) + '"><i class="bi bi-table"></i> SMART</button>' : '') +
 					(s.since && st !== 'ok' ? '<div class="small fw-normal text-body-secondary">' + esc(since(s.since)) + '</div>' : '') + '</td><td class="svc-val">' + valueCell(s) + '</td>' +
 					'<td class="d-none d-lg-table-cell spark-cell">' + (sparks[s.key] ? spark(sparks[s.key], st === 'ok' ? '' : 's-' + st) : '') + '</td>' +
@@ -937,9 +937,76 @@ function pageHost() {
 					'<td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button" data-cfg="' + esc(s.key) + '" title="' + esc(L('sd.settings')) + '" aria-label="' + esc(L('sd.settings')) + '"><i class="bi bi-gear"></i></button></td></tr>';
 			});
 		});
-		if (!list.length) { html = '<tr><td colspan="7" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
+		if (!list.length) { html = '<tr><td colspan="8" class="text-center text-body-secondary p-4">' + esc(H.checked ? L('host.no_services') : L('host.no_services_yet')) + '</td></tr>'; }
 		setHTML($('#m64-svcs'), html);
+		selApply();
 	}
+	// Mehrfachauswahl (#182): Auswahl bleibt ueber das Neuladen erhalten (Schluessel), Filter nach Name bzw. Schluessel
+	var SEL = { on: false, keys: {}, q: '' };
+	// Texte je Aktion: Knopf, Rueckfrage, Meldung (Schluessel woertlich, die Seite liefert nur benutzte Texte aus)
+	var SELTX = {
+		show: function (n) { return [L('sel.act_show'), L('sel.confirm_show', { n: n }), L('sel.done_show', { n: n })]; },
+		notify: function (n) { return [L('sel.act_notify'), L('sel.confirm_notify', { n: n }), L('sel.done_notify', { n: n })]; },
+		ignore: function (n) { return [L('sel.act_ignore'), L('sel.confirm_ignore', { n: n }), L('sel.done_ignore', { n: n })]; }
+	};
+	function selVisible() { return $$('#m64-svcs tr[data-svc]').filter(function (tr) { return !tr.classList.contains('d-none'); }); }
+	function selApply() {
+		var known = {};
+		H.services.forEach(function (s) { known[s.key] = true; });
+		Object.keys(SEL.keys).forEach(function (k) { if (!known[k]) { delete SEL.keys[k]; } }); // entfernte bzw. ignorierte Dienste
+		var q = SEL.q.toLowerCase();
+		$$('#m64-svcs tr[data-svc]').forEach(function (tr) {
+			var s = H.services.filter(function (x) { return x.key === tr.dataset.svc; })[0];
+			var hit = !q || !s || (svcName(s) + ' ' + s.key).toLowerCase().indexOf(q) >= 0;
+			tr.classList.toggle('d-none', !hit);
+		});
+		$$('#m64-svcs tr.svc-cat').forEach(function (cat) { // Kategorie ohne sichtbare Zeile ausblenden
+			var n = cat.nextElementSibling, any = false;
+			while (n && !n.classList.contains('svc-cat')) { if (n.dataset.svc && !n.classList.contains('d-none')) { any = true; } n = n.nextElementSibling; }
+			cat.classList.toggle('d-none', !any);
+		});
+		var n = Object.keys(SEL.keys).length, vis = selVisible(), head = $('#m64-sel-head');
+		$('#m64-sel-count').textContent = L('sel.count', { n: n });
+		$$('[data-sel-act]').forEach(function (b) { b.disabled = n === 0; });
+		if (head) {
+			var on = vis.filter(function (tr) { return SEL.keys[tr.dataset.svc]; }).length;
+			head.checked = vis.length > 0 && on === vis.length;
+			head.indeterminate = on > 0 && on < vis.length;
+		}
+	}
+	function selSet(keys, on) { keys.forEach(function (k) { if (on) { SEL.keys[k] = true; } else { delete SEL.keys[k]; } }); renderServices(); }
+	$('#m64-sel-toggle').addEventListener('click', function () {
+		SEL.on = !SEL.on;
+		if (!SEL.on) { SEL.keys = {}; SEL.q = ''; $('#m64-sel-q').value = ''; }
+		this.setAttribute('aria-pressed', SEL.on ? 'true' : 'false');
+		this.classList.toggle('active', SEL.on);
+		$('#m64-sel-bar').classList.toggle('d-none', !SEL.on);
+		document.querySelector('.svc-table').classList.toggle('sel-mode', SEL.on);
+		renderServices();
+		if (SEL.on) { $('#m64-sel-q').focus(); }
+	});
+	$('#m64-sel-q').addEventListener('input', function () { SEL.q = this.value.trim(); selApply(); });
+	$('#m64-sel-head').addEventListener('change', function () { selSet(selVisible().map(function (tr) { return tr.dataset.svc; }), this.checked); });
+	$('#m64-sel-bar').addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sel]');
+		if (b) {
+			if (b.dataset.sel === 'all') { selSet(H.services.map(function (s) { return s.key; }), true); }
+			if (b.dataset.sel === 'visible') { selSet(selVisible().map(function (tr) { return tr.dataset.svc; }), true); }
+			if (b.dataset.sel === 'none') { SEL.keys = {}; renderServices(); }
+			return;
+		}
+		var a = ev.target.closest('[data-sel-act]');
+		if (!a) { return; }
+		var keys = Object.keys(SEL.keys), act = a.dataset.selAct;
+		if (!keys.length) { return; }
+		var base = '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/';
+		var run = function () {
+			var req = act === 'ignore' ? api('POST', base + 'adopt', { keys: keys, state: -1 }) : api('POST', base + 'report', { keys: keys, report: act === 'show' ? 'show' : '' });
+			return req.then(function (r) { SEL.keys = {}; toast(SELTX[act]((r && r.changed) || keys.length)[2]); return reload(); });
+		};
+		var tx3 = SELTX[act](keys.length);
+		confirmBox(L('sel.confirm_title'), tx3[1], tx3[0], function () { return run().catch(fail); });
+	});
 	// openSmart: alle zuletzt gelesenen SMART-Werte einer Platte als Dialog (liegen nur im Speicher der Node).
 	function openSmart(key) {
 		var s = H.services.filter(function (x) { return x.key === key; })[0];
@@ -975,7 +1042,8 @@ function pageHost() {
 		setHTML($('#m64-accesses'), html || '<div class="list-group-item small text-body-secondary">' + esc(L('host.no_access')) + '</div>');
 		var ig = H.ignored || [];
 		setHTML($('#m64-ignored'), ig.length ? '<details class="mb-3" data-ign-box' + (ignOpen ? ' open' : '') + '><summary class="small text-body-secondary">' + esc(L('host.ignored_n', { n: ig.length })) + '</summary><div class="list-group mt-2">' +
-			ig.map(function (s) { return '<div class="list-group-item d-flex align-items-center gap-2 small"><span class="me-auto">' + esc(tx(s.name) || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></span><button class="btn btn-sm btn-outline-secondary" type="button" data-ign="' + esc(s.key) + '">' + esc(L('host.adopt')) + '</button></div>'; }).join('') + '</div></details>' : '');
+			ig.map(function (s) { return '<div class="list-group-item d-flex align-items-center gap-2 small"><input class="form-check-input mt-0" type="checkbox" data-ignsel="' + esc(s.key) + '" aria-label="' + esc(tx(s.name) || s.key) + '"><span class="me-auto">' + esc(tx(s.name) || s.key) + ' <span class="text-body-tertiary">' + esc(s.key) + '</span></span><button class="btn btn-sm btn-outline-secondary" type="button" data-ign="' + esc(s.key) + '">' + esc(L('host.adopt')) + '</button></div>'; }).join('') +
+			'</div>' + (ig.length > 1 ? '<button class="btn btn-sm btn-outline-primary mt-2" type="button" data-ign-many="1"><i class="bi bi-plus-square"></i> ' + esc(L('sel.adopt_selected')) + '</button>' : '') + '</details>' : '');
 	}
 	root.addEventListener('toggle', function (ev) { if (ev.target.matches && ev.target.matches('[data-ign-box]')) { ignOpen = ev.target.open; } }, true);
 	root.addEventListener('change', function (ev) { var k = ev.target.dataset && ev.target.dataset.newsel; if (k !== undefined) { newSel[k] = ev.target.checked; } });
@@ -1546,11 +1614,11 @@ function pageHost() {
 		return [30, 60, 120, 300, 600, 900].map(function (s) { return '<option value="' + s + '"' + (s === cur ? ' selected' : '') + '>' + esc(s < 60 ? L('iv.sec', { n: s }) : fmtDur(s)) + '</option>'; }).join('');
 	}
 	function hostForm(h) {
-		var groups = (D.targets && D.targets.groups) || [];
+		var groups = (D.targets && D.targets.groups) || [], tags = (D.targets && D.targets.tags) || [];
 		return '<div class="row g-3"><div class="col-md-6"><label class="form-label" for="m64-hf-name">' + esc(L('f.name')) + '</label><input class="form-control" id="m64-hf-name" maxlength="100" value="' + esc(h.name) + '"></div>' +
 			'<div class="col-md-6"><label class="form-label" for="m64-hf-addr">' + esc(L('f.address')) + '</label><input class="form-control" id="m64-hf-addr" maxlength="253" value="' + esc(h.address) + '"></div>' +
 			'<div class="col-md-6"><label class="form-label" for="m64-hf-group">' + esc(L('f.group')) + '</label><input class="form-control" id="m64-hf-group" maxlength="64" list="m64-groups-dl" value="' + esc(h.group) + '"><datalist id="m64-groups-dl">' + groups.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist></div>' +
-			'<div class="col-md-6"><label class="form-label" for="m64-hf-tags">' + esc(L('f.tags')) + '</label><input class="form-control" id="m64-hf-tags" value="' + esc((h.tags || []).join(', ')) + '"><div class="form-text">' + esc(L('f.tags_hint')) + '</div></div>' +
+			'<div class="col-md-6"><label class="form-label" for="m64-hf-tags">' + esc(L('f.tags')) + '</label><input class="form-control" id="m64-hf-tags" value="' + esc((h.tags || []).join(', ')) + '" autocomplete="off" data-tag-list="m64-tags-dl" data-tag-sep=","><datalist id="m64-tags-dl">' + tags.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist><div class="form-text">' + esc(L('f.tags_hint')) + '</div></div>' +
 			'<div class="col-md-6"><label class="form-label" for="m64-hf-iv">' + esc(L('f.interval')) + '</label><select class="form-select" id="m64-hf-iv">' + intervalOpts(h.interval_sec) + '</select></div>' +
 			'<div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-hf-auto"' + (h.agent_autoupdate ? ' checked' : '') + '><label class="form-check-label" for="m64-hf-auto">' + esc(L('f.autoupdate')) + '</label></div></div>' +
 			'<div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="m64-hf-offline"' + (h.offline_ok ? ' checked' : '') + '><label class="form-check-label" for="m64-hf-offline">' + esc(L('f.offline_ok')) + '</label></div><div class="form-text mt-0">' + esc(L('f.offline_ok_hint')) + '</div></div>' +
@@ -1829,6 +1897,13 @@ function pageHost() {
 			});
 			return;
 		}
+		var igm = ev.target.closest('[data-ign-many]');
+		if (igm) { // mehrere ignorierte Dienste wieder uebernehmen (#182)
+			var ks = $$('#m64-ignored input[data-ignsel]:checked').map(function (x) { return x.dataset.ignsel; });
+			if (!ks.length) { toast(L('sel.none_selected')); return; }
+			lock(igm, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: ks, state: 1 }).then(function () { toast(L('host.adopted_toast', { n: ks.length })); return reload(); }); }).catch(fail);
+			return;
+		}
 		var ig = ev.target.closest('[data-ign]');
 		if (ig) {
 			lock(ig, function () { return api('POST', '/api/monitor64/hosts/' + encodeURIComponent(uid) + '/services/adopt', { keys: [ig.dataset.ign], state: 1 }).then(function () { toast(L('host.adopted_toast', { n: 1 })); return reload(); }); }).catch(fail);
@@ -1845,8 +1920,13 @@ function pageHost() {
 		var cf = ev.target.closest('[data-cfg]');
 		if (cf) { openDetail(cf.dataset.cfg); return; }
 		var tr = ev.target.closest('tr[data-svc]');
+		if (tr && SEL.on && ev.target.closest('.m64-sel-col')) { // Auswahl statt Dialog (auch Klick neben die Box)
+			if (!ev.target.matches('input')) { var cb = tr.querySelector('[data-svcsel]'); if (cb) { cb.checked = !cb.checked; selSet([tr.dataset.svc], cb.checked); } }
+			return;
+		}
 		if (tr) { history.replaceState(null, '', '#svc=' + encodeURIComponent(tr.dataset.svc)); openInfo(tr.dataset.svc); }
 	});
+	root.addEventListener('change', function (ev) { var k = ev.target.dataset && ev.target.dataset.svcsel; if (k !== undefined) { selSet([k], ev.target.checked); } });
 	root.addEventListener('keydown', function (ev) {
 		if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('tr[data-svc]')) { ev.preventDefault(); ev.target.click(); }
 	});

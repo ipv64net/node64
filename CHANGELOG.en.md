@@ -15,6 +15,9 @@ Short summary of what changes per version. Details per module are in the node un
 - Healthchecks: website addresses without `http://`/`https://` are treated as `https://` (with certificate check); with a certificate warning, a redirect to unencrypted HTTP counts as down (#234).
 - PROXY64: after an internet outage the CDN64 tunnel no longer stays stuck on the TCP fallback, switches back to QUIC by itself and closes broken connections (e.g. WebSockets) towards the service right away.
 - Dashboard: the whole header of a card leads to its page, not only the arrow (#228).
+- Navigation: the version number at the bottom left links to the changes on GitHub (#147).
+- Monitor64: multiple selection of services on the host page – stop reporting, report again or ignore together, adopt ignored ones together (#182).
+- Healthchecks, Monitor64, IPAM64: entering tags suggests the ones already in use (#193).
 - AI interface (MCP): IPAM64 in the description and in `api_reference`, plus user management; more fields for Monitor64, DNS64 (list hints, records from IPAM64) and PROXY64 streams (CDN64).
 - Local API: description (`openapi.json`) completed for Monitor64, DNS64, IPAM64, CDN64, AD/LDAP, environment and cluster; `GET /api/group` also returns role, disabled and source for user conflicts.
 

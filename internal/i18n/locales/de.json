@@ -106,6 +106,7 @@
     "theme_auto": "Automatisch",
     "standalone": "Healthchecks-Sync aus",
     "version": "Version {version}",
+    "version_link": "Änderungen dieser Version auf GitHub",
     "api": "API",
     "status_pages": "Statusseiten",
     "honeypot": "Honeypot64",
@@ -7967,6 +7968,26 @@
         "uncorrectable": "Nicht korrigierbare Sektoren bzw. Fehler",
         "crc_errors": "CRC-Fehler der Verbindung"
       }
+    },
+    "sel": {
+      "toggle": "Auswählen",
+      "filter": "Dienste filtern …",
+      "all": "Alle",
+      "visible": "Gefilterte",
+      "none": "Keine",
+      "count": "{n} ausgewählt",
+      "act_show": "Nicht melden",
+      "act_notify": "Wieder melden",
+      "act_ignore": "Ignorieren",
+      "confirm_title": "Ausgewählte Dienste ändern",
+      "confirm_show": "{n} Dienste nur noch anzeigen? Sie bleiben in der Liste mit Werten und Verlauf, melden aber keine Probleme mehr.",
+      "confirm_notify": "{n} Dienste wieder melden lassen? Warnungen und kritische Zustände gehen dann wieder an die Kanäle.",
+      "confirm_ignore": "{n} Dienste ignorieren? Sie werden nicht mehr überwacht und stehen danach unter „Ignoriert“, wo sie sich wieder übernehmen lassen.",
+      "done_show": "{n} Dienste melden nicht mehr",
+      "done_notify": "{n} Dienste melden wieder",
+      "done_ignore": "{n} Dienste ignoriert",
+      "adopt_selected": "Ausgewählte übernehmen",
+      "none_selected": "Keine Dienste ausgewählt"
     }
   },
   "useradmin": {

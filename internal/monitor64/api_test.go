@@ -184,6 +184,22 @@ func TestAPIServices(t *testing.T) {
 	if rec := e.do("POST", base+"/services/adopt", map[string]any{"keys": []string{"fs:/"}, "state": 7}); rec.Code != 400 {
 		t.Fatalf("bad state: %d", rec.Code)
 	}
+	// Mehrfachauswahl (#182): mehrere Dienste nur anzeigen und wieder melden, unbekannte Schluessel uebergehen
+	if rec := e.do("POST", base+"/services/report", map[string]any{"keys": []string{"fs:/data", "ctr:web", "gibt:es-nicht"}, "report": "show"}); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"changed":2`) {
+		t.Fatalf("report show: %d %s", rec.Code, rec.Body)
+	}
+	if r := e.col(`SELECT report FROM m64_services WHERE host_uid = ? AND key = 'ctr:web'`, h.UID); r != "show" {
+		t.Fatalf("report: %q", r)
+	}
+	if rec := e.do("POST", base+"/services/report", map[string]any{"keys": []string{"ctr:web"}, "report": ""}); rec.Code != 200 {
+		t.Fatalf("report notify: %d %s", rec.Code, rec.Body)
+	}
+	if r := e.col(`SELECT report FROM m64_services WHERE host_uid = ? AND key = 'ctr:web'`, h.UID); r != "" {
+		t.Fatalf("report back: %q", r)
+	}
+	if rec := e.do("POST", base+"/services/report", map[string]any{"keys": []string{"ctr:web"}, "report": "laut"}); rec.Code != 400 {
+		t.Fatalf("bad report: %d", rec.Code)
+	}
 	// nur dieser Dienst
 	rule := map[string]any{"warn": 85, "crit": 95}
 	if rec := e.do("PUT", base+"/service", map[string]any{"key": "fs:/", "rules": map[string]any{"fs.used": map[string]any{"rule": rule}}, "name": "Root", "soll": "", "report": ""}); rec.Code != 200 {

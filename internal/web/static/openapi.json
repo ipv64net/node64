@@ -30521,6 +30521,96 @@
         }
       }
     },
+    "/monitor64/hosts/{uid}/services/report": {
+      "post": {
+        "tags": [
+          "Monitor64"
+        ],
+        "summary": "Mehrere Dienste melden oder nur anzeigen",
+        "description": "Mehrfachauswahl auf der Host-Seite: setzt Melden (`\"\"`) bzw. Nur anzeigen (`show`) für alle genannten Dienste des Hosts. Unbekannte Schlüssel werden übergangen. Die Antwort wartet bis zu 8 s auf die nächste Abfragerunde des Hosts.",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "description": "UID des Hosts",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "keys",
+                  "report"
+                ],
+                "properties": {
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 5000,
+                    "description": "Schlüssel der Dienste"
+                  },
+                  "report": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "show"
+                    ],
+                    "description": "\"\" = melden, show = nur anzeigen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig (`json`, `report`, `keys`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Monitor64Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden (`not_found`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Monitor64Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/monitor64/hosts/{uid}/services/remove": {
       "post": {
         "tags": [

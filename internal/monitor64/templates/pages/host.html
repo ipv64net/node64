@@ -38,9 +38,25 @@
 	<div class="small text-warning-emphasis mb-2" id="m64-chart-note"></div>
 	<div class="row g-3 mb-3" id="m64-charts"></div>
 	<div class="card mb-3">
-		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.services"}}</span><span class="badge text-bg-secondary ms-2" id="m64-svc-count">0</span><span class="ms-auto small text-body-secondary d-none d-sm-inline">{{.T "monitor64.host.click_hint"}}</span></div>
+		<div class="card-header d-flex align-items-center"><span class="fw-semibold">{{.T "monitor64.host.services"}}</span><span class="badge text-bg-secondary ms-2" id="m64-svc-count">0</span><span class="ms-auto small text-body-secondary d-none d-sm-inline">{{.T "monitor64.host.click_hint"}}</span><button class="btn btn-sm btn-outline-secondary ms-2" type="button" id="m64-sel-toggle" aria-pressed="false"><i class="bi bi-ui-checks"></i> {{.T "monitor64.sel.toggle"}}</button></div>
+		<div class="card-body border-bottom py-2 d-none" id="m64-sel-bar">
+			<div class="d-flex flex-wrap align-items-center gap-2 small">
+				<input class="form-control form-control-sm w-auto" type="search" id="m64-sel-q" placeholder="{{.T "monitor64.sel.filter"}}" aria-label="{{.T "monitor64.sel.filter"}}">
+				<div class="btn-group btn-group-sm" role="group">
+					<button class="btn btn-outline-secondary" type="button" data-sel="all">{{.T "monitor64.sel.all"}}</button>
+					<button class="btn btn-outline-secondary" type="button" data-sel="visible">{{.T "monitor64.sel.visible"}}</button>
+					<button class="btn btn-outline-secondary" type="button" data-sel="none">{{.T "monitor64.sel.none"}}</button>
+				</div>
+				<span class="text-body-secondary" id="m64-sel-count"></span>
+				<div class="btn-group btn-group-sm ms-auto" role="group">
+					<button class="btn btn-outline-secondary" type="button" data-sel-act="show" disabled><i class="bi bi-eye"></i> {{.T "monitor64.sel.act_show"}}</button>
+					<button class="btn btn-outline-secondary" type="button" data-sel-act="notify" disabled><i class="bi bi-bell"></i> {{.T "monitor64.sel.act_notify"}}</button>
+					<button class="btn btn-outline-danger" type="button" data-sel-act="ignore" disabled><i class="bi bi-slash-circle"></i> {{.T "monitor64.sel.act_ignore"}}</button>
+				</div>
+			</div>
+		</div>
 		<div class="table-responsive"><table class="table table-hover mb-0 svc-table" data-nosort>
-			<thead><tr><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.service"}}</th><th>{{.T "monitor64.col.value"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.h24"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.thresholds"}}</th><th class="d-none d-xl-table-cell">{{.T "monitor64.col.access"}}</th><th style="width:2.75rem"><span class="visually-hidden">{{.T "monitor64.sd.settings"}}</span></th></tr></thead>
+			<thead><tr><th class="m64-sel-col" style="width:2rem"><input class="form-check-input" type="checkbox" id="m64-sel-head" aria-label="{{.T "monitor64.sel.visible"}}"></th><th style="width:6.5rem">{{.T "monitor64.col.state"}}</th><th>{{.T "monitor64.col.service"}}</th><th>{{.T "monitor64.col.value"}}</th><th class="d-none d-lg-table-cell">{{.T "monitor64.col.h24"}}</th><th class="d-none d-md-table-cell">{{.T "monitor64.col.thresholds"}}</th><th class="d-none d-xl-table-cell">{{.T "monitor64.col.access"}}</th><th style="width:2.75rem"><span class="visually-hidden">{{.T "monitor64.sd.settings"}}</span></th></tr></thead>
 			<tbody id="m64-svcs"></tbody>
 		</table></div>
 	</div>

@@ -197,6 +197,31 @@ func normTags(in []string) ([]string, error) {
 
 func tagsText(t []string) string { return strings.Join(t, " ") }
 
+// allTags: alle vergebenen Tags von Praefixen und Adressen, sortiert (Vorschlaege beim Eingeben, #193).
+func (m *Module) allTags(ctx context.Context) []string {
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT tags FROM ipam_prefixes WHERE tags != '' UNION SELECT tags FROM ipam_addresses WHERE tags != ''`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	var out []string
+	for rows.Next() {
+		var s string
+		if rows.Scan(&s) != nil {
+			continue
+		}
+		for _, t := range tagsOf(s) {
+			if !seen[t] {
+				seen[t] = true
+				out = append(out, t)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 func tagsOf(s string) []string {
 	if f := strings.Fields(s); len(f) > 0 {
 		return f

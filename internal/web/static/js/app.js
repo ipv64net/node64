@@ -263,6 +263,99 @@
 		}
 	})();
 
+	// Tag-Vorschlaege (#193): Feld mit data-tag-list="<datalist-id>" (Tags ohne list-Attribut, sonst ersetzt der
+	// Browser das ganze Feld) und data-tag-sep="," bzw. " ". Vorgeschlagen werden vorhandene Tags fuer das gerade
+	// getippte Wort (Pfeiltasten, Enter/Tab, Escape, Klick); schon eingetragene fehlen. Ueber Ereignisse am Dokument,
+	// damit auch Felder in spaeter geoeffneten Dialogen (Monitor64) mitmachen.
+	(function () {
+		var menu = null, field = null, items = [], active = -1;
+		function close() {
+			if (menu && menu.parentNode) { menu.parentNode.removeChild(menu); }
+			menu = null; items = []; active = -1;
+		}
+		function parts(f) {
+			var sep = f.getAttribute("data-tag-sep") || ",", v = f.value, re = sep === "," ? /,/ : /[\s,]/;
+			var i = -1;
+			for (var k = v.length - 1; k >= 0; k--) { if (re.test(v.charAt(k))) { i = k; break; } }
+			return { head: v.slice(0, i + 1), word: v.slice(i + 1).trim(), sep: sep };
+		}
+		function used(f) {
+			var re = (f.getAttribute("data-tag-sep") || ",") === "," ? /\s*,\s*/ : /[\s,]+/;
+			return f.value.split(re).map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+		}
+		function pick(tag) {
+			var p = parts(field);
+			var head = p.head;
+			if (p.sep === "," && head && !/\s$/.test(head)) { head += " "; }
+			field.value = head + tag + (p.sep === "," ? ", " : " ");
+			field.dispatchEvent(new Event("input", { bubbles: true }));
+			close();
+			field.focus();
+		}
+		function mark(i) {
+			active = i;
+			items.forEach(function (b, k) { b.classList.toggle("active", k === i); });
+		}
+		function open(f) {
+			var dl = document.getElementById(f.getAttribute("data-tag-list"));
+			if (!dl) { return; }
+			var p = parts(f), w = p.word.toLowerCase(), have = used(f);
+			if (w) { have = have.slice(0, -1); } // das gerade getippte Wort zaehlt noch nicht als vergeben
+			var list = Array.prototype.map.call(dl.options, function (o) { return o.value; }).filter(function (t) {
+				var l = t.toLowerCase();
+				return have.indexOf(l) < 0 && l !== w && (!w || l.indexOf(w) >= 0);
+			}).slice(0, 8);
+			close();
+			if (!list.length) { return; }
+			field = f;
+			menu = document.createElement("div");
+			menu.className = "dropdown-menu show shadow-sm";
+			menu.setAttribute("role", "listbox");
+			menu.style.position = "absolute";
+			menu.style.zIndex = 2000;
+			list.forEach(function (t) {
+				var b = document.createElement("button");
+				b.type = "button";
+				b.className = "dropdown-item small";
+				b.setAttribute("role", "option");
+				b.textContent = t;
+				b.addEventListener("mousedown", function (e) { e.preventDefault(); pick(t); });
+				menu.appendChild(b);
+				items.push(b);
+			});
+			var r = f.getBoundingClientRect();
+			menu.style.left = (r.left + window.scrollX) + "px";
+			menu.style.top = (r.bottom + window.scrollY + 2) + "px";
+			menu.style.minWidth = Math.min(r.width, 280) + "px";
+			document.body.appendChild(menu);
+		}
+		document.addEventListener("focusin", function (e) {
+			if (e.target.matches && e.target.matches("[data-tag-list]")) { open(e.target); }
+		});
+		document.addEventListener("input", function (e) {
+			if (e.target.matches && e.target.matches("[data-tag-list]")) { open(e.target); }
+		});
+		document.addEventListener("focusout", function (e) {
+			if (e.target === field) { close(); }
+		});
+		document.addEventListener("keydown", function (e) {
+			if (!menu || e.target !== field) { return; }
+			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+				e.preventDefault();
+				var n = items.length;
+				mark(e.key === "ArrowDown" ? (active + 1) % n : (active - 1 + n) % n);
+			} else if ((e.key === "Enter" || e.key === "Tab") && active >= 0) {
+				e.preventDefault();
+				pick(items[active].textContent);
+			} else if (e.key === "Escape") {
+				e.stopPropagation(); // Dialog bleibt offen
+				close();
+			}
+		}, true);
+		window.addEventListener("resize", close);
+		document.addEventListener("scroll", function (e) { if (menu && !menu.contains(e.target)) { close(); } }, true);
+	})();
+
 	// Erfolgsmeldungen nach einigen Sekunden ausblenden
 	document.querySelectorAll(".alert-success.alert-dismissible").forEach(function (el) {
 		setTimeout(function () {

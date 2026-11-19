@@ -22,7 +22,7 @@
 				<select class="form-select form-select-sm" id="ipam-p-scan" name="scan">
 					{{range (split "passive active off")}}<option value="{{.}}"{{if eq . $f.Scan}} selected{{end}}>{{$v.T (print "ipam64.scanmode." .)}}</option>{{end}}
 				</select></div>
-			<div class="col-md-6"><label class="form-label small" for="ipam-p-tags">{{$v.T "ipam64.col.tags"}}</label><input class="form-control form-control-sm" id="ipam-p-tags" name="tags" value="{{join $f.Tags " "}}" maxlength="330"></div>
+			<div class="col-md-6"><label class="form-label small" for="ipam-p-tags">{{$v.T "ipam64.col.tags"}}</label><input class="form-control form-control-sm" id="ipam-p-tags" name="tags" value="{{join $f.Tags " "}}" maxlength="330" autocomplete="off" data-tag-list="ipam-p-tag-list" data-tag-sep=" "><datalist id="ipam-p-tag-list">{{range $v.Data.TagList}}<option value="{{.}}">{{end}}</datalist></div>
 			<div class="col-md-6"><label class="form-label small" for="ipam-p-desc">{{$v.T "ipam64.col.description"}}</label><input class="form-control form-control-sm" id="ipam-p-desc" name="description" value="{{$f.Description}}" maxlength="200"></div>
 			<div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="ipam-p-full" name="mark_full" value="1"{{if $f.MarkFull}} checked{{end}}><label class="form-check-label small" for="ipam-p-full">{{$v.T "ipam64.prefix.mark_full"}}</label></div>
 				<div class="form-check"><input class="form-check-input" type="checkbox" id="ipam-p-dyn" name="dynamic" value="1"{{if eq $f.DynSource "auto"}} checked{{end}}><label class="form-check-label small" for="ipam-p-dyn">{{$v.T "ipam64.prefix.dynamic"}}</label><div class="form-text">{{$v.T "ipam64.prefix.dynamic_hint"}}</div></div></div>

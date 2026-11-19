@@ -38,7 +38,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.6.2"
+	version = "0.6.3"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)

@@ -609,6 +609,7 @@ type formData struct {
 	Types       []checks.Type
 	Parents     []*Check
 	Groups      []string    // vorhandene Gruppen (Vorschlaege)
+	Tags        []string    // vorhandene Tags (Vorschlaege, #193)
 	Devices     []NetDevice // Geraete aus DNS64 (Auswahl beim Anlegen, nur wenn DNS64 laeuft)
 	IPModes     []string
 	Error       string
@@ -1013,8 +1014,15 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 			seen[c.Group] = true
 			d.Groups = append(d.Groups, c.Group)
 		}
+		for _, t := range c.Tags {
+			if t != "" && !seen["\x00"+t] {
+				seen["\x00"+t] = true
+				d.Tags = append(d.Tags, t)
+			}
+		}
 	}
 	sort.Strings(d.Groups)
+	sort.Strings(d.Tags)
 	if !d.Edit && m.netDevices != nil {
 		d.Devices = m.netDevices(r.Context())
 	}

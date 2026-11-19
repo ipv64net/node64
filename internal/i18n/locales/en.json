@@ -106,6 +106,7 @@
     "theme_auto": "Automatic",
     "standalone": "Healthchecks sync off",
     "version": "Version {version}",
+    "version_link": "Changes of this version on GitHub",
     "api": "API",
     "status_pages": "Status pages",
     "honeypot": "Honeypot64",
@@ -7967,6 +7968,26 @@
         "uncorrectable": "Uncorrectable sectors or errors",
         "crc_errors": "Interface CRC errors"
       }
+    },
+    "sel": {
+      "toggle": "Select",
+      "filter": "Filter services …",
+      "all": "All",
+      "visible": "Filtered",
+      "none": "None",
+      "count": "{n} selected",
+      "act_show": "Do not report",
+      "act_notify": "Report again",
+      "act_ignore": "Ignore",
+      "confirm_title": "Change selected services",
+      "confirm_show": "Only display {n} services? They stay in the list with values and history but no longer report problems.",
+      "confirm_notify": "Let {n} services report again? Warnings and critical states go to the channels again.",
+      "confirm_ignore": "Ignore {n} services? They are no longer monitored and are then listed under \"Ignored\", where they can be adopted again.",
+      "done_show": "{n} services no longer report",
+      "done_notify": "{n} services report again",
+      "done_ignore": "{n} services ignored",
+      "adopt_selected": "Adopt selected",
+      "none_selected": "No services selected"
     }
   },
   "useradmin": {

@@ -1,5 +1,9 @@
 # IPAM64 – Changes
 
+## 0.6.3 – unreleased
+
+- Edit prefix and address: the "Tags" field suggests tags already in use (#193).
+
 ## 0.6.2 – 2026-11-15
 
 - Own logo (light and dark) in the overview, on the dashboard and under Settings → Modules.

@@ -44,7 +44,8 @@
 					</div>
 					<div class="col-md-6">
 						<label class="form-label" for="tags">{{.T "hc.tags"}}</label>
-						<div class="input-group"><span class="input-group-text"><i class="bi bi-tags"></i></span><input class="form-control" id="tags" name="tags" value="{{index $f "tags"}}" placeholder="prod, web"></div>
+						<div class="input-group"><span class="input-group-text"><i class="bi bi-tags"></i></span><input class="form-control" id="tags" name="tags" value="{{index $f "tags"}}" placeholder="prod, web" autocomplete="off" data-tag-list="hc-tags" data-tag-sep=","></div>
+						<datalist id="hc-tags">{{range $d.Tags}}<option value="{{.}}">{{end}}</datalist>
 					</div>
 					{{if not $d.APIMode}}<div class="col-md-6">
 						<label class="form-label" for="parent">{{.T "hc.form.parent"}}</label>

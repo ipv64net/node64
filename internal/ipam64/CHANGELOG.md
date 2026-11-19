@@ -1,5 +1,9 @@
 # IPAM64 – Änderungen
 
+## 0.6.3 – unveröffentlicht
+
+- Präfix und Adresse bearbeiten: Beim Feld „Tags“ werden die schon vergebenen Tags vorgeschlagen (#193).
+
 ## 0.6.2 – 2026-11-15
 
 - Eigenes Logo (hell und dunkel) in der Übersicht, auf dem Dashboard und unter Einstellungen → Module.
