@@ -223,6 +223,15 @@ func TestSilentConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = ca.Close()
+	// Der Agent verbucht die Anmeldung erst nach seiner Seite des Handshakes, und der Platz der Anmeldung wird danach
+	// frei: auf beides warten (CI ist langsamer) - sonst zaehlt die Node noch als unbekannt und findet den Topf voll
+	gateBusy := func() int { s2.gate.mu.Lock(); defer s2.gate.mu.Unlock(); return s2.gate.total + s2.gate.knownTotal }
+	for i := 0; i < 300 && (!s2.lim.known("127.0.0.1", time.Now()) || gateBusy() > 0); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !s2.lim.known("127.0.0.1", time.Now()) {
+		t.Fatal("login was not recorded as known address")
+	}
 
 	// Plaetze ohne Anmeldung von vielen Adressen fuellen
 	var open []net.Conn
