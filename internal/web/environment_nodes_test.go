@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"crypto/tls"
-	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -72,13 +71,7 @@ func enterWith(t *testing.T, c *http.Client, b *keyNode, origin, ticket string) 
 	req, _ := http.NewRequest(http.MethodPost, b.tls.URL+envEnterPath, strings.NewReader(url.Values{"ticket": {ticket}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", origin)
-	resp, err := c.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	return resp, string(body)
+	return envBrowser(t, c, req)
 }
 
 // enterConfirmed loest ein Ticket ein, fuer das B eine Bestaetigung verlangt (Rueckweg nicht als Adresse von A
@@ -192,6 +185,12 @@ func TestEnvironmentAddedNodes(t *testing.T) {
 	if page := getWith(t, bb, b.tls.URL+"/"); !strings.Contains(page, "Geöffnet über Environment von Node A") {
 		t.Fatal("banner on B missing")
 	}
+	// zweites Oeffnen, solange die Sitzung vom ersten lebt: das Formular von A kommt ohne die Cookies von B, die
+	// Bestaetigung (mit Cookies) passt trotzdem zum CSRF-Token
+	tok, _ = open()
+	if resp := enterConfirmed(t, bb, b, a.app.srv.URL, tok); resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
+		t.Fatalf("second open: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
 	if acc, _ := b.env.Accesses(ctx); len(acc) != 1 || acc[0].LastFromName != "Node A" {
 		t.Fatalf("last use: %+v", acc)
 	}
@@ -253,6 +252,17 @@ func TestEnvironmentAddedNodes(t *testing.T) {
 	}
 	if tok, _ := open(); tok != "" {
 		t.Fatal("ticket after revoke")
+	}
+	// ... und beendet die ueber den Zugang geoeffneten Sitzungen
+	for _, c := range []*http.Client{bb, bb2} {
+		resp, err := c.Get(b.tls.URL + "/settings")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
+			t.Fatalf("session after revoke: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+		}
 	}
 	// Fehlversuche (Mittelsmann, widerrufen) bremsen: nach fuenf antwortet B mit 429
 	for range 3 {
@@ -377,5 +387,16 @@ func TestEnvironmentAddedNodesAPI(t *testing.T) {
 	}
 	if st, _ := api("DELETE", "/api/environment/nodes/"+list[0].UID, ""); st != 403 {
 		t.Fatalf("read-only delete: %d", st)
+	}
+}
+
+// Fehlermeldungen beim Anlegen eines Zugangs sind uebersetzt (kein roher englischer Fehlertext).
+func TestEnvironmentAccessErrorTranslated(t *testing.T) {
+	b := newKeyNode(t, "node-b-000001", "Node B", -1)
+	loginAs(t, b.app, "admin", "sehr geheimes passwort")
+	_, page := b.app.get(t, "/environment/access")
+	resp, page := b.app.post(t, "/environment/access", url.Values{"_csrf": {csrfOf(t, page)}, "name": {"  "}})
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(page, "Bitte einen Namen angeben.") || strings.Contains(page, "name missing") {
+		t.Fatalf("access without name: %d", resp.StatusCode)
 	}
 }

@@ -158,6 +158,7 @@ type seenRow struct {
 	IP          netip.Addr
 	MAC         string
 	First, Last time.Time
+	Since       time.Time // Beginn der aktuellen Anwesenheit (nach einer Luecke laenger als conflictFor neu)
 }
 
 func newUID() string {
@@ -824,10 +825,12 @@ func (m *Module) saveSeen(ctx context.Context, list []seenRow) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, s := range todo {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ipam_seen (ip, mac, first_seen, last_seen) VALUES (?, ?, ?, ?)
-			ON CONFLICT (ip, mac) DO UPDATE SET last_seen = excluded.last_seen WHERE excluded.last_seen > ipam_seen.last_seen`,
-			s.IP.String(), s.MAC, s.Last.Unix(), s.Last.Unix()); err != nil {
+	for _, s := range todo { // since: nach einer Luecke laenger als conflictFor beginnt eine neue Anwesenheit
+		if _, err := tx.ExecContext(ctx, `INSERT INTO ipam_seen (ip, mac, first_seen, last_seen, since) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (ip, mac) DO UPDATE SET last_seen = excluded.last_seen,
+				since = CASE WHEN excluded.last_seen - ipam_seen.last_seen > ? THEN excluded.last_seen ELSE ipam_seen.since END
+			WHERE excluded.last_seen > ipam_seen.last_seen`,
+			s.IP.String(), s.MAC, s.Last.Unix(), s.Last.Unix(), s.Last.Unix(), int64(conflictFor/time.Second)); err != nil {
 			return err
 		}
 	}
@@ -841,7 +844,7 @@ func (m *Module) saveSeen(ctx context.Context, list []seenRow) error {
 }
 
 func (m *Module) seenRows(ctx context.Context) ([]seenRow, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT ip, mac, first_seen, last_seen FROM ipam_seen ORDER BY last_seen`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT ip, mac, first_seen, last_seen, since FROM ipam_seen ORDER BY last_seen`)
 	if err != nil {
 		return nil, err
 	}
@@ -850,24 +853,32 @@ func (m *Module) seenRows(ctx context.Context) ([]seenRow, error) {
 	for rows.Next() {
 		var ip string
 		var s seenRow
-		var a, b int64
-		if err := rows.Scan(&ip, &s.MAC, &a, &b); err != nil {
+		var a, b, c int64
+		if err := rows.Scan(&ip, &s.MAC, &a, &b, &c); err != nil {
 			return nil, err
 		}
 		if s.IP, err = netip.ParseAddr(ip); err != nil {
 			continue
 		}
-		s.First, s.Last = time.Unix(a, 0), time.Unix(b, 0)
+		s.First, s.Last, s.Since = time.Unix(a, 0), time.Unix(b, 0), time.Unix(max(a, c), 0)
 		out = append(out, s)
 	}
 	return out, rows.Err()
 }
 
-// pruneSeen loescht Sichtungen, die aelter als seenKeep sind.
+// pruneSeen loescht Sichtungen, die aelter als seenKeep sind (auch aus dem Gedaechtnis von saveSeen).
 func (m *Module) pruneSeen(ctx context.Context, now time.Time) {
-	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM ipam_seen WHERE last_seen < ?`, now.Add(-seenKeep).Unix()); err != nil {
+	cut := now.Add(-seenKeep).Unix()
+	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM ipam_seen WHERE last_seen < ?`, cut); err != nil {
 		m.log.Warn("ipam64: prune sightings", "err", err)
 	}
+	m.seenMu.Lock()
+	for k, t := range m.seenAt {
+		if t < cut {
+			delete(m.seenAt, k)
+		}
+	}
+	m.seenMu.Unlock()
 }
 
 // lastAddr ist die letzte Adresse eines Praefixes (IPv4: Broadcast).

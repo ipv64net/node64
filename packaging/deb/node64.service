@@ -12,7 +12,9 @@ User=node64
 Group=node64
 EnvironmentFile=-/etc/default/node64
 ExecStart=/usr/bin/node64
-Restart=on-failure
+# auch nach sauberem Ende: "Datenbank wiederherstellen" und "Zuruecksetzen" beenden Node64 mit Exit 0 und erwarten den
+# Neustart (wie im Docker-Container); "systemctl stop" stoppt weiterhin
+Restart=always
 RestartSec=5s
 # Daten in /var/lib/node64 (legt systemd mit dem Benutzer an); neuere Versionen aus dem Selbst-Update liegen dort in bin/
 StateDirectory=node64

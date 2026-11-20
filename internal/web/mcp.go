@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/mcp"
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -60,7 +61,7 @@ func mcpPrivateSource(r *http.Request) bool {
 		host = r.RemoteAddr
 	}
 	ip, err := netip.ParseAddr(host)
-	if err != nil || !lanOnly(ip.Unmap()) {
+	if err != nil || !lanOnly(localnet.Origin(ip.Unmap())) { // Docker-Gateway: Herkunft unbekannt, nicht privat
 		return false
 	}
 	var fwd []string

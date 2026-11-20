@@ -184,3 +184,37 @@ func TestLDAPGroupsRevoked(t *testing.T) {
 		t.Fatal("failed sync must keep the last state")
 	}
 }
+
+// Benutzerfilter auf ein anderes Attribut (mail): Abgleich und Passkey-Nachpruefung finden den Benutzer ueber seinen
+// Node64-Namen, und eine Anmeldung mit dem Namen und beliebigem Passwort (Filter findet nichts) nimmt ihm die Rolle
+// nicht.
+func TestLDAPMailFilterKeepsGroups(t *testing.T) {
+	e := newLDAPEnv(t)
+	ctx := context.Background()
+	e.dir.Set(tAdminsDN, "member", tMaxDN)
+	cfg := authcfg.LoadLDAP(ctx, e.a.store)
+	cfg.UserFilter = "(&(objectClass=user)(mail=%s))"
+	_ = authcfg.SaveLDAP(ctx, e.a.store, cfg)
+	if resp := e.login(t, "max@example.org", "ad-passwort-1"); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("login: %d", resp.StatusCode)
+	}
+	e.logout(t)
+	max, _ := e.a.store.UserByName(ctx, "mmuster")
+	if max == nil || e.a.store.EffectiveRole(ctx, max) != store.RoleAdmin {
+		t.Fatalf("admin via group expected: %+v", max)
+	}
+	e.unthrottle()
+	if resp := e.login(t, "mmuster", "beliebig"); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("name instead of mail: %d", resp.StatusCode)
+	}
+	if max, _ = e.a.store.UserByName(ctx, "mmuster"); e.a.store.EffectiveRole(ctx, max) != store.RoleAdmin {
+		t.Fatalf("anonymous login attempt took the role: %v", max.ExtGroupUIDs)
+	}
+	e.a.s.ldapSyncGroups(ctx)
+	if max, _ = e.a.store.UserByName(ctx, "mmuster"); e.a.store.EffectiveRole(ctx, max) != store.RoleAdmin {
+		t.Fatalf("sync must find the user by name: %v", max.ExtGroupUIDs)
+	}
+	if ok, reason := e.a.s.ldapRecheck(ctx, max); !ok {
+		t.Fatalf("passkey recheck: %s", reason)
+	}
+}

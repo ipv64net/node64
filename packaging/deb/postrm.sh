@@ -10,6 +10,10 @@ remove)
 	fi
 	;;
 purge)
+	rm -f /etc/systemd/system/multi-user.target.wants/node64.service # aktiviert (prerm laesst das bei "remove" stehen)
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload >/dev/null 2>&1 || true
+	fi
 	if getent passwd node64 >/dev/null 2>&1; then
 		deluser --system node64 >/dev/null 2>&1 || true
 	fi

@@ -10,22 +10,24 @@ import (
 // Zusaetzliche Vertrauensanker fuer HTTPS- und Zertifikats-Checks: Auf der Node setzt main die eigenen CAs der
 // Zertifikatsverwaltung (System-CAs plus eigene CAs, #190 - Dienste mit Zertifikat einer eigenen CA galten sonst als
 // "certificate signed by unknown authority"). Ohne Quelle (hubs, Tests) gelten nur die System-CAs.
-var trustSource atomic.Pointer[func() *x509.CertPool]
+var trustSource atomic.Pointer[func() (*x509.CertPool, error)]
 
 // SetTrustPool setzt die Quelle der Vertrauensanker (nil = nur System-CAs). Sie liefert nil, solange es keine eigene
-// CA gibt.
-func SetTrustPool(f func() *x509.CertPool) {
+// CA gibt, und einen Fehler, wenn sie die CAs nicht lesen konnte.
+func SetTrustPool(f func() (*x509.CertPool, error)) {
 	if f == nil {
 		trustSource.Store(nil)
 	} else {
 		trustSource.Store(&f)
 	}
 	trustCache.Lock()
-	trustCache.at = time.Time{}
+	trustCache.pool, trustCache.at = nil, time.Time{}
 	trustCache.Unlock()
 }
 
-// trustCache haelt den Pool eine Minute (die Quelle liest die Datenbank, Checks laufen sehr oft).
+// trustCache haelt den Pool eine Minute (die Quelle liest die Datenbank, Checks laufen sehr oft). Ein Lesefehler wird
+// nicht gemerkt (sonst galten Dienste mit Zertifikat einer eigenen CA eine Minute als "unknown authority"): es gilt
+// der bisherige Pool, der naechste Check fragt erneut.
 var trustCache struct {
 	sync.Mutex
 	pool *x509.CertPool
@@ -43,7 +45,9 @@ func trustRoots() *x509.CertPool {
 	trustCache.Lock()
 	defer trustCache.Unlock()
 	if time.Since(trustCache.at) > trustTTL {
-		trustCache.pool, trustCache.at = (*f)(), time.Now()
+		if pool, err := (*f)(); err == nil {
+			trustCache.pool, trustCache.at = pool, time.Now()
+		}
 	}
 	return trustCache.pool
 }

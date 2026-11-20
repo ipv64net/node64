@@ -40,7 +40,7 @@ type System struct {
 	Home      string    `json:"home,omitempty"` // Node, die das System angelegt hat (Cluster); leer = diese Node
 }
 
-// Guest-Typen und Node-Zustaende wie in der API.
+// Typen wie in der API (qemu/lxc/node fuer Abfragen und Probe) und Container eines Docker-Hosts (Resource.Type).
 const (
 	TypeQEMU   = "qemu"
 	TypeLXC    = "lxc"
@@ -48,44 +48,34 @@ const (
 	TypeDocker = "docker" // Container eines Docker-Hosts
 )
 
-// IsDocker sagt, ob das System ein Docker-Host ist.
-func (s *System) IsDocker() bool { return s != nil && s.Kind == KindDocker }
-
-// State ist der bewertete Zustand (Anzeige und Regeln).
+// State ist der bewertete Zustand eines Containers (dockerState).
 type State string
 
 const (
-	StateRunning   State = "running"
-	StateStopped   State = "stopped"
-	StatePaused    State = "paused"
-	StateSuspended State = "suspended"
-	StateBackup    State = "backup"  // lock=backup (laeuft weiter, Hinweis)
-	StateLocked    State = "locked"  // anderer lock (migrate, snapshot, clone …) – Lock im Feld Lock
-	StateOnline    State = "online"  // Node
-	StateOffline   State = "offline" // Node
-	StateUnknown   State = "unknown" // Node offline bzw. keine Daten
-	StateError     State = "error"   // Absturz: qmpstatus internal-error, guest-panicked bzw. io-error (Gast „haengt“)
+	StateRunning State = "running"
+	StateStopped State = "stopped"
+	StatePaused  State = "paused"
+	StateUnknown State = "unknown" // keine Daten
+	StateError   State = "error"   // Stoerung, Grund im Feld Detail (dockerState)
 )
 
-// Resource ist ein Node oder Gast in einem Snapshot.
+// Resource ist ein Container eines Docker-Hosts in einem Snapshot (Type docker; die Felder VMID, Tags und Template
+// stammen aus der Zeit der Proxmox-Gaeste und bleiben fuer Key und Excluded).
 type Resource struct {
-	Type     string   `json:"type"`           // qemu, lxc, node
-	Node     string   `json:"node"`           // Node-Name (bei Nodes = Name)
-	VMID     int      `json:"vmid,omitempty"` // Gaeste
+	Type     string   `json:"type"`           // docker
+	Node     string   `json:"node"`           // Name des Docker-Hosts
+	VMID     int      `json:"vmid,omitempty"` // Proxmox-Gaeste (nicht mehr belegt)
 	Name     string   `json:"name"`
 	State    State    `json:"state"`
-	Status   string   `json:"status"` // roh aus der API (running, stopped, online …)
-	Lock     string   `json:"lock,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
+	Status   string   `json:"status"`         // roh aus der API (running, exited …)
+	Tags     []string `json:"tags,omitempty"` // Docker: Compose-Projekt
 	Template bool     `json:"template,omitempty"`
 
-	CPU     float64 `json:"cpu"` // Anteil 0..1 (bezogen auf MaxCPU)
-	MaxCPU  float64 `json:"max_cpu"`
-	Mem     int64   `json:"mem"`
-	MaxMem  int64   `json:"max_mem"`
-	Disk    int64   `json:"disk"` // bei QEMU meist 0 (ohne Gast-Agent)
-	MaxDisk int64   `json:"max_disk"`
-	Uptime  int64   `json:"uptime"` // Sekunden
+	CPU    float64 `json:"cpu"` // Anteil 0..1 (bezogen auf MaxCPU)
+	MaxCPU float64 `json:"max_cpu"`
+	Mem    int64   `json:"mem"`
+	MaxMem int64   `json:"max_mem"`
+	Uptime int64   `json:"uptime"` // Sekunden
 
 	// Raten seit der letzten Abfrage (Byte/s), aus den Zaehlern der API berechnet; 0 bei erster Abfrage.
 	NetIn     float64 `json:"net_in"`
@@ -94,10 +84,6 @@ type Resource struct {
 	DiskWrite float64 `json:"disk_write"`
 
 	Restarted bool `json:"restarted,omitempty"` // uptime ist zurueckgesprungen, obwohl weiter laufend
-
-	// IP fuer den Ping der Latenz (Check-Typ proxmox): Node aus cluster/status, laufender Gast ueber den Gast-Agent
-	// bzw. die LXC-Schnittstellen (nur Gaeste mit Check, siehe Poller.WantIP); leer = keine bekannt.
-	IP string `json:"ip,omitempty"`
 
 	// Nur Docker (Type docker): Key ist der Name (bleibt beim Neuanlegen), die ID wird mitgefuehrt.
 	ContainerID string            `json:"container_id,omitempty"` // 12 Zeichen
@@ -142,39 +128,6 @@ func (r *Resource) Excluded() bool {
 		}
 	}
 	return false
-}
-
-// Measurable: Werte sind aussagekraeftig (Node online, Gast laeuft – auch mit Lock).
-func (r *Resource) Measurable() bool {
-	if r.Type == TypeNode {
-		return r.State == StateOnline
-	}
-	if r.Type == TypeDocker {
-		return r.Status == "running" // auch unhealthy bzw. Neustart-Schleife: Werte sind echt
-	}
-	switch r.State {
-	case StateRunning:
-		return true
-	case StateBackup, StateLocked:
-		return r.Status == "running"
-	}
-	return false
-}
-
-// MemPercent liefert die RAM-Belegung in Prozent; ok = Maximum bekannt.
-func (r *Resource) MemPercent() (float64, bool) {
-	if r.MaxMem <= 0 {
-		return 0, false
-	}
-	return float64(r.Mem) * 100 / float64(r.MaxMem), true
-}
-
-// DiskPercent liefert die Disk-Belegung in Prozent; ok = Wert vorhanden (bei QEMU nur mit Gast-Agent, sonst 0).
-func (r *Resource) DiskPercent() (float64, bool) {
-	if r.MaxDisk <= 0 || (r.Disk <= 0 && r.Type == TypeQEMU) {
-		return 0, false
-	}
-	return float64(r.Disk) * 100 / float64(r.MaxDisk), true
 }
 
 // Snapshot ist der Stand eines Systems nach einer Abfrage.

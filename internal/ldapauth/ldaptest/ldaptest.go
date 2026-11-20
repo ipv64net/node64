@@ -37,6 +37,7 @@ type Server struct {
 	empty    int          // Binds mit leerem Passwort
 	conns    int
 	searches []string // Filter jeder Suche (lesbar)
+	delay    time.Duration
 }
 
 // Dienstkonto im Testverzeichnis
@@ -97,6 +98,13 @@ func (f *Server) Set(dn, attr string, vals ...string) {
 	if e := f.entries[strings.ToLower(dn)]; e != nil {
 		e[strings.ToLower(attr)] = vals
 	}
+}
+
+// SetDelay: jede Suche antwortet erst nach d (langsames Verzeichnis).
+func (f *Server) SetDelay(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.delay = d
 }
 
 // Stats: DNs der Binds mit Passwort, Zahl der Binds mit leerem Passwort, Zahl der Verbindungen.
@@ -214,7 +222,9 @@ func (f *Server) search(c net.Conn, id int64, op *ber.Packet) {
 	}
 	f.mu.Lock()
 	f.searches = append(f.searches, filterString(filter))
+	delay := f.delay
 	f.mu.Unlock()
+	time.Sleep(delay)
 	f.dirMu.RLock()
 	defer f.dirMu.RUnlock()
 	n := 0

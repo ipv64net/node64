@@ -262,3 +262,28 @@ func TestSettingsModulesPage(t *testing.T) {
 		t.Fatalf("disable: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
+
+// Meldung beim Schalten eines Moduls: Titel aus dem Modul (TitleKey), nicht der rohe Schluessel module.<name>.
+func TestModuleToggleFlashTitle(t *testing.T) {
+	a := newTestAppWith(t, pingModule{})
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	_, body := a.get(t, "/settings/modules")
+	if resp, _ := a.post(t, "/settings/modules", url.Values{"_csrf": {csrfOf(t, body)}, "module": {"ping"}, "action": {"enable"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("enable: %d", resp.StatusCode)
+	}
+	if _, body = a.get(t, "/settings/modules"); !strings.Contains(body, "Modul Dashboard aktiviert.") || strings.Contains(body, "module.ping") {
+		t.Fatal("flash must name the module by its title")
+	}
+}
+
+// Design-Umschalter: neu geladen wird die Seite mit der Karte Darstellung (Mein Konto), nicht /settings.
+func TestDesignSwitchReloadsAccount(t *testing.T) {
+	a := newTestApp(t)
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	if _, body := a.get(t, accountPath); !strings.Contains(body, `id="appearance"`) || !strings.Contains(body, `name="ui_design"`) {
+		t.Fatal("appearance card not on the account page")
+	}
+	if _, js := a.get(t, "/static/js/app.js"); !strings.Contains(js, `window.location.assign("`+accountPath+`")`) {
+		t.Fatal("design switch must reload the account page")
+	}
+}

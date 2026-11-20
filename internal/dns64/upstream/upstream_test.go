@@ -272,6 +272,10 @@ func TestPlainChecksQuestion(t *testing.T) {
 			m.Question[0].Qtype = dns.TypeAAAA
 		case "none.example.":
 			m.Question = nil
+		case "refused.example.": // Fehlerantwort ohne Frage (manche Router, RFC 1035 erlaubt das)
+			m.Question, m.Rcode = nil, dns.RcodeRefused
+		case "nx.example.": // NXDOMAIN ohne Frage koennte im Cache landen: weiter abgewiesen
+			m.Question, m.Rcode = nil, dns.RcodeNameError
 		case "case.example.":
 			m.Question[0].Name = "CaSe.ExAmPlE."
 		}
@@ -281,12 +285,16 @@ func TestPlainChecksQuestion(t *testing.T) {
 	defer srv.Shutdown()
 	host, port, _ := net.SplitHostPort(pc.LocalAddr().String())
 	p := newPlain(host, port)
-	for name, ok := range map[string]bool{"good.example.": true, "case.example.": true, "other.example.": false, "type.example.": false, "none.example.": false} {
+	for name, ok := range map[string]bool{"good.example.": true, "case.example.": true, "other.example.": false, "type.example.": false, "none.example.": false,
+		"refused.example.": true, "nx.example.": false} {
 		req := new(dns.Msg)
 		req.SetQuestion(name, dns.TypeA)
-		_, err := p.exchange(context.Background(), req)
+		resp, err := p.exchange(context.Background(), req)
 		if (err == nil) != ok {
 			t.Errorf("%s: err %v", name, err)
+		}
+		if name == "refused.example." && err == nil && resp.Rcode != dns.RcodeRefused {
+			t.Errorf("refused: rcode %d", resp.Rcode)
 		}
 	}
 }

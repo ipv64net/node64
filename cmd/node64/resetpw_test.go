@@ -49,7 +49,8 @@ func TestResetPassword(t *testing.T) {
 	if code := resetPassword([]string{"-user", "nobody"}); code == 0 {
 		t.Fatal("unbekannter Benutzer angenommen")
 	}
-	if code := resetPassword([]string{"-password", "neues-passwort-456", "-disable-2fa"}); code != 0 {
+	// Leerzeichen am Rand zaehlen wie bei der Anmeldung nicht
+	if code := resetPassword([]string{"-password", " neues-passwort-456 ", "-disable-2fa"}); code != 0 {
 		t.Fatalf("reset-password: exit %d", code)
 	}
 

@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -19,11 +21,47 @@ import (
 // wer die alte Kennung noch hat, biegt ebenso um. So loescht keine dritte Node eine Gruppe samt Mitgliedschaften.
 // Die Umleitungen stehen in users.group_aliases (alte -> neue Kennung) und gelten auch fuer Benutzer, die mit einer
 // alten Kennung eintreffen.
+//
+// Zusammengefuehrt wird erst, wenn die Gleichnamigkeit beim erneuten Abholen noch besteht (groupMergeWait): eine Node,
+// die nachholt, bekommt je Gruppe nur den letzten Stand in der Reihenfolge der letzten Aenderung. Wurde dort „Admins“
+// umbenannt und danach neu angelegt, kann die neue Gruppe hier vor der Umbenennung der alten eintreffen - beide sind
+// keine getrennt angelegten Gruppen und duerfen nicht verschmelzen (die alten Mitglieder kaemen in die neue Gruppe).
 
 const (
 	setGroupAliases = "users.group_aliases"
 	maxAliases      = 500
 )
+
+// groupMergeWait: so lange nach dem ersten Eintreffen einer gleichnamigen Gruppe wartet die Zusammenfuehrung
+// mindestens (Variable fuer Tests); bis dahin wird die Gruppe abgelehnt und spaeter erneut abgeholt (peer, ab 5 min).
+var groupMergeWait = 2 * time.Minute
+
+// errGroupWait: gleichnamige Gruppe hier, Zusammenfuehrung erst beim erneuten Abholen.
+var errGroupWait = errors.New("cluster: group with the same name here, merged on a later retry if it stays")
+
+// mergeDue: die Gruppe uid trifft auf die gleichnamige Gruppe other hier - zusammenfuehren erst, wenn das schon
+// mindestens groupMergeWait vorher so war (unter c.mu).
+func (c *Cluster) mergeDue(uid, other string) bool {
+	key, now := uid+"|"+other, time.Now()
+	first, seen := c.merges[key]
+	if !seen {
+		if c.merges == nil {
+			c.merges = map[string]time.Time{}
+		}
+		for k, t := range c.merges { // aufgeloeste Faelle vergessen
+			if now.Sub(t) > 24*time.Hour {
+				delete(c.merges, k)
+			}
+		}
+		c.merges[key] = now
+		return false
+	}
+	if now.Sub(first) < groupMergeWait {
+		return false
+	}
+	delete(c.merges, key)
+	return true
+}
 
 // clusterGroup ist eine Gruppe im Cluster. Into: die Kennung ist in dieser Gruppe aufgegangen (sonst leer).
 type clusterGroup struct {
@@ -164,6 +202,9 @@ func (c *Cluster) applyGroup(ctx context.Context, uid string, data json.RawMessa
 		if g.UID != uid && strings.EqualFold(g.Name, in.Name) {
 			other = g
 		}
+	}
+	if other != nil && !c.mergeDue(uid, other.UID) {
+		return errGroupWait
 	}
 	if other != nil && other.UID < uid { // hier gilt die gleichnamige mit der kleineren Kennung: uid geht in ihr auf
 		return c.redirectGroup(ctx, uid, other.UID)

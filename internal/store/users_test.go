@@ -139,7 +139,7 @@ func TestExtGroupsFresh(t *testing.T) {
 	if role(oidc.ID) != RoleRead {
 		t.Fatal("oidc groups after 8 days")
 	}
-	// Gruppe von Hand und eigene Rolle zaehlen immer; lokale Benutzer ohne Pruefzeitpunkt behalten ihre Gruppen
+	// Gruppe von Hand und eigene Rolle zaehlen immer; lokale Benutzer behalten frisch gepruefte Gruppen
 	u, _ := s.UserByID(ctx, ldap.ID)
 	_ = s.UpdateUserAdmin(ctx, ldap.ID, UserAdmin{Role: RoleRead, GroupUIDs: []string{g.UID}})
 	if role(ldap.ID) != RoleAdmin {
@@ -151,6 +151,11 @@ func TestExtGroupsFresh(t *testing.T) {
 	}
 	if role(local.ID) != RoleAdmin {
 		t.Fatal("local user keeps its groups")
+	}
+	// Gruppen aus einem verknuepften SSO-Konto verfallen auch beim lokalen Benutzer nach 7 Tagen
+	setChecked(t, s, local.ID, time.Now().Add(-8*24*time.Hour))
+	if role(local.ID) != RoleRead {
+		t.Fatal("sso groups of a local user after 8 days")
 	}
 }
 

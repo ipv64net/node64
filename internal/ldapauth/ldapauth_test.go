@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/authcfg"
 	"github.com/ipv64net/node64/internal/ldapauth/ldaptest"
@@ -281,5 +283,81 @@ func TestLookup(t *testing.T) {
 		if b != ldaptest.Service {
 			t.Fatalf("lookup must only bind the service account, got %q", b)
 		}
+	}
+}
+
+// Lookup mit einem Benutzerfilter auf ein anderes Attribut (mail): der gespeicherte Node64-Name (sAMAccountName) wird
+// trotzdem gefunden.
+func TestLookupOtherFilterAttribute(t *testing.T) {
+	f := adDirectory(t, false)
+	cfg := adConfig(f)
+	cfg.UserFilter = "(&(objectClass=user)(mail=%s))"
+	got, err := Lookup(ctxCA(t, f), cfg, ldaptest.ServicePassword, []string{"mmuster", "niemand"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("lookup: %v %+v", err, got)
+	}
+	if m := got["mmuster"]; m == nil || m.StableKey != guidHex || m.Disabled {
+		t.Fatalf("mmuster: %+v", m)
+	}
+}
+
+// Abgelaufene AD-Konten (accountExpires) und im LDAP gesperrte Konten (nsAccountLock, dauerhafte ppolicy-Sperre)
+// gelten als deaktiviert; "nie" (0, groesster Wert) und eine zeitweise Sperre nach Fehlversuchen nicht.
+func TestDisabledExpiredAndLocked(t *testing.T) {
+	f := adDirectory(t, false)
+	add := func(name, expires string) {
+		f.Add("CN="+name+",OU=Users,DC=example,DC=org", map[string][]string{"objectClass": {"user"}, "sAMAccountName": {name},
+			"userAccountControl": {"512"}, "accountExpires": {expires}, "objectGUID": {name}})
+	}
+	add("abgelaufen", "130000000000000000") // 2012
+	add("nie", "9223372036854775807")
+	add("null", "0")
+	add("spaeter", strconv.FormatInt((time.Now().Add(24*time.Hour).Unix()+11644473600)*10_000_000, 10))
+	got, err := Lookup(ctxCA(t, f), adConfig(f), ldaptest.ServicePassword, []string{"abgelaufen", "nie", "null", "spaeter"})
+	if err != nil || len(got) != 4 {
+		t.Fatalf("lookup: %v %+v", err, got)
+	}
+	for name, want := range map[string]bool{"abgelaufen": true, "nie": false, "null": false, "spaeter": false} {
+		if got[name].Disabled != want {
+			t.Errorf("%s: disabled=%v", name, got[name].Disabled)
+		}
+	}
+	if _, err := Authenticate(ctxCA(t, f), adConfig(f), ldaptest.ServicePassword, "abgelaufen", "x"); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("expired login: %v", err)
+	}
+
+	l := ldaptest.New(t, true)
+	for name, attrs := range map[string]map[string][]string{
+		"nslock": {"nsAccountLock": {"TRUE"}}, "ppolicy": {"pwdAccountLockedTime": {"000001010000Z"}},
+		"zeitweise": {"pwdAccountLockedTime": {"20261120100000Z"}}, "frei": {"nsAccountLock": {"false"}},
+	} {
+		attrs["objectClass"], attrs["uid"] = []string{"person"}, []string{name}
+		l.Add("uid="+name+",ou=people,dc=example,dc=org", attrs)
+	}
+	cfg := authcfg.LDAPConfig{Enabled: true, URLs: []string{l.URL("ldaps")}, Profile: authcfg.ProfileLDAP, BindDN: ldaptest.Service, BaseDN: adBase}
+	got, err = Lookup(ctxCA(t, l), cfg, ldaptest.ServicePassword, []string{"nslock", "ppolicy", "zeitweise", "frei"})
+	if err != nil || len(got) != 4 {
+		t.Fatalf("ldap lookup: %v %+v", err, got)
+	}
+	for name, want := range map[string]bool{"nslock": true, "ppolicy": true, "zeitweise": false, "frei": false} {
+		if got[name].Disabled != want {
+			t.Errorf("%s: disabled=%v", name, got[name].Disabled)
+		}
+	}
+}
+
+// Das Zeitlimit gilt je Vorgang: ein Abgleich vieler Benutzer, der insgesamt laenger dauert, scheitert nicht.
+func TestLookupTimeoutPerOperation(t *testing.T) {
+	f := adDirectory(t, false)
+	cfg := adConfig(f)
+	cfg.TimeoutSec = 1
+	f.SetDelay(300 * time.Millisecond)
+	start := time.Now()
+	got, err := Lookup(ctxCA(t, f), cfg, ldaptest.ServicePassword, []string{"mmuster", "gesperrt", "mmuster"})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("lookup: %v %+v", err, got)
+	}
+	if time.Since(start) < 1200*time.Millisecond {
+		t.Fatalf("test too fast to prove anything: %s", time.Since(start))
 	}
 }

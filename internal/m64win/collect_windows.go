@@ -126,6 +126,23 @@ func (c *collector) collectStorage(ctx context.Context, r *m64proto.Report, want
 		}
 		return
 	}
+	if !want(m64proto.SecSmart) {
+		// SMART nicht gewuenscht (Schalter "SMART-Werte abfragen" aus, #215): Storage Spaces ohne
+		// Get-StorageReliabilityCounter lesen, damit schlafende Platten schlafen; ohne virtuelle Datentraeger so selten
+		// wie sonst das Storage-Skript
+		if want(m64proto.SecRAID) {
+			every := m64proto.SlowSmartSec * time.Second
+			if prev, ok := c.cache.peek(keyRAID); ok && prev.vdisks > 0 {
+				every = raidEvery
+			}
+			rr := c.cache.slow(ctx, c.now, keyRAID, m64proto.SecRAID, every, c.storageFn(raidScript, m64proto.SecRAID))
+			if !reading(rr) {
+				r.RAID = rr.raid
+				r.Errors = append(r.Errors, filterErrs(rr.errs, m64proto.SecRAID)...)
+			}
+		}
+		return
+	}
 	res := c.cache.slow(ctx, c.now, keyStorage, m64proto.SecSmart, m64proto.SlowSmartSec*time.Second, c.storageFn(storageScript, m64proto.SecSmart))
 	raid := res.raid
 	raidErrs := filterErrs(res.errs, m64proto.SecRAID)
@@ -208,7 +225,9 @@ func Caps(opt Options) []string {
 		m64proto.SecWinSvc, m64proto.SecReboot}
 	if hasPowerShell() {
 		caps = append(caps, m64proto.SecSmart, m64proto.SecUpdates)
-		if res, ok := c.cache.peek(keyStorage); ok && res.vdisks > 0 {
+		st, _ := c.cache.peek(keyStorage)
+		rd, _ := c.cache.peek(keyRAID) // ohne SMART nur das RAID-Skript
+		if st.vdisks > 0 || rd.vdisks > 0 {
 			caps = append(caps, m64proto.SecRAID)
 		}
 	}

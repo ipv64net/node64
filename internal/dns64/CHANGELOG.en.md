@@ -1,5 +1,17 @@
 # Changes – DNS64
 
+## 1.45.1 – unreleased
+
+### Fixed
+- Blocklists, allow lists and upstreams are switched and removed by address; a list changed in the meantime (cluster, second tab) no longer hits the wrong entry.
+- DoH via the shared entrance honours “additional allowed client networks” for the Docker gateway too.
+- Rebinding protection: device-group releases apply only to that group, regardless of who asked first (shared cache).
+- Docker bridge with IPv6: the gateway's IPv6 address also counts as unknown origin.
+- Upstream error replies without a question section (e.g. REFUSED) no longer count as a failure.
+- The “lines without a DNS rule” tooltip on blocklists shows the text instead of the key.
+- The rule limit honours the memory limit of the systemd service (Debian package).
+- Takeover into IPAM64: the name of a manual DHCP reservation (e.g. “Tablet Lea”) is kept.
+
 ## 1.45.0 – 2026-11-19
 
 ### New

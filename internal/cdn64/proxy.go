@@ -1100,6 +1100,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		// WebSockets (nur, wo erlaubt) laufen lange und zaehlen nicht; gRPC-Streams (NetBird: je Peer zwei dauerhaft)
 		// zaehlen in eigenen, groesseren Plaetzen (der Kopf kommt vom Besucher - ohne Grenze hebelte er den Schutz aus);
 		// Wartung braucht kein Ziel
+		freeSlot := func() {}
 		if sl != nil && !maint && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) {
 			use := sl
 			if grpcReq(r) {
@@ -1116,7 +1117,14 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 				}
 				return
 			}
-			defer use.release()
+			freed := false
+			freeSlot = func() {
+				if !freed {
+					freed = true
+					use.release()
+				}
+			}
+			defer freeSlot()
 		}
 		if r.Body != nil && r.Body != http.NoBody { // Upload zaehlen (was das Ziel wirklich liest), mit Bandbreite des Hosts
 			if bw != nil {
@@ -1132,6 +1140,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			out, done = edge.KeepUpload(sw, r)
 		}
 		next.ServeHTTP(out, r)
+		freeSlot() // das Ziel ist fertig: Platz frei, bevor KeepUpload den Rest liest (auch abgewiesene Uploads)
 		done()
 		if sw.status >= 500 && sw.status != http.StatusBadGateway { // 502 zaehlt der ErrorHandler schon
 			st.errors.Add(1)

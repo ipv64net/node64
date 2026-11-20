@@ -38,7 +38,7 @@ var changelogEN string
 const Name = "ipam64"
 
 const (
-	version = "0.6.3"
+	version = "0.6.4"
 
 	setAutoScan = "ipam64.autoscan" // automatischer Netz-Scan alle n Minuten (0 = aus)
 	setLastScan = "ipam64.lastscan" // letzter Netz-Scan (Unix-Sekunden)
@@ -92,6 +92,7 @@ type NetHint struct {
 	Subnet             netip.Prefix
 	Router, Start, End netip.Addr
 	Domain             string
+	Off                bool // auf dieser Node ausgeschaltet (vergibt z. B. eine andere Node im Cluster): nur fuer Ausnahmen
 }
 
 // Neighbor ist ein Eintrag der Nachbartabelle: MAC und wie lange die letzte Bestaetigung her ist.
@@ -157,18 +158,29 @@ func (m *Module) SetSource(key string, f func(ctx context.Context) []Sighting) {
 // SetNetworks liefert die DHCP-Netze aus DNS64 (erscheinen ohne Zutun als Praefixe).
 func (m *Module) SetNetworks(f func(ctx context.Context) []NetHint) { m.hints = f }
 
+// hintList liefert die auf dieser Node eingeschalteten DHCP-Netze.
 func (m *Module) hintList(ctx context.Context) []NetHint {
+	on, _ := m.hintSplit(ctx)
+	return on
+}
+
+// hintSplit liefert die eingeschalteten und die ausgeschalteten DHCP-Netze (diese nur fuer Ausnahmen im Pool).
+func (m *Module) hintSplit(ctx context.Context) (on, off []NetHint) {
 	if m.hints == nil {
-		return nil
+		return nil, nil
 	}
-	var out []NetHint
 	for _, h := range m.hints(ctx) {
-		if h.Subnet.IsValid() {
-			h.Subnet = h.Subnet.Masked()
-			out = append(out, h)
+		if !h.Subnet.IsValid() {
+			continue
+		}
+		h.Subnet = h.Subnet.Masked()
+		if h.Off {
+			off = append(off, h)
+		} else {
+			on = append(on, h)
 		}
 	}
-	return out
+	return on, off
 }
 
 func (m *Module) Info() module.Info {

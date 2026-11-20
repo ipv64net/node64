@@ -30,6 +30,8 @@ var (
 	ErrAccessDenied = errors.New("access denied")
 	// ErrInvalidKey: Zugangsschluessel hat nicht die erwartete Form.
 	ErrInvalidKey = errors.New("invalid access key")
+	// ErrNameMissing: Zugang ohne Namen.
+	ErrNameMissing = errors.New("environment: name missing")
 )
 
 // Access ist ein Zugang auf dieser Node (ohne Geheimnis).
@@ -97,7 +99,7 @@ func cleanName(s string) string {
 func (s *Service) CreateAccess(ctx context.Context, name, userUID, by string) (*Access, string, error) {
 	name = cleanName(name)
 	if name == "" {
-		return nil, "", errors.New("environment: name missing")
+		return nil, "", ErrNameMissing
 	}
 	if s.d.NodeID == nil || s.d.PublicKey == nil || s.d.NodeID() == "" || s.d.PublicKey() == "" {
 		return nil, "", errors.New("environment: node identity missing")
@@ -181,14 +183,53 @@ func (s *Service) AccessByID(ctx context.Context, id int64) (*Access, error) {
 	return a, err
 }
 
-// RevokeAccess loescht einen Zugang (found=false: gab es nicht). Der Schluessel wirkt danach nicht mehr.
+// RevokeAccess loescht einen Zugang (found=false: gab es nicht). Der Schluessel wirkt danach nicht mehr: offene
+// Tickets verfallen, ueber ihn geoeffnete Sitzungen enden.
 func (s *Service) RevokeAccess(ctx context.Context, id int64) (bool, error) {
 	res, err := s.d.Store.Writer().ExecContext(ctx, `DELETE FROM env_access WHERE id = ?`, id)
 	if err != nil {
 		return false, err
 	}
 	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if n == 0 || id <= 0 { // 0 = Sitzungen der Cluster-Mitglieder, nie anfassen
+		return false, nil
+	}
+	s.mu.Lock()
+	for k, t := range s.tickets {
+		if t.AccessID == id {
+			delete(s.tickets, k)
+		}
+	}
+	s.mu.Unlock()
+	return true, s.endAccessSessions(ctx, id)
+}
+
+// endAccessSessions beendet die Sitzungen, die ueber den Zugang id entstanden sind.
+func (s *Service) endAccessSessions(ctx context.Context, id int64) error {
+	rows, err := s.d.Store.Reader().QueryContext(ctx, `SELECT session_id FROM env_sessions WHERE access_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, sid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, sid := range ids {
+		if err := s.d.Store.DeleteSession(ctx, sid); err != nil {
+			return err
+		}
+	}
+	_, err = s.d.Store.Writer().ExecContext(ctx, `DELETE FROM env_sessions WHERE access_id = ?`, id)
+	return err
 }
 
 // accessByPub sucht den Zugang zum Pruefwert (nil = unbekannt, z. B. widerrufen).

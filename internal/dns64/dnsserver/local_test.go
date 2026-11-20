@@ -1,6 +1,7 @@
 package dnsserver
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -38,5 +39,15 @@ func TestTLDQuery(t *testing.T) {
 		if got := tldQuery(c.name, c.qtype); got != c.want {
 			t.Errorf("tldQuery(%q, %s) = %v, want %v", c.name, dns.TypeToString[c.qtype], got, c.want)
 		}
+	}
+}
+
+// LocalNames: dieselben Endungen wie localSuffixes ohne Rueckwaertszonen (Name Constraints der Heimnetz-CA).
+func TestLocalNames(t *testing.T) {
+	got := LocalNames()
+	slices.Sort(got)
+	want := []string{"fritz.box", "home", "home.arpa", "internal", "lan", "local", "localdomain", "localhost", "speedport.ip"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }

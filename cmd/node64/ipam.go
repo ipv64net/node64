@@ -93,10 +93,11 @@ func newIPAM(st *store.Store, log *slog.Logger, modules *module.Registry, dns *d
 		var out []ipam64.NetHint
 		for _, s := range scopes(ctx) {
 			p, err := netip.ParsePrefix(s.Subnet)
-			if err != nil || !s.Enabled {
+			if err != nil {
 				continue
 			}
-			h := ipam64.NetHint{Name: s.Name, Iface: s.Iface, Subnet: p, Domain: s.Domain}
+			// ausgeschaltete Netze (Standard fuer Netze aus dem Cluster) nur fuer die Ausnahmen fester Adressen im Pool
+			h := ipam64.NetHint{Name: s.Name, Iface: s.Iface, Subnet: p, Domain: s.Domain, Off: !s.Enabled}
 			h.Router, _ = netip.ParseAddr(s.Router)
 			h.Start, _ = netip.ParseAddr(s.Start)
 			h.End, _ = netip.ParseAddr(s.End)

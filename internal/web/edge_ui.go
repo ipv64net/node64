@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/edge"
 )
 
@@ -42,7 +43,7 @@ func (s *Server) uiRoute(ctx context.Context) error {
 		rt.CertID = id
 	}
 	if s.Store.SettingOr(ctx, setUIPublic, "0") != "1" {
-		rt.Allow = lanOnly
+		rt.Allow = func(ip netip.Addr) bool { return lanOnly(localnet.Origin(ip)) } // Docker-Gateway: Herkunft unbekannt
 	}
 	return s.Edge.Set(edgeOwnerUI, []edge.Route{rt})
 }

@@ -21,7 +21,6 @@ func (s *Server) ssoRoutes() {
 	s.mux.Handle("POST /settings/login/passkeys/begin", s.auth(s.passkeyRegisterBegin))
 	s.mux.Handle("POST /settings/login/passkeys/finish", s.auth(s.passkeyRegisterFinish))
 	s.mux.Handle("POST /settings/login/passkeys/{id}/delete", s.auth(s.passkeyDelete))
-	s.mux.Handle("POST /settings/login/users/{id}/delete", s.admin(s.uaDeleteSubmit)) // frueher Liste „Benutzer dieser Node“
 	s.mux.HandleFunc("POST /login/passkey/begin", s.passkeyLoginBegin)
 	s.mux.HandleFunc("POST /login/passkey/finish", s.passkeyLoginFinish)
 }

@@ -29,6 +29,10 @@ func Register(pm *peer.Manager, m *ipam64.Module) {
 			pm.ClusterChange(ctx, ipam64.ClusterModuleID, item, id, deleted)
 		},
 		ForeignDNS64: func(ctx context.Context) bool { return foreignDNS64(ctx, pm) },
+		Stale: func(ctx context.Context, item, id string) bool {
+			from, _, ok := peer.ClusterOrigin(ctx)
+			return ok && from != "" && pm.EntryOrigin(ipam64.ClusterModuleID, item, id) == from
+		},
 	})
 }
 

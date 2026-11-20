@@ -31,7 +31,8 @@ var (
 	ErrUnknownUser = errors.New("user not found in directory")
 	// ErrAmbiguous: der Filter findet mehr als einen Eintrag.
 	ErrAmbiguous = errors.New("user filter matches more than one entry")
-	// ErrDisabled: im AD deaktiviert (userAccountControl, Bit 2).
+	// ErrDisabled: im Verzeichnis deaktiviert, abgelaufen bzw. gesperrt (AD: userAccountControl Bit 2, accountExpires;
+	// LDAP: nsAccountLock, dauerhafte Sperre per pwdAccountLockedTime).
 	ErrDisabled = errors.New("account disabled in directory")
 	// ErrBusy: zu viele gleichzeitige Anmeldungen am Verzeichnis.
 	ErrBusy = errors.New("too many concurrent directory requests")
@@ -76,12 +77,16 @@ const (
 	maxGroups      = 1000
 	oidInChain     = "1.2.840.113556.1.4.1941" // LDAP_MATCHING_RULE_IN_CHAIN (AD, verschachtelte Gruppen)
 	uacDisabled    = 0x2                       // userAccountControl: ACCOUNTDISABLE
+	adNever        = 1<<63 - 1                 // accountExpires: laeuft nie ab (wie 0)
+	adEpochOffset  = 11644473600               // Sekunden von 1601-01-01 bis 1970-01-01 (accountExpires)
+	ppolicyLocked  = "000001010000Z"           // pwdAccountLockedTime: dauerhaft gesperrt (bis ein Admin entsperrt)
 )
 
 var sem = make(chan struct{}, maxConcurrent)
 
 // Attribute des Benutzers (beide Profile; was es nicht gibt, fehlt einfach).
-var userAttrs = []string{"objectGUID", "entryUUID", "sAMAccountName", "userPrincipalName", "uid", "displayName", "cn", "mail", "memberOf", "userAccountControl"}
+var userAttrs = []string{"objectGUID", "entryUUID", "sAMAccountName", "userPrincipalName", "uid", "displayName", "cn", "mail", "memberOf", "userAccountControl",
+	"accountExpires", "nsAccountLock", "pwdAccountLockedTime"}
 
 type ctxKey struct{}
 
@@ -130,6 +135,25 @@ type conn struct {
 	url  string
 	tls  bool
 	stop func() bool
+	ctx  context.Context
+	raw  net.Conn      // TCP-Verbindung (Frist)
+	to   time.Duration // Zeitlimit je Vorgang
+}
+
+// renew setzt die Frist fuer den naechsten Vorgang (Bind, Suche) neu: das Zeitlimit gilt je Vorgang, nicht fuer die
+// ganze Verbindung (der Abgleich arbeitet viele Benutzer nacheinander ab); nie ueber die Frist von ctx hinaus.
+func (c *conn) renew() {
+	if c.raw == nil || c.ctx.Err() != nil {
+		return
+	}
+	deadline := time.Now().Add(c.to)
+	if dl, ok := c.ctx.Deadline(); ok && dl.Before(deadline) {
+		deadline = dl
+	}
+	_ = c.raw.SetDeadline(deadline)
+	if c.ctx.Err() != nil { // gerade abgebrochen: nicht wieder verlaengern
+		_ = c.raw.SetDeadline(time.Now())
+	}
 }
 
 func (c *conn) close() {
@@ -137,7 +161,8 @@ func (c *conn) close() {
 	_ = c.Close()
 }
 
-var errPlain = errors.New("ldap:// needs StartTLS (or allow plain text)")
+// ErrPlain: ldap:// ohne StartTLS und ohne Schalter fuer Klartext.
+var ErrPlain = errors.New("ldap:// needs StartTLS (or allow plain text)")
 
 // CheckURL prueft eine Server-Adresse gegen die Einrichtung (Schema, Host, Klartext).
 func CheckURL(cfg authcfg.LDAPConfig, raw string) error {
@@ -154,7 +179,7 @@ func CheckURL(cfg authcfg.LDAPConfig, raw string) error {
 	case "ldaps":
 	case "ldap":
 		if !cfg.StartTLS && !cfg.AllowPlain {
-			return errPlain
+			return ErrPlain
 		}
 	default:
 		return errors.New("server url must start with ldaps:// or ldap://")
@@ -199,30 +224,25 @@ func dial(ctx context.Context, cfg authcfg.LDAPConfig, raw string) (*conn, error
 	if err != nil {
 		return nil, err
 	}
-	// Ein Zeitlimit fuer die ganze Verbindung (TLS, Binds, Suchen); Abbruch ueber ctx beendet sie sofort.
-	deadline := time.Now().Add(to)
-	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
-		deadline = dl
-	}
-	_ = nc.SetDeadline(deadline)
-	stop := context.AfterFunc(ctx, func() { _ = nc.SetDeadline(time.Now()) })
+	// Zeitlimit fuer den Aufbau (TLS, StartTLS), danach je Vorgang neu (renew); Abbruch ueber ctx beendet sie sofort.
+	c := &conn{url: raw, ctx: ctx, raw: nc, to: to}
+	c.renew()
+	c.stop = context.AfterFunc(ctx, func() { _ = c.raw.SetDeadline(time.Now()) })
 	tc := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host, RootCAs: rootCAs(ctx), InsecureSkipVerify: cfg.SkipVerify} //nolint:gosec // nur mit Schalter (Warnung in der Oberflaeche)
-	isTLS := false
 	if scheme == "ldaps" {
 		t := tls.Client(nc, tc)
 		if err := t.HandshakeContext(ctx); err != nil {
-			stop()
+			c.stop()
 			_ = nc.Close()
 			return nil, err
 		}
-		nc, isTLS = t, true
+		nc, c.tls = t, true
 	}
-	lc := ldap.NewConn(nc, isTLS)
-	lc.Start()
-	lc.SetTimeout(to)
-	c := &conn{Conn: lc, url: raw, tls: isTLS, stop: stop}
+	c.Conn = ldap.NewConn(nc, c.tls)
+	c.Start()
+	c.SetTimeout(to)
 	if scheme == "ldap" && cfg.StartTLS {
-		if err := lc.StartTLS(tc); err != nil {
+		if err := c.StartTLS(tc); err != nil {
 			c.close()
 			return nil, err
 		}
@@ -239,6 +259,7 @@ func bindService(c *conn, cfg authcfg.LDAPConfig, bindPassword string) error {
 	if bindPassword == "" {
 		return fmt.Errorf("%w: bind password missing", ErrConfig)
 	}
+	c.renew()
 	if err := c.Bind(strings.TrimSpace(cfg.BindDN), bindPassword); err != nil {
 		return fmt.Errorf("service account bind failed: %w", err)
 	}
@@ -266,8 +287,14 @@ func UserFilter(cfg authcfg.LDAPConfig, username string) string {
 }
 
 func findUser(c *conn, cfg authcfg.LDAPConfig, username string) (*ldap.Entry, error) {
+	return findBy(c, cfg, UserFilter(cfg, username))
+}
+
+// findBy sucht genau einen Eintrag ueber filter.
+func findBy(c *conn, cfg authcfg.LDAPConfig, filter string) (*ldap.Entry, error) {
 	req := ldap.NewSearchRequest(cfg.BaseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 2, int(Timeout(cfg).Seconds()), false,
-		UserFilter(cfg, username), userAttrs, nil)
+		filter, userAttrs, nil)
+	c.renew()
 	res, err := c.Search(req)
 	if err != nil {
 		if ldap.IsErrorWithCode(err, ldap.LDAPResultSizeLimitExceeded) {
@@ -286,13 +313,29 @@ func findUser(c *conn, cfg authcfg.LDAPConfig, username string) (*ldap.Entry, er
 	return res.Entries[0], nil
 }
 
-// disabled: AD-Konto deaktiviert.
+// disabled: Konto im Verzeichnis deaktiviert, abgelaufen oder gesperrt. AD: userAccountControl Bit 2 oder accountExpires
+// in der Vergangenheit; LDAP: nsAccountLock (389 DS, FreeIPA) oder dauerhafte Sperre per pwdAccountLockedTime
+// (ppolicy; eine zeitweise Sperre nach Fehlversuchen zaehlt nicht, sonst koennte jeder mit falschen Passwoertern
+// Rollen nehmen).
 func disabled(cfg authcfg.LDAPConfig, e *ldap.Entry) bool {
+	attr := func(n string) string { return strings.TrimSpace(e.GetEqualFoldAttributeValue(n)) }
 	if cfg.Profile != authcfg.ProfileAD {
+		return strings.EqualFold(attr("nsAccountLock"), "true") || attr("pwdAccountLockedTime") == ppolicyLocked
+	}
+	n, err := strconv.ParseInt(attr("userAccountControl"), 10, 64)
+	if err == nil && n&uacDisabled != 0 {
+		return true
+	}
+	return adExpired(attr("accountExpires"), time.Now())
+}
+
+// adExpired: accountExpires (100 ns seit 1601-01-01 UTC; 0 und adNever = nie) liegt vor now.
+func adExpired(v string, now time.Time) bool {
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 || n == adNever {
 		return false
 	}
-	n, err := strconv.ParseInt(strings.TrimSpace(e.GetEqualFoldAttributeValue("userAccountControl")), 10, 64)
-	return err == nil && n&uacDisabled != 0
+	return time.Unix(n/10_000_000-adEpochOffset, 0).Before(now)
 }
 
 func identity(cfg authcfg.LDAPConfig, e *ldap.Entry, typed string) *Identity {
@@ -324,6 +367,7 @@ func identity(cfg authcfg.LDAPConfig, e *ldap.Entry, typed string) *Identity {
 func groupSearch(c *conn, cfg authcfg.LDAPConfig, filter string) ([]string, error) {
 	req := ldap.NewSearchRequest(cfg.BaseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, maxGroups, int(Timeout(cfg).Seconds()), false,
 		filter, []string{"1.1"}, nil)
+	c.renew()
 	res, err := c.Search(req)
 	if err != nil && !ldap.IsErrorWithCode(err, ldap.LDAPResultSizeLimitExceeded) {
 		return nil, fmt.Errorf("group search failed: %w", err)
@@ -399,6 +443,7 @@ func Authenticate(ctx context.Context, cfg authcfg.LDAPConfig, bindPassword, use
 	if disabled(cfg, e) {
 		return nil, ErrDisabled
 	}
+	c.renew()
 	if err := c.Bind(e.DN, password); err != nil {
 		if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {
 			return nil, ErrInvalidCredentials
@@ -416,8 +461,15 @@ func Authenticate(ctx context.Context, cfg authcfg.LDAPConfig, bindPassword, use
 	return id, nil
 }
 
-// Lookup sucht Benutzer mit dem Dienstkonto (ohne deren Passwort) und liefert sie mit Gruppen und Sperre; fehlt ein
-// Name in der Antwort, gibt es ihn im Verzeichnis nicht (mehr). Fuer den regelmaessigen Abgleich der Gruppen und die
+// nameFilter: Eintrag ueber das Attribut, aus dem identity den Node64-Namen nimmt (sAMAccountName bzw. uid).
+func nameFilter(name string) string {
+	n := ldap.EscapeFilter(name)
+	return "(|(sAMAccountName=" + n + ")(uid=" + n + "))"
+}
+
+// Lookup sucht Benutzer (Node64-Namen) mit dem Dienstkonto (ohne deren Passwort) und liefert sie mit Gruppen und
+// Sperre: zuerst ueber den Benutzerfilter, findet der nichts, ueber sAMAccountName bzw. uid. Fehlt ein Name in der
+// Antwort, gibt es ihn im Verzeichnis nicht (mehr). Fuer den regelmaessigen Abgleich der Gruppen und die
 // Nachpruefung bei Passkey-Anmeldungen. Fehler (Verbindung, Dienstkonto, Suche) brechen ab: dann ist nichts geprueft.
 func Lookup(ctx context.Context, cfg authcfg.LDAPConfig, bindPassword string, usernames []string) (map[string]*Identity, error) {
 	if strings.TrimSpace(cfg.BaseDN) == "" {
@@ -444,6 +496,9 @@ func Lookup(ctx context.Context, cfg authcfg.LDAPConfig, bindPassword string, us
 			continue
 		}
 		e, err := findUser(c, cfg, strings.TrimSpace(name))
+		if errors.Is(err, ErrUnknownUser) { // gespeicherter Name: der Benutzerfilter kann ein anderes Attribut meinen (z. B. mail)
+			e, err = findBy(c, cfg, nameFilter(strings.TrimSpace(name)))
+		}
 		if errors.Is(err, ErrUnknownUser) || errors.Is(err, ErrAmbiguous) {
 			continue
 		}

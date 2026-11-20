@@ -299,7 +299,7 @@ func (d *openAPI) bodyFields(rb map[string]any, short bool) (string, []any, any)
 	return ct, full, out
 }
 
-// params: Parameter einer Operation (Pfad-Ebene und Operation).
+// paramsOf: Parameter einer Operation (Pfad-Ebene und Operation).
 func paramsOf(pathParams, opParams []map[string]any, short bool) []any {
 	var out []any
 	seen := map[string]bool{}
@@ -443,7 +443,7 @@ func apiReference(c *call, a map[string]any) (map[string]any, error) {
 			}
 			x := obj{"method": strings.ToUpper(mth), "path": base + p, "summary": clean(op.Summary, 300)}
 			if pr := paramsOf(pathParams, op.Parameters, !detail); len(pr) > 0 {
-				x["params"] = pr
+				x["parameters"] = pr // nicht "params": den Schluessel verwirft der zentrale Filter (Check-Parameter)
 			}
 			ct, _, body := d.bodyFields(op.RequestBody, !detail)
 			if body != nil && body != "" {

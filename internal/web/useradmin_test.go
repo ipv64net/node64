@@ -149,7 +149,7 @@ func TestUserAdminAPI(t *testing.T) {
 
 	st, out := apiCall(t, a, key, "POST", "/api/groups", map[string]any{"name": "Leser", "role": "read", "oidc_groups": []string{"readers"}})
 	g, _ := out.(map[string]any)
-	if st != 201 || g["uid"] == "" || g["role"] != "read" {
+	if st != 201 || g["uid"] == "" || g["role"] != "read" || strings.HasPrefix(g["created_at"].(string), "0001") || strings.HasPrefix(g["updated_at"].(string), "0001") {
 		t.Fatalf("group create: %d %v", st, out)
 	}
 	gid := g["uid"].(string)
@@ -161,6 +161,16 @@ func TestUserAdminAPI(t *testing.T) {
 	id := itoa(int64(u["id"].(float64)))
 	if st, _ = apiCall(t, a, key, "POST", "/api/users", map[string]any{"username": "kurz", "password": "kurz"}); st != 422 {
 		t.Fatalf("weak password: %d", st)
+	}
+	// Leerzeichen am Rand zaehlen wie bei der Anmeldung nicht (die Anmeldung kuerzt sie)
+	if st, _ = apiCall(t, a, key, "POST", "/api/users", map[string]any{"username": "rand", "password": "  langes passwort  "}); st != 201 {
+		t.Fatalf("create with spaces: %d", st)
+	}
+	if ru, _ := a.store.UserByName(ctx, "rand"); ru == nil || !VerifyPassword(ru.PasswordHash, "langes passwort") {
+		t.Fatal("password must be stored without surrounding spaces")
+	}
+	if st, _ = apiCall(t, a, key, "POST", "/api/users", map[string]any{"username": "kurz2", "password": "   kurz12345   "}); st != 422 {
+		t.Fatalf("short after trimming: %d", st)
 	}
 	st, out = apiCall(t, a, key, "PUT", "/api/users/"+id, map[string]any{"role": "admin", "email": "max@example.com"})
 	if u, _ = out.(map[string]any); st != 200 || u["role"] != "admin" || u["own_role"] != "admin" || u["email"] != "max@example.com" {

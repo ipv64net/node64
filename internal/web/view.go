@@ -45,6 +45,7 @@ type View struct {
 	Form     map[string]string
 	EnvFrom  *environment.Origin // Sitzung ueber Environment einer anderen Node geoeffnet (Hinweis mit Rueckweg)
 	loc      *time.Location
+	ldap     *ldapDraft // „Verbindung testen“: getestete, ungespeicherte Angaben fuer die Karte (LDAPCard)
 }
 
 // Design ist ein Oberflaechen-Design (Einstellungen > Darstellung > Design). Ein weiteres Design ist ein Eintrag in

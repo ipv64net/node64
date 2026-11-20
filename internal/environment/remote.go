@@ -286,7 +286,7 @@ func (s *Service) HandleRemote(ctx context.Context, path string, h http.Header, 
 		return RemoteResult{Status: http.StatusOK, Body: st}
 	case PathTicket:
 		tok, err := s.addTicket(&Ticket{UID: u.UID, Role: MinRole(req.Role, s.d.Store.EffectiveRole(ctx, u)), FromNode: fromNode, FromName: fromName,
-			Back: cleanBack(req.Back)})
+			Back: cleanBack(req.Back), AccessID: a.ID})
 		if err != nil {
 			return deny(http.StatusServiceUnavailable, err.Error(), false)
 		}

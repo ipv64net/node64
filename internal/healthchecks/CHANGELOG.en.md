@@ -1,5 +1,14 @@
 # Changes – Healthchecks
 
+## 3.3.1 – unreleased
+
+### Fixed
+- The “read only” role no longer sees the request body of HTTP checks or the data sent by TCP checks (API, detail page, online checks).
+- The certificate expiry date stays in the list and `/api/metrics` even when the target has not delivered a certificate for a while (e.g. expired); JSON checks now show it too.
+- The list, detail page and `/api/metrics` read certificate data less often; the detail page only loads the data of its own check.
+- The online test run measures targets without a scheme with https://, as saving does.
+- HTTPS checks against services with a certificate from an own CA no longer report “unknown authority” for a minute after a brief read error.
+
 ## 3.3.0 – 2026-11-19
 
 ### Added

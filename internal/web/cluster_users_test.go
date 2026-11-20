@@ -116,11 +116,11 @@ func TestClusterUserChoice(t *testing.T) {
 		t.Fatal("user list in the user management")
 	}
 	csrf := csrfOf(t, body)
-	a.post(t, "/settings/login/users/"+itoa(me.ID)+"/delete", url.Values{"_csrf": {csrf}})
+	a.post(t, "/settings/users/"+itoa(me.ID)+"/delete", url.Values{"_csrf": {csrf}})
 	if u, _ := a.store.UserByID(ctx, me.ID); u == nil {
 		t.Fatal("own user must not be deleted")
 	}
-	a.post(t, "/settings/login/users/"+itoa(other.ID)+"/delete", url.Values{"_csrf": {csrf}})
+	a.post(t, "/settings/users/"+itoa(other.ID)+"/delete", url.Values{"_csrf": {csrf}})
 	if u, _ := a.store.UserByID(ctx, other.ID); u != nil {
 		t.Fatal("other user not deleted")
 	}

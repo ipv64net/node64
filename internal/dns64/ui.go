@@ -204,7 +204,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"block", "block_title", "block_confirm", "blocked_toast", "unblock_confirm", "unblocked_toast", "own_blocked", "no_own_blocks", "reason_own", "reason_search",
 	"no_releases", "ready", "online", "disturbed", "avg", "fastest", "requests", "errors", "last_error", "router_auto", "router_config", "router_none", "mdns_on", "mdns_silent",
 	"of", "failed", "just_now", "min_ago", "hours_ago", "days_ago", "per_hour", "pct_all", "pct_cache", "loaded", "no_data", "empty_chart",
-	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "list_ip", "list_limit", "flush_confirm", "flushed", "error", "active", "loading",
+	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "list_ip", "list_limit", "list_skipped", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_nodata", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
 	"reason_group", "reason_cat", "reason_svc", "reason_list", "lookup_title", "lookup_free", "lookup_nogroup", "lookup_own", "lookup_allowed", "lookup_list",
@@ -261,6 +261,38 @@ func formInt(r *http.Request, key string) int {
 	return n
 }
 
+// formSwitch: Haken einer Tabelle nach URL statt Position - die Liste kann sich inzwischen geaendert haben (Cluster,
+// zweiter Tab). Feld <p>url_<i> traegt die URL der Zeile, <p>on_<i> den Haken. Die Funktion liefert den Haken einer
+// Zeile; ok=false: Zeile nicht im Formular (inzwischen hinzugekommen), ihr Stand bleibt. Ohne URL-Felder (Seite einer
+// aelteren Version) gilt die Position.
+func formSwitch(r *http.Request, p string) func(i int, url string) (on, ok bool) {
+	_ = r.ParseForm()
+	byURL := map[string]bool{}
+	for i := 0; ; i++ {
+		u, found := r.PostForm[p+"url_"+strconv.Itoa(i)]
+		if !found || len(u) == 0 {
+			break
+		}
+		byURL[u[0]] = r.PostForm.Get(p+"on_"+strconv.Itoa(i)) != ""
+	}
+	return func(i int, url string) (bool, bool) {
+		if len(byURL) == 0 {
+			return r.PostForm.Get(p+"on_"+strconv.Itoa(i)) != "", true
+		}
+		on, ok := byURL[url]
+		return on, ok
+	}
+}
+
+// formIndex: Zeile, die ein Knopf meint (Wert = URL; eine Zahl gilt als Position, Seite einer aelteren Version).
+func formIndex[T any](r *http.Request, key string, list []T, url func(T) string) int {
+	v := strings.TrimSpace(r.PostFormValue(key))
+	if i := slices.IndexFunc(list, func(x T) bool { return url(x) == v }); i >= 0 {
+		return i
+	}
+	return formInt(r, key)
+}
+
 func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
 	c.Port, c.Bind, c.Router, c.Retention = formInt(r, "port"), r.PostFormValue("bind"), r.PostFormValue("router"), formInt(r, "retention")
@@ -274,11 +306,14 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	m.apply(w, r, "/dns64/settings", c, "dns64.settings", "")
 }
 
-// pageUpstreamsSave uebernimmt die Haken (on_<index>) und die Betriebsart.
+// pageUpstreamsSave uebernimmt die Haken (on_<index> mit url_<index>) und die Betriebsart.
 func (m *Module) pageUpstreamsSave(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
+	sw := formSwitch(r, "")
 	for i := range c.Upstreams {
-		c.Upstreams[i].Enabled = r.PostFormValue("on_"+strconv.Itoa(i)) != ""
+		if on, ok := sw(i, c.Upstreams[i].URL); ok {
+			c.Upstreams[i].Enabled = on
+		}
 	}
 	c.UpMode = r.PostFormValue("mode")
 	if n := formInt(r, "count"); n > 0 {
@@ -302,11 +337,7 @@ func (m *Module) pageUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 // Liste inzwischen geaendert hat, z. B. per Cluster); eine Zahl gilt als Position (Seite einer aelteren Version).
 func (m *Module) pageUpstreamRemove(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
-	key := strings.TrimSpace(r.PostFormValue("remove"))
-	i := slices.IndexFunc(c.Upstreams, func(u upstreamSetting) bool { return u.URL == key })
-	if i < 0 {
-		i = formInt(r, "remove")
-	}
+	i := formIndex(r, "remove", c.Upstreams, func(u upstreamSetting) string { return u.URL })
 	if i < 0 || i >= len(c.Upstreams) || !c.Upstreams[i].Custom {
 		m.g.Flash(w, r, "danger", m.g.T(r, "dns64.err.up_not_found"))
 		http.Redirect(w, r, "/dns64/settings#upstreams", http.StatusSeeOther)
@@ -319,8 +350,11 @@ func (m *Module) pageUpstreamRemove(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) pageListsSave(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
+	sw := formSwitch(r, "")
 	for i := range c.Lists {
-		c.Lists[i].Enabled = r.PostFormValue("on_"+strconv.Itoa(i)) != ""
+		if on, ok := sw(i, c.Lists[i].URL); ok {
+			c.Lists[i].Enabled = on
+		}
 	}
 	c.ListHours = formInt(r, "hours")
 	m.apply(w, r, "/dns64/lists", c, "dns64.lists", "")
@@ -331,10 +365,12 @@ func (m *Module) pageListAdd(w http.ResponseWriter, r *http.Request) {
 	m.pageListAddKind(w, r, false)
 }
 
+func listURL(l listSetting) string { return l.URL }
+
 func (m *Module) pageListRemove(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
 	url := ""
-	if i := formInt(r, "remove"); i >= 0 && i < len(c.Lists) && c.Lists[i].Custom {
+	if i := formIndex(r, "remove", c.Lists, listURL); i >= 0 && i < len(c.Lists) && c.Lists[i].Custom {
 		url = c.Lists[i].URL
 		c.Lists = append(c.Lists[:i], c.Lists[i+1:]...)
 	}

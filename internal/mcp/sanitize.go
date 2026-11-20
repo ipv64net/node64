@@ -38,6 +38,21 @@ var (
 		0x2068: true, 0x2069: true, 0xFEFF: true}
 )
 
+// sshFPRe: SSH-Fingerabdruck wie ssh.FingerprintSHA256 ("SHA256:" und 43 Zeichen Base64 ohne Auffuellung).
+var sshFPRe = regexp.MustCompile(`^SHA256:[A-Za-z0-9+/]{43}$`)
+
+// publicText: Text, den der zentrale Filter unveraendert laesst (vorher geprueft und oeffentlich).
+type publicText string
+
+// sshFingerprint: SSH-Fingerabdruck unveraendert - die Base64-Folge saehe fuer den Filter wie ein Zufallstoken aus
+// und wuerde gekuerzt -, alles andere wie jeder fremde Text gefiltert.
+func sshFingerprint(s string) any {
+	if sshFPRe.MatchString(s) {
+		return publicText(s)
+	}
+	return clean(s, 120)
+}
+
 // looksLikeToken: lange Zeichenfolge aus Gross-, Kleinbuchstaben und Ziffern (Zufallstoken). Hex-Werte
 // (Fingerabdruecke, Hashes) bestehen nur aus Kleinbuchstaben und Ziffern und bleiben stehen.
 func looksLikeToken(s string) bool {

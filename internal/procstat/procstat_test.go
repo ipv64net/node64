@@ -49,3 +49,19 @@ func TestSelf(t *testing.T) {
 		t.Fatalf("Speicherplatz unplausibel: %+v %v", d, ok)
 	}
 }
+
+// Eigene cgroup v2 (systemd-Dienst des .deb): Grenze dort, nicht nur an der Wurzel.
+func TestCgroupV2Path(t *testing.T) {
+	for in, want := range map[string]string{
+		"0::/system.slice/node64.service\n":  "/system.slice/node64.service",
+		"12:memory:/docker/abc\n0::/\n":      "/",
+		"12:memory:/docker/abc\n":            "",
+		"0::/../../system.slice/x.service\n": "",
+		"":                                   "",
+		"1:name=systemd:/user.slice\n0::/user.slice\n": "/user.slice",
+	} {
+		if got := cgroupV2Path(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}

@@ -229,7 +229,7 @@ func run() error {
 	defer edgeSrv.Close(context.Background())
 	certMgr.SetHTTP(edgeSrv) // HTTP-01 ueber Port 80 des Eingangs
 	defer certMgr.Close()
-	checks.SetTrustPool(func() *x509.CertPool { // Healthchecks vertrauen den eigenen CAs (#190)
+	checks.SetTrustPool(func() (*x509.CertPool, error) { // Healthchecks vertrauen den eigenen CAs (#190)
 		tctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return certMgr.TrustPool(tctx)

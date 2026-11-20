@@ -102,6 +102,10 @@ type Store struct {
 	w, r  *sql.DB
 	mu    sync.RWMutex
 	maint []Maintenance // Cache der Wartungsfenster
+	// Cache von CertExpiries (certCacheTTL)
+	certMu  sync.Mutex
+	certAt  time.Time
+	certMap map[string]time.Time
 	// Aufbewahrung (Einstellung der Node); 0 = Standard, hourlyRet < 0 = unbegrenzt
 	rawRet, hourlyRet time.Duration
 
@@ -1115,16 +1119,22 @@ func (s *Store) Counts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// certScanRows: so viele der neuesten Messungen eines Checks sieht CertExpiries hoechstens an.
-const certScanRows = 50
+// certCacheTTL: so lange gilt das Ergebnis von CertExpiries (Liste und /api/metrics fragen es bei jedem Aufruf ab; ein
+// Ablaufdatum aendert sich hoechstens einmal je Zertifikatswechsel).
+const certCacheTTL = time.Minute
 
 // CertExpiries liefert je HTTP(S)-Check das Ablaufdatum des Zertifikats aus der letzten Messung mit Zertifikat
-// (hoechstens 3 Tage alt). Je Check nur seine neuesten certScanRows Messungen ueber den Index token/time - frueher
-// durchsuchte eine Abfrage alle Messungen der letzten 3 Tage per LIKE, bei ~800 000 Zeilen dauerten Liste,
-// Detailseite und /api/metrics so ~13 s (#197).
+// (hoechstens 3 Tage alt), fuer certCacheTTL zwischengespeichert. Je Check eine Abfrage ueber den Index token/time -
+// frueher durchsuchte eine Abfrage alle Messungen der letzten 3 Tage per LIKE, bei ~800 000 Zeilen dauerten Liste,
+// Detailseite und /api/metrics so ~13 s (#197). Das Ergebnis nur lesen (wird geteilt).
 func (s *Store) CertExpiries(ctx context.Context) map[string]time.Time {
+	s.certMu.Lock()
+	defer s.certMu.Unlock()
+	if s.certMap != nil && time.Since(s.certAt) < certCacheTTL {
+		return s.certMap
+	}
 	out := map[string]time.Time{}
-	rows, err := s.r.QueryContext(ctx, `SELECT token FROM hc_checks WHERE type IN ('http','keyword')`)
+	rows, err := s.r.QueryContext(ctx, `SELECT token FROM hc_checks WHERE type IN ('http','keyword','json')`)
 	if err != nil {
 		return out
 	}
@@ -1136,23 +1146,38 @@ func (s *Store) CertExpiries(ctx context.Context) map[string]time.Time {
 		}
 	}
 	rows.Close()
-	since := ft(time.Now().Add(-3 * 24 * time.Hour))
 	for _, token := range tokens {
-		var details, msg string
-		err := s.r.QueryRowContext(ctx, `SELECT details, message FROM (SELECT details, message, time FROM hc_measurements
-			WHERE token = ? AND time > ? ORDER BY time DESC LIMIT ?)
-			WHERE details LIKE '%cert_not_after%' OR message LIKE '%cert valid until%' ORDER BY time DESC LIMIT 1`,
-			token, since, certScanRows).Scan(&details, &msg)
-		if err != nil {
-			continue
-		}
-		if t, ok := certNotAfter([]byte(details)); ok {
-			out[token] = t
-		} else if t, ok := CertFromMessage(msg); ok {
+		if t, ok := s.CertExpiry(ctx, token); ok {
 			out[token] = t
 		}
 	}
+	if ctx.Err() == nil { // abgebrochene Anfrage: unvollstaendiges Ergebnis nicht merken
+		s.certMap, s.certAt = out, time.Now()
+	}
 	return out
+}
+
+// certType: Check-Typen mit Zertifikat in den Messungen (HTTP(S)); wie die Typliste in CertExpiries.
+func certType(t checks.Type) bool {
+	return t == checks.TypeHTTP || t == checks.TypeKeyword || t == checks.TypeJSON
+}
+
+// CertExpiry: Ablaufdatum des Zertifikats eines Checks aus seiner letzten Messung mit Zertifikat (hoechstens 3 Tage
+// alt). Der Index token/time liefert die Messungen des Checks absteigend; meist traegt schon die neueste das
+// Zertifikat, sonst geht es nur die Messungen dieses Checks durch (nie die ganze Tabelle). Auch nach vielen Messungen
+// ohne Zertifikat (abgelaufen, nicht erreichbar) bleibt so das letzte bekannte Ablaufdatum stehen.
+func (s *Store) CertExpiry(ctx context.Context, token string) (time.Time, bool) {
+	var details, msg string
+	err := s.r.QueryRowContext(ctx, `SELECT details, message FROM hc_measurements INDEXED BY idx_hc_measurements_token_time
+		WHERE token = ? AND time > ? AND (details LIKE '%cert_not_after%' OR message LIKE '%cert valid until%')
+		ORDER BY time DESC LIMIT 1`, token, ft(time.Now().Add(-3*24*time.Hour))).Scan(&details, &msg)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if t, ok := certNotAfter([]byte(details)); ok {
+		return t, true
+	}
+	return CertFromMessage(msg)
 }
 
 // certNotAfter liest cert_not_after aus den Details; bei IPv4+IPv6 (verschachtelt je Familie) das fruehere.

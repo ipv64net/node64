@@ -322,9 +322,40 @@ func TestRemoteAccess(t *testing.T) {
 		t.Fatalf("locked: %+v", res)
 	}
 	_ = st.UpdateUserAdmin(ctx, u.ID, store.UserAdmin{Role: store.RoleAdmin})
-	// widerrufen
+	// Widerruf: offenes Ticket verfaellt, ueber den Zugang geoeffnete Sitzung endet, andere Sitzungen bleiben
+	no = nonce()
+	res = call(PathTicket, signedReq(key.Secret, key.NodeID, PathTicket, bind, body, now, no), no, bind, body)
+	openTk := res.Body.(TicketResponse).Ticket
+	no = nonce()
+	res = call(PathTicket, signedReq(key.Secret, key.NodeID, PathTicket, bind, body, now, no), no, bind, body)
+	if tk, _ := s.Redeem(res.Body.(TicketResponse).Ticket); tk == nil || tk.AccessID != a.ID {
+		t.Fatalf("ticket without access: %+v", tk)
+	}
+	for _, id := range []string{"via-access", "via-cluster"} {
+		wall := time.Now()
+		if err := st.CreateSession(ctx, &store.Session{ID: id, UserID: u.ID, CSRF: "c", CreatedAt: wall, LastSeenAt: wall, ExpiresAt: wall.Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = s.SaveSession(ctx, "via-access", Origin{MaxRole: store.RoleAdmin, FromName: "A", AccessID: a.ID})
+	_ = s.SaveSession(ctx, "via-cluster", Origin{MaxRole: store.RoleAdmin, FromNode: "node-c"})
+	if o, _ := s.SessionOrigin(ctx, "via-access"); o == nil || o.AccessID != a.ID {
+		t.Fatalf("session origin: %+v", o)
+	}
 	if ok, _ := s.RevokeAccess(ctx, a.ID); !ok {
 		t.Fatal("revoke")
+	}
+	if _, ok := s.Redeem(openTk); ok {
+		t.Fatal("open ticket of a revoked access still redeemable")
+	}
+	if x, _ := st.SessionByID(ctx, "via-access"); x != nil {
+		t.Fatal("session of a revoked access still alive")
+	}
+	if x, _ := st.SessionByID(ctx, "via-cluster"); x == nil {
+		t.Fatal("other session ended")
+	}
+	if ok, _ := s.RevokeAccess(ctx, a.ID); ok {
+		t.Fatal("second revoke")
 	}
 	no = nonce()
 	if res := call(PathTicket, signedReq(key.Secret, key.NodeID, PathTicket, bind, body, now, no), no, bind, body); res.Status != 403 || !res.AuthFailed {

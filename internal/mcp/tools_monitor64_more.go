@@ -85,11 +85,16 @@ func m64Config(c *call, a map[string]any) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		out := pick(d, "interval", "workers", "retention_raw_hours", "retention_5m_days", "retention_1h_days", "hosts", "services", "port", "fingerprint",
+		out := pick(d, "interval", "workers", "retention_raw_hours", "retention_5m_days", "retention_1h_days", "hosts", "services", "port",
 			"trap_port", "push_port")
-		out["part"], out["status"] = part, plain(d["status"], 4)
+		out["part"], out["status"], out["fingerprint"] = part, plain(d["status"], 4), sshFingerprint(str(d, "fingerprint"))
 		push := asObj(d["push"])
-		out["push"] = obj{"listening": strs(push, "listening"), "stats": plain(push["stats"], 2)}
+		stats := asObj(plain(push["stats"], 2))
+		if n, ok := asObj(push["stats"])["Tokens"]; ok && stats != nil { // angemeldete Zugaenge; "Tokens" verwirft der zentrale Filter
+			delete(stats, "Tokens")
+			stats["Registered"] = n
+		}
+		out["push"] = obj{"listening": strs(push, "listening"), "stats": stats}
 		return out, nil
 	case "traps":
 		d, err := c.getObj("/api/monitor64/traps", nil)
@@ -115,9 +120,9 @@ func m64Config(c *call, a map[string]any) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		out := pick(d, "internet", "http_port", "port", "running", "version", "date", "due", "fingerprint")
+		out := pick(d, "internet", "http_port", "port", "running", "version", "date", "due")
 		src := asObj(d["source"])
-		out["part"] = part
+		out["part"], out["fingerprint"] = part, sshFingerprint(str(d, "fingerprint"))
 		out["source"] = obj{"source": clean(str(src, "source"), 120), "checked": ts(src["checked"]), "ok": boolean(src, "ok"), "untrusted": obj{"error": clean(str(src, "error"), 200)}}
 		out["files"] = pickList(d["files"], 50, "name", "os", "arch", "size", "cached")
 		hosts := []any{}
@@ -151,7 +156,8 @@ func m64Config(c *call, a map[string]any) (map[string]any, error) {
 	out["nodes"] = pickList(d["nodes"], 0, "id", "name", "self", "online", "stable")
 	out["hosts"] = pickList(d["hosts"], 500, "uid", "name", "owner", "owner_name", "preferred", "backups", "role", "reachable")
 	k := asObj(d["key"])
-	key := pick(k, "fingerprint", "cluster", "at", "running")
+	key := pick(k, "cluster", "at", "running")
+	key["fingerprint"] = sshFingerprint(str(k, "fingerprint"))
 	pending := []any{}
 	for _, e := range asArr(k["pending"]) {
 		m := asObj(e)

@@ -3,6 +3,7 @@ package edge
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"net/netip"
 	"net/url"
@@ -191,12 +192,22 @@ func (e *Edge) lookupIP(ctx context.Context, host string) ([]netip.Addr, error) 
 	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }
 
+// peerHost: zuletzt aufgeloeste Adressen eines Namens und wann.
+type peerHost struct {
+	addrs []netip.Addr
+	at    time.Time
+}
+
+// ppPeerKeep: so lange gelten die Adressen eines Namens weiter, wenn seine Aufloesung scheitert.
+const ppPeerKeep = 30 * time.Minute
+
 // resolvePeers: Adressen aus URLs bzw. Adressen (Namen ueber lookup), ohne Doppelte, sortiert. Scheitert die
-// Aufloesung eines Namens (z. B. DNS kurz nicht erreichbar), gelten seine Adressen aus dem letzten Lauf (prev) weiter,
-// statt die Verbindungen dieser Node bis zum naechsten Lauf abzuweisen.
-func resolvePeers(ctx context.Context, list []string, lookup func(context.Context, string) ([]netip.Addr, error), prev map[string][]netip.Addr) ([]netip.Addr, map[string][]netip.Addr) {
+// Aufloesung eines Namens (z. B. DNS kurz nicht erreichbar), gelten seine Adressen aus dem letzten erfolgreichen Lauf
+// (prev) noch bis ppPeerKeep weiter, statt die Verbindungen dieser Node bis zum naechsten Lauf abzuweisen; gibt es den
+// Namen nicht mehr (NXDOMAIN), fallen sie sofort weg.
+func resolvePeers(ctx context.Context, list []string, lookup func(context.Context, string) ([]netip.Addr, error), prev map[string]peerHost) ([]netip.Addr, map[string]peerHost) {
 	out := []netip.Addr{}
-	byHost := map[string][]netip.Addr{}
+	byHost := map[string]peerHost{}
 	add := func(a netip.Addr) {
 		if a = a.Unmap(); a.IsValid() && !a.IsUnspecified() && !slices.Contains(out, a) {
 			out = append(out, a)
@@ -216,11 +227,16 @@ func resolvePeers(ctx context.Context, list []string, lookup func(context.Contex
 			continue
 		}
 		addrs, err := lookup(ctx, host)
+		ph := peerHost{addrs: addrs, at: time.Now()}
 		if err != nil {
-			addrs = prev[host]
+			var dnsErr *net.DNSError
+			ph = prev[host]
+			if errors.As(err, &dnsErr) && dnsErr.IsNotFound || time.Since(ph.at) > ppPeerKeep {
+				continue
+			}
 		}
-		byHost[host] = addrs
-		for _, a := range addrs {
+		byHost[host] = ph
+		for _, a := range ph.addrs {
 			add(a)
 		}
 	}

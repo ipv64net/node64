@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -281,5 +283,25 @@ func TestMCPEndToEnd(t *testing.T) {
 	r3.Body.Close()
 	if r3.StatusCode != http.StatusForbidden && r3.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("cookie only: %d", r3.StatusCode)
+	}
+}
+
+// WE-3: Ueber das Docker-Gateway (Bridge-Netz) ist die Herkunft unbekannt - /mcp gilt dann nicht als Heimnetz.
+func TestMCPPrivateSourceGateway(t *testing.T) {
+	gw := netip.MustParseAddr("172.17.0.1")
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.RemoteAddr = "172.17.0.1:4000"
+	restore := localnet.OriginForTest(false, gw) // der Test selbst kann im Bridge-Netz laufen
+	if !mcpPrivateSource(req) {
+		t.Fatal("private address without bridge network must count as private")
+	}
+	restore()
+	defer localnet.OriginForTest(true, gw)()
+	if mcpPrivateSource(req) {
+		t.Fatal("docker gateway counted as private source")
+	}
+	req.RemoteAddr = "192.168.1.5:4000"
+	if !mcpPrivateSource(req) {
+		t.Fatal("other LAN addresses must stay private")
 	}
 }

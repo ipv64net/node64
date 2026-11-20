@@ -433,3 +433,33 @@ func TestAdminRouteMatrixGets(t *testing.T) {
 		}
 	}
 }
+
+// app.js graut fuer „Nur lesen“ alle POST-Formulare aus, ausser denen, die der Server erlaubt (selfService): die
+// Liste own muss jede erlaubte Formular-Route enthalten (auch Environment), Formulare an andere Nodes bleiben frei.
+func TestReadOnlyFormsMatchSelfService(t *testing.T) {
+	js, err := staticFS.ReadFile("static/js/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`var own = /(.+)/;`).FindSubmatch(js)
+	if m == nil {
+		t.Fatal("own not found in app.js")
+	}
+	own := regexp.MustCompile(string(m[1]))
+	for _, p := range []string{"/settings/user", "/settings/password", "/login/password", "/settings/2fa/enable", "/settings/2fa/disable",
+		"/settings/api-keys", "/settings/api-keys/3/delete", "/settings/login/passkeys/begin", "/settings/login/passkeys/7/delete",
+		"/settings/login/oidc/link", "/settings/login/identities/2/delete", "/settings/mcp/keys", "/settings/mcp/keys/4/delete",
+		"/environment/open/node-b", "/environment/nodes/abc123/open"} {
+		if _, pat := selfService.Handler(httptest.NewRequest(http.MethodPost, p, nil)); pat == "" {
+			t.Fatalf("%s is not self service", p)
+		}
+		if !own.MatchString(p) {
+			t.Errorf("app.js disables the allowed form %s", p)
+		}
+	}
+	for _, p := range []string{"/settings/node", "/environment/nodes", "/environment/access", "/settings/users"} {
+		if own.MatchString(p) {
+			t.Errorf("app.js leaves %s enabled", p)
+		}
+	}
+}

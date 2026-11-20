@@ -188,8 +188,9 @@ func (s *Store) UserCount(ctx context.Context) (int, error) {
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash, lang, tz string) (*User, error) {
 	uid := make([]byte, 16)
 	_, _ = rand.Read(uid)
-	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		hex.EncodeToString(uid), username, passwordHash, lang, tz, Now())
+	now := Now()
+	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at, admin_at, password_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		hex.EncodeToString(uid), username, passwordHash, lang, tz, now, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -206,9 +207,10 @@ var ErrSetupDone = errors.New("setup already done")
 func (s *Store) CreateFirstUser(ctx context.Context, username, passwordHash, lang, tz string) (*User, error) {
 	uid := make([]byte, 16)
 	_, _ = rand.Read(uid)
-	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at)
-		SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)`,
-		hex.EncodeToString(uid), username, passwordHash, lang, tz, Now())
+	now := Now()
+	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at, admin_at, password_at)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)`,
+		hex.EncodeToString(uid), username, passwordHash, lang, tz, now, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +245,8 @@ func (s *Store) userChanged(ctx context.Context, id int64) {
 	}
 }
 
-// DeleteUser loescht einen Benutzer samt Sitzungen, Keys, Verknuepfungen und Passkeys; false = gab es nicht.
+// DeleteUser loescht einen Benutzer samt Sitzungen, Keys, Verknuepfungen und Passkeys; false = gab es nicht. Der
+// Zeitpunkt bleibt vermerkt (UserDeletedAt).
 func (s *Store) DeleteUser(ctx context.Context, id int64) (bool, error) {
 	u, err := s.UserByID(ctx, id)
 	if err != nil || u == nil {
@@ -252,8 +255,36 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) (bool, error) {
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id); err != nil {
 		return false, err
 	}
+	_ = s.NoteUserDeleted(ctx, u.UID, time.Now())
 	s.LoginChanged(ctx, "accounts", u.UID, true)
 	return true, nil
+}
+
+// userDeletionsKeep: so lange bleibt eine Loeschung vermerkt (wie die Loeschvermerke im Cluster).
+const userDeletionsKeep = 30 * 24 * time.Hour
+
+// NoteUserDeleted vermerkt die Loeschung des Benutzers uid zum Zeitpunkt at (Cluster: der Zeitpunkt der Loeschung auf
+// der Urheberin); aeltere Vermerke fallen weg.
+func (s *Store) NoteUserDeleted(ctx context.Context, uid string, at time.Time) error {
+	if uid == "" {
+		return nil
+	}
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM user_deletions WHERE deleted_at < ?`, FormatTime(time.Now().Add(-userDeletionsKeep))); err != nil {
+		return err
+	}
+	_, err := s.w.ExecContext(ctx, `INSERT INTO user_deletions (uid, deleted_at) VALUES (?, ?)
+		ON CONFLICT(uid) DO UPDATE SET deleted_at = excluded.deleted_at`, uid, FormatTime(at))
+	return err
+}
+
+// UserDeletedAt: Zeitpunkt, zu dem der Benutzer uid hier geloescht wurde (Null = nicht oder vor mehr als 30 Tagen).
+func (s *Store) UserDeletedAt(ctx context.Context, uid string) time.Time {
+	var at string
+	_ = s.r.QueryRowContext(ctx, `SELECT deleted_at FROM user_deletions WHERE uid = ?`, uid).Scan(&at)
+	if t := ParseTime(at); time.Since(t) < userDeletionsKeep {
+		return t
+	}
+	return time.Time{}
 }
 
 func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
@@ -294,16 +325,21 @@ func (s *Store) TouchUserLogin(ctx context.Context, id int64) error {
 	return err
 }
 
+// UpdateUserPrefs speichert Sprache und Zeitzone; an den Cluster nur, wenn sich etwas geaendert hat.
 func (s *Store) UpdateUserPrefs(ctx context.Context, id int64, lang, tz string) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET lang = ?, timezone = ? WHERE id = ?`, lang, tz, id)
-	if err == nil {
+	res, err := s.w.ExecContext(ctx, `UPDATE users SET lang = ?, timezone = ? WHERE id = ? AND (lang <> ? OR timezone <> ?)`, lang, tz, id, lang, tz)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
 		s.userChanged(ctx, id)
 	}
-	return err
+	return nil
 }
 
+// UpdateUserPassword setzt den Passwort-Hash (auch password_at fuer den Cluster).
 func (s *Store) UpdateUserPassword(ctx context.Context, id int64, hash string) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hash, id)
+	_, err := s.w.ExecContext(ctx, `UPDATE users SET password_hash = ?, password_at = ? WHERE id = ?`, hash, Now(), id)
 	if err == nil {
 		s.userChanged(ctx, id)
 	}

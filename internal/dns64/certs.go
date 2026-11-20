@@ -18,6 +18,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/certs"
+	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 )
 
 // Zertifikate fuer die verschluesselten Dienste (DoH, DoT, DoQ). Standard: eine eigene kleine CA fuer das
@@ -135,14 +138,11 @@ func (m *Module) serverCert(c config) (tls.Certificate, []string, error) {
 	return crt, certNames(leaf), nil
 }
 
-// caLocal: Endungen, die eine neue Heimnetz-CA immer erlaubt (nur im eigenen Netz gueltig, wie dnsserver.localSuffixes).
-var caLocal = []string{"lan", "home", "home.arpa", "internal", "local", "localdomain", "localhost", "fritz.box", "speedport.ip"}
-
 // caPermitted: Namen, auf die eine neue Heimnetz-CA beschraenkt wird (Review DN-1) - lokale Endungen, die
 // eingestellten Namen fuer DoH/DoT, die lokalen Zonen und der Rechnername. Ohne Beschraenkung koennte, wer den
 // CA-Schluessel hat, fuer Geraete mit installiertem Profil Zertifikate fuer jede Domain ausstellen.
 func (m *Module) caPermitted(c config) []string {
-	out := slices.Clone(caLocal)
+	out := dnsserver.LocalNames() // Endungen, die nur im eigenen Netz gelten
 	for _, n := range c.Names {
 		if n = strings.TrimPrefix(hostName(n), "*."); n != "" && net.ParseIP(n) == nil && validName(n) {
 			out = append(out, n)
@@ -242,7 +242,7 @@ func (m *Module) loadOrCreateCA(permitted []string) (*x509.Certificate, *ecdsa.P
 		IsCA:                  true,
 		MaxPathLenZero:        true,
 		// nur private Adressen und die Namen aus caPermitted (lokale Endungen, eigene DoH/DoT-Namen, Zonen)
-		PermittedIPRanges:           privateRanges(),
+		PermittedIPRanges:           certs.PrivateRanges(),
 		PermittedDNSDomains:         permitted,
 		PermittedDNSDomainsCritical: len(permitted) > 0,
 	}
@@ -256,16 +256,6 @@ func (m *Module) loadOrCreateCA(permitted []string) (*x509.Certificate, *ecdsa.P
 	m.log.Info("dns64 home CA created", "file", certFile)
 	ca, err := x509.ParseCertificate(der)
 	return ca, key, err
-}
-
-func privateRanges() []*net.IPNet {
-	var out []*net.IPNet
-	for _, s := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
-		"fc00::/7", "fe80::/10", "::1/128"} {
-		_, n, _ := net.ParseCIDR(s)
-		out = append(out, n)
-	}
-	return out
 }
 
 // wantedNames: eingestellte Namen, Rechnername, localhost und alle privaten Adressen der Node.

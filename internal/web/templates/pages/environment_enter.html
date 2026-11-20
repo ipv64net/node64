@@ -1,0 +1,8 @@
+{{define "content"}}
+<h1 class="h5 mb-3"><i class="bi bi-hdd-stack text-primary"></i> {{.T "environment.title"}}</h1>
+<form method="post" action="/environment/enter" id="env-enter" class="m-0">
+	<input type="hidden" name="step" value="{{index .Data "Step"}}">
+	<button class="btn btn-primary w-100" type="submit">{{.T "environment.continue"}}</button>
+</form>
+{{end}}
+{{define "scripts"}}<script src="/static/js/environment.js?v={{.Version}}"></script>{{end}}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -27,6 +28,37 @@ func (h hostRewrite) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
 	r.Host = h.host
 	return http.DefaultTransport.RoundTrip(r)
+}
+
+var envStepRe = regexp.MustCompile(`name="step" value="([^"]+)"`)
+
+// envBrowser schickt das Formular der oeffnenden Node (req, cross-site) wie ein Browser an B: ohne die Cookies von B
+// (SameSite=Lax), Set-Cookie der Antwort landet aber im Cookie-Jar; die selbst absendende Seite von B (zweiter
+// Schritt) geht danach same-site mit Cookies an B. Liefert die letzte Antwort mit Seite.
+func envBrowser(t *testing.T, c *http.Client, req *http.Request) (*http.Response, string) {
+	t.Helper()
+	bare := *c
+	bare.Jar = nil
+	resp, err := bare.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := readBody(t, resp)
+	if c.Jar != nil {
+		c.Jar.SetCookies(req.URL, resp.Cookies())
+	}
+	m := envStepRe.FindStringSubmatch(body)
+	if resp.StatusCode != http.StatusOK || m == nil {
+		return resp, body
+	}
+	base := req.URL.Scheme + "://" + req.URL.Host
+	req2, _ := http.NewRequest(http.MethodPost, base+envEnterPath, strings.NewReader(url.Values{"step": {m[1]}}.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.Header.Set("Origin", base)
+	if resp, err = c.Do(req2); err != nil {
+		t.Fatal(err)
+	}
+	return resp, readBody(t, resp)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {
@@ -78,6 +110,36 @@ func TestEnvironmentSessionNoCredentials(t *testing.T) {
 			}
 			if body := readBody(t, resp); resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "opened via environment") {
 				t.Errorf("%s: POST %s = %d %s", role, p, resp.StatusCode, body)
+			}
+		}
+		if role == store.RoleAdmin { // auch keine Zugangsdaten fuer andere Benutzer und keine Zugaenge fuer andere Nodes
+			for _, p := range []string{userAdminPath, userAdminPath + "/" + itoa(bu.ID) + "/password", userAdminPath + "/" + itoa(bu.ID) + "/2fa-reset", "/environment/access"} {
+				resp, err := c.PostForm(b.app.srv.URL+p, url.Values{"_csrf": {csrf}, "username": {"neu"}, "name": {"x"}, "user": {bu.UID}, "role": {"admin"},
+					"password": {"ein neues langes passwort"}, "password2": {"ein neues langes passwort"}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if body := readBody(t, resp); resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "über Environment geöffneten Sitzung") {
+					t.Errorf("admin: POST %s = %d", p, resp.StatusCode)
+				}
+			}
+			for _, p := range []string{"/api/users", "/api/users/" + itoa(bu.ID) + "/password", "/api/environment/access"} {
+				req, _ := http.NewRequest(http.MethodPost, b.app.srv.URL+p, strings.NewReader(`{"username":"neu","name":"x","role":"admin","password":"ein neues langes passwort"}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("X-CSRF-Token", csrf)
+				resp, err := c.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if body := readBody(t, resp); resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "opened via environment") {
+					t.Errorf("admin: POST %s = %d %s", p, resp.StatusCode, body)
+				}
+			}
+			if u, _ := b.app.store.UserByName(ctx, "neu"); u != nil {
+				t.Fatal("admin: user created in environment session")
+			}
+			if acc, _ := b.env.Accesses(ctx); len(acc) != 0 {
+				t.Fatal("admin: access created in environment session")
 			}
 		}
 		if keys, _ := b.app.store.APIKeys(ctx, bu.ID); len(keys) != 0 {
@@ -151,11 +213,7 @@ func TestEnvironmentHostHeader(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPost, b.app.srv.URL+envEnterPath, strings.NewReader(url.Values{"ticket": {m[1]}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", "http://evil.example")
-	resp, err = victim.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body := readBody(t, resp); resp.StatusCode != http.StatusOK || !strings.Contains(body, `id="env-confirm"`) || !strings.Contains(body, "dennis") {
+	if resp, body := envBrowser(t, victim, req); resp.StatusCode != http.StatusOK || !strings.Contains(body, `id="env-confirm"`) || !strings.Contains(body, "dennis") {
 		t.Fatalf("no confirmation: %d", resp.StatusCode)
 	}
 	if resp, _ := victim.Get(b.app.srv.URL + "/settings"); resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {

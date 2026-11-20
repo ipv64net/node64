@@ -49,8 +49,12 @@ func (p *plain) exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, error) {
 
 var errQuestion = errors.New("plain: answer for another question")
 
-// sameQuestion: die Antwort nennt genau die Frage der Anfrage (Gross/Klein egal, wie 0x20).
+// sameQuestion: die Antwort nennt genau die Frage der Anfrage (Gross/Klein egal, wie 0x20). Fehlerantworten ohne
+// Frage (NOTIMP, REFUSED, FORMERR, SERVFAIL; RFC 1035 erlaubt das) gelten - sie landen nie im Cache.
 func sameQuestion(q, resp *dns.Msg) bool {
+	if len(resp.Question) == 0 && len(resp.Answer) == 0 && resp.Rcode != dns.RcodeSuccess && resp.Rcode != dns.RcodeNameError {
+		return true
+	}
 	if len(q.Question) != len(resp.Question) {
 		return false
 	}

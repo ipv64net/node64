@@ -8,8 +8,9 @@
 # Optionen: --key "<oeffentlicher Schluessel>" (Pflicht), --port 6465, --base <URL> (Ordner mit den Dateien,
 # Standard https://node64.de/agent/; z. B. die eigene Node fuer Hosts ohne Internet).
 # --sums-sha256 <hex>: Pruefsumme von SHA256SUMS, wie sie die Node aus ihrem signierten Verzeichnis kennt (steht im
-# Befehl des Assistenten "Host hinzufuegen"). Ohne sie prueft das Skript die Signatur SHA256SUMS.sig (ed25519,
-# Release-Schluessel wie beim automatischen Update) mit OpenSSL ab 3.0; fehlt beides, nur mit Warnung (AG-2).
+# Befehl des Assistenten "Host hinzufuegen"). Ohne sie bzw. bei Abweichung (neues Release, das die Node noch nicht
+# kennt) prueft das Skript die Signatur SHA256SUMS.sig (ed25519, Release-Schluessel wie beim automatischen Update) mit
+# OpenSSL ab 3.0; ohne beides nur mit Warnung, bei Abweichung ohne gueltige Signatur Abbruch (AG-2).
 # Push-Betrieb (Host hinter NAT, VPS): --connect token@node[:6466] (auch mehrfach, z. B. Cluster) baut die Verbindung
 # zur Node selbst auf; --no-listen zusaetzlich, wenn der Agent nicht lauschen soll. Die Ziele landen in
 # /etc/monitor64-agent/connect (FreeBSD: /usr/local/etc/monitor64-agent/connect; nur fuer root lesbar), nicht in der
@@ -162,22 +163,41 @@ sha256of() {
 	fi
 }
 
-# SHA256SUMS absichern (AG-2): mit der Pruefsumme aus dem Befehl der Node (sie kennt das signierte Verzeichnis), sonst
-# ueber die Signatur SHA256SUMS.sig. Eine ungueltige Signatur bricht ab; nicht pruefbar (keine Signatur, kein OpenSSL
-# ab 3.0) nur mit Warnung - dann schuetzt allein HTTPS.
-if [ -n "$SUMS" ]; then
-	[ "$(sha256of "$TMP/SHA256SUMS")" = "$SUMS" ] || die "SHA256SUMS does not match the checksum from the node (--sums-sha256). Files may have been tampered with - or the node knows another release: reload the page in Node64 and copy the command again."
-	say "SHA256SUMS confirmed by the node"
-elif ! download "${BASE}SHA256SUMS.sig" "$TMP/SHA256SUMS.sig" >/dev/null 2>&1; then
-	say "WARNING: no signature (${BASE}SHA256SUMS.sig) - only the transport protects the download"
-elif ! command -v openssl >/dev/null 2>&1 || ! openssl pkeyutl -help 2>&1 | grep -q rawin; then
-	say "WARNING: OpenSSL 3.0 or newer is required to check the signature - only the transport protects the download"
-else
+# verify_sig: Signatur SHA256SUMS.sig pruefen (Release-Schluessel). 0 = gueltig; 1 = nicht pruefbar (keine Signatur,
+# kein OpenSSL ab 3.0; Grund in SIGWHY). Eine ungueltige Signatur bricht ab.
+SIGWHY=""
+verify_sig() {
+	if ! download "${BASE}SHA256SUMS.sig" "$TMP/SHA256SUMS.sig" >/dev/null 2>&1; then
+		SIGWHY="no signature (${BASE}SHA256SUMS.sig)"
+		return 1
+	fi
+	if ! command -v openssl >/dev/null 2>&1 || ! openssl pkeyutl -help 2>&1 | grep -q rawin; then
+		SIGWHY="OpenSSL 3.0 or newer is required to check the signature"
+		return 1
+	fi
 	printf '%s\n' "$RELEASE_KEY" >"$TMP/release.pem"
 	openssl base64 -d -A -in "$TMP/SHA256SUMS.sig" -out "$TMP/SHA256SUMS.bin" 2>/dev/null || die "SHA256SUMS.sig is not readable"
 	openssl pkeyutl -verify -pubin -inkey "$TMP/release.pem" -rawin -in "$TMP/SHA256SUMS" -sigfile "$TMP/SHA256SUMS.bin" >/dev/null 2>&1 ||
 		die "invalid signature of SHA256SUMS - files may have been tampered with"
+	return 0
+}
+
+# SHA256SUMS absichern (AG-2): mit der Pruefsumme aus dem Befehl der Node (sie kennt das signierte Verzeichnis), sonst
+# ueber die Signatur SHA256SUMS.sig. Weicht SHA256SUMS von der Pruefsumme der Node ab (z. B. neues Release, das die
+# Node noch nicht geladen hat), entscheidet die Signatur; ohne gueltige Signatur bricht das Skript ab. Ohne
+# --sums-sha256 und nicht pruefbar (keine Signatur, kein OpenSSL ab 3.0) nur mit Warnung - dann schuetzt allein HTTPS.
+if [ -n "$SUMS" ]; then
+	if [ "$(sha256of "$TMP/SHA256SUMS")" = "$SUMS" ]; then
+		say "SHA256SUMS confirmed by the node"
+	elif verify_sig; then
+		say "SHA256SUMS differs from the checksum of the node (newer release?) - signature of SHA256SUMS ok"
+	else
+		die "SHA256SUMS does not match the checksum from the node (--sums-sha256) and cannot be confirmed by its signature ($SIGWHY). Files may have been tampered with - or the node knows another release: reload the page in Node64 and copy the command again."
+	fi
+elif verify_sig; then
 	say "signature of SHA256SUMS ok"
+else
+	say "WARNING: $SIGWHY - only the transport protects the download"
 fi
 
 WANT=$(awk -v f="$FILE" '$2 == f || $2 == "*" f { print $1; exit }' "$TMP/SHA256SUMS")

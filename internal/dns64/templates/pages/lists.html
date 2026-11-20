@@ -34,11 +34,11 @@
 						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th>{{.T "dns64.lists.list"}}</th><th class="text-end">{{.T "dns64.lists.domains"}}</th><th>{{.T "dns64.lists.updated"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $i, $l := $d.Cfg.Lists}}<tr data-url="{{$l.URL}}">
-							<td class="ps-3"><input class="form-check-input" type="checkbox" name="on_{{$i}}" value="1"{{if $l.Enabled}} checked{{end}} aria-label="{{$l.Name}}"></td>
+							<td class="ps-3"><input type="hidden" name="url_{{$i}}" value="{{$l.URL}}"><input class="form-check-input" type="checkbox" name="on_{{$i}}" value="1"{{if $l.Enabled}} checked{{end}} aria-label="{{$l.Name}}"></td>
 							<td><a href="{{$l.URL}}" target="_blank" rel="noopener noreferrer">{{$l.Name}}</a>{{if $l.Custom}} <span class="badge text-bg-light">{{$.T "dns64.custom"}}</span> <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-body-secondary" data-rename-list="{{$l.URL}}" data-name="{{$l.Name}}" data-prompt="{{$.T "dns64.lists.rename_prompt"}}" title="{{$.T "dns64.lists.rename"}}" aria-label="{{$.T "dns64.lists.rename"}}"><i class="bi bi-pencil"></i></button>{{else}}{{with $l.Cat}} <span class="badge text-bg-{{if eq . "kids"}}warning{{else if eq . "security"}}danger{{else if eq . "bypass"}}dark{{else}}secondary{{end}} fw-normal">{{$.T (print "dns64.lists.cat." .)}}</span>{{end}}{{end}}</td>
 							<td class="text-end l-rules">–</td><td class="text-nowrap l-updated">–</td>
 							<td class="l-status">{{if not $l.Enabled}}<span class="badge text-bg-light">{{$.T "dns64.js.off"}}</span>{{end}}</td>
-							<td class="text-end pe-3">{{if $l.Custom}}<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/lists/remove" name="remove" value="{{$i}}" data-confirm="{{$.T "dns64.lists.remove_confirm" "name" $l.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>{{end}}</td>
+							<td class="text-end pe-3">{{if $l.Custom}}<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/lists/remove" name="remove" value="{{$l.URL}}" data-confirm="{{$.T "dns64.lists.remove_confirm" "name" $l.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>{{end}}</td>
 						</tr>{{end}}
 						</tbody>
 					</table>
@@ -73,11 +73,11 @@
 						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th>{{.T "dns64.lists.list"}}</th><th class="text-end">{{.T "dns64.lists.domains"}}</th><th>{{.T "dns64.lists.updated"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $i, $l := $d.Cfg.AllowLst}}<tr data-aurl="{{$l.URL}}">
-							<td class="ps-3"><input class="form-check-input" type="checkbox" name="aon_{{$i}}" value="1"{{if $l.Enabled}} checked{{end}} aria-label="{{$l.Name}}"></td>
+							<td class="ps-3"><input type="hidden" name="aurl_{{$i}}" value="{{$l.URL}}"><input class="form-check-input" type="checkbox" name="aon_{{$i}}" value="1"{{if $l.Enabled}} checked{{end}} aria-label="{{$l.Name}}"></td>
 							<td><a href="{{$l.URL}}" target="_blank" rel="noopener noreferrer">{{$l.Name}}</a></td>
 							<td class="text-end l-rules">–</td><td class="text-nowrap l-updated">–</td>
 							<td class="l-status">{{if not $l.Enabled}}<span class="badge text-bg-light">{{$.T "dns64.js.off"}}</span>{{end}}</td>
-							<td class="text-end pe-3"><button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/allowlists/remove" name="remove" value="{{$i}}" data-confirm="{{$.T "dns64.lists.remove_confirm" "name" $l.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button></td>
+							<td class="text-end pe-3"><button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/allowlists/remove" name="remove" value="{{$l.URL}}" data-confirm="{{$.T "dns64.lists.remove_confirm" "name" $l.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button></td>
 						</tr>{{end}}
 						</tbody>
 					</table>

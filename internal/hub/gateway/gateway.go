@@ -166,6 +166,21 @@ func (g *Gateway) clientIP(r *http.Request) string {
 	return host
 }
 
+// limitKey: Schluessel der Ratenlimits je Absender - IPv4-Adresse bzw. IPv6-/64 (ein Anschluss hat meist ein ganzes
+// /64, einzelne Adressen daraus wuerden die Limits umgehen).
+func limitKey(ip string) string {
+	a, err := netip.ParseAddr(ip)
+	if err != nil || !a.Unmap().Is6() {
+		return ip
+	}
+	p, _ := a.Prefix(64)
+	return p.String()
+}
+
+// maxLinkCode: laengster angenommener Code der Erstverknuepfung (8 Zeichen, mit Bindestrichen und Leerraum
+// grosszuegig) - der Code ist Schluessel im Limiter.
+const maxLinkCode = 32
+
 func (g *Gateway) fromProxy(a netip.Addr) bool {
 	for _, p := range g.realIPFrom {
 		if p.Contains(a) {
@@ -191,15 +206,20 @@ func (g *Gateway) auth(h http.HandlerFunc) http.Handler {
 		if tok == "" {
 			tok = r.URL.Query().Get("token") // WebSocket aus Browsern o. ae.
 		}
-		// Fehlanmeldungen (widerrufene/falsche Tokens) bremsen strenger als gueltige Anmeldungen
-		if !g.trusted[g.clientIP(r)] && (!g.limiter.allow("auth:"+g.clientIP(r), 60, time.Minute) || g.limiter.over("bad:"+g.clientIP(r), 20)) {
+		ip, free := limitKey(g.clientIP(r)), g.trusted[g.clientIP(r)]
+		if !free && !g.limiter.allow("auth:"+ip, 60, time.Minute) {
 			writeErr(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
 		n, err := g.st.NodeByToken(r.Context(), tok)
 		if err != nil {
 			if errors.Is(err, store.ErrInvalidToken) {
-				g.limiter.allow("bad:"+g.clientIP(r), 20, time.Minute)
+				// Fehlanmeldungen (widerrufene/falsche Tokens) bremsen strenger als gueltige Anmeldungen - nur sie
+				// selbst: gueltige Nodes hinter derselben Adresse (CGNAT) kommen weiter an
+				if !free && !g.limiter.allow("bad:"+ip, 20, time.Minute) {
+					writeErr(w, http.StatusTooManyRequests, "too many requests")
+					return
+				}
 				writeErr(w, http.StatusUnauthorized, "token_revoked")
 				return
 			}
@@ -213,7 +233,7 @@ func (g *Gateway) auth(h http.HandlerFunc) http.Handler {
 // ---------------------------------------------------------------- Erstverknuepfung
 
 func (g *Gateway) linkStart(w http.ResponseWriter, r *http.Request) {
-	if !g.limiter.allow("link:"+g.clientIP(r), 5, time.Minute) {
+	if !g.limiter.allow("link:"+limitKey(g.clientIP(r)), 5, time.Minute) {
 		writeErr(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
@@ -233,7 +253,7 @@ func (g *Gateway) linkStart(w http.ResponseWriter, r *http.Request) {
 
 func (g *Gateway) linkPoll(w http.ResponseWriter, r *http.Request) {
 	var in wire.LinkPoll
-	if err := readJSON(r, &in, 4096); err != nil || in.Code == "" || in.PollSecret == "" {
+	if err := readJSON(r, &in, 4096); err != nil || in.Code == "" || len(in.Code) > maxLinkCode || in.PollSecret == "" {
 		writeErr(w, http.StatusBadRequest, "code and poll_secret required")
 		return
 	}
@@ -578,6 +598,7 @@ func (g *Gateway) push(w http.ResponseWriter, r *http.Request) {
 type ipLimiter struct {
 	mu    sync.Mutex
 	m     map[string]*bucket
+	kinds map[string]int // Schluessel je Art (Teil vor ":")
 	swept time.Time
 }
 
@@ -594,20 +615,24 @@ func validToken(t string) bool { return len(t) >= 20 && len(t) <= 50 }
 const maxDeliveries = 500
 
 // Grenzen des Limiters: abgelaufene Eintraege werden ab limiterSweep Schluesseln hoechstens einmal je Sekunde
-// entfernt; ueber limiterMax werden neue Schluessel abgewiesen statt den Speicher weiter zu fuellen.
+// entfernt. Ueber limiterMax Schluesseln insgesamt bzw. limiterKind je Art teilen sich neue Schluessel einer Art einen
+// gemeinsamen Eimer, statt den Speicher weiter zu fuellen - eine Flut einer Art (z. B. push: mit erfundenen Tokens)
+// sperrt so nicht alle anderen.
 const (
 	limiterSweep = 100000
 	limiterMax   = 500000
+	limiterKind  = limiterMax / 4
 )
 
-func newIPLimiter() *ipLimiter { return &ipLimiter{m: map[string]*bucket{}} }
+func newIPLimiter() *ipLimiter { return &ipLimiter{m: map[string]*bucket{}, kinds: map[string]int{}} }
 
-// over meldet, ob ein Schluessel sein Limit im laufenden Fenster schon ueberschritten hat (zaehlt nicht mit).
-func (l *ipLimiter) over(key string, limit int) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	b, ok := l.m[key]
-	return ok && time.Now().Before(b.reset) && b.count > limit
+// limKind: Art eines Schluessels (Teil vor ":", ohne ":" leer).
+func limKind(key string) string {
+	k, _, ok := strings.Cut(key, ":")
+	if !ok {
+		return ""
+	}
+	return k
 }
 
 // allow zaehlt einen Zugriff; false, wenn limit im Fenster erreicht.
@@ -621,11 +646,18 @@ func (l *ipLimiter) allow(key string, limit int, window time.Duration) bool {
 		for k, x := range l.m {
 			if now.After(x.reset) {
 				delete(l.m, k)
+				if kind := limKind(k); l.kinds[kind] > 0 {
+					l.kinds[kind]--
+				}
 			}
 		}
 	}
-	if !ok && len(l.m) >= limiterMax {
-		return false
+	if kind := limKind(key); !ok && (len(l.m) >= limiterMax || l.kinds[kind] >= limiterKind) {
+		key = kind + ":*" // Tabelle bzw. Anteil der Art voll: gemeinsamer Eimer der Art
+		b, ok = l.m[key]
+	}
+	if !ok {
+		l.kinds[limKind(key)]++
 	}
 	if !ok || now.After(b.reset) {
 		b = &bucket{reset: now.Add(window)}

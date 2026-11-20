@@ -16,7 +16,9 @@ import (
 // uid. Kommt sie von aussen, ersetzt sie den Eintrag hier (die eigene uid geht als geloescht hinaus); ist die eigene
 // kleiner, wird der fremde Eintrag nicht uebernommen - die andere Node ersetzt ihren, sobald sie unseren bekommt. Eine
 // verdraengte eigene Adresse ist ein Fund (Konflikt "double", 24 Stunden, mit Benachrichtigung): "naechste freie
-// Adresse vergeben" ist nur je Node am Stueck, zwei Nodes koennen dieselbe Adresse gleichzeitig vergeben.
+// Adresse vergeben" ist nur je Node am Stueck, zwei Nodes koennen dieselbe Adresse gleichzeitig vergeben. Stammt der
+// Eintrag hier von derselben Node wie die ankommende Aenderung, ist er dort schon geaendert (z. B. zwei Adressen
+// getauscht) und nur noch nicht angekommen: kein Doppel, er macht still Platz.
 //
 // Uebernommene Eintraege schreiben nichts nach DNS64 durch (Stufe I3): die Eintraege dort kommen ueber den Abgleich
 // von DNS64 (Plan E1).
@@ -39,6 +41,9 @@ type ClusterHooks struct {
 	// ForeignDNS64 meldet, ob eine Node die Eintraege von DNS64 mit dieser abgleicht, nicht aber die Adressen von
 	// IPAM64: dann kommen gekennzeichnete Eintraege, deren Adressen diese Node nicht kennt (keine Waisen).
 	ForeignDNS64 func(ctx context.Context) bool
+	// Stale meldet, ob der hier geltende Stand des Eintrags id von derselben Node stammt wie die ankommende Aenderung
+	// (ctx): dann ist er dort schon geaendert und nur noch nicht hier angekommen, keine gleichzeitige Doppelvergabe.
+	Stale func(ctx context.Context, item, id string) bool
 }
 
 // doubleKeep: so lange bleibt eine verdraengte Adresse als Fund stehen.
@@ -219,6 +224,12 @@ func (m *Module) clusterDouble(ctx context.Context, item, table, col, value, id 
 		return false, nil
 	}
 	if err != nil {
+		return false, err
+	}
+	if m.cluster.Stale != nil && m.cluster.Stale(ctx, item, other) {
+		// kein Doppel: die Urheberin hat den eigenen Eintrag schon verschoben (z. B. zwei Adressen getauscht), sein
+		// neuer Stand kommt noch - hier nur Platz machen, nichts melden
+		_, err := m.core.Writer().ExecContext(ctx, `DELETE FROM `+table+` WHERE uid = ?`, other)
 		return false, err
 	}
 	if other < id {

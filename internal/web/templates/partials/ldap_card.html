@@ -7,6 +7,7 @@
 			{{if not $d.LDAPGroups}}<div class="alert alert-warning small py-2">{{.T "ldap.no_groups"}}</div>{{else}}<p class="small">{{.T "ldap.groups_mapped" "n" $d.LDAPGroups}}</p>{{end}}
 			<form method="post" action="/settings/users/ldap">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<button class="visually-hidden" type="submit" tabindex="-1" aria-hidden="true"></button>{{/* Enter speichert (erster Submit-Knopf), nicht „Verbindung testen“ */}}
 				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="ldap_enabled" name="enabled" value="1"{{if $d.Cfg.Enabled}} checked{{end}}><label class="form-check-label" for="ldap_enabled">{{.T "ldap.enable"}}</label></div>
 				<div class="mb-2"><label class="form-label" for="ldap_profile">{{.T "ldap.profile"}}</label>
 					<select class="form-select form-select-sm" id="ldap_profile" name="profile">
@@ -31,7 +32,7 @@
 					<div class="col-sm-7"><div class="form-check"><input class="form-check-input" type="checkbox" id="ldap_nested" name="nested" value="1"{{if $d.Cfg.Nested}} checked{{end}}><label class="form-check-label" for="ldap_nested">{{.T "ldap.nested"}}</label></div></div>
 					<div class="col-sm-5"><label class="form-label" for="ldap_timeout">{{.T "ldap.timeout"}}</label><input class="form-control form-control-sm" type="number" min="0" max="60" id="ldap_timeout" name="timeout_sec" value="{{if $d.Cfg.TimeoutSec}}{{$d.Cfg.TimeoutSec}}{{end}}" placeholder="10"></div>
 				</div>
-				<div class="input-group input-group-sm mb-2"><input class="form-control" name="probe" placeholder="{{.T "ldap.probe"}}" maxlength="256" autocomplete="off">
+				<div class="input-group input-group-sm mb-2"><input class="form-control" name="probe" value="{{$d.Probe}}" placeholder="{{.T "ldap.probe"}}" maxlength="256" autocomplete="off">
 					<button class="btn btn-outline-secondary" type="submit" formaction="/settings/users/ldap/test"><i class="bi bi-plug"></i> {{.T "ldap.test"}}</button></div>
 				<div class="form-text mb-2">{{.T "ldap.test_hint"}}</div>
 				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>

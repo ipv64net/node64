@@ -43,7 +43,7 @@ func legacyData(t *testing.T, data json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"role", "disabled", "source", "email", "group_uids", "ext_group_uids", "must_change", "jit", "group_claim"} {
+	for _, k := range []string{"role", "disabled", "source", "email", "group_uids", "ext_group_uids", "must_change", "jit", "group_claim", "admin_at", "password_at"} {
 		delete(m, k)
 	}
 	b, _ := json.Marshal(m)
@@ -289,9 +289,16 @@ func TestGroupNameConflict(t *testing.T) {
 	if c.group(t, gidHigh) == nil || !slices.Equal(c.user(t, "bert").GroupUIDs, []string{gidHigh}) {
 		t.Fatal("C has B's group")
 	}
-	// B bekommt die Gruppe von A: die kleinere Kennung gilt, Inhalt von A, bert zeigt auf sie
-	if errs := transfer(t, a, b); len(errs) > 0 {
-		t.Fatal(errs)
+	// B bekommt die Gruppe von A: erst beim erneuten Abholen zusammengefuehrt (die Gleichnamigkeit besteht noch), dann
+	// gilt die kleinere Kennung, Inhalt von A, bert zeigt auf sie
+	defer func(w time.Duration) { groupMergeWait = w }(groupMergeWait)
+	groupMergeWait = 0
+	ga, _, _ := a.c.ClusterGet(ctx, ItemGroups, gidLow)
+	if errs := transfer(t, a, b); len(errs) != 1 || !errors.Is(errs[gidLow], errGroupWait) || b.group(t, gidHigh) == nil {
+		t.Fatalf("first time: wait for the retry: %v", errs)
+	}
+	if err := apply(t, a, b, ItemGroups, gidLow, ga); err != nil {
+		t.Fatal(err)
 	}
 	if b.group(t, gidHigh) != nil {
 		t.Fatal("B: larger uid gone")
@@ -335,6 +342,9 @@ func TestGroupNameConflict(t *testing.T) {
 	}
 	// A: die groessere Kennung von B kommt an (B hatte sie gemeldet) - A behaelt die eigene
 	hi, _ := json.Marshal(clusterGroup{Name: "admins", Role: store.RoleRead})
+	if err := apply(t, b, a, ItemGroups, gidHigh, hi); !errors.Is(err, errGroupWait) {
+		t.Fatalf("first time: wait for the retry: %v", err)
+	}
 	if err := apply(t, b, a, ItemGroups, gidHigh, hi); err != nil {
 		t.Fatal(err)
 	}

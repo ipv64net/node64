@@ -1,5 +1,20 @@
 # IPAM64 – Changes
 
+## 0.6.4 – unreleased
+
+- Takeover from DNS64: the name of a manual DHCP reservation (e.g. “Tablet Lea”) is kept when the address has no host name.
+- Saving an address with a locked DHCP switch no longer deletes its reservation.
+- CSV import: from the own export only fixed entries are taken over; leases and sightings are skipped and no longer create exclusions in the DHCP range.
+- The confirmation when removing an address now correctly says that its entries in DNS64 are deleted with it.
+- The message after import and setup lists at most ten failed lines; with many failures it used to get lost.
+- Block overview: cells of a larger child prefix lead to that prefix.
+- Exclusions of fixed addresses in the DHCP range stay even when the DHCP network is off on this node (in a cluster another node serves it).
+- Cluster: swapped addresses are no longer treated as a double assignment when the changes arrive in a different order.
+- “Next free address” and gap list: router address, child prefixes and reserved ranges no longer count as free; gaps are split at the DHCP range boundaries.
+- Hint “unknown device in DHCP range” and the “new device” notification only for devices seen just now, no longer for departed clients after their lease expired.
+- Returning to a previously seen MAC (e.g. VIP failover) is no longer a conflict.
+- Memory for sightings is cleaned up on long-running nodes.
+
 ## 0.6.3 – 2026-11-19
 
 - Edit prefix and address: the "Tags" field suggests tags already in use (#193).

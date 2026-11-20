@@ -159,3 +159,30 @@ func TestUnifiNetworkWithoutDrive(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Stuendliche Erkennung: scheitert Drive dabei nur kurz (503), bleibt Drive erkannt (Teilfehler statt fehlender
+// Dienste); erst ein 404 heisst "nicht installiert".
+func TestUnifiDetectKeepsAppOnError(t *testing.T) {
+	f := udFake(t)
+	f.noNetwork = false
+	u, now := unifiFor(t, f, UnifiConfig{Secret: ufTestKey})
+	if _, err := u.Collect(context.Background()); err != nil {
+		t.Fatal(deErr(err))
+	}
+	redetect := func(status int) error {
+		t.Helper()
+		*now = now.Add(ufAppsEvery + time.Minute) // naechste stuendliche Erkennung
+		f.mu.Lock()
+		f.driveFail[udPrefix+"/storage"] = status
+		f.mu.Unlock()
+		_, err := u.Collect(context.Background())
+		return err
+	}
+	err := redetect(503)
+	if pe := partialOf(t, err); !pe.Affects("raid:pool1") || !u.apps.drive || !u.apps.at.Equal(*now) {
+		t.Fatalf("Drive nach 503 nicht mehr erkannt: %v drive=%v", pe.Prefixes, u.apps.drive)
+	}
+	if err := redetect(404); err != nil || u.apps.drive {
+		t.Fatalf("404: %v drive=%v", deErr(err), u.apps.drive)
+	}
+}

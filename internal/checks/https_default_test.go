@@ -35,7 +35,7 @@ func TestHTTPSDowngradeRedirect(t *testing.T) {
 	defer tsrv.Close()
 	pool := x509.NewCertPool()
 	pool.AddCert(tsrv.Certificate()) // httptest-Zertifikat gilt fuer example.com
-	SetTrustPool(func() *x509.CertPool { return pool })
+	SetTrustPool(func() (*x509.CertPool, error) { return pool, nil })
 	t.Cleanup(func() { SetTrustPool(nil) })
 	base := strings.Replace(tsrv.URL, "127.0.0.1", "localhost", 1) + "/"
 	viaName := func(days int) HTTPParams {

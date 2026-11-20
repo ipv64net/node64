@@ -205,21 +205,27 @@ func envNodeInput(r *http.Request) environment.NodeInput {
 func (s *Server) envNodeErr(w http.ResponseWriter, r *http.Request, n *environment.AddedNode, in environment.NodeInput, err error) {
 	v := s.view(r, "environment.title")
 	v.Form = map[string]string{"name": in.Name, "url": in.URL, "browser_url": in.BrowserURL, "description": in.Description}
-	v.Data = envNodeData{Node: n, Message: envErrText(v, err)}
+	msg, known := envErrText(v, err)
+	if !known {
+		s.log.Warn("environment node not saved", "err", err)
+	}
+	v.Data = envNodeData{Node: n, Message: msg}
 	s.render(w, r, http.StatusUnprocessableEntity, "environment_node", v)
 }
 
-func envErrText(v *View, err error) string {
+// envErrText: uebersetzte Meldung (known=false: unerwarteter Fehler, Text allgemein, Details ins Log).
+func envErrText(v *View, err error) (msg string, known bool) {
 	for _, e := range []struct {
 		err error
 		key string
 	}{{environment.ErrInvalidURL, "environment.err_url"}, {environment.ErrHTTPSRequired, "environment.err_https"},
-		{environment.ErrInvalidKey, "environment.err_key"}, {environment.ErrSelfKey, "environment.err_self_key"}} {
+		{environment.ErrInvalidKey, "environment.err_key"}, {environment.ErrSelfKey, "environment.err_self_key"},
+		{environment.ErrUnknownUser, "environment.err_user"}, {environment.ErrNameMissing, "environment.err_name"}} {
 		if errors.Is(err, e.err) {
-			return v.T(e.key)
+			return v.T(e.key), true
 		}
 	}
-	return err.Error()
+	return v.T("errors.internal"), false
 }
 
 func (s *Server) envNodeCreate(w http.ResponseWriter, r *http.Request) {
@@ -313,9 +319,9 @@ func (s *Server) envAccessPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) envAccessCreate(w http.ResponseWriter, r *http.Request) {
 	a, key, err := s.Env.CreateAccess(r.Context(), r.PostFormValue("name"), r.PostFormValue("user"), currentUser(r).Username)
 	if err != nil {
-		msg := err.Error()
-		if errors.Is(err, environment.ErrUnknownUser) {
-			msg = s.tr(r, "environment.err_user")
+		msg, known := envErrText(s.view(r, "environment.access_title"), err)
+		if !known {
+			s.log.Warn("environment access not created", "err", err)
 		}
 		s.envAccessView(w, r, http.StatusUnprocessableEntity, envAccessData{Message: msg})
 		return

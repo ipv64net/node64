@@ -108,7 +108,19 @@ type Snapshot struct {
 	Nets    []Net
 	Ranges  []Range
 	entries map[netip.Prefix][]Entry
+	off     []NetHint // auf dieser Node ausgeschaltete DHCP-Netze: ihr Pool gilt nur fuer Ausnahmen (desired)
 	At      time.Time
+}
+
+// offPool meldet, ob ip im Pool eines hier ausgeschalteten DHCP-Netzes liegt (vergibt z. B. eine andere Node im
+// Cluster bzw. wird wieder eingeschaltet: die Ausnahme fester Adressen bleibt).
+func (s *Snapshot) offPool(ip netip.Addr) bool {
+	for _, h := range s.off {
+		if h.Subnet.Contains(ip) && h.Start.IsValid() && h.End.IsValid() && !ip.Less(h.Start) && !h.End.Less(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // Entries liefert die belegten Adressen eines Praefixes, nach Adresse sortiert.
@@ -200,12 +212,13 @@ func hostCount(p netip.Prefix) int64 {
 
 // nets fuehrt die Praefixe aus IPAM64 und die DHCP-Netze aus DNS64 zusammen (ohne Belegung) und baut den Baum. Ein
 // Kind-Praefix in einem DHCP-Netz erbt dessen Adressbereich (soweit er im Kind liegt) und die Zone, falls es keine
-// eigene hat: Ausnahmen, freie Adressen und Zaehler gelten auch dort.
-func (m *Module) nets(ctx context.Context) ([]Net, error) {
+// eigene hat: Ausnahmen, freie Adressen und Zaehler gelten auch dort. off: die hier ausgeschalteten DHCP-Netze.
+func (m *Module) nets(ctx context.Context) ([]Net, []NetHint, error) {
 	rows, err := m.Prefixes(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	on, off := m.hintSplit(ctx)
 	var out []Net
 	idx := map[netip.Prefix]int{}
 	for _, r := range rows {
@@ -217,7 +230,7 @@ func (m *Module) nets(ctx context.Context) ([]Net, error) {
 		out = append(out, Net{Prefix: p, CIDR: p.String(), UID: r.UID, Family: r.Family, Name: r.Name, Status: r.Status, Role: r.Role, VLAN: r.VLAN,
 			Tags: r.Tags, Description: r.Description, MarkFull: r.MarkFull, DNSZone: r.DNSZone, Scan: r.Scan, Dynamic: r.DynSource == DynAuto, DynIndex: r.DynIndex})
 	}
-	for _, h := range m.hintList(ctx) {
+	for _, h := range on {
 		i, ok := idx[h.Subnet]
 		if !ok {
 			i, idx[h.Subnet] = len(out), len(out)
@@ -282,7 +295,7 @@ func (m *Module) nets(ctx context.Context) ([]Net, error) {
 			n.Tags = []string{}
 		}
 	}
-	return out, nil
+	return out, off, nil
 }
 
 // hostOf liefert den Rechnernamen bzw. die IP aus einem Ziel (IP, Name, "host:port", URL).
@@ -392,7 +405,7 @@ func (m *Module) routerNames(ctx context.Context, all map[netip.Addr]*acc) {
 
 func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 	now := m.now()
-	nets, err := m.nets(ctx)
+	nets, off, err := m.nets(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +418,7 @@ func (m *Module) build(ctx context.Context) (*Snapshot, error) {
 		y, _ := netip.ParseAddr(b.Start)
 		return x.Compare(y)
 	})
-	snap := &Snapshot{Nets: nets, Ranges: ranges, entries: map[netip.Prefix][]Entry{}, At: now}
+	snap := &Snapshot{Nets: nets, Ranges: ranges, entries: map[netip.Prefix][]Entry{}, off: off, At: now}
 	all := map[netip.Addr]*acc{}
 	get := func(ip netip.Addr) *acc { // nil: in keinem Praefix, im Container ohne Adressen egal, Netz-/Broadcast-Adresse
 		ip = ip.Unmap()
@@ -621,14 +634,14 @@ func (a *acc) conflict() string {
 	for i := range a.recent {
 		for j := i + 1; j < len(a.recent); j++ {
 			x, y := a.recent[i], a.recent[j]
-			if x.MAC != y.MAC && minTime(x.Last, y.Last).Sub(maxTime(x.First, y.First)) > conflictMin {
+			if x.MAC != y.MAC && minTime(x.Last, y.Last).Sub(maxTime(x.since(), y.since())) > conflictMin {
 				return "dup"
 			}
 		}
 	}
 	if len(a.assigned) > 0 {
 		for _, r := range a.recent {
-			if !slices.Contains(a.assigned, r.MAC) && r.Last.Sub(r.First) >= conflictMin {
+			if !slices.Contains(a.assigned, r.MAC) && r.Last.Sub(r.since()) >= conflictMin {
 				return "mac"
 			}
 		}
@@ -637,6 +650,15 @@ func (a *acc) conflict() string {
 		return "lease"
 	}
 	return ""
+}
+
+// since: Beginn der aktuellen Anwesenheit (nicht die allererste Sichtung des Paars, sonst waere die Rueckkehr zu einer
+// frueher gesehenen MAC - VIP-Failover, Geraetetausch zurueck - eine Doppelvergabe).
+func (s seenRow) since() time.Time {
+	if s.Since.After(s.First) {
+		return s.Since
+	}
+	return s.First
 }
 
 func minTime(a, b time.Time) time.Time {
@@ -672,11 +694,11 @@ func (m *Module) netView(ctx context.Context) (*Snapshot, error) {
 	if s, ok := ctx.Value(viewKey{}).(*Snapshot); ok {
 		return s, nil
 	}
-	nets, err := m.nets(ctx)
+	nets, off, err := m.nets(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &Snapshot{Nets: nets, entries: map[netip.Prefix][]Entry{}, At: m.now()}, nil
+	return &Snapshot{Nets: nets, entries: map[netip.Prefix][]Entry{}, off: off, At: m.now()}, nil
 }
 
 type viewKey struct{}

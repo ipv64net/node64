@@ -1625,6 +1625,9 @@ func (m *Module) ruleKindsOfService(hostUID string, row *ServiceRow) []string {
 	for _, k := range factKinds[row.Kind] {
 		add(k)
 	}
+	if !row.VanishedAt.IsZero() { // "Dienst verschwunden" ist bestaetigbar, solange er verschwunden ist
+		add(eval.KindServiceGone)
+	}
 	for k := range parseHostRules(row.HostRule) {
 		add(k)
 	}

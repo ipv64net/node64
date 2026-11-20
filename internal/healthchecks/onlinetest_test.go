@@ -32,6 +32,11 @@ func TestOnlineTestFlow(t *testing.T) {
 	if got.Type != "json" || got.Target != "https://example.org/api" || len(gotLocs) != 1 || gotLocs[0] != "nbg" {
 		t.Fatalf("definition: %+v %v", got, gotLocs)
 	}
+	// Ziel ohne Schema: gemessen wird wie gespeichert (https://), nicht http://
+	code, b = call(t, srv, "POST", "/api/checks/online-test", map[string]any{"name": "x", "type": "http", "target": "example.org/health"})
+	if code != 200 || got.Target != "https://example.org/health" {
+		t.Fatalf("no scheme: %d %s %q", code, b, got.Target)
+	}
 	// ungueltige Eingabe kommt gar nicht erst zu ipv64
 	if code, b = call(t, srv, "POST", "/api/checks/online-test", map[string]any{"name": "x", "type": "json", "target": "https://example.org"}); code != 422 {
 		t.Fatalf("invalid: %d %s", code, b)

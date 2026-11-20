@@ -1,5 +1,23 @@
 # Monitor64 – Änderungen
 
+## 0.1.26 – unveröffentlicht
+
+Behoben:
+
+- „In Ordnung, bis der Wert schlechter wird“ endet jetzt auch bei Werten nahe 100 % und im Modus „GB frei“.
+- „Darf ausgeschaltet sein“: Abgewiesene Anmeldung, geänderter Hostschlüssel oder ein Zertifikatsfehler gelten nicht mehr als ausgeschaltet und werden gemeldet.
+- Cluster: Eine auf einer anderen Node gesetzte Quittierung geht nicht mehr verloren.
+- Eine bestätigte SMART-Regel bleibt, wenn SMART in einer Runde nicht gelesen werden kann (schlafende Platte, Lesefehler).
+- „Dienst verschwunden“ lässt sich als in Ordnung bestätigen.
+- Nach dem Ausschalten von „SMART-Werte abfragen“ bleiben Platten mit Warnung nicht mehr tagelang „Unbekannt“.
+- TrueNAS ohne SMART: „Verbindung testen“ im Dialog funktioniert ohne vorheriges Speichern.
+- Seite Agent: Nach dem Auffrischen zeigt der Installationsbefehl gleich die neue Prüfsumme.
+- UniFi: Ein kurzer Fehler einer App bei der stündlichen Erkennung blendet ihre Dienste nicht mehr aus.
+- Stabilität: Ein Datenbankfehler beim Schließen eines Problems bricht die Abfragerunde nicht mehr ab; „Jetzt prüfen“ während einer laufenden Abfrage startet keinen zweiten Lauf gleichzeitig.
+- **Agent 0.1.12 (Windows):** Mit ausgeschaltetem „SMART-Werte abfragen“ fragt der Agent keine SMART-Zähler mehr ab, Storage Spaces werden weiter überwacht.
+- **Agent 0.1.12 (Linux):** Beim Start meldet der Agent kein „kein Neustart nötig“ mehr, solange needs-restarting noch läuft.
+- **install.sh:** Ein Installationsbefehl mit älterer Prüfsumme funktioniert nach einem neuen Agent-Release weiter, wenn die Signatur von SHA256SUMS gültig ist.
+
 ## 0.1.25 – 2026-11-19
 
 Neu:

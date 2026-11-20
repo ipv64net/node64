@@ -120,3 +120,39 @@ func TestCtxRoleMCPKeyDistinct(t *testing.T) {
 		t.Fatalf("ctxMCPKey: %v", ctx.Value(ctxMCPKey))
 	}
 }
+
+// Ein Administrator aendert die Zeitzone der Node nur, wenn er seine Zeitzone wirklich aendert - nicht schon beim
+// Speichern der Sprache (Formular mit der Vorgabe, API ohne das Feld).
+func TestAdminPrefsKeepNodeTimezone(t *testing.T) {
+	a := newTestApp(t)
+	ctx := context.Background()
+	u := loginAs(t, a, "admin", "sehr geheimes passwort")
+	_ = a.store.UpdateUserPrefs(ctx, u.ID, "de", "") // ohne eigene Zeitzone (wie LDAP/SSO)
+	_ = a.store.SetSetting(ctx, SettingNodeTimezone, "Asia/Tokyo")
+	_, csrf := sessionOf(t, a)
+	if resp, _ := a.post(t, "/settings/user", url.Values{"_csrf": {csrf}, "lang": {"en"}, "timezone": {DefaultTimezone}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("settings/user: %d", resp.StatusCode)
+	}
+	if tz := a.store.SettingOr(ctx, SettingNodeTimezone, ""); tz != "Asia/Tokyo" {
+		t.Fatalf("language only changed the node timezone (form): %q", tz)
+	}
+	key, _, _ := a.store.NewAPIKey(ctx, u.ID, "admin")
+	if st, _ := apiCall(t, a, key, "PUT", "/api/users/me", map[string]any{"lang": "de"}); st != 200 {
+		t.Fatalf("api me: %d", st)
+	}
+	if tz := a.store.SettingOr(ctx, SettingNodeTimezone, ""); tz != "Asia/Tokyo" {
+		t.Fatalf("language only changed the node timezone (api): %q", tz)
+	}
+	if st, _ := apiCall(t, a, key, "PUT", "/api/users/me", map[string]any{"timezone": "America/New_York"}); st != 200 {
+		t.Fatalf("api me timezone: %d", st)
+	}
+	if tz := a.store.SettingOr(ctx, SettingNodeTimezone, ""); tz != "America/New_York" {
+		t.Fatalf("changed timezone must reach the node (api): %q", tz)
+	}
+	if resp, _ := a.post(t, "/settings/user", url.Values{"_csrf": {csrf}, "lang": {"de"}, "timezone": {"Europe/London"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("settings/user: %d", resp.StatusCode)
+	}
+	if tz := a.store.SettingOr(ctx, SettingNodeTimezone, ""); tz != "Europe/London" {
+		t.Fatalf("changed timezone must reach the node (form): %q", tz)
+	}
+}

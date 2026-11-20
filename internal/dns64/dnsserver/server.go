@@ -417,7 +417,13 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 			e.Reason = ReasonStale
 		}
 		if refresh {
-			s.refresh(r, released, rebind)
+			s.refresh(r, released)
+		}
+		if rebind { // der Cache haelt die ungefilterte Antwort, der Schutz gilt je Anfrager
+			if m, hit := rebound(resp); hit {
+				resp = m
+				e.Status, e.Reason = querylog.StatusBlocked, ReasonRebind
+			}
 		}
 		return resp
 	}
@@ -440,13 +446,15 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	}
 
 	e.Status, e.Reason = querylog.StatusAllowed, reason
+	// ungefiltert in den Cache: er gilt fuer alle Gruppen, ob der Rebinding-Schutz greift, haengt vom Anfrager ab
+	// (Freigabe der Geraetegruppe)
+	s.Cache.Set(r, resp)
 	if rebind {
 		if m, hit := rebound(resp); hit {
 			resp = m
 			e.Status, e.Reason = querylog.StatusBlocked, ReasonRebind
 		}
 	}
-	s.Cache.Set(r, resp)
 	return resp
 }
 
@@ -469,7 +477,7 @@ func (s *Server) cnameBlocked(resp *dns.Msg, qtype uint16, mask uint64) (bool, s
 
 // refresh fetches a new copy of a cached answer in the background, so the
 // client that triggered it is answered from the cache without waiting.
-func (s *Server) refresh(r *dns.Msg, released, rebind bool) {
+func (s *Server) refresh(r *dns.Msg, released bool) {
 	select {
 	case s.refreshSem <- struct{}{}:
 	default:
@@ -492,10 +500,7 @@ func (s *Server) refresh(r *dns.Msg, released, rebind bool) {
 			s.Cache.RefreshDone(true)
 			return
 		}
-		if rebind {
-			resp, _ = rebound(resp)
-		}
-		s.Cache.Set(req, resp)
+		s.Cache.Set(req, resp) // ungefiltert wie in resolve
 		s.Cache.RefreshDone(true)
 	}()
 }

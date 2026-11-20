@@ -99,17 +99,33 @@ func TestAG2Signature(t *testing.T) {
 	if err != nil || called == "" || !strings.Contains(out, "signature of SHA256SUMS ok") {
 		t.Fatalf("gueltige Signatur: %v %q\n%s", err, called, out)
 	}
-	// Signatur passt nicht (SHA256SUMS ausgetauscht): abgelehnt, nichts gestartet
+	// Pruefsumme der Node veraltet (neues Release, die Node kennt noch das alte): die gueltige Signatur entscheidet
+	old := []string{"--sums-sha256", strings.Repeat("ab", 32)}
+	agHook(t, sign(nil)) // SHA256SUMS ist je Lauf anders (Pfad im Test-Programm): neu signieren
+	out, called, err = agLinux(t, old...)
+	if err != nil || called == "" || !strings.Contains(out, "differs from the checksum of the node") || !strings.Contains(out, "signature of SHA256SUMS ok") {
+		t.Fatalf("veraltete Pruefsumme mit gueltiger Signatur: %v %q\n%s", err, called, out)
+	}
+	// Signatur passt nicht (SHA256SUMS ausgetauscht): abgelehnt, nichts gestartet - auch mit Pruefsumme der Node
 	agHook(t, sign([]byte("0000  monitor64-agent-linux-amd64\n")))
 	out, called, err = agLinux(t)
 	if err == nil || called != "" || !strings.Contains(out, "invalid signature of SHA256SUMS") {
 		t.Fatalf("falsche Signatur: %v %q\n%s", err, called, out)
+	}
+	out, called, err = agLinux(t, old...)
+	if err == nil || called != "" || !strings.Contains(out, "invalid signature of SHA256SUMS") {
+		t.Fatalf("falsche Signatur, andere Pruefsumme: %v %q\n%s", err, called, out)
 	}
 	// keine Signatur (z. B. aelteres Release, eigene Node): Warnung, Installation laeuft
 	installSumsHook = nil
 	out, called, err = agLinux(t)
 	if err != nil || called == "" || !strings.Contains(out, "WARNING: no signature") {
 		t.Fatalf("ohne Signatur: %v %q\n%s", err, called, out)
+	}
+	// abweichende Pruefsumme der Node ohne Signatur: abgelehnt
+	out, called, err = agLinux(t, old...)
+	if err == nil || called != "" || !strings.Contains(out, "does not match the checksum from the node") {
+		t.Fatalf("abweichende Pruefsumme ohne Signatur: %v %q\n%s", err, called, out)
 	}
 }
 

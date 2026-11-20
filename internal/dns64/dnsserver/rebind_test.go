@@ -95,6 +95,27 @@ func TestRebind(t *testing.T) {
 	if got := answer("released.example", dns.TypeAAAA); len(got) != 3 {
 		t.Fatalf("released name: %v", got)
 	}
+	// Freigabe nur fuer eine Geraetegruppe: der Cache ist gemeinsam, gefiltert wird je Anfrager - in beiden
+	// Reihenfolgen (erst das freigegebene Geraet, dann eins ohne Freigabe und umgekehrt)
+	kid := netip.MustParseAddr("127.0.0.2")
+	s.Policy = func(ip netip.Addr) *Policy {
+		if ip == kid {
+			return &Policy{Group: "lab", Mask: fm.Global(), Allow: filter.NewDomainSet([]string{"lab.example", "lab2.example"})}
+		}
+		return nil
+	}
+	ask := func(ip netip.Addr, n string) int {
+		q := new(dns.Msg)
+		q.SetQuestion(dns.Fqdn(n), dns.TypeA)
+		return len(s.Answer(q, ip, "udp").Answer)
+	}
+	if ask(kid, "lab.example") != 3 || ask(client, "lab.example") != 2 || ask(kid, "lab.example") != 3 {
+		t.Fatal("group release: private address must reach only the released group (released first)")
+	}
+	if ask(client, "lab2.example") != 2 || ask(kid, "lab2.example") != 3 {
+		t.Fatal("group release: filtered answer of another group must not be cached for the released group")
+	}
+	s.Policy = nil
 	s.Rebind = nil
 	if got := answer("off.example", dns.TypeA); len(got) != 3 {
 		t.Fatalf("switched off: %v", got)

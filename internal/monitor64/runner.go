@@ -404,6 +404,19 @@ func accessErrText(err error) string {
 	return shortErr(err)
 }
 
+// hostAnswered: der Zugang ist am Host angekommen und wurde abgewiesen (Anmeldung, Hostschluessel, Zertifikat) - der
+// Host laeuft also, auch wenn keine Werte kamen. Fuer "darf ausgeschaltet sein" (#229): nur echte
+// Nichterreichbarkeit heisst "ausgeschaltet".
+func hostAnswered(err error) bool {
+	switch {
+	case errors.Is(err, transport.ErrHostKeyChanged), errors.Is(err, transport.ErrHostKeyUnconfirmed), errors.Is(err, transport.ErrNoKeyAuth), errors.Is(err, transport.ErrPushAmbiguous), errors.Is(err, transport.ErrPushForeignKey):
+		return true
+	case apis.HostAnswered(err):
+		return true
+	}
+	return strings.Contains(err.Error(), "ssh: unable to authenticate") // Anmeldung abgelehnt (golang.org/x/crypto/ssh)
+}
+
 // poll ist eine Abfragerunde eines Hosts (vom Planer aufgerufen).
 func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	rt.mu.Lock()
@@ -434,8 +447,11 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	var accViews []AccessView
 	var accInputs []eval.Access
 	pushWaiting := false
+	answered := false             // ein Zugang wurde vom laufenden Host abgewiesen (Anmeldung, Schluessel, Zertifikat)
+	smartOff := map[string]bool{} // Zugang fragt SMART gewollt nicht ab ("SMART-Werte abfragen" aus)
 	for _, a := range rt.accs {
 		name := accessName(a.row.Type)
+		smartOff[a.row.UID] = accessSmartOff(a.row)
 		av := AccessView{UID: a.row.UID, Type: a.row.Type, Name: name}
 		var svcs []model.Service
 		var err error
@@ -459,6 +475,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			rt.Failures[a.row.UID]++
 			failedAcc[a.row.UID] = true
 			av.Error = accessErrText(err)
+			answered = answered || hostAnswered(err)
 		} else {
 			rt.Failures[a.row.UID] = 0
 			av.OK = true
@@ -642,7 +659,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				// "in Ordnung bis zu diesem Wert" (Ausnahme am Dienst, z. B. SSD-Verschleiss 100 %): bis dahin keine Stufe;
 				// wird der Wert schlechter oder faellt er unter die Warnschwelle, ist die Ausnahme erledigt
 				if a := hostRules[mt.Rule].AcceptedAt; a != nil {
-					if acceptWorse(e, *a, mt.Value) || acceptRecovered(e, mt.Value) {
+					if acceptWorse(e, *a, mt) || acceptRecovered(e, mt.Value) {
 						numDone = append(numDone, mt.Rule)
 					} else {
 						e = withoutLimits(e)
@@ -685,11 +702,12 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind)
 			st := tr.Status(e, now)
-			if ok && st.State == eval.Unknown && svcStopped(g.svc) {
+			if ok && st.State == eval.Unknown && (svcStopped(g.svc) || smartOff[g.acc] && smartMetric(kind)) {
 				// Dienst kommt weiter, ist aber aus (gestoppte VM mit Warnung zu CPU/RAM): Wert gewollt weggelassen - die
 				// Warnung gilt nicht mehr, statt 7 Tage "unbekannt". Laeuft der Dienst, bleibt der fehlende Wert nach 3
 				// Intervallen "unbekannt" (Teilfehler, Sammler liefert ihn nicht mehr) - keine Entwarnung ohne Erholung
-				// (Review 7); kurz fehlend (erste Runde ohne Rate) bleibt der letzte Zustand
+				// (Review 7); kurz fehlend (erste Runde ohne Rate) bleibt der letzte Zustand. Ebenso gewollt weggelassen:
+				// Werte aus SMART (Temperatur, Verschleiss), wenn der Zugang SMART nicht mehr abfragt
 				delete(rt.Kinds, key)
 				delete(rt.Trackers, key)
 				rt.dirty = true
@@ -706,6 +724,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			rt.Rising[r.Key] = now.Add(risingHold)
 		}
 		_, smartUnreadable := facts["smart_unreadable"]
+		_, smartAsleep := facts["smart_standby"] // schlafende Platte ohne Vorstand (mapper.go): SMART nicht gelesen
 		kinds := map[string]bool{}
 		for _, k := range factKinds[r.Kind] {
 			kinds[k] = true
@@ -774,18 +793,21 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			}
 			// "in Ordnung, bis sich der Zustand aendert": solange die Bedingung gilt, meldet sie nichts; entfaellt sie
 			// (Dienst geliefert bzw. wieder da), ist die Ausnahme erledigt
+			isSmart := k == eval.KindSmartFailed || k == eval.KindSmartSectors || k == eval.KindSmartSectorsUp
 			if hr := hostRules[k]; hr.Accepted != nil && *hr.Accepted && (ok || k == eval.KindServiceGone) {
-				if cond {
+				switch {
+				case cond:
 					cond = false
 					sv.Accepted = append(sv.Accepted, k)
-				} else {
+				case isSmart && (smartUnreadable || smartAsleep):
+					sv.Accepted = append(sv.Accepted, k) // SMART in dieser Runde nicht gelesen: Bedingung unbekannt, bleibt
+				default:
 					accDone = append(accDone, k)
 				}
 			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, k), k)
 			tr := rt.tracker(r.Key+"|state:"+k, iv)
 			var st eval.Status
-			isSmart := k == eval.KindSmartFailed || k == eval.KindSmartSectors || k == eval.KindSmartSectorsUp
 			switch {
 			case k == eval.KindServiceGone:
 				st = tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(cond)})
@@ -880,8 +902,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	hres = eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs, Services: states})
 
 	// Host darf ausgeschaltet sein (#229): nicht erreichbar heisst "ausgeschaltet" - kein Problem, keine Meldung; die
-	// letzten Werte bleiben, beim naechsten Einschalten gilt wieder alles wie sonst
-	offline := h.OfflineOK && hres.Unreachable && !maint
+	// letzten Werte bleiben, beim naechsten Einschalten gilt wieder alles wie sonst. Weist der Host einen Zugang ab
+	// (Anmeldung, Hostschluessel, Zertifikat), laeuft er: das wird wie sonst gemeldet
+	offline := h.OfflineOK && hres.Unreachable && !maint && !answered
 	if offline {
 		hres.View = eval.ViewOffline
 	}
@@ -953,6 +976,27 @@ func svcStopped(s model.Service) bool {
 	return false
 }
 
+// accessSmartOff: der Zugang fragt SMART gewollt nicht ab (Schalter "SMART-Werte abfragen" aus, #215; SSH ohne
+// SMART per sudo smartctl).
+func accessSmartOff(a *Access) bool {
+	var cfg accessConfig
+	if a == nil || json.Unmarshal(a.Config, &cfg) != nil {
+		return false
+	}
+	switch {
+	case smartSwitch(a.Type):
+		return cfg.NoSmart
+	case a.Type == "ssh":
+		return !cfg.Smart
+	}
+	return false
+}
+
+// smartMetric: Regel-Art eines Werts, der aus SMART stammt (Temperatur, Verschleiss einer Platte).
+func smartMetric(kind string) bool {
+	return kind == model.RuleDiskTemp || kind == model.RuleNVMeTemp || kind == model.RuleWear
+}
+
 // upsOnBattery: die USV meldet Batteriebetrieb (Messgroesse on_battery bzw. Fact ups_on_battery).
 func upsOnBattery(s model.Service) bool {
 	for _, mt := range s.Metrics {
@@ -968,14 +1012,35 @@ func upsOnBattery(s model.Service) bool {
 	return false
 }
 
-// withoutLimits: dieselbe Regel ohne Schwellen (Messung wird als OK beobachtet).
-// acceptWorse: der Wert ist schlechter als der als gewollt bestaetigte (Richtung der Regel, Hysterese als Spielraum,
-// damit leichtes Schwanken die Ausnahme nicht beendet).
-func acceptWorse(e eval.Effective, at, v float64) bool {
-	if e.Dir == eval.Down {
-		return v < at-e.Hyst
+// acceptWorse: der Wert ist schlechter als der als gewollt bestaetigte at (Richtung der Regel, Hysterese als
+// Spielraum, damit leichtes Schwanken die Ausnahme nicht beendet). Verglichen wird in der Einheit der Schwellen: im
+// Modus "GB frei" die freien GB (at ist wie der Wert "belegt in %", umgerechnet ueber die Groesse), sonst der Wert
+// selbst. Prozentwerte enden bei 100 % (bzw. 0 %): der Spielraum ist hoechstens die Haelfte des Rests bis dahin, sonst
+// endete die Ausnahme nahe 100 % nie.
+func acceptWorse(e eval.Effective, at float64, mt model.Metric) bool {
+	v := mt.Value
+	if e.Mode == eval.ModeFree && mt.Unit == "%" && mt.Max > 0 {
+		l := e.WarnFree
+		if l.Off {
+			l = e.CritFree
+		}
+		h := e.Hyst
+		if !l.Off {
+			h = e.HystAt(l.V)
+		}
+		return mt.Max*(v-at)/100 > h*eval.GB // weniger frei als bei der Bestaetigung (ueber den Spielraum hinaus)
 	}
-	return v > at+e.Hyst
+	h := e.Hyst
+	if e.Dir == eval.Down {
+		if mt.Unit == "%" && at > 0 {
+			h = math.Min(h, at/2)
+		}
+		return v < at-h
+	}
+	if mt.Unit == "%" && at < 100 {
+		h = math.Min(h, (100-at)/2)
+	}
+	return v > at+h
 }
 
 // acceptRecovered: der Wert ist wieder unter der Warnschwelle (bzw. ohne Warnschwelle unter der kritischen) - die
@@ -997,6 +1062,7 @@ func acceptRecovered(e eval.Effective, v float64) bool {
 	return v < l.V
 }
 
+// withoutLimits: dieselbe Regel ohne Schwellen (Messung wird als OK beobachtet).
 func withoutLimits(e eval.Effective) eval.Effective {
 	off := eval.Limit{Off: true}
 	e.Warn, e.Crit, e.WarnFree, e.CritFree = off, off, off, off

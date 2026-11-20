@@ -4,6 +4,16 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Über den CDN64-Tunnel ist ein nicht veröffentlichter Host nicht mehr per Host-Kopf erreichbar (auch mit Wildcard-Zertifikat); Limits, Ländersperre bei „TLS durchreichen“ und DoH beachten ausdrückliche Freigaben fürs Docker-Gateway; der Tunnel wechselt nach einer UDP-Störung zuverlässig zurück auf QUIC.
+- Benutzer im Cluster: Eigene Aktionen eines Benutzers (2FA-Anmeldung, Einstellungen, LDAP-Abgleich) nehmen keine Sperre, Herabstufung, Passwort-Rücksetzung oder Löschung einer anderen Node mehr zurück; umbenannte Gruppen verschmelzen nicht mehr falsch; LDAP-Einrichtung und 2FA-Pflicht überschreiben sich nicht mehr gegenseitig.
+- Anmeldung: Abgelaufene AD-Konten und im LDAP gesperrte Konten verlieren ihre Gruppenrolle auch bei Passkey und API-Key; SSO-Gruppen verknüpfter lokaler Konten verfallen nach 7 Tagen; LDAP-Abgleich mit eigenem Benutzerfilter und vielen Benutzern; „Verbindung testen“ behält die Eingaben.
+- Environment: Erneutes Öffnen einer Node scheitert nicht mehr mit „Formular abgelaufen“; Widerruf eines Zugangs beendet dessen Sitzungen; keine Zugangsdaten aus Environment-Sitzungen; ungültige Tickets fluten das Audit-Log nicht mehr.
+- IPAM64: Pool-Ausnahmen fester Adressen bleiben im Cluster erhalten; Speichern, Einrichtung und CSV-Import löschen keine Reservierungen oder Namen mehr und legen keine falschen Ausnahmen an; weniger Fehlalarme bei Konflikten und neuen Geräten.
+- Monitor64: „In Ordnung, bis der Wert schlechter wird“ endet auch nahe 100 %; „Darf ausgeschaltet sein“ meldet Anmelde- und Schlüsselfehler; Quittierungen im Cluster und bestätigte SMART-Regeln bleiben erhalten; „Dienst verschwunden“ lässt sich bestätigen; Agent 0.1.12.
+- DNS64: Listen werden nach Adresse statt Position gelöscht; Rebinding-Schutz und Gerätegruppen-Freigaben unabhängig vom gemeinsamen Cache.
+- Healthchecks: „Nur lesen“ sieht keinen Request-Body mehr; das Zertifikats-Ablaufdatum verschwindet nicht mehr nach einigen Fehlmessungen.
+- Debian-Paket: Nach Wiederherstellen und Zurücksetzen startet der Dienst wieder; ein Update aktiviert keinen deaktivierten Dienst mehr.
+- Oberfläche: Browser-Meldungen erkennen Störungen aller Module; Meldungen nach dem SSO-Verknüpfen und beim Schalten von Modulen; Design-Umschalter bleibt auf „Mein Konto“.
 - Prometheus: Node64 liefert jetzt auch die Werte des eigenen Prozesses (CPU-Zeit, Arbeitsspeicher, Threads, offene Dateien) und den Speicherplatz des Datenverzeichnisses – ein Dashboard für Node64 selbst braucht dafür kein cAdvisor mehr.
 
 ## 1.7.10 – 2026-11-19

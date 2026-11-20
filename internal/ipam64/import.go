@@ -7,12 +7,14 @@ import (
 	"errors"
 	"io"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 // CSV-Import (Plan Stufe I6): Praefixe oder Adressen aus einer Tabelle (Komma oder Semikolon, erste Zeile = Spalten,
-// Gross/Klein egal, unbekannte Spalten werden uebergangen - der eigene CSV-Export laesst sich wieder einlesen).
+// Gross/Klein egal, unbekannte Spalten werden uebergangen - der eigene CSV-Export laesst sich wieder einlesen, dabei
+// nur die fest eingetragenen Adressen, nicht Leases und Sichtungen, siehe observedOnly).
 //   - Adressen, wenn es eine Spalte ip/address/adresse gibt: name, mac, status, role, description, tags, dns, dns_zone,
 //     ptr, dhcp. Eine vorhandene Adresse wird ergaenzt (leere Zellen aendern nichts). Ein voller Name (nas.home.lan)
 //     ergibt Rechnername und Zone.
@@ -32,6 +34,9 @@ var ErrImport = errors.New("ipam64: invalid import file")
 // ErrCSVLine: Zeile der CSV-Datei laesst sich nicht lesen.
 var ErrCSVLine = errors.New("ipam64: invalid csv line")
 
+// ErrImportSeen: Zeile des eigenen Exports, die nur aus Quellen bekannt ist (Lease, Sichtung) - wird uebergangen.
+var ErrImportSeen = errors.New("ipam64: only known from sources")
+
 // ImportRow ist eine Zeile der Vorschau.
 type ImportRow struct {
 	Line    int
@@ -48,7 +53,23 @@ var importAlias = map[string]string{
 	"name": "name", "host": "name", "hostname": "name", "rechnername": "name", "mac": "mac", "status": "status", "role": "role", "rolle": "role",
 	"description": "description", "beschreibung": "description", "comment": "description", "kommentar": "description", "tags": "tags",
 	"dns": "dns", "dns_zone": "dns_zone", "zone": "dns_zone", "ptr": "ptr", "dhcp": "dhcp", "vlan": "vlan", "scan": "scan", "dynamic": "dynamic",
-	"dynamisch": "dynamic",
+	"dynamisch": "dynamic", "kind": "kind", "sources": "sources",
+}
+
+// observedOnly: Zeile des eigenen CSV-Exports (Spalten kind, sources), die nur aus Quellen bekannt ist - Lease,
+// Sichtung der Nachbartabelle, Ziel eines Moduls. Sie wird nicht eingelesen: sonst entstuende je Lease eine feste
+// Adresse samt Ausnahme im Pool. Fest eingetragen sind Adressen aus IPAM64, Reservierungen und DNS-Eintraege.
+func observedOnly(kind, sources string) bool {
+	src := strings.Fields(sources)
+	switch {
+	case slices.Contains(src, SrcIPAM):
+		return false
+	case kind == KindDHCP:
+		return true
+	case len(src) > 0:
+		return kind != KindFixed && !slices.Contains(src, SrcDNS)
+	}
+	return false
 }
 
 // parseBool: leer = nicht gesetzt.
@@ -131,6 +152,9 @@ func (m *Module) ParseImport(ctx context.Context, data []byte) ([]ImportRow, err
 				continue
 			}
 			row.Address, row.Exists, row.Err = m.importAddress(ctx, snap, newPrefixes, get)
+			if row.Err == nil && observedOnly(strings.ToLower(get("kind")), strings.ToLower(get("sources"))) {
+				row.Err = ErrImportSeen
+			}
 		} else {
 			row.Kind, row.Key = "prefix", get("prefix")
 			if row.Key == "" {

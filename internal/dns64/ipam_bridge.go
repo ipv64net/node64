@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/netip"
+	"regexp"
 	"strings"
 	"time"
 
@@ -306,22 +307,23 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT id, mac, ip, origin, ref FROM dns64_dhcp_reservations WHERE scope_id = ? AND (mac = ? OR ip = ?)`, r.ScopeID, r.MAC, r.IP)
+	rows, err := tx.QueryContext(ctx, `SELECT id, mac, ip, name, origin, ref FROM dns64_dhcp_reservations WHERE scope_id = ? AND (mac = ? OR ip = ?)`, r.ScopeID, r.MAC, r.IP)
 	if err != nil {
 		return err
 	}
 	var claim int64
+	var claimName string
 	for rows.Next() {
 		var id int64
-		var omac, oip, origin, oref string
-		if err := rows.Scan(&id, &omac, &oip, &origin, &oref); err != nil {
+		var omac, oip, oname, origin, oref string
+		if err := rows.Scan(&id, &omac, &oip, &oname, &origin, &oref); err != nil {
 			rows.Close()
 			return err
 		}
 		switch {
 		case origin == OriginIPAM && oref == ref: // eigene, wird ersetzt
 		case origin == "" && omac == r.MAC && oip == r.IP:
-			claim = id
+			claim, claimName = id, oname
 		default:
 			rows.Close()
 			return errCfg("err_dhcp_res_dup")
@@ -331,6 +333,10 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 	if ipamChecking(ctx) {
 		return nil
 	}
+	var ownName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM dns64_dhcp_reservations WHERE origin = ? AND ref = ? LIMIT 1`, OriginIPAM, ref).Scan(&ownName); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM dns64_dhcp_reservations WHERE origin = ? AND ref = ?`, OriginIPAM, ref); err != nil {
 		return err
 	}
@@ -338,10 +344,10 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 		return err
 	}
 	if claim > 0 {
-		_, err = tx.ExecContext(ctx, `UPDATE dns64_dhcp_reservations SET origin = ?, ref = ?, name = ? WHERE id = ?`, OriginIPAM, ref, r.Name, claim)
+		_, err = tx.ExecContext(ctx, `UPDATE dns64_dhcp_reservations SET origin = ?, ref = ?, name = ? WHERE id = ?`, OriginIPAM, ref, ipamKeepName(claimName, r.Name), claim)
 	} else {
 		_, err = tx.ExecContext(ctx, `INSERT INTO dns64_dhcp_reservations (scope_id, mac, ip, name, comment, origin, ref) VALUES (?,?,?,?,?,?,?)`,
-			r.ScopeID, r.MAC, r.IP, r.Name, "", OriginIPAM, ref)
+			r.ScopeID, r.MAC, r.IP, ipamKeepName(ownName, r.Name), "", OriginIPAM, ref)
 	}
 	if isUnique(err) {
 		return errCfg("err_dhcp_res_dup")
@@ -354,6 +360,18 @@ func (m *Module) PutIPAMReservation(ctx context.Context, ref, mac, ip, name stri
 	}
 	m.ipamDHCPChanged(ctx)
 	return nil
+}
+
+// ipamHostRe: Rechnername, wie IPAM64 ihn schreibt (ein DNS-Label, klein).
+var ipamHostRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// ipamKeepName: ohne Namen aus IPAM64 bleibt ein Name der Reservierung, den IPAM64 nicht geschrieben haben kann (kein
+// DNS-Label, z. B. "Tablet Lea" einer uebernommenen Reservierung von Hand); einen eigenen Namen raeumt IPAM64 ab.
+func ipamKeepName(old, name string) string {
+	if name == "" && old != "" && !ipamHostRe.MatchString(old) {
+		return old
+	}
+	return name
 }
 
 // DeleteIPAMReservation loescht die DHCP-Reservierung einer Adresse aus IPAM64 (keine = kein Fehler).

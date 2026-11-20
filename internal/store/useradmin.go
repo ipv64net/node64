@@ -7,8 +7,9 @@ import "context"
 // RestoreAdmin macht einen Benutzer wieder zum aktiven lokalen Administrator (node64 reset-password): Rolle admin,
 // nicht gesperrt, Herkunft lokal, kein „Passwort beim naechsten Anmelden setzen“.
 func (s *Store) RestoreAdmin(ctx context.Context, id int64) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET role = ?, disabled = 0, source = ?, must_change = 0 WHERE id = ?`,
-		RoleAdmin, SourceLocal, id)
+	now := Now()
+	_, err := s.w.ExecContext(ctx, `UPDATE users SET role = ?, disabled = 0, source = ?, must_change = 0, admin_at = ?, password_at = ? WHERE id = ?`,
+		RoleAdmin, SourceLocal, now, now, id)
 	if err == nil {
 		s.userChanged(ctx, id)
 	}

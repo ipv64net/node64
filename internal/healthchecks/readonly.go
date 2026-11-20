@@ -2,10 +2,11 @@ package healthchecks
 
 import "encoding/json"
 
-// Rolle „Nur lesen“ (Benutzerverwaltung im Kern): Passwort und Kopfzeilen der HTTP-Checks (z. B. Authorization)
-// gehen nur an Administratoren.
+// Rolle „Nur lesen“ (Benutzerverwaltung im Kern): Passwort, Kopfzeilen (z. B. Authorization) und frei befuellbarer
+// Request-Body der HTTP-Checks sowie die gesendeten Daten der TCP-Checks gehen nur an Administratoren - alle koennen
+// Zugangsdaten enthalten.
 
-var secretParams = []string{"basic_password", "headers"}
+var secretParams = []string{"basic_password", "headers", "body", "send"}
 
 // redactParams: Parameter ohne die geheimen Felder (unveraendert, wenn keine da sind).
 func redactParams(p json.RawMessage) json.RawMessage {

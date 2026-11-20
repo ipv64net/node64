@@ -1745,12 +1745,20 @@ function pageHost() {
 	// access_uid: der Server ergaenzt ein Teil-Geheimnis (SNMP v3 nur ein Passwort neu) aus dem gespeicherten bzw.
 	// meldet bei Push den Stand der Verbindung dieses Zugangs.
 	function accessTestReq(a, acc) {
-		var keep = a && !acc.secret && !acc.clear_secret, same = a && JSON.stringify(acc.config) === JSON.stringify(cleanCfg(a.config, a.type));
+		var keep = a && !acc.secret && !acc.clear_secret, same = a && canonJSON(acc.config) === canonJSON(cleanCfg(a.config, a.type));
 		if (keep && same) { return { stored: true }; }
 		if (keep && a.secret_set) { return null; }
 		var b = { address: H.host.address, access: acc };
 		if (a && !acc.clear_secret && ((a.type === 'snmp' && a.secret_set && acc.secret) || (acc.type === 'agent' && acc.config.mode === 'push'))) { b.access_uid = a.uid; }
 		return { body: b };
+	}
+	// canonJSON: JSON mit sortierten Schluesseln (Vergleich unabhaengig von der Reihenfolge, z. B. no_smart bei TrueNAS).
+	function canonJSON(v) {
+		if (Array.isArray(v)) { return '[' + v.map(canonJSON).join(',') + ']'; }
+		if (v && typeof v === 'object') {
+			return '{' + Object.keys(v).filter(function (k) { return v[k] !== undefined; }).sort().map(function (k) { return JSON.stringify(k) + ':' + canonJSON(v[k]); }).join(',') + '}';
+		}
+		return JSON.stringify(v === undefined ? null : v);
 	}
 	// cleanCfg: gespeicherte Konfiguration in der Form des Formulars (Vergleich "geaendert?").
 	function cleanCfg(c, t) {
@@ -3023,7 +3031,11 @@ function pageAgent() {
 		var fp = $('#m64-ag-fp');
 		if (fp) { fp.textContent = A.fingerprint || ''; }
 	}
-	function take(r) { A = r; AG = r; render(); }
+	function take(r) {
+		var cmd = A.sums_sha256 + '|' + A.public_key + '|' + A.internet; // Befehl nur bei Aenderung neu (Auswahl im Feld bleibt)
+		A = r; AG = r; render();
+		if (A.sums_sha256 + '|' + A.public_key + '|' + A.internet !== cmd) { $('#m64-ag-cmd').textContent = agentCmd(osSel.value, agentBase(agentSrc()), A.public_key || L('new.no_key'), ''); }
+	}
 	function load() { return api('GET', '/api/monitor64/agent').then(take); }
 	function refresh() { return lock(refreshBtn, function () { return api('POST', '/api/monitor64/agent/refresh').then(take); }); }
 	if (osSel) { osSel.onchange = function () { try { localStorage.setItem('m64-agent-os', osSel.value); } catch (e) { /* nur diese Ansicht */ } renderInstall(); }; }

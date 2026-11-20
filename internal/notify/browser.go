@@ -21,6 +21,7 @@ type BrowserEvent struct {
 	Text    string    `json:"text"`
 	URL     string    `json:"url,omitempty"`
 	Token   string    `json:"token,omitempty"`
+	Down    bool      `json:"down"` // Stoerung (sonst Entwarnung bzw. Hinweis), wie isDownKind
 	Time    time.Time `json:"time"`
 	Channel string    `json:"channel"`
 }
@@ -75,7 +76,8 @@ func (b *Broadcast) Clients() int {
 type browserSender struct{}
 
 func (browserSender) Send(_ context.Context, ch *Channel, m Message) error {
-	n := Browser.Publish(BrowserEvent{Kind: string(m.Kind), Title: m.Title, Text: m.Text, URL: m.URL, Token: m.Check.Token, Time: m.Time, Channel: ch.Name})
+	n := Browser.Publish(BrowserEvent{Kind: string(m.Kind), Title: m.Title, Text: m.Text, URL: m.URL, Token: m.Check.Token, Down: isDownKind(m.Kind),
+		Time: m.Time, Channel: ch.Name})
 	if n == 0 {
 		return errors.New("no browser with Node64 open – the notification could not be shown")
 	}

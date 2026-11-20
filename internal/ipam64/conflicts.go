@@ -13,10 +13,12 @@ import (
 )
 
 // Scan & Konflikte (Plan Stufe I5). Konflikte kommen aus der Zusammenfuehrung (merge.go: dup, mac, lease), Hinweise
-// entstehen hier: unbekanntes Geraet im DHCP-Adressbereich (fest eingestellt, keine Lease), feste Adresse mit DNS lange
-// nicht gesehen, fremder DHCP-Server (aus DNS64). Unbekannte Geraete sind Adressen, die nur die Nachbartabelle kennt.
+// entstehen hier: unbekanntes Geraet im DHCP-Adressbereich (fest eingestellt, keine Lease, gerade gesehen), feste
+// Adresse mit DNS lange nicht gesehen, fremder DHCP-Server (aus DNS64). Unbekannte Geraete sind Adressen, die nur die
+// Nachbartabelle kennt.
 // Ignorierte MACs (je Node) erscheinen dort nicht mehr. Benachrichtigungen: neuer Konflikt bzw. neues Geraet (je Art
-// abschaltbar, neue Geraete erst eine Stunde nach dem Start des Moduls - sonst meldete der erste Scan alles).
+// abschaltbar, neue Geraete erst eine Stunde nach dem Start des Moduls - sonst meldete der erste Scan alles - und nur
+// gerade gesehene).
 
 const (
 	setIgnored        = "ipam64.ignored"         // ignorierte MACs (JSON-Liste)
@@ -76,7 +78,7 @@ func (m *Module) Findings(ctx context.Context) ([]Finding, error) {
 			switch {
 			case e.Conflict != "":
 				out = append(out, Finding{Kind: e.Conflict, Severity: "conflict", IP: e.IP, Prefix: n.CIDR, Name: name, MACs: e.MACs})
-			case n.inPool(e.ip) && onlyScan(e):
+			case n.inPool(e.ip) && onlyScan(e) && e.State == "online": // nur gerade gesehen, nicht der gegangene Client nach Ablauf der Lease
 				out = append(out, Finding{Kind: "pool", Severity: "hint", IP: e.IP, Prefix: n.CIDR, MACs: nonEmpty(e.MAC)})
 			case e.UID != "" && e.Status == StatusActive && slices.Contains(e.Sources, SrcDNS) && n.Scan != ScanOff && n.Attached &&
 				(e.Seen.IsZero() || now.Sub(e.Seen) > staleAfter):
@@ -204,7 +206,8 @@ func (m *Module) notifyCheck(ctx context.Context) {
 			for _, e := range list {
 				k := "new|" + e.MAC
 				cur[k] = true
-				if !m.notified[k] && !e.First.Before(m.started.Add(newDevGrace)) {
+				// nur gerade gesehene: ein gegangener DHCP-Client steht nach Ablauf seiner Lease hier, ist aber nicht neu
+				if !m.notified[k] && e.State == "online" && !e.First.Before(m.started.Add(newDevGrace)) {
 					v := e.Vendor
 					if v == "random" {
 						v = ""

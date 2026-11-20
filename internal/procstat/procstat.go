@@ -61,3 +61,14 @@ func parseLimit(s string) (uint64, bool) {
 	}
 	return v, true
 }
+
+// cgroupV2Path: Pfad der eigenen cgroup v2 aus /proc/self/cgroup (Zeile "0::/pfad"); "" ohne bzw. bei einem Pfad
+// ausserhalb des eigenen Namensraums ("/../..").
+func cgroupV2Path(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if p, ok := strings.CutPrefix(strings.TrimSpace(line), "0::"); ok && strings.HasPrefix(p, "/") && !strings.Contains(p, "..") {
+			return p
+		}
+	}
+	return ""
+}

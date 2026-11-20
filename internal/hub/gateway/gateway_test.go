@@ -171,8 +171,17 @@ func TestLimiterBoundsAndRedact(t *testing.T) {
 	for i := 0; i < limiterMax; i++ {
 		l.m[fmt.Sprint("k", i)] = &bucket{reset: time.Now().Add(time.Hour)}
 	}
-	if l.allow("neu", 10, time.Minute) {
-		t.Fatal("neuer Schluessel ueber der Grenze angenommen")
+	// Tabelle voll: neue Schluessel teilen sich einen Eimer je Art (nicht pauschal alle abgewiesen, Speicher bleibt begrenzt)
+	for i := 0; i < 10; i++ {
+		if !l.allow(fmt.Sprint("push:neu", i), 10, time.Minute) {
+			t.Fatalf("neuer Schluessel %d bei voller Tabelle abgewiesen", i)
+		}
+	}
+	if l.allow("push:neu-x", 10, time.Minute) || len(l.m) > limiterMax+1 {
+		t.Fatalf("gemeinsamer Eimer ohne Grenze: %d", len(l.m))
+	}
+	if !l.allow("auth:198.51.100.1", 10, time.Minute) {
+		t.Fatal("andere Art von der vollen Tabelle gesperrt")
 	}
 	if !l.allow("k1", 10, time.Minute) {
 		t.Fatal("bekannter Schluessel abgewiesen")
@@ -183,6 +192,27 @@ func TestLimiterBoundsAndRedact(t *testing.T) {
 	l.swept = time.Time{}
 	if !l.allow("neu", 10, time.Minute) || len(l.m) > 2 {
 		t.Fatalf("abgelaufene Schluessel nicht entfernt: %d", len(l.m))
+	}
+	// Anteil einer Art voll (Flut erfundener Push-Tokens): andere Arten bekommen weiter eigene Eimer
+	l = newIPLimiter()
+	for i := 0; i < limiterKind; i++ {
+		if !l.allow(fmt.Sprintf("push:%030d", i), 60, time.Minute) {
+			t.Fatalf("push %d", i)
+		}
+	}
+	if _, ok := l.m["push:*"]; ok || !l.allow("push:extra-token-0000000000", 60, time.Minute) {
+		t.Fatal("first push key over the share")
+	}
+	if _, ok := l.m["push:*"]; !ok {
+		t.Fatal("push key over the share must use the shared bucket")
+	}
+	if !l.allow("auth:198.51.100.1", 1, time.Minute) || l.allow("auth:198.51.100.1", 1, time.Minute) || !l.allow("auth:198.51.100.2", 1, time.Minute) {
+		t.Fatal("other kinds must keep their own buckets")
+	}
+	// IPv6 als /64, IPv4 einzeln
+	if limitKey("2001:db8:1:2:aaaa::1") != limitKey("2001:db8:1:2:bbbb::2") || limitKey("2001:db8:1:3::1") == limitKey("2001:db8:1:2::1") ||
+		limitKey("198.51.100.1") != "198.51.100.1" || limitKey("::ffff:198.51.100.1") != "::ffff:198.51.100.1" {
+		t.Fatal("limitKey")
 	}
 	err := &url.Error{Op: "Post", URL: "https://api.telegram.org/bot123456:ABCdefGHIjklMNOpqr/sendMessage", Err: errors.New("i/o timeout")}
 	if s := publicError(notify.TypeTelegram, err); strings.Contains(s, "ABCdef") {

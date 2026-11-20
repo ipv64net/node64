@@ -94,8 +94,9 @@ type Ticket struct {
 	// Trusted: der Rueckweg ist eine dieser Node bekannte Adresse der oeffnenden Node (Cluster-Adresse des Mitglieds).
 	// Sonst kommt der Host aus der Anfrage an die oeffnende Node und ist frei waehlbar - die Web-Schicht laesst die
 	// Anmeldung dann erst bestaetigen (Login-CSRF).
-	Trusted bool
-	expires time.Time
+	Trusted  bool
+	AccessID int64 // Zugang (env_access.id), ueber den das Ticket ausgestellt wurde (0 = Cluster-Mitglied)
+	expires  time.Time
 }
 
 // Origin merkt sich eine ueber Environment entstandene Sitzung.
@@ -104,6 +105,7 @@ type Origin struct {
 	FromNode string
 	FromName string
 	Back     string
+	AccessID int64 // Zugang der Sitzung (0 = Cluster-Mitglied); sein Widerruf beendet sie
 }
 
 // Node ist eine Zeile der Liste (ohne diese Node, die stellt die Oberflaeche selbst).
@@ -300,6 +302,13 @@ func (s *Service) Hold(t *Ticket) (string, error) {
 	return s.addTicket(&c)
 }
 
+// Park legt ein eingeloestes Ticket unveraendert (auch Trusted) erneut ab (60 s, einmal): fuer den zweiten Schritt
+// von /environment/enter auf dieser Node (dann mit den Cookies dieser Node).
+func (s *Service) Park(t *Ticket) (string, error) {
+	c := *t
+	return s.addTicket(&c)
+}
+
 // addTicket legt ein Ticket (60 s gueltig) an und liefert es.
 func (s *Service) addTicket(t *Ticket) (string, error) {
 	t.expires = s.d.Now().Add(TicketTTL)
@@ -346,9 +355,9 @@ func (s *Service) Redeem(tok string) (*Ticket, bool) {
 func (s *Service) SaveSession(ctx context.Context, sessionID string, o Origin) error {
 	w := s.d.Store.Writer()
 	_, _ = w.ExecContext(ctx, `DELETE FROM env_sessions WHERE session_id NOT IN (SELECT id FROM sessions)`)
-	_, err := w.ExecContext(ctx, `INSERT OR REPLACE INTO env_sessions (session_id, max_role, from_node, from_name, back_url, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`, sessionID, MinRole(o.MaxRole, o.MaxRole), // unbekannte Rolle: nur lesen
-		o.FromNode, o.FromName, o.Back, store.Now())
+	_, err := w.ExecContext(ctx, `INSERT OR REPLACE INTO env_sessions (session_id, max_role, from_node, from_name, back_url, created_at, access_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, sessionID, MinRole(o.MaxRole, o.MaxRole), // unbekannte Rolle: nur lesen
+		o.FromNode, o.FromName, o.Back, store.Now(), o.AccessID)
 	return err
 }
 
@@ -359,8 +368,8 @@ func (s *Service) SessionOrigin(ctx context.Context, sessionID string) (*Origin,
 		return nil, nil
 	}
 	var o Origin
-	err := s.d.Store.Reader().QueryRowContext(ctx, `SELECT max_role, from_node, from_name, back_url FROM env_sessions WHERE session_id = ?`,
-		sessionID).Scan(&o.MaxRole, &o.FromNode, &o.FromName, &o.Back)
+	err := s.d.Store.Reader().QueryRowContext(ctx, `SELECT max_role, from_node, from_name, back_url, access_id FROM env_sessions WHERE session_id = ?`,
+		sessionID).Scan(&o.MaxRole, &o.FromNode, &o.FromName, &o.Back, &o.AccessID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 3.3.1 – unveröffentlicht
+
+### Behoben
+- Rolle „Nur lesen“ sieht auch den Request-Body von HTTP-Checks und die gesendeten Daten von TCP-Checks nicht mehr (API, Detailseite, Online-Checks).
+- Das Ablaufdatum des Zertifikats bleibt in Übersicht und `/api/metrics` stehen, auch wenn das Ziel länger kein Zertifikat liefert (z. B. abgelaufen); JSON-Checks zeigen es jetzt ebenfalls.
+- Übersicht, Detailseite und `/api/metrics` lesen die Zertifikatsdaten seltener; die Detailseite lädt nur noch die Daten des einen Checks.
+- Der Online-Testlauf misst Ziele ohne Schema wie beim Speichern mit https://.
+- HTTPS-Checks gegen Dienste mit Zertifikat einer eigenen CA melden nach einem kurzen Lesefehler nicht mehr eine Minute lang „unknown authority“.
+
 ## 3.3.0 – 2026-11-19
 
 ### Neu

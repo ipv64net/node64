@@ -113,7 +113,7 @@ func (s *Server) uaCreate(r *http.Request, in newUserIn) (u *store.User, otp str
 	if !store.ValidRole(in.Role) {
 		return nil, "", errRoleInvalid
 	}
-	pw := in.Password
+	pw := strings.TrimSpace(in.Password) // wie bei der Anmeldung (Leerzeichen am Rand zaehlen nicht)
 	if pw == "" && in.MustChange {
 		pw = oneTimePassword()
 		otp = pw
@@ -184,6 +184,7 @@ func (s *Server) uaSetPassword(r *http.Request, u *store.User, pw string, mustCh
 	if u.Source != store.SourceLocal {
 		return "", errUserNotLocal
 	}
+	pw = strings.TrimSpace(pw) // wie bei der Anmeldung (Leerzeichen am Rand zaehlen nicht)
 	if pw == "" && mustChange {
 		pw = oneTimePassword()
 		otp = pw
@@ -793,7 +794,7 @@ func (s *Server) apiGroupCreate(w http.ResponseWriter, r *http.Request) {
 		s.apiUserErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, s.groupJSON(r.Context(), g))
+	writeJSON(w, http.StatusCreated, s.groupJSON(r.Context(), s.savedGroup(r.Context(), g)))
 }
 
 // PUT /api/groups/{id}: fehlende Felder bleiben.
@@ -832,7 +833,15 @@ func (s *Server) apiGroupUpdate(w http.ResponseWriter, r *http.Request) {
 		s.apiUserErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.groupJSON(r.Context(), g))
+	writeJSON(w, http.StatusOK, s.groupJSON(r.Context(), s.savedGroup(r.Context(), g)))
+}
+
+// savedGroup: gespeicherter Stand der Gruppe (mit den Zeitstempeln aus der Datenbank), sonst g.
+func (s *Server) savedGroup(ctx context.Context, g *store.Group) *store.Group {
+	if sg, err := s.Store.GroupByUID(ctx, g.UID); err == nil && sg != nil {
+		return sg
+	}
+	return g
 }
 
 // DELETE /api/groups/{id}

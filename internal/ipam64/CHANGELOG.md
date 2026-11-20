@@ -1,5 +1,20 @@
 # IPAM64 – Änderungen
 
+## 0.6.4 – unveröffentlicht
+
+- Übernahme aus DNS64: Der Name einer DHCP-Reservierung von Hand (z. B. „Tablet Lea“) bleibt erhalten, wenn die Adresse keinen Rechnernamen hat.
+- Speichern einer Adresse mit gesperrtem DHCP-Schalter löscht ihre Reservierung nicht mehr.
+- CSV-Import: Aus dem eigenen Export werden nur fest eingetragene Adressen übernommen; Leases und Sichtungen werden übergangen und erzeugen keine Ausnahmen im DHCP-Bereich mehr.
+- Die Rückfrage beim Entfernen einer Adresse sagt richtig, dass ihre Einträge in DNS64 mit gelöscht werden.
+- Die Meldung nach Import und Einrichtung nennt höchstens zehn fehlgeschlagene Zeilen; bei vielen Fehlern ging sie vorher verloren.
+- Blockübersicht: Felder eines größeren Kind-Präfixes führen zu diesem Präfix.
+- Ausnahmen fester Adressen im DHCP-Bereich bleiben, auch wenn das DHCP-Netz auf dieser Node aus ist (im Cluster vergibt eine andere Node).
+- Cluster: Getauschte Adressen gelten nicht mehr als Doppelvergabe, wenn die Änderungen in anderer Reihenfolge ankommen.
+- „Nächste freie Adresse“ und Lückenliste: Router-Adresse, Kind-Präfixe und reservierte Bereiche zählen nicht mehr als frei; Lücken werden an den Grenzen des DHCP-Bereichs geteilt.
+- Hinweis „unbekanntes Gerät im DHCP-Bereich“ und Meldung „neues Gerät“ nur noch für gerade gesehene Geräte, nicht mehr für gegangene Clients nach Ablauf der Lease.
+- Die Rückkehr zu einer früher gesehenen MAC (z. B. VIP-Failover) ist kein Konflikt mehr.
+- Der Speicher für Sichtungen wird bei lange laufenden Nodes aufgeräumt.
+
 ## 0.6.3 – 2026-11-19
 
 - Präfix und Adresse bearbeiten: Beim Feld „Tags“ werden die schon vergebenen Tags vorgeschlagen (#193).

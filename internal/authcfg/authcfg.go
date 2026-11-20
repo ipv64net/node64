@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -20,6 +21,10 @@ const (
 	SetOIDCJIT = "auth.oidc.jit"
 	// SetOIDCGroupClaim: Name des Gruppen-Claims (Standard "groups").
 	SetOIDCGroupClaim = "auth.oidc.group_claim"
+	// Zeitpunkt der letzten Aenderung von AD/LDAP bzw. der 2FA-Pflicht (Cluster: jeder Teil von directory gilt fuer
+	// sich, der juengere gewinnt; leer = unbekannt)
+	SetLDAPAt        = "auth.ldap_at"
+	Set2FARequiredAt = "auth.2fa_required_at"
 
 	// Cluster: Bereich directory, ein Eintrag mit dieser Kennung (LDAP + 2FA-Pflicht)
 	DirectoryID = "auth"
@@ -75,6 +80,9 @@ func SaveLDAP(ctx context.Context, st *store.Store, c LDAPConfig) error {
 	if err := writeLDAP(ctx, st, c); err != nil {
 		return err
 	}
+	if err := st.SetSetting(ctx, SetLDAPAt, store.Now()); err != nil {
+		return err
+	}
 	st.LoginChanged(ctx, "directory", DirectoryID, false)
 	return nil
 }
@@ -84,18 +92,37 @@ func writeLDAP(ctx context.Context, st *store.Store, c LDAPConfig) error {
 	return st.SetSetting(ctx, SetLDAP, string(b))
 }
 
-// ApplyDirectory speichert AD/LDAP und die 2FA-Pflicht zusammen und meldet den Bereich directory einmal - fuer die
-// Uebernahme aus dem Cluster (ctx traegt die Herkunft, die Meldung reicht den Stand nur weiter). Ein Melden je
-// Einstellung kaeme mit derselben Herkunft und demselben Zeitpunkt beim zweiten Mal nicht mehr an.
-func ApplyDirectory(ctx context.Context, st *store.Store, c LDAPConfig, twoFARequired bool) error {
-	if err := writeLDAP(ctx, st, c); err != nil {
-		return err
+// ApplyDirectory speichert AD/LDAP und die 2FA-Pflicht (nil = der Teil bleibt) samt ihrem Zeitpunkt zusammen und
+// meldet den Bereich directory einmal - fuer die Uebernahme aus dem Cluster (ctx traegt die Herkunft, die Meldung
+// reicht den Stand nur weiter). Ein Melden je Einstellung kaeme mit derselben Herkunft und demselben Zeitpunkt beim
+// zweiten Mal nicht mehr an.
+func ApplyDirectory(ctx context.Context, st *store.Store, c *LDAPConfig, ldapAt time.Time, twoFARequired *bool, twoFAAt time.Time) error {
+	if c != nil {
+		if err := writeLDAP(ctx, st, *c); err != nil {
+			return err
+		}
+		if err := st.SetSetting(ctx, SetLDAPAt, stampText(ldapAt)); err != nil {
+			return err
+		}
 	}
-	if err := write2FA(ctx, st, twoFARequired); err != nil {
-		return err
+	if twoFARequired != nil {
+		if err := write2FA(ctx, st, *twoFARequired); err != nil {
+			return err
+		}
+		if err := st.SetSetting(ctx, Set2FARequiredAt, stampText(twoFAAt)); err != nil {
+			return err
+		}
 	}
 	st.LoginChanged(ctx, "directory", DirectoryID, false)
 	return nil
+}
+
+// stampText: Zeitpunkt zum Speichern (Null = unbekannt, leer).
+func stampText(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return store.FormatTime(t)
 }
 
 // TwoFARequired: Schalter „2FA fuer alle Pflicht“.
@@ -106,6 +133,9 @@ func TwoFARequired(ctx context.Context, st *store.Store) bool {
 // SetTwoFARequired schaltet die 2FA-Pflicht und meldet sie an den Cluster (Bereich directory).
 func SetTwoFARequired(ctx context.Context, st *store.Store, on bool) error {
 	if err := write2FA(ctx, st, on); err != nil {
+		return err
+	}
+	if err := st.SetSetting(ctx, Set2FARequiredAt, store.Now()); err != nil {
 		return err
 	}
 	st.LoginChanged(ctx, "directory", DirectoryID, false)

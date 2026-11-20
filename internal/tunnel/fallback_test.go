@@ -84,3 +84,24 @@ func TestQUICOnlyFailure(t *testing.T) {
 		t.Error("cancelled context")
 	}
 }
+
+// Die Probe fuer den Rueckweg auf QUIC versucht alle Adressen und Ports wie connect - ohne IPv6-Route (erste Adresse)
+// bzw. mit QUIC nur auf dem anderen Port kommt sie trotzdem durch.
+func TestQUICReachableAllAddrs(t *testing.T) {
+	f := newFixture(t)
+	qport := f.addrQ.(*net.UDPAddr).Port
+	free, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unused := free.LocalAddr().(*net.UDPAddr).Port
+	free.Close()
+	c := NewClient(ClientConfig{Tunnel: "t1", Token: "secret", Node: "test", AltPort: qport, Edges: []Edge{{Name: "e1", Host: "edge.test", Port: unused}},
+		RootCAs: f.pool, Handler: func(st Stream, h Header) { _ = st.Close() }})
+	c.resolve = func(context.Context, Edge) []net.IP {
+		return []net.IP{net.ParseIP("2001:db8::1"), net.ParseIP("127.0.0.1")}
+	}
+	if !c.quicReachable(context.Background(), c.cfg.Edges[0], unused) {
+		t.Fatal("probe must try the other addresses and ports")
+	}
+}

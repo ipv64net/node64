@@ -208,12 +208,13 @@ func TestOtherACMECA(t *testing.T) {
 	}
 }
 
-// TrustPool: ohne eigene CA nil, sonst System-CAs plus die eigene CA (SSO-Anbieter mit Zertifikat der eigenen CA).
+// TrustPool: ohne eigene CA nil, sonst System-CAs plus die eigene CA (SSO-Anbieter mit Zertifikat der eigenen CA);
+// Lesefehler als Fehler.
 func TestTrustPool(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, nil)
-	if e.m.TrustPool(ctx) != nil {
-		t.Fatal("pool without own CA")
+	if pool, err := e.m.TrustPool(ctx); pool != nil || err != nil {
+		t.Fatal("pool without own CA", err)
 	}
 	ca, err := e.m.CreateCA(ctx, CAInput{Name: "SSO"})
 	if err != nil {
@@ -228,11 +229,17 @@ func TestTrustPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pool := e.m.TrustPool(ctx)
-	if pool == nil {
-		t.Fatal("no pool")
+	pool, err := e.m.TrustPool(ctx)
+	if pool == nil || err != nil {
+		t.Fatal("no pool", err)
 	}
 	if _, err := c.Verify(x509.VerifyOptions{Roots: pool}); err != nil {
 		t.Fatalf("own CA not trusted: %v", err)
+	}
+	// Lesefehler ist kein "keine eigene CA" (der Cache der Checks merkt sich ihn sonst eine Minute)
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if pool, err := e.m.TrustPool(cctx); pool != nil || err == nil {
+		t.Fatalf("read error: %v %v", pool, err)
 	}
 }

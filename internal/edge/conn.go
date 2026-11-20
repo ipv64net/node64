@@ -28,8 +28,8 @@ func (e *Edge) virtualServers() *virtual {
 	e.vonce.Do(func() {
 		errLog := e.errLog()
 		mark := func(ctx context.Context, c net.Conn) context.Context {
-			if rc, ok := c.(*routedConn); ok && rc.host != "" {
-				ctx = context.WithValue(ctx, routedKey{}, rc.host)
+			if h := routedHost(c); h != "" { // TLS-Server: c ist die *tls.Conn um die Verbindung aus dem Tunnel
+				ctx = context.WithValue(ctx, routedKey{}, h)
 			}
 			return context.WithValue(ctx, virtualKey{}, true)
 		}
@@ -147,12 +147,21 @@ func routedName(h string) string {
 	return "!" + h // kein gueltiger Name
 }
 
-// routedHost: Name der Verbindung aus dem Tunnel ("" = keine Vorgabe).
+// routedHost: Name der Verbindung aus dem Tunnel ("" = keine Vorgabe), auch durch die Huellen von TLS und dem schon
+// gelesenen ClientHello hindurch.
 func routedHost(c net.Conn) string {
-	if rc, ok := c.(*routedConn); ok {
-		return rc.host
+	for {
+		switch x := c.(type) {
+		case *routedConn:
+			return x.host
+		case *tls.Conn:
+			c = x.NetConn()
+		case *prefixConn:
+			c = x.Conn
+		default:
+			return ""
+		}
 	}
-	return ""
 }
 
 // routedOK: Anfrage passt zum Namen, fuer den der CDN64-Server die Verbindung durchreicht. r.Host enthaelt bei

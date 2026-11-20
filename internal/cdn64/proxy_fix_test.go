@@ -310,3 +310,53 @@ func TestClientAbortIs499(t *testing.T) {
 		t.Fatalf("client abort in error counter: %d", n)
 	}
 }
+
+// Abgewiesener Upload (Zugriffsliste): Waehrend KeepUpload den Rest des Uploads liest und verwirft, ist der Platz
+// beim Ziel schon wieder frei - Unangemeldete koennen das Ziel so nicht fuer Berechtigte belegen.
+func TestKeepUploadFreesTargetSlot(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	release := make(chan struct{})
+	defer close(release)
+	port := fixBackend(t, release)
+	old := limQueueWait
+	limQueueWait = 100 * time.Millisecond
+	defer func() { limQueueWait = old }()
+	if err := e.m.limSave(ctx, Limits{Enabled: true, TargetConns: 1}); err != nil {
+		t.Fatal(err)
+	}
+	acl := &AccessList{Name: "lan", Rules: []AccessRule{{Action: "allow", CIDR: "10.0.0.0/8"}}}
+	if err := e.m.saveAccessList(ctx, acl, nil); err != nil {
+		t.Fatal(err)
+	}
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID, h.AccessListID = []string{"upload.test"}, "127.0.0.1", port, CertNone, acl.ID
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	hd := e.m.handlerFor(h, &hostStats{})
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	go func() { _, _ = pw.Write(make([]byte, 1024)) }() // Anfang des Uploads, der Rest kommt (noch) nicht
+	rejected := make(chan int, 1)
+	go func() {
+		req := httptest.NewRequest("POST", "http://upload.test/", pr)
+		req.RemoteAddr = "203.0.113.9:4242"
+		rec := httptest.NewRecorder()
+		hd.ServeHTTP(rec, req)
+		rejected <- rec.Code
+	}()
+	time.Sleep(150 * time.Millisecond)
+	req := httptest.NewRequest("GET", "http://upload.test/", nil)
+	req.RemoteAddr = "10.0.0.5:4242"
+	rec := httptest.NewRecorder()
+	hd.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("allowed client while a rejected upload drains: %d", rec.Code)
+	}
+	_ = pw.Close()
+	if code := <-rejected; code == http.StatusOK {
+		t.Fatalf("upload from outside the access list: %d", code)
+	}
+}

@@ -106,3 +106,31 @@ func TestCollectSlowFake(t *testing.T) {
 		t.Fatalf("raid: %+v", r.RAID)
 	}
 }
+
+// Ohne SMART (Schalter "SMART-Werte abfragen" aus): RAID kommt aus dem RAID-Skript, das Storage-Skript mit den
+// Zuverlaessigkeitszaehlern (weckt Platten) laeuft nicht.
+func TestCollectRAIDWithoutSmart(t *testing.T) {
+	cache := NewCache()
+	var storage int
+	ps := func(ctx context.Context, script string) ([]byte, error) {
+		switch script {
+		case storageScript:
+			storage++
+			return os.ReadFile("testdata/storage_admin.json")
+		case raidScript:
+			return os.ReadFile("testdata/storage_admin.json")
+		}
+		return nil, errors.New("unbekanntes Skript")
+	}
+	secs := []string{m64proto.SecRAID}
+	Collect(context.Background(), Options{Cache: cache, PS: ps, Sections: secs})
+	cache.Wait()
+	r := Collect(context.Background(), Options{Cache: cache, PS: ps, Sections: secs})
+	if len(r.RAID) != 1 || r.RAID[0].State != "degraded" || r.SMART != nil {
+		t.Fatalf("raid: %+v smart: %+v", r.RAID, r.SMART)
+	}
+	cache.Wait()
+	if storage != 0 {
+		t.Fatalf("Storage-Skript %d-mal ohne SMART", storage)
+	}
+}

@@ -210,14 +210,18 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 	return r
 }
 
-// pillsFor liefert die letzten n Messungen je Check als Pillen (aelteste zuerst).
-func (m *Module) pillsFor(ctx context.Context, lang string, loc *time.Location, n int) (map[string][]Pill, error) {
+// pillsFor liefert die letzten n Messungen je Check als Pillen (aelteste zuerst); only != "" nur fuer diesen Check.
+func (m *Module) pillsFor(ctx context.Context, lang string, loc *time.Location, n int, only string) (map[string][]Pill, error) {
 	tr := m.translator(lang)
 	// je Check die letzten n Messungen ueber den Index (token, time) – nicht die ganze Tabelle durchnummerieren (das
 	// dauerte mit wachsender Aufbewahrung bei jedem Aufruf der Uebersicht spuerbar)
+	where, args := "", []any{n}
+	if only != "" {
+		where, args = " WHERE c.token = ?", append(args, only)
+	}
 	rows, err := m.st.r.QueryContext(ctx, `SELECT m.token, m.time, m.status, m.latency_ms, m.flags, m.reason, m.message FROM hc_checks c
-		JOIN hc_measurements m ON m.node_seq IN (SELECT node_seq FROM hc_measurements WHERE token = c.token ORDER BY time DESC LIMIT ?)
-		ORDER BY m.token, m.time`, n)
+		JOIN hc_measurements m ON m.node_seq IN (SELECT node_seq FROM hc_measurements WHERE token = c.token ORDER BY time DESC LIMIT ?)`+where+`
+		ORDER BY m.token, m.time`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +273,7 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
-	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 30)
+	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 30, "")
 	if err != nil {
 		m.fail(w, r, err)
 		return
@@ -509,7 +513,7 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	lang := m.g.Lang(r)
-	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 300) // reicht auch fuer breite Bildschirme
+	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 300, c.Token) // reicht auch fuer breite Bildschirme
 	if err != nil {
 		m.fail(w, r, err)
 		return
@@ -520,8 +524,10 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Row.SyncErr = m.OutboxErrors(ctx)[c.Token]
 	d.Row.CertDays = -1
-	if t, ok := m.st.CertExpiries(ctx)[c.Token]; ok {
-		d.Row.CertTill, d.Row.CertDays = t, int(time.Until(t).Hours()/24)
+	if certType(c.Type) { // nur dieser Check, nicht CertExpiries aller
+		if t, ok := m.st.CertExpiry(ctx, c.Token); ok {
+			d.Row.CertTill, d.Row.CertDays = t, int(time.Until(t).Hours()/24)
+		}
 	}
 	now := time.Now().UTC()
 	for _, rg := range []string{"24h", "30d", "1y"} {
@@ -553,8 +559,10 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.Unmarshal(c.Params, &d.Params)
-	if m.g.IsReadOnly(r) { // Kopfzeilen koennen Zugangsdaten enthalten
-		delete(d.Params, "headers")
+	if m.g.IsReadOnly(r) { // Passwort, Kopfzeilen, Body und gesendete Daten koennen Zugangsdaten enthalten
+		for _, k := range secretParams {
+			delete(d.Params, k)
+		}
 	}
 	if c.Parent != "" {
 		if p, _ := m.st.Check(ctx, c.Parent); p != nil {

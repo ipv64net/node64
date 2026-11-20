@@ -119,7 +119,7 @@ func TestOIDCLinkAndLogin(t *testing.T) {
 	resp, body = a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
 	cb := idp.authorize(t, handoffURL(t, resp, body), "alice")
 	resp, _ = a.get(t, cb)
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings#identities" {
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != accountPath+"#identities" {
 		t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	u, _ := a.store.UserByName(t.Context(), "admin")
@@ -181,7 +181,7 @@ func TestOIDCIssuerTrailingSlash(t *testing.T) {
 			resp, body := a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
 			cb := idp.authorize(t, handoffURL(t, resp, body), "alice")
 			resp, _ = a.get(t, cb)
-			if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings#identities" {
+			if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != accountPath+"#identities" {
 				t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 			}
 			u, _ := a.store.UserByName(t.Context(), "admin")

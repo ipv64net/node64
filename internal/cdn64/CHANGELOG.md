@@ -1,5 +1,15 @@
 # Änderungen – PROXY64
 
+## 1.57.1 – unveröffentlicht
+
+### Behoben
+- Über den CDN64-Tunnel (TLS, Port 443) gilt eine Verbindung nur für ihren Namen; andere Hosts sind auch mit Wildcard-Zertifikat per Host-Kopf nicht mehr erreichbar.
+- Limits: Freigabeliste und vertrauenswürdige Proxys gelten auch für das Docker-Gateway (Vorproxy auf dem Docker-Host).
+- „TLS durchreichen“: Freigabeliste der Ländersperre und eigene Sperrliste wirken auch für Zugriffe über das Docker-Gateway.
+- Abgewiesene Uploads (Zugriffsliste, Fehler) belegen keinen Platz beim Ziel mehr, während der Rest verworfen wird.
+- PROXY von Cluster-Nodes: Adressen eines Namens gelten bei DNS-Fehlern höchstens 30 Minuten weiter, bei unbekanntem Namen nicht mehr.
+- CDN64-Tunnel: wechselt nach einer UDP-Störung wieder auf QUIC, auch wenn nur IPv4 oder nur der andere Port geht.
+
 ## 1.57.0 – 2026-11-19
 
 ### Neu

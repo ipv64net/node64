@@ -158,13 +158,13 @@ func TestDockerPollerMapping(t *testing.T) {
 		len(web.Ports) != 1 || web.Ports[0] != "8080->80/tcp" || len(web.Tags) != 1 || web.Tags[0] != "shop" || web.Node != "dockerhost" {
 		t.Fatalf("web: %+v", web)
 	}
-	if web.Uptime != 3600 || web.CPU != 0 || web.MaxCPU != 4 || web.Mem != (2<<30)-(512<<20) || web.MaxMem != 4<<30 || !web.Measurable() {
+	if web.Uptime != 3600 || web.CPU != 0 || web.MaxCPU != 4 || web.Mem != (2<<30)-(512<<20) || web.MaxMem != 4<<30 || web.Status != "running" {
 		t.Fatalf("web values: uptime=%d cpu=%v max=%v mem=%d/%d", web.Uptime, web.CPU, web.MaxCPU, web.Mem, web.MaxMem)
 	}
 	if c := r["cache"]; c.State != StateError || c.Detail != DockerUnhealthy || c.MaxMem != 8<<30 {
 		t.Fatalf("cache: %+v", c)
 	}
-	if d := r["db"]; d.State != StateError || d.Detail != DockerExited || d.ExitCode != 1 || d.Measurable() {
+	if d := r["db"]; d.State != StateError || d.Detail != DockerExited || d.ExitCode != 1 || d.Status == "running" {
 		t.Fatalf("db: %+v", d)
 	}
 	if j := r["job"]; j.State != StateStopped || !j.Excluded() {

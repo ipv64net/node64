@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -463,6 +464,12 @@ func (c *collector) collectReboot(ctx context.Context, r *m64proto.Report) {
 		})
 		if res.required != nil {
 			rb.Required = *res.required
+		}
+		if res.required == nil && !res.nrFailed && slices.ContainsFunc(res.notes, func(n m64proto.SectionNote) bool { return n.Note == NoteReading }) {
+			// erster Lauf noch nicht fertig: kein "nein" melden (die Warnung endete sonst fuer eine Runde und ihre
+			// Frist begaenne neu), sondern wie bei SMART den Hinweis "wird gelesen" ohne Abschnitt
+			r.Notes = append(r.Notes, m64proto.SectionNote{Section: m64proto.SecReboot, Note: NoteReading})
+			return
 		}
 		if res.nrFailed && !rb.Required {
 			// Pruefung gescheitert und keine andere Quelle sagt "ja": kein "nein" melden, sondern den Fehler

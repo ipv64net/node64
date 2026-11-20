@@ -12,7 +12,8 @@ import (
 // Verbindung zu DNS64 (Plan docs/PLAN-NODE64-IPAM64.md, Stufe I3, Entscheidung E1): IPAM64 schreibt feste Eintraege
 // gekennzeichnet nach DNS64 (Bezug = uid der Adresse). Je Adresse:
 //   - DHCP an, MAC, IPv4, nicht veraltet: Reservierung im DHCP-Netz, in dem die Adresse liegt.
-//   - sonst, wenn die Adresse (aktiv oder reserviert) im DHCP-Adressbereich liegt: Ausnahme (nie vergeben).
+//   - sonst, wenn die Adresse (aktiv oder reserviert) im DHCP-Adressbereich liegt: Ausnahme (nie vergeben) - auch in
+//     einem DHCP-Netz, das auf dieser Node aus ist (im Cluster vergibt es eine andere Node).
 //   - DNS an, Rechnername, Zone (an der Adresse, sonst am Praefix bzw. DHCP-Netz), nicht veraltet: A bzw. AAAA, PTR
 //     nach Schalter.
 //
@@ -117,7 +118,7 @@ func desired(snap *Snapshot, a Address) want {
 	n := snap.NetOf(ip)
 	if a.DHCP && a.MAC != "" && ip.Is4() {
 		w.res = &OwnedRes{Ref: a.UID, MAC: a.MAC, IP: a.Address, Name: a.Name}
-	} else if ip.Is4() && n != nil && n.inPool(ip) {
+	} else if ip.Is4() && (n != nil && n.inPool(ip) || snap.offPool(ip)) { // auch im Pool eines hier ausgeschalteten DHCP-Netzes
 		w.excl = &OwnedExcl{Ref: a.UID, IP: a.Address}
 	}
 	if a.DNS && a.Name != "" {
@@ -179,7 +180,7 @@ func (m *Module) Effects(ctx context.Context, a Address) ([]Effect, bool, error)
 		fx[i].State = "missing"
 		switch fx[i].Kind {
 		case "reservation":
-			if have.res != nil && *have.res == *w.res {
+			if have.res != nil && resEqual(*w.res, *have.res) {
 				fx[i].State = "ok"
 			}
 		case "exclude":
@@ -267,9 +268,18 @@ func (o ownedOne) rec(w want) bool {
 	return len(o.recs) == 1 && o.recs[0].Name == w.recName && o.recs[0].Type == typ && o.recs[0].Value == w.recAddr.String() && o.recs[0].NoPTR == !w.ptr
 }
 
+// resEqual: Reservierung wie gewuenscht. Ohne Rechnernamen in IPAM64 behaelt DNS64 den Namen einer uebernommenen
+// Reservierung von Hand, der kein DNS-Label ist (z. B. "Tablet Lea"): das ist keine Abweichung.
+func resEqual(w, o OwnedRes) bool {
+	if w.Name == "" && o.Name != "" && !hostRe.MatchString(o.Name) {
+		o.Name = ""
+	}
+	return w == o
+}
+
 // matches: Ist-Stand entspricht dem Soll.
 func (o ownedOne) matches(w want) bool {
-	resOK := (w.res == nil && o.res == nil) || (w.res != nil && o.res != nil && *w.res == *o.res)
+	resOK := (w.res == nil && o.res == nil) || (w.res != nil && o.res != nil && resEqual(*w.res, *o.res))
 	exOK := (w.excl == nil && o.excl == nil) || (w.excl != nil && o.excl != nil && *w.excl == *o.excl)
 	return resOK && exOK && o.rec(w)
 }

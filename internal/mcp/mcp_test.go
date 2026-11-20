@@ -102,6 +102,8 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`[A-Za-z0-9]{32}`),
 }
 
+var sshFPInText = regexp.MustCompile(`SHA256:[A-Za-z0-9+/]{43}`)
+
 type fakeBackend struct {
 	mux   *http.ServeMux
 	off   map[string]bool
@@ -244,8 +246,9 @@ func TestToolsAndSecrets(t *testing.T) {
 					t.Errorf("%s: secret %q in response: %s", tool.Name, bad, raw)
 				}
 			}
+			fps := sshFPInText.ReplaceAllString(raw, "SHA256:fp") // SSH-Fingerabdruecke sind oeffentlich und bleiben ganz
 			for _, re := range secretPatterns {
-				if m := re.FindString(raw); m != "" {
+				if m := re.FindString(fps); m != "" {
 					t.Errorf("%s: secret pattern %q (%s) in response", tool.Name, m, re)
 				}
 			}

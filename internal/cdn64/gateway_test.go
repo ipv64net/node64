@@ -45,6 +45,12 @@ func TestDockerGatewayOrigin(t *testing.T) {
 	if l.exempted(&on, gw) {
 		t.Fatal("docker gateway exempted from limits as home network")
 	}
+	// ausdrueckliche Ausnahme bzw. vertrauenswuerdiger Proxy auf dem Docker-Host gilt auch fuer das Gateway
+	l.exempt.Store(&[]netip.Prefix{netip.MustParsePrefix("172.17.0.1/32")})
+	if !l.exempted(&on, gw) || !l.exempted(&Limits{Enabled: true}, gw) {
+		t.Fatal("explicit exemption must cover the docker gateway")
+	}
+	l.exempt.Store(nil)
 	if !m.geoBlocked(allow, gw) || m.geoBlocked(block, gw) {
 		t.Fatal("country block: unknown origin must be blocked by \"allow only\" and pass \"block\"")
 	}

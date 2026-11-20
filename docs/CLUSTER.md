@@ -137,7 +137,7 @@ Bereiche sind ohne Einstellung aus (Schalter je Bereich auf `/cluster`).
 | Benutzer (`accounts`, Kennung `users.uid`) | Name, Passwort-Hash, App-2FA-Geheimnis, gehashte Wiederherstellungscodes (ein verbrauchter Code gilt danach überall nicht mehr), Sprache, Zeitzone, Anlagedatum, verknüpfte SSO-Konten (Anbieter, Subject, Anzeige), Rolle, Sperre, Herkunft, E-Mail, Gruppen (von Hand `group_uids` und aus LDAP/SSO `ext_group_uids` samt Prüfzeitpunkt `ext_checked_at`), „Passwort beim nächsten Anmelden setzen“, zuletzt verbrauchter Zeitschritt der App-2FA (`totp_last_step`) | lokale Nummer, Passkeys (an Hostnamen/RP-ID gebunden), Sitzungen, letzte Anmeldung, API- und MCP-Keys, Sperren nach Fehlversuchen |
 | Gruppen (`groups`, Kennung `user_groups.uid`) | Name, Rolle, Beschreibung, Zuordnungen nach außen (LDAP-Gruppen, OIDC-Gruppen) | – |
 | SSO (`sso`, ein Eintrag `oidc`) | Issuer, Client-ID, Client-Secret, Beschriftung, Scopes, „Benutzer über Gruppen anlegen“ (`auth.oidc.jit`) und Claim-Name (`auth.oidc.group_claim`); „SSO entfernen“ entfernt es überall | feste Rückleit-Adresse (`auth.oidc.base_url`, enthält den eigenen Hostnamen) |
-| Verzeichnis (`directory`, ein Eintrag `auth`) | AD/LDAP-Anbindung (`auth.ldap` samt Bind-Passwort) und „2FA für alle Pflicht“ (`auth.2fa_required`), damit jede Node dieselbe Regel hat | – |
+| Verzeichnis (`directory`, ein Eintrag `auth`) | AD/LDAP-Anbindung (`auth.ldap` samt Bind-Passwort) und „2FA für alle Pflicht“ (`auth.2fa_required`), damit jede Node dieselbe Regel hat; jeder Teil mit eigenem Zeitpunkt (`auth.ldap_at`, `auth.2fa_required_at`), siehe unten | – |
 | Forward-Auth | – | komplett (Proxy-Adressen und Kopf gehören zum Netz der Node) |
 | Zeitzone der Node (`node.timezone`) | – | ja (nur die Zeitzone des Benutzers geht mit) |
 
@@ -168,8 +168,22 @@ Gruppen oder höchstens stündlich). Sie zählen für die wirksame Rolle nur, so
 SSO 7 Tage; Gruppen von Hand und die eigene Rolle immer). Beim Übernehmen gewinnt der **neuere Prüfzeitpunkt samt
 seinen Gruppen**, unabhängig davon, welche Änderung sonst gewinnt.
 
-**Neueres behalten:** Behält eine Node beim Übernehmen ihre neueren Gruppen aus LDAP/SSO oder ihren höheren
-2FA-Schritt, speichert sie den zusammengeführten Stand und meldet ihn als eigene Änderung neu (für `peer` „bewusst
+**Benutzerverwaltung und Passwort mit eigenem Zeitpunkt:** Rolle, Sperre, Herkunft, E-Mail und Gruppen von Hand
+tragen `admin_at` (gesetzt von `UpdateUserAdmin`, `RestoreAdmin` und beim Anlegen), Passwort-Hash und „Passwort
+setzen“ tragen `password_at` (`UpdateUserPassword`, `SetUserMustChange`, auch das eigene neue Passwort). Beim
+Übernehmen derselben Kennung gilt je Feldgruppe der **jüngere Zeitpunkt** (gleich alt: der eintreffende Stand),
+unabhängig davon, welche Änderung sonst gewinnt. Eine eigene Aktion des Benutzers (Anmeldung mit 2FA, Sprache,
+Wiederherstellungscode) oder der Abgleich mit LDAP auf einer Node nimmt so keine Sperre, Herabstufung oder
+Passwort-Rücksetzung einer anderen Node zurück; unveränderte Einstellungen meldet `UpdateUserPrefs` gar nicht erst.
+Ein auf dieser Node gelöschter Benutzer (`user_deletions`, 30 Tage) wird nur von einem Stand mit jüngerem `admin_at`
+wieder angelegt; sonst meldet die Node die Löschung erneut. Bestand vor den Feldern (Migration 0010): Zeitpunkt
+unbekannt (älter als jede Änderung, im Cluster als `0001-01-01T00:00:00Z`), Benutzer mit vergebener Rolle, Sperre oder
+Gruppen gelten als seit der Anlage so. Nodes bis 1.7.10 senden die Felder nicht: dann gilt der Zeitpunkt ihrer
+Änderung (wie bisher als Ganzes).
+
+**Neueres behalten:** Behält eine Node beim Übernehmen ihre neueren Gruppen aus LDAP/SSO, ihren höheren
+2FA-Schritt oder neuere Felder der Benutzerverwaltung bzw. das neuere Passwort, speichert sie den zusammengeführten
+Stand und meldet ihn als eigene Änderung neu (für `peer` „bewusst
 nicht übernommen“, kein Fehler). Die Gegenstelle übernimmt ihn, ohne erneut zu melden – bei ihr ist dann nichts
 neuer, es entsteht keine Schleife. Eine Node ohne die Felder (bis Node64 1.7.0) sendet keinen Prüfzeitpunkt: ihre
 Gruppen ersetzen einen geprüften Stand hier nicht (ein neu angelegter Benutzer bekommt sie ohne Prüfzeitpunkt, bei
@@ -177,7 +191,9 @@ LDAP/SSO zählen sie dann bis zur nächsten Anmeldung nicht).
 
 **Identität und Konflikte:**
 
-- Dieselbe Kennung auf beiden Seiten (der Benutzer kam schon über den Cluster): die jüngere Änderung gewinnt, als Ganzes.
+- Dieselbe Kennung auf beiden Seiten (der Benutzer kam schon über den Cluster): die jüngere Änderung gewinnt, als
+  Ganzes – außer Prüfzeitpunkt der LDAP/SSO-Gruppen, 2FA-Schritt, Benutzerverwaltung und Passwort (siehe oben).
+  Behält die Node bei einer übernommenen Wahl Neueres, ist die Abweichung trotzdem erledigt.
 - Gleicher Name, andere Kennung, **exakt gleich** (Name ohne Groß/klein, Hash, 2FA-Geheimnis, Codes, Sprache, Zeitzone,
   SSO-Konten, Rolle, Sperre, Herkunft, E-Mail, Gruppen, „Passwort setzen“): es gilt die kleinere Kennung; die Node mit
   der größeren übernimmt sie an Ort und Stelle (lokale Nummer, Passkeys, Keys und Sitzungen bleiben). Anders als bei
@@ -205,6 +221,10 @@ LDAP/SSO zählen sie dann bis zur nächsten Anmeldung nicht).
   liefert sie statt eines Löschvermerks eine **Umleitung** (`into`, gemerkt in `users.group_aliases`): eine dritte
   Node, die die alte Kennung noch hat, biegt ebenso um, statt die Gruppe samt Mitgliedschaften zu löschen. Auch ein
   Benutzer, der noch mit der alten Kennung eintrifft, wird umgeleitet. Gleicher Name heißt also dieselbe Gruppe.
+  Zusammengeführt wird erst, wenn die Gleichnamigkeit beim erneuten Abholen (frühestens 2 min nach dem ersten
+  Eintreffen, `peer` holt abgelehnte Einträge ab 5 min erneut) noch besteht: eine nachholende Node bekommt je Gruppe
+  nur den letzten Stand in der Reihenfolge der letzten Änderung – wurde „Admins“ umbenannt und neu angelegt, kann die
+  neue Gruppe vor der Umbenennung der alten eintreffen und darf nicht mit ihr verschmelzen.
 - Eine gelöschte Gruppe wird bei den Benutzern einfach übergangen (die Kennung bleibt am Benutzer stehen und zählt
   nicht mehr).
 
@@ -214,7 +234,10 @@ stuft also weder herab noch herauf und entsperrt nicht); neu angelegt gilt der S
 das exakte Doppel zählt ein solcher Stand als „Administrator, lokal, nicht gesperrt, ohne Gruppen“. Die Bereiche
 `groups` und `directory` und die neuen SSO-Felder kennt eine ältere Node nicht (sie meldet sie nicht im Ping bzw.
 lässt die Felder weg – dann bleiben sie hier). Grenze: Solange eine Node die Benutzerverwaltung noch nicht hat, gelten
-Rolle und Sperre dort nicht (alle Benutzer sind dort Administratoren); nach dem Update aller Nodes greift alles.
+Rolle und Sperre dort nicht (alle Benutzer sind dort Administratoren); nach dem Update aller Nodes greift alles
+(spätestens mit der nächsten Änderung des Benutzers auf einer der Nodes: der Bestand ohne Benutzerverwaltung hat einen
+unbekannten Zeitpunkt und unterliegt einer vergebenen Rolle bzw. Sperre, siehe „Benutzerverwaltung und Passwort mit
+eigenem Zeitpunkt“).
 Benutzer aus LDAP/SSO (ohne Passwort) weist eine ältere Node ab. Bewusst hingenommen: Benutzer mit „Nur lesen“ oder
 Sperre einer älteren Node gar nicht zu schicken, ginge nur über `peer` (Abholen je Mitglied filtern) – die Version der
 Gegenstelle kennt der Abgleich dort nicht, und die eingeschalteten Bereiche taugen nicht als Erkennung (`groups` und
@@ -245,7 +268,10 @@ aktualisieren, dann Rollen und Sperren vergeben.
    ermittelt, daher wirken Änderungen an Gruppen (Rolle, Zusammenführen) ohne Sitzungsende.
 6. Gleiche SSO-Identität hier bei einem anderen Benutzer: diese Verknüpfung wird nicht übernommen (Warnung im Log).
 7. Ein Löschvermerk für `directory` ändert nichts (Einstellungen werden nie gelöscht); eine unbekannte (neuere) Rolle
-   wird als „Nur lesen“ übernommen.
+   wird als „Nur lesen“ übernommen. In `directory` gilt je Teil (LDAP, 2FA-Pflicht) die jüngere Änderung; ein auf der
+   anderen Node nie gespeicherter Teil (`ldap_unset`, `twofa_unset`) ändert hier nichts – eine Node ohne
+   LDAP-Einrichtung verteilt beim Schalten der 2FA-Pflicht also keine leere Anbindung. Behält die Node dabei einen
+   Teil, meldet sie den zusammengeführten Stand neu. Nodes bis 1.7.10 senden die Felder nicht (dann als Ganzes).
 8. Aus dem Cluster übernommene Änderungen stehen im Audit-Log mit Herkunft `cluster` und Urheber `node:<Name>`
    (`user.cluster.create|update|delete|merge|choice|keep_last`, `group.cluster.create|update|delete|merge`,
    `sso.cluster.update|delete`, `auth.cluster.directory`; Bereich „Anmeldung“).
@@ -255,9 +281,11 @@ Meldungen: Benutzer und Gruppen meldet der Store selbst (`LoginChanged`), LDAP u
 „Benutzer über Gruppen anlegen“ `authcfg.SaveOIDCJIT`. Wer `auth.oidc.*` direkt mit `SetSetting` schreibt, muss danach
 `SSOChanged` rufen (es gibt keinen Setting-Hook für diese Schlüssel).
 
-`reset-password` per Kommandozeile wirkt nur auf der eigenen Node (der Befehl läuft ohne Cluster); es gilt im Cluster
-erst, wenn das Passwort danach in der Oberfläche geändert wird. Bis dahin kann eine Änderung desselben Benutzers auf
-einer anderen Node es wieder überschreiben.
+`reset-password` per Kommandozeile wirkt zunächst nur auf der eigenen Node (der Befehl läuft ohne Cluster, es geht
+keine Meldung hinaus); im Cluster gilt es mit der nächsten Meldung dieses Benutzers, spätestens wenn das Passwort
+danach in der Oberfläche geändert wird. Passwort und wiederhergestellte Rolle tragen den Zeitpunkt des Befehls
+(`password_at`, `admin_at`): eine ältere Änderung desselben Benutzers von einer anderen Node überschreibt sie nicht,
+eine jüngere Änderung der Benutzerverwaltung bzw. des Passworts dort schon.
 
 Neue Module hängen sich als Provider an `/peer/v2/sync`
 (`internal/peer/cluster.go`); eine ältere Node bekommt nie Eintragsarten, die sie nicht kennt.

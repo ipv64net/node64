@@ -124,7 +124,10 @@ func (m *Module) syncProblems(ctx context.Context, h *Host, open map[string]*ope
 		res, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = 'ok', closed_at = ?, closed_how = ?, closed_by = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`,
 			ts(at), how, SystemActor.json(), tsNow(), p.UID)
 		delete(open, key)
-		if n, _ := res.RowsAffected(); err == nil && n > 0 {
+		if err != nil {
+			continue // Datenbankfehler: res ist nil
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
 			m.event(ctx, p.UID, h.UID, key, "ok", "", SystemActor, at)
 		}
 	}
@@ -139,7 +142,10 @@ func (m *Module) closeHostProblem(ctx context.Context, h *Host, open map[string]
 	res, err := m.st.Writer().ExecContext(ctx, `UPDATE m64_problems SET state = 'ok', closed_at = ?, closed_how = 'auto', closed_by = ?, updated_at = ? WHERE uid = ? AND closed_at = ''`,
 		ts(at), SystemActor.json(), tsNow(), p.UID)
 	delete(open, "")
-	if n, _ := res.RowsAffected(); err == nil && n > 0 {
+	if err != nil {
+		return // Datenbankfehler: res ist nil
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
 		m.event(ctx, p.UID, h.UID, "", "ok", i18nText("monitor64.detail.offline_ok"), SystemActor, at)
 	}
 }

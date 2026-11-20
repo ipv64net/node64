@@ -48,6 +48,7 @@
 					<div class="col-12 border-top pt-2 mt-2 fw-semibold small"><i class="bi bi-router text-primary"></i> {{.T "ipam64.addr.dhcp_title"}}</div>
 					<div class="col-12">
 						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="ipam-a-dhcp" name="dhcp" value="1"{{if $f.DHCP}} checked{{end}}{{if or (not $d.Net.DHCP) (not $d.Net.IsV4)}} disabled{{end}}><label class="form-check-label small" for="ipam-a-dhcp">{{.T "ipam64.addr.dhcp"}}</label></div>
+							{{if or (not $d.Net.DHCP) (not $d.Net.IsV4)}}<input type="hidden" name="dhcp_locked" value="1">{{end}}
 						<div class="form-text">{{if not $d.Net.IsV4}}{{.T "ipam64.addr.no_dhcpv6"}}{{else if not $d.Net.DHCP}}{{.T "ipam64.addr.no_dhcp_net"}}{{else if $d.InPool}}{{.T "ipam64.addr.in_pool" "from" $d.Net.PoolStart "to" $d.Net.PoolEnd}}{{else}}{{.T "ipam64.addr.dhcp_hint"}}{{end}}</div>
 					</div>
 					{{if not $d.DNS64}}<div class="col-12"><div class="alert alert-warning small py-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "ipam64.addr.no_dns64"}}</div></div>{{end}}

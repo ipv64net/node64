@@ -293,8 +293,8 @@ func TestAvailable(t *testing.T) {
 	}
 	s, _ := m.Snapshot(ctx)
 	blocks := s.FreeBlocks(s.Net("192.168.1.0/24"))
-	// .2 ist die Node selbst: Luecken .1 (im Pool), .3-.12, .14-.254
-	if len(blocks) != 3 || !blocks[0].Pool || blocks[1].Last.String() != "192.168.1.12" || blocks[2].First.String() != "192.168.1.14" || blocks[2].Count != 241 {
+	// .2 ist die Node selbst, .10-.12 reserviert: Luecken .1 und .3-.9 (im Pool), .14-.254
+	if len(blocks) != 3 || !blocks[0].Pool || !blocks[1].Pool || blocks[1].Last.String() != "192.168.1.9" || blocks[2].First.String() != "192.168.1.14" || blocks[2].Count != 241 {
 		t.Fatalf("blocks: %+v", blocks)
 	}
 }

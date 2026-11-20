@@ -1,5 +1,17 @@
 # Änderungen – DNS64
 
+## 1.45.1 – unveröffentlicht
+
+### Behoben
+- Block- und Freigabe-Listen sowie Upstreams werden nach Adresse geschaltet und gelöscht; eine zwischendurch geänderte Liste (Cluster, zweiter Tab) trifft nicht mehr den falschen Eintrag.
+- DoH über den gemeinsamen Eingang beachtet „Weitere erlaubte Client-Netze“ auch für das Docker-Gateway.
+- Rebinding-Schutz: Freigaben einer Gerätegruppe wirken nur für diese Gruppe, unabhängig davon, wer zuerst gefragt hat (gemeinsamer Cache).
+- Docker-Bridge mit IPv6: Auch die IPv6-Adresse des Gateways gilt als unbekannte Herkunft.
+- Fehlerantworten eines Upstreams ohne Frage (z. B. REFUSED) gelten nicht mehr als Störung.
+- Tooltip „Zeilen ohne DNS-Regel“ an Blocklisten zeigt den Text statt des Schlüssels.
+- Die Regelgrenze beachtet die Speichergrenze des systemd-Dienstes (Debian-Paket).
+- Übernahme in IPAM64: Der Name einer DHCP-Reservierung von Hand (z. B. „Tablet Lea“) bleibt erhalten.
+
 ## 1.45.0 – 2026-11-19
 
 ### Neu

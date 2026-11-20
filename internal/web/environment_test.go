@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strings"
@@ -218,11 +219,12 @@ func TestEnvironmentTwoNodes(t *testing.T) {
 
 func newClient(t *testing.T) *http.Client {
 	t.Helper()
-	return &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	jar, _ := cookiejar.New(nil)
+	return &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
 // enter schickt ein Ticket an /environment/enter von B, wie der Browser von der Seite mit Ursprung origin ("" = ohne
-// Origin und Referer).
+// Origin und Referer): cross-site ohne die Cookies von B, danach der zweite Schritt (envBrowser).
 func enter(t *testing.T, c *http.Client, b *envNode, tok, origin string) *http.Response {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, b.app.srv.URL+envEnterPath, strings.NewReader(url.Values{"ticket": {tok}}.Encode()))
@@ -230,11 +232,7 @@ func enter(t *testing.T, c *http.Client, b *envNode, tok, origin string) *http.R
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
-	resp, err := c.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
+	resp, _ := envBrowser(t, c, req)
 	return resp
 }
 
@@ -275,11 +273,7 @@ func TestEnvironmentEnterOrigin(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", "null")
 	req.Header.Set("Referer", a.app.srv.URL+"/")
-	resp, err := newClient(t).Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
+	resp, _ := envBrowser(t, newClient(t), req)
 	if resp.Header.Get("Location") != "/" {
 		t.Fatalf("referer fallback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
@@ -308,5 +302,28 @@ func TestEnvironmentEnterOrigin(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("audit for other user missing")
+	}
+}
+
+// /environment/enter geht ohne Anmeldung: ungueltige Tickets landen nach einigen Fehlversuchen je Adresse nicht mehr
+// im Audit-Log (sonst liesse es sich fluten); abgelehnt werden sie weiter.
+func TestEnvironmentEnterAuditThrottled(t *testing.T) {
+	ctx := context.Background()
+	a, b := newEnvNode(t, "node-a", "Node A"), newEnvNode(t, "node-b", "Node B")
+	a.other, b.other = b, a
+	for i := range 20 {
+		if resp := enter(t, newClient(t), b, "ungueltig-"+itoa(int64(i)), a.app.srv.URL); resp.Header.Get("Location") != "/login?env=1" {
+			t.Fatalf("invalid ticket: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+		}
+	}
+	entries, _ := b.app.store.AuditList(ctx, 100, 0)
+	n := 0
+	for _, e := range entries {
+		if e.Action == "login.environment_failed" {
+			n++
+		}
+	}
+	if n == 0 || n > 5 {
+		t.Fatalf("audit entries for 20 invalid tickets: %d", n)
 	}
 }

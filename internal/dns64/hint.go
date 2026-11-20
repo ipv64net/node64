@@ -9,6 +9,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/groups"
+	"github.com/ipv64net/node64/internal/dns64/localnet"
 )
 
 // Hinweisseite bei "Internet aus" (Phase G4): Geraete einer gesperrten Gruppe bekommen fuer fremde Namen die
@@ -45,9 +46,10 @@ func (m *Module) syncHintRoute(list []groups.Group, running bool) {
 	}
 }
 
-// offNow: das Geraet gehoert zu einer Gruppe, die gerade "Internet aus" hat.
+// offNow: das Geraet gehoert zu einer Gruppe, die gerade "Internet aus" hat. Ueber das Docker-Gateway ist das Geraet
+// unbekannt (keine Gruppe, wie bei den DNS-Anfragen).
 func (m *Module) offNow(ip netip.Addr) bool {
-	p := m.policy(ip)
+	p := m.policy(localnet.Origin(ip))
 	return p != nil && p.State(time.Now()).Off
 }
 

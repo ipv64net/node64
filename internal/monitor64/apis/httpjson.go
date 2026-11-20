@@ -98,6 +98,13 @@ func webAbsent(err error) bool {
 // webAuthErr: Zugangsdaten bzw. Rechte – liegt nicht an einer einzelnen Abfrage.
 func webAuthErr(err error) bool { return errors.Is(err, errWebAuth) || errors.Is(err, errWebPerm) }
 
+// HostAnswered: das Geraet hat die Anfrage abgewiesen (Anmeldung, Rechte, Zertifikat bzw. Pin) - es laeuft also
+// (Monitor64 "darf ausgeschaltet sein": das ist nicht "ausgeschaltet").
+func HostAnswered(err error) bool {
+	var pin *webPinMismatch
+	return webAuthErr(err) || errors.Is(err, errWebCert) || errors.Is(err, errWebTrust) || errors.As(err, &pin)
+}
+
 // webPinMismatch kommt aus VerifyPeerCertificate.
 type webPinMismatch struct{ got string }
 

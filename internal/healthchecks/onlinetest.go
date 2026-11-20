@@ -42,6 +42,9 @@ func (m *Module) runOnlineTest(ctx context.Context, token string, in checkJSON) 
 	locs := in.Locations
 	in.Execution = "local" // Ausfuehrungsort und Limits prueft erst das Speichern; ipv64 prueft private Ziele selbst
 	c := &Check{Token: token}
+	if err := splitPort(c, &in); err != nil { // wie beim Speichern: https:// ohne Schema, Port aus dem Ziel
+		return nil, err
+	}
 	if err := m.apply(c, in, true); err != nil {
 		return nil, err
 	}

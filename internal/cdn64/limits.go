@@ -146,20 +146,19 @@ func limShow(k netip.Addr) string {
 
 func (l *limiter) exempted(c *Limits, a netip.Addr) bool {
 	a = a.Unmap()
-	if localnet.MaskedGateway(a) { // Docker-Gateway: Herkunft unbekannt, nie als Heimnetz ausnehmen
-		return false
-	}
-	if !a.IsValid() || c.ExemptLAN && (a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || l.lan.has(a)) {
-		return true
-	}
-	if ex := l.exempt.Load(); ex != nil {
+	// Ausnahmen zuerst (wie bei der Laendersperre): Wer ein Netz ausdruecklich freigibt oder einen Vorproxy auf dem
+	// Docker-Host als vertrauenswuerdig eintraegt, meint auch das Gateway darin
+	if ex := l.exempt.Load(); ex != nil && a.IsValid() {
 		for _, p := range *ex {
 			if p.Contains(a) {
 				return true
 			}
 		}
 	}
-	return false
+	if localnet.MaskedGateway(a) { // Docker-Gateway: Herkunft unbekannt, nie als Heimnetz ausnehmen
+		return false
+	}
+	return !a.IsValid() || c.ExemptLAN && (a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || l.lan.has(a))
 }
 
 // stateLocked liefert den Zaehler einer Adresse und fuellt die Eimer auf (nie nil). Ist die Tabelle voll (z. B. eine

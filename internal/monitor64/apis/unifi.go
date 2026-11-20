@@ -422,6 +422,14 @@ func (u *Unifi) detectApps(ctx context.Context, now time.Time, force bool) (ufAp
 	var we *webError
 	switch {
 	case a.network || a.drive:
+		// die andere App scheitert nur (Zeitlimit, 5xx, Rechte): bisheriger Stand bleibt - nicht installiert ist sie
+		// nur bei ufNoApp (404 bzw. Oberflaeche statt JSON), sonst fehlten ihre Dienste eine Stunde
+		if !a.network && !ufNoApp(nerr) {
+			a.network = u.apps.network
+		}
+		if !a.drive && !ufNoApp(derr) {
+			a.drive = u.apps.drive
+		}
 	case !ufNoApp(nerr):
 		return u.apps, nerr // Netz, Anmeldung, Rechte: Fehler der Network-Abfrage (mit Hinweisen)
 	case errors.As(nerr, &we) && we.Status == 404:

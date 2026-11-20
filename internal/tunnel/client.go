@@ -371,6 +371,9 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 						err = terr
 					}
 				}
+			} else if quicOnlyFailure(ctx, err) || errors.Is(err, errNoAddress) {
+				// auch TCP scheitert (Netz weg): UDP war dann nicht der Grund - sobald es wieder geht, zuerst QUIC
+				udpBlocked = false
 			}
 		}
 		if errors.Is(err, errSlotOff) {
@@ -476,26 +479,12 @@ func (c *Client) tlsConfig(e Edge) *tls.Config {
 // connect: Verbindung aufbauen (je Adresse und Port hoechstens 5 s) und anmelden. Ports: der Tunnel-Port, sonst 443
 // (G1, Netze, die nur 443 hinauslassen); prefer zuerst.
 func (c *Client) connect(ctx context.Context, e Edge, slot int, useTCP bool, prefer int) (Session, error) {
-	alt := c.cfg.AltPort
-	if alt == 0 {
-		alt = 443
-	}
-	ports := []int{e.Port, alt}
-	if ports[0] == 0 {
-		ports[0] = 7844
-	}
-	if alt < 0 || ports[0] == alt {
-		ports = ports[:1]
-	}
-	if prefer == ports[len(ports)-1] && len(ports) > 1 {
-		ports[0], ports[1] = ports[1], ports[0]
-	}
 	ips := c.resolve(ctx, e)
 	if len(ips) == 0 {
 		return nil, fmt.Errorf("%s: %w", e.Host, errNoAddress)
 	}
 	var lastErr error
-	for _, port := range ports {
+	for _, port := range c.ports(e, prefer) {
 		for _, ip := range ips {
 			dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			addr := hostPort(ip.String(), port)
@@ -529,6 +518,25 @@ func (c *Client) connect(ctx context.Context, e Edge, slot int, useTCP bool, pre
 		}
 	}
 	return nil, lastErr
+}
+
+// ports: der Tunnel-Port, sonst 443 (G1); prefer zuerst.
+func (c *Client) ports(e Edge, prefer int) []int {
+	alt := c.cfg.AltPort
+	if alt == 0 {
+		alt = 443
+	}
+	ports := []int{e.Port, alt}
+	if ports[0] == 0 {
+		ports[0] = 7844
+	}
+	if alt < 0 || ports[0] == alt {
+		ports = ports[:1]
+	}
+	if prefer == ports[len(ports)-1] && len(ports) > 1 {
+		ports[0], ports[1] = ports[1], ports[0]
+	}
+	return ports
 }
 
 func dialTCP(ctx context.Context, addr string, conf *tls.Config) (Session, error) {
@@ -705,26 +713,25 @@ func (c *Client) backToQUIC(ctx context.Context, e Edge, slot int, old Session, 
 	}
 }
 
-// quicReachable: kurzer QUIC-Handschlag ohne Anmeldung (prueft nur, ob UDP zum Server durchkommt).
+// quicReachable: kurzer QUIC-Handschlag ohne Anmeldung (prueft nur, ob UDP zum Server durchkommt) - ueber alle
+// Adressen und Ports wie connect (z. B. ohne IPv6-Route ueber IPv4), port zuerst.
 func (c *Client) quicReachable(ctx context.Context, e Edge, port int) bool {
 	ips := c.resolve(ctx, e)
-	if len(ips) == 0 {
-		return false
-	}
-	if port == 0 {
-		port = e.Port
-		if port == 0 {
-			port = 7844
+	for _, p := range c.ports(e, port) {
+		for _, ip := range ips {
+			dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			qc, err := quic.DialAddr(dctx, hostPort(ip.String(), p), c.tlsConfig(e), QUICConfig())
+			cancel()
+			if err == nil {
+				_ = qc.CloseWithError(0, "probe")
+				return true
+			}
+			if ctx.Err() != nil {
+				return false
+			}
 		}
 	}
-	dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	qc, err := quic.DialAddr(dctx, hostPort(ips[0].String(), port), c.tlsConfig(e), QUICConfig())
-	if err != nil {
-		return false
-	}
-	_ = qc.CloseWithError(0, "probe")
-	return true
+	return false
 }
 
 // countedStream zaehlt offene Streams bis zum Schliessen (der Handler darf asynchron weitermachen).

@@ -132,6 +132,16 @@ func (m *Manager) syncLocal(module, item, id string) (*syncLocal, error) {
 	return &l, nil
 }
 
+// EntryOrigin liefert die Urheberin des hier geltenden Stands eines Eintrags ("" = unbekannt), z. B. damit ein
+// Provider einen noch nicht nachgezogenen Stand von einer echten Doppelvergabe unterscheiden kann.
+func (m *Manager) EntryOrigin(module, item, id string) string {
+	l, err := m.syncLocal(module, item, id)
+	if err != nil || l == nil {
+		return ""
+	}
+	return l.origin
+}
+
 // logSync traegt einen Stand ein (neue Nummer, damit die anderen ihn abholen); unveraendert = nichts.
 func (m *Manager) logSync(module, item, id string, deleted bool, origin string, at time.Time) (bool, error) {
 	at = at.UTC().Truncate(time.Millisecond)

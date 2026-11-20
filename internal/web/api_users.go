@@ -86,7 +86,7 @@ func (s *Server) apiUserMePut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.saveUserPrefs(r, u, lang, tz); err != nil {
+	if err := s.saveUserPrefs(r, u, lang, tz, tz != u.Timezone); err != nil {
 		writeErr(w, 500, "database error")
 		return
 	}

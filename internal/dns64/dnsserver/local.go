@@ -28,6 +28,18 @@ var localSuffixes = []string{
 	".1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa", // ::1
 }
 
+// LocalNames: die Endungen aus localSuffixes ohne die Rueckwaertszonen und ohne Punkt (z. B. "lan", "fritz.box") -
+// Namen, die nur im eigenen Netz gelten (auch Name Constraints der Heimnetz-CA).
+func LocalNames() []string {
+	var out []string
+	for _, s := range localSuffixes {
+		if !strings.HasSuffix(s, ".arpa") || s == ".home.arpa" {
+			out = append(out, strings.TrimPrefix(s, "."))
+		}
+	}
+	return out
+}
+
 // ReasonSearch: das Geraet hat an eine oeffentliche Domain seine Suchdomain gehaengt (z. B. example.com.home.local),
 // meist nachdem die eigentliche Anfrage scheiterte (SERVFAIL, keine Adresse). Nur Hinweis im Abfrage-Log.
 const ReasonSearch = "search:"

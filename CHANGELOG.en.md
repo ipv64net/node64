@@ -4,6 +4,16 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: through the CDN64 tunnel an unpublished host can no longer be reached via the Host header (even with a wildcard certificate); limits, the country block for “TLS passthrough” and DoH honour explicit releases for the Docker gateway; the tunnel reliably switches back to QUIC after a UDP outage.
+- Users in a cluster: a user's own actions (2FA login, preferences, LDAP sync) no longer undo a lock, demotion, password reset or deletion made on another node; renamed groups no longer merge wrongly; the LDAP setup and the 2FA requirement no longer overwrite each other.
+- Sign-in: expired AD accounts and accounts locked in LDAP lose their group role for passkeys and API keys too; SSO groups of linked local accounts expire after 7 days; LDAP sync with a custom user filter and many users; “Test connection” keeps the inputs.
+- Environment: opening a node again no longer fails with “form expired”; revoking an access ends its sessions; no credentials from environment sessions; invalid tickets no longer flood the audit log.
+- IPAM64: pool exclusions of fixed addresses survive in a cluster; saving, setup and CSV import no longer delete reservations or names or create wrong exclusions; fewer false alarms for conflicts and new devices.
+- Monitor64: “OK until the value gets worse” also ends close to 100 %; “May be switched off” reports login and key errors; acknowledgements in a cluster and confirmed SMART rules are kept; “Service vanished” can be confirmed; agent 0.1.12.
+- DNS64: lists are removed by address instead of position; rebinding protection and device-group releases independent of the shared cache.
+- Healthchecks: “read only” no longer sees the request body; the certificate expiry date no longer disappears after a few failed measurements.
+- Debian package: the service starts again after restore and reset; an update no longer enables a disabled service.
+- UI: browser notifications recognise incidents of all modules; messages after linking SSO and when switching modules; the design switch stays on “My account”.
 - Prometheus: Node64 now also exposes the values of its own process (CPU time, memory, threads, open files) and the disk space of the data directory – a dashboard for Node64 itself no longer needs cAdvisor for that.
 
 ## 1.7.10 – 2026-11-19

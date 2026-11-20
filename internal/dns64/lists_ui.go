@@ -66,8 +66,11 @@ func (m *Module) listUIRoutes(mux *http.ServeMux, page func(http.HandlerFunc) ht
 
 func (m *Module) pageAllowListsSave(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
+	sw := formSwitch(r, "a")
 	for i := range c.AllowLst {
-		c.AllowLst[i].Enabled = r.PostFormValue("aon_"+strconv.Itoa(i)) != ""
+		if on, ok := sw(i, c.AllowLst[i].URL); ok {
+			c.AllowLst[i].Enabled = on
+		}
 	}
 	m.apply(w, r, "/dns64/lists#freigabe-listen", c, "dns64.allowlists", "")
 }
@@ -134,7 +137,7 @@ func (m *Module) bulkText(r *http.Request, res BulkResult) string {
 func (m *Module) pageAllowListRemove(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
 	url := ""
-	if i := formInt(r, "remove"); i >= 0 && i < len(c.AllowLst) {
+	if i := formIndex(r, "remove", c.AllowLst, listURL); i >= 0 && i < len(c.AllowLst) {
 		url = c.AllowLst[i].URL
 		c.AllowLst = append(c.AllowLst[:i], c.AllowLst[i+1:]...)
 	}

@@ -262,8 +262,8 @@ const OwnPrefix = "own:"
 func (m *Manager) Mask(urls []string) uint64 {
 	var mask uint64
 	for _, u := range urls {
-		for i, l := range m.lists {
-			if l.URL == u {
+		for i := range m.lists { // nur die URL lesen: Rename aendert Namen nebenher (unter rebuildMu)
+			if m.lists[i].URL == u {
 				mask |= 1 << uint(i)
 			}
 		}
@@ -367,15 +367,16 @@ func PruneFiles(dir string, urls []string) {
 // not hold back the others.
 func (m *Manager) refresh(ctx context.Context) (failed bool) {
 	var wg sync.WaitGroup
-	for i, l := range m.lists {
+	for i := range m.lists { // nur die URL lesen, der Name kommt aus dem Status (Rename aendert ihn nebenher)
 		if fi, err := os.Stat(m.path(i)); err == nil && time.Since(fi.ModTime()) < m.interval {
 			continue
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			cut, err := m.download(ctx, l.URL, m.path(i))
+			cut, err := m.download(ctx, m.lists[i].URL, m.path(i))
 			m.mu.Lock()
+			l := m.status[i].List
 			switch {
 			case err != nil:
 				failed = true

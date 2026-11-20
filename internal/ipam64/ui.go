@@ -63,7 +63,7 @@ func errKey(err error) string {
 	for e, k := range map[error]string{ErrPrefix: "prefix", ErrSize: "size", ErrDup: "dup", ErrName: "name", ErrHost: "host", ErrStatus: "status",
 		ErrVLAN: "vlan", ErrTags: "tags", ErrRange: "range", ErrRangeNet: "range_net", ErrOverlap: "overlap", ErrIP: "ip", ErrNoNet: "no_net",
 		ErrNetAddr: "net_addr", ErrMAC: "mac", ErrTaken: "taken", ErrRole: "role", ErrNotFound: "not_found", ErrBusy: "busy",
-		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn", ErrImport: "import", ErrCSVLine: "csv_line"} {
+		ErrNotAttached: "not_attached", ErrNoScan: "no_scan", ErrNoZone: "no_zone", ErrNoDNS64: "no_dns64", ErrDyn: "dyn", ErrImport: "import", ErrCSVLine: "csv_line", ErrImportSeen: "import_seen"} {
 		if errors.Is(err, e) {
 			return "ipam64.err." + k
 		}
@@ -197,6 +197,7 @@ type MapCell struct {
 	Label  string
 	Count  int    // Eintraege im Teilnetz
 	Level  string // empty | low | mid | high | full (IPv4) bzw. empty | used (IPv6) | child (eigenes Praefix)
+	Child  string // Level child: das Kind-Praefix (auch groesser als das Feld, z. B. /22 in der /24-Uebersicht)
 	Hits   int    // Treffer von Filter/Suche
 	Active bool   // Liste zeigt nur dieses Teilnetz
 }
@@ -320,7 +321,7 @@ func (s *Snapshot) blockMap(n *Net, mb int, hit func(*Entry) bool) []MapCell {
 		}
 		for _, k := range s.Nets {
 			if k.Parent == n.CIDR && k.Prefix.Bits() <= mb && k.Prefix.Contains(addr) {
-				c.Level = "child"
+				c.Level, c.Child = "child", k.CIDR
 			}
 		}
 		cells[i] = c
@@ -725,6 +726,11 @@ func (m *Module) postAddress(w http.ResponseWriter, r *http.Request) {
 	in := Address{UID: r.PostFormValue("uid"), Address: r.PostFormValue("address"), Status: r.PostFormValue("status"), Role: r.PostFormValue("role"),
 		Name: r.PostFormValue("name"), MAC: r.PostFormValue("mac"), Description: r.PostFormValue("description"), Tags: []string{r.PostFormValue("tags")},
 		DNS: r.PostFormValue("dns") == "1", DNSZone: r.PostFormValue("dns_zone"), PTR: r.PostFormValue("ptr") == "1", DHCP: r.PostFormValue("dhcp") == "1"}
+	if r.PostFormValue("dhcp_locked") == "1" && in.UID != "" { // gesperrtes Kaestchen sendet nichts: gespeicherten Stand behalten
+		if cur, err := m.addressWhere(r.Context(), `uid = ?`, in.UID); err == nil && cur != nil {
+			in.DHCP = cur.DHCP
+		}
+	}
 	out, err := m.ApplyAddress(r.Context(), in, m.g.Actor(r))
 	if err != nil {
 		text := m.errText(r, err)
@@ -818,14 +824,28 @@ func (m *Module) postSetup(w http.ResponseWriter, r *http.Request) {
 	text := m.g.T(r, "ipam64.flash.setup", "p", res.Prefixes, "a", res.Addresses)
 	if len(res.Failed) > 0 {
 		kind = "warning"
-		var parts []string
-		for _, f := range res.Failed {
-			parts = append(parts, f.What+": "+f.Reason)
-		}
-		text += " " + m.g.T(r, "ipam64.flash.setup_failed", "list", strings.Join(parts, "; "))
+		text += " " + m.failedText(r, res.Failed)
 	}
 	m.g.Flash(w, r, kind, text)
 	http.Redirect(w, r, "/ipam64", http.StatusSeeOther)
+}
+
+// maxFailedShown: so viele nicht uebernommene Zeilen nennt die Meldung (sie steht in einem Cookie, Browser verwerfen
+// es ab etwa 4 KB).
+const maxFailedShown = 10
+
+// failedText nennt die nicht uebernommenen Eintraege (Assistent, Import), hoechstens maxFailedShown, dazu die Zahl
+// der uebrigen.
+func (m *Module) failedText(r *http.Request, failed []SetupSkip) string {
+	var parts []string
+	for _, f := range failed[:min(len(failed), maxFailedShown)] {
+		parts = append(parts, f.What+": "+f.Reason)
+	}
+	text := strings.Join(parts, "; ")
+	if n := len(failed) - maxFailedShown; n > 0 {
+		text += " " + m.g.T(r, "ipam64.flash.failed_more", "n", n)
+	}
+	return m.g.T(r, "ipam64.flash.setup_failed", "list", text)
 }
 
 func (m *Module) postDynCheck(w http.ResponseWriter, r *http.Request) {
@@ -936,11 +956,7 @@ func (m *Module) postImport(w http.ResponseWriter, r *http.Request) {
 		m.g.Audit(r, "ipam64.import", Name, strconv.Itoa(n))
 		kind, msg := "success", m.g.T(r, "ipam64.flash.imported", "n", n)
 		if len(failed) > 0 {
-			var parts []string
-			for _, f := range failed {
-				parts = append(parts, f.What+": "+f.Reason)
-			}
-			kind, msg = "warning", msg+" "+m.g.T(r, "ipam64.flash.setup_failed", "list", strings.Join(parts, "; "))
+			kind, msg = "warning", msg+" "+m.failedText(r, failed)
 		}
 		m.g.Flash(w, r, kind, msg)
 		http.Redirect(w, r, "/ipam64", http.StatusSeeOther)

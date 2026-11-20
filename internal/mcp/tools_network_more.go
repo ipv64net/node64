@@ -237,18 +237,29 @@ func dns64Config(c *call, a map[string]any) (map[string]any, error) {
 			out["allow_lists"] = status(al)
 		}
 	case "own_lists":
-		own := func(path string) []any {
+		own := func(path string) ([]any, error) {
 			l := []any{}
-			list, _ := c.getArr(path, nil)
+			list, err := c.getArr(path, nil)
+			if err != nil { // z. B. DNS64 nicht gestartet: Fehler statt leerer Liste
+				return nil, err
+			}
 			for _, e := range list {
 				m := asObj(e)
 				if contains(find, str(m, "domain")) && len(l) < limit {
 					l = append(l, pick(m, "domain", "addedAt"))
 				}
 			}
-			return l
+			return l, nil
 		}
-		out["allowed_domains"], out["blocked_domains"] = own("/api/dns64/allowlist"), own("/api/dns64/denylist")
+		allowed, err := own("/api/dns64/allowlist")
+		if err != nil {
+			return nil, err
+		}
+		blocked, err := own("/api/dns64/denylist")
+		if err != nil {
+			return nil, err
+		}
+		out["allowed_domains"], out["blocked_domains"] = allowed, blocked
 	case "services":
 		s, err := c.getObj("/api/dns64/services", nil)
 		if err != nil {
@@ -436,7 +447,13 @@ func proxyConfig(c *call, a map[string]any) (map[string]any, error) {
 			out[k] = v
 		}
 		out["edges"] = pickList(o["edges"], 50, "name", "host", "connected", "transport", "total", "rtt_ms", "loss_pct")
-		out["names"] = pickList(o["names"], 500, "name", "host_id", "remote_id", "mode", "check", "created_at")
+		names := pickList(o["names"], 500, "name", "host_id", "remote_id", "mode", "check", "created_at")
+		for i, e := range names { // Healthcheck vom Einschalten: kurze Kennung wie in list_checks, nie das Token
+			if tok := str(asObj(asArr(o["names"])[i]), "check"); tok != "" {
+				asObj(e)["check"] = shortID(tok)
+			}
+		}
+		out["names"] = names
 		out["quota"] = plain(o["quota"], 3)
 		if se := str(o, "sync_error"); se != "" {
 			out["untrusted"] = obj{"sync_error": clean(se, 200)}

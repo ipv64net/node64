@@ -35,7 +35,7 @@
 		r.addEventListener("change", function () {
 			setCookie("node64_design", r.value);
 			try { sessionStorage.setItem("node64_goto", "appearance"); } catch (e) { /* ohne Speicher oben beginnen */ }
-			window.location.assign("/settings");
+			window.location.assign("/settings/account"); // Karte Darstellung liegt auf Mein Konto
 		});
 	});
 	try {
@@ -126,6 +126,12 @@
 	var bnOn = function () { try { return localStorage.getItem(BN_KEY) === "1"; } catch (e) { return false; } };
 	var bnSet = function (v) { try { localStorage.setItem(BN_KEY, v ? "1" : "0"); } catch (e) {} };
 	var canNotify = function () { return "Notification" in window && window.isSecureContext; };
+	// Ziel beim Klick: Pfad der mitgeschickten Adresse (Seite dieser Node), ohne sie der Check der Healthchecks
+	// (Monitor64-Kennungen wie m64:… sind keine Healthchecks-Checks)
+	var bnLink = function (ev) {
+		if (ev.url) { try { var u = new URL(ev.url, location.href); return u.pathname + u.search + u.hash; } catch (e) {} }
+		return ev.token && ev.token.indexOf(":") < 0 ? "/healthchecks/" + encodeURIComponent(ev.token) : "";
+	};
 	function toast(ev) {
 		var box = document.getElementById("bn-toasts");
 		if (!box) {
@@ -135,7 +141,7 @@
 			box.style.zIndex = 1090;
 			document.body.appendChild(box);
 		}
-		var down = /down|reminder|flapping_start|degraded$|summary/.test(ev.kind || "");
+		var down = ev.down === true; // Stoerung oder Entwarnung entscheidet der Server (notify.isDownKind)
 		var t = document.createElement("div");
 		t.className = "toast show border-" + (down ? "danger" : "success");
 		t.setAttribute("role", "alert");
@@ -147,7 +153,8 @@
 		body.className = "toast-body small";
 		body.style.whiteSpace = "pre-line";
 		body.textContent = ev.text || "";
-		if (ev.token) { body.style.cursor = "pointer"; body.addEventListener("click", function () { location.href = "/healthchecks/" + ev.token; }); }
+		var link = bnLink(ev);
+		if (link) { body.style.cursor = "pointer"; body.addEventListener("click", function () { location.href = link; }); }
 		t.appendChild(head); t.appendChild(body); box.appendChild(t);
 		head.querySelector(".btn-close").addEventListener("click", function () { t.remove(); });
 		setTimeout(function () { t.remove(); }, down ? 30000 : 10000);
@@ -180,13 +187,13 @@
 		});
 	}
 	function show(ev) {
-		var down = /down|reminder|flapping_start|degraded$|summary/.test(ev.kind || "");
+		var down = ev.down === true;
 		if (canNotify() && Notification.permission === "granted") {
 			try {
 				// renotify: auch eine erneute Meldung zum selben Check bekommt den Ton des Betriebssystems
 				var tag = ev.token ? "node64-" + ev.token : undefined;
 				var n = new Notification(ev.title || "Node64", { body: ev.text || "", tag: tag, renotify: !!tag, silent: false, requireInteraction: down, icon: "/static/img/favicon.png" });
-				n.onclick = function () { window.focus(); if (ev.token) { location.href = "/healthchecks/" + ev.token; } n.close(); };
+				n.onclick = function () { window.focus(); var link = bnLink(ev); if (link) { location.href = link; } n.close(); };
 			} catch (e) {}
 		}
 		beep(down);
@@ -365,18 +372,21 @@
 
 	// Rueckfrage vor Loeschen (data-confirm) auf den Kernseiten; Modulseiten mit eigenem Skript fragen selbst
 	// (geprueft beim Klick: die Modulskripte stehen erst nach app.js im Dokument)
+	var ownConfirm = ["dns64", "cdn64", "certs", "healthchecks", "dyndns"].map(function (n) { return 'script[src*="/static/js/' + n + '.js"]'; }).join(", ");
 	document.addEventListener("click", function (e) {
 		var b = e.target.closest("[data-confirm]");
-		if (!b || document.querySelector('script[src*="/static/js/dns64.js"], script[src*="/static/js/cdn64.js"], script[src*="/static/js/certs.js"]')) { return; }
+		if (!b || document.querySelector(ownConfirm)) { return; }
 		if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
 	});
 
 	// Rolle „Nur lesen“ (data-readonly am body): Formulare, die etwas aendern, ausgrauen - ausser dem eigenen Konto
 	// (wie selfService in roles.go). Sicher ist es auch ohne: der Server antwortet mit 403.
 	if (document.body.getAttribute("data-readonly") === "1") {
-		var own = /^\/(logout|login\/password|settings\/(user|password|2fa\/(enable|disable)|api-keys(\/.*)?|login\/(passkeys|identities)\/.*|login\/oidc\/link|mcp\/keys(\/.*)?))$/;
+		var own = /^\/(logout|login\/password|settings\/(user|password|2fa\/(enable|disable)|api-keys(\/.*)?|login\/(passkeys|identities)\/.*|login\/oidc\/link|mcp\/keys(\/.*)?)|environment\/(open\/[^\/]+|nodes\/[^\/]+\/open|enter|confirm))$/;
 		document.querySelectorAll("form").forEach(function (f) {
-			if ((f.getAttribute("method") || "get").toLowerCase() !== "post" || own.test(f.getAttribute("action") || location.pathname)) { return; }
+			var act = f.getAttribute("action") || location.pathname;
+			// Formular an eine andere Node (Environment): dort entscheidet deren Rolle, hier aendert es nichts
+			if ((f.getAttribute("method") || "get").toLowerCase() !== "post" || own.test(act) || /^[a-z][a-z0-9+.-]*:\/\//i.test(act)) { return; }
 			f.classList.add("readonly-form");
 			f.querySelectorAll("button, input, select, textarea").forEach(function (el) {
 				if (el.type !== "hidden") { el.disabled = true; }

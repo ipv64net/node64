@@ -91,9 +91,11 @@ func (s *Store) CreateUserWith(ctx context.Context, n NewUser) (*User, error) {
 	if len(n.ExtGroupUIDs) > 0 {
 		checked = Now()
 	}
-	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at, role, source, email, group_uids, ext_group_uids, must_change, ext_checked_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.UID, n.Username, n.PasswordHash, n.Lang, n.Timezone, Now(), n.Role, n.Source, n.Email, joinList(n.GroupUIDs), joinList(n.ExtGroupUIDs), n.MustChange, checked)
+	now := Now()
+	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at, role, source, email, group_uids, ext_group_uids, must_change, ext_checked_at,
+		admin_at, password_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.UID, n.Username, n.PasswordHash, n.Lang, n.Timezone, now, n.Role, n.Source, n.Email, joinList(n.GroupUIDs), joinList(n.ExtGroupUIDs), n.MustChange, checked,
+		now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -119,14 +121,14 @@ type UserAdmin struct {
 	GroupUIDs []string
 }
 
-// UpdateUserAdmin aendert Rolle, Sperre, E-Mail und Gruppen. Die Schutzregel „letzter lokaler Administrator“ prueft
-// der Aufrufer (GuardLastAdmin).
+// UpdateUserAdmin aendert Rolle, Sperre, E-Mail und Gruppen (auch admin_at fuer den Cluster). Die Schutzregel „letzter
+// lokaler Administrator“ prueft der Aufrufer (GuardLastAdmin).
 func (s *Store) UpdateUserAdmin(ctx context.Context, id int64, a UserAdmin) error {
 	if !ValidRole(a.Role) {
 		return errors.New("invalid role")
 	}
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET role = ?, disabled = ?, email = ?, group_uids = ? WHERE id = ?`,
-		a.Role, a.Disabled, strings.TrimSpace(a.Email), joinList(a.GroupUIDs), id)
+	_, err := s.w.ExecContext(ctx, `UPDATE users SET role = ?, disabled = ?, email = ?, group_uids = ?, admin_at = ? WHERE id = ?`,
+		a.Role, a.Disabled, strings.TrimSpace(a.Email), joinList(a.GroupUIDs), Now(), id)
 	if err == nil {
 		s.userChanged(ctx, id)
 	}
@@ -162,9 +164,9 @@ func (s *Store) SetUserExtGroups(ctx context.Context, id int64, groups []string)
 	return nil
 }
 
-// SetUserMustChange setzt bzw. loescht „Passwort beim naechsten Anmelden setzen“.
+// SetUserMustChange setzt bzw. loescht „Passwort beim naechsten Anmelden setzen“ (auch password_at fuer den Cluster).
 func (s *Store) SetUserMustChange(ctx context.Context, id int64, on bool) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE users SET must_change = ? WHERE id = ?`, on, id)
+	_, err := s.w.ExecContext(ctx, `UPDATE users SET must_change = ?, password_at = ? WHERE id = ?`, on, Now(), id)
 	if err == nil {
 		s.userChanged(ctx, id)
 	}
@@ -172,11 +174,11 @@ func (s *Store) SetUserMustChange(ctx context.Context, id int64, on bool) error 
 }
 
 // extGroups: die Gruppen aus LDAP/SSO, wenn ihre letzte Pruefung frisch ist (LDAP ExtMaxAgeLDAP, SSO ExtMaxAgeOIDC);
-// sonst keine. Lokale Benutzer: immer.
+// sonst keine. Lokale Benutzer bekommen sie nur ueber ein verknuepftes SSO-Konto: wie SSO.
 func (u *User) extGroups() []string {
 	age := time.Since(u.ExtCheckedAt)
 	switch {
-	case u.Source == SourceLDAP && age >= ExtMaxAgeLDAP, u.Source == SourceOIDC && age >= ExtMaxAgeOIDC:
+	case u.Source == SourceLDAP && age >= ExtMaxAgeLDAP, u.Source != SourceLDAP && age >= ExtMaxAgeOIDC:
 		return nil
 	}
 	return u.ExtGroupUIDs

@@ -613,7 +613,11 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusUnprocessableEntity, "settings_account", v)
 		return
 	}
-	if err := s.saveUserPrefs(r, v.User, f["lang"], f["timezone"]); err != nil {
+	shown := v.User.Timezone // im Formular angezeigt (ohne eigene: die Vorgabe)
+	if shown == "" {
+		shown = DefaultTimezone
+	}
+	if err := s.saveUserPrefs(r, v.User, f["lang"], f["timezone"], f["timezone"] != shown); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -623,12 +627,13 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // saveUserPrefs speichert Sprache und Zeitzone eines Benutzers (Oberflaeche und API); die Zeitzone gilt auch fuer die
-// Node, aber nur wenn ein Administrator sie setzt (sie gilt fuer alle und geht in den Cluster).
-func (s *Server) saveUserPrefs(r *http.Request, u *store.User, lang, tz string) error {
+// Node, aber nur wenn ein Administrator sie aendert (tzChanged; sie gilt fuer alle und geht in den Cluster) - nicht
+// schon, wenn er nur die Sprache speichert.
+func (s *Server) saveUserPrefs(r *http.Request, u *store.User, lang, tz string, tzChanged bool) error {
 	if err := s.Store.UpdateUserPrefs(r.Context(), u.ID, lang, tz); err != nil {
 		return err
 	}
-	if tz != "" && s.isAdmin(r) {
+	if tz != "" && tzChanged && s.isAdmin(r) {
 		_ = s.Store.SetSetting(r.Context(), SettingNodeTimezone, tz)
 	}
 	s.audit(r, "settings.user", u.Username, "lang="+lang+" timezone="+tz)
@@ -674,7 +679,10 @@ func (s *Server) settingsModules(w http.ResponseWriter, r *http.Request) {
 	f := s.formValues(r, "module", "action")
 	v := s.settingsView(r)
 	name := f["module"]
-	title := v.T("module." + name)
+	title := name // Titel aus dem Modul (es gibt nicht fuer jedes Modul einen Schluessel module.<name>)
+	if m, ok := s.Modules.Get(name); ok {
+		title = v.T(m.Info().TitleKey)
+	}
 	var err error
 	switch f["action"] {
 	case "enable":

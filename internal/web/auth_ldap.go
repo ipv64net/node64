@@ -72,7 +72,10 @@ func (s *Server) ldapLogin(w http.ResponseWriter, r *http.Request, v *View, u *s
 		return true
 	case errors.Is(err, ldapauth.ErrUnknownUser), errors.Is(err, ldapauth.ErrDisabled):
 		if u != nil && u.Source == store.SourceLDAP { // im Verzeichnis geloescht bzw. deaktiviert: Rolle aus LDAP entfaellt
-			_ = s.Store.SetUserExtGroups(ctx, u.ID, nil)
+			// Der Benutzerfilter sucht den eingegebenen Namen (z. B. ueber mail); ob das Konto u wirklich weg bzw.
+			// gesperrt ist, prueft die Nachpruefung ueber den gespeicherten Namen und die feste Kennung - sonst koennte
+			// jeder ohne Passwort einem LDAP-Benutzer die Rolle nehmen.
+			s.ldapRecheck(ctx, u)
 		}
 		deny("login.failed", ldapReason(err), errors.Is(err, ldapauth.ErrUnknownUser))
 		return true
@@ -445,8 +448,9 @@ type ldapInput struct {
 	TimeoutSec   int      `json:"timeout_sec"`
 }
 
-// ldapFieldErr: ungueltige Angabe (Feld fuer die Meldung, Text ohne Geheimnisse).
-type ldapFieldErr struct{ Field, Msg string }
+// ldapFieldErr: ungueltige Angabe (Feld fuer die Meldung, Text ohne Geheimnisse fuer die API, Code fuer den
+// uebersetzten Text ldap.errmsg_<Code> in der Oberflaeche, Arg fuer dessen Platzhalter {url}).
+type ldapFieldErr struct{ Field, Msg, Code, Arg string }
 
 func (e *ldapFieldErr) Error() string { return e.Field + ": " + e.Msg }
 
@@ -466,29 +470,33 @@ func (s *Server) ldapBuild(ctx context.Context, in ldapInput) (authcfg.LDAPConfi
 	}
 	switch {
 	case len(c.URLs) > 10:
-		return c, &ldapFieldErr{"urls", "at most 10 servers"}
+		return c, &ldapFieldErr{"urls", "at most 10 servers", "max_servers", ""}
 	case c.Enabled && len(c.URLs) == 0:
-		return c, &ldapFieldErr{"urls", "at least one server required"}
+		return c, &ldapFieldErr{"urls", "at least one server required", "no_server", ""}
 	case c.Enabled && c.BaseDN == "":
-		return c, &ldapFieldErr{"base_dn", "base dn required"}
+		return c, &ldapFieldErr{"base_dn", "base dn required", "no_base_dn", ""}
 	case len(c.BindDN) > 512 || len(c.BaseDN) > 512:
-		return c, &ldapFieldErr{"base_dn", "too long"}
+		return c, &ldapFieldErr{"base_dn", "too long", "too_long", ""}
 	case c.TimeoutSec < 0 || c.TimeoutSec > 60:
-		return c, &ldapFieldErr{"timeout_sec", "0 to 60 seconds"}
+		return c, &ldapFieldErr{"timeout_sec", "0 to 60 seconds", "timeout", ""}
 	}
 	for _, u := range c.URLs {
 		if err := ldapauth.CheckURL(c, u); err != nil {
-			return c, &ldapFieldErr{"urls", err.Error()}
+			code := "url"
+			if errors.Is(err, ldapauth.ErrPlain) {
+				code = "url_plain"
+			}
+			return c, &ldapFieldErr{"urls", err.Error(), code, u}
 		}
 	}
 	if c.BaseDN != "" {
 		if _, err := ldap.ParseDN(c.BaseDN); err != nil {
-			return c, &ldapFieldErr{"base_dn", "invalid base dn"}
+			return c, &ldapFieldErr{"base_dn", "invalid base dn", "base_dn", ""}
 		}
 	}
 	if c.UserFilter != "" {
 		if _, err := ldap.CompileFilter(strings.ReplaceAll(c.UserFilter, "%s", "x")); err != nil || !strings.Contains(c.UserFilter, "%s") || len(c.UserFilter) > 1024 {
-			return c, &ldapFieldErr{"user_filter", "invalid filter (needs %s for the user name)"}
+			return c, &ldapFieldErr{"user_filter", "invalid filter (needs %s for the user name)", "filter", ""}
 		}
 	}
 	old := authcfg.LoadLDAP(ctx, s.Store)
@@ -497,17 +505,17 @@ func (s *Server) ldapBuild(ctx context.Context, in ldapInput) (authcfg.LDAPConfi
 		c.BindPasswordEnc = ""
 	case in.BindPassword != "":
 		if s.Box == nil {
-			return c, &ldapFieldErr{"bind_password", "no secret key to encrypt the password"}
+			return c, &ldapFieldErr{"bind_password", "no secret key to encrypt the password", "no_key", ""}
 		}
 		c.BindPasswordEnc = s.Box.Encrypt(in.BindPassword)
 	case old.BindPasswordEnc != "" && !sameBindTarget(old, c):
 		// gespeichertes Passwort nie an einen anderen Server bzw. fuer ein anderes Konto schicken
-		return c, &ldapFieldErr{"bind_password", "bind password required again (server, account or tls changed)"}
+		return c, &ldapFieldErr{"bind_password", "bind password required again (server, account or tls changed)", "bind_again", ""}
 	default:
 		c.BindPasswordEnc = old.BindPasswordEnc
 	}
 	if c.Enabled && c.BindDN != "" && c.BindPasswordEnc == "" {
-		return c, &ldapFieldErr{"bind_password", "bind password required"}
+		return c, &ldapFieldErr{"bind_password", "bind password required", "bind_missing", ""}
 	}
 	return c, nil
 }
@@ -543,10 +551,15 @@ func (s *Server) ldapForm(r *http.Request) ldapInput {
 		BaseDN: f["base_dn"], UserFilter: f["user_filter"], Nested: f["nested"] == "1", TimeoutSec: t}
 }
 
+// ldapFieldText: Meldung zu einer ungueltigen Angabe (uebersetzt).
+func ldapFieldText(v *View, fe *ldapFieldErr) string {
+	return v.T("ldap.err_"+fe.Field) + " (" + v.T("ldap.errmsg_"+fe.Code, "url", fe.Arg) + ")"
+}
+
 func (s *Server) ldapFieldFlash(w http.ResponseWriter, r *http.Request, v *View, err error) {
 	var fe *ldapFieldErr
 	if errors.As(err, &fe) {
-		s.flash(w, r, "danger", v.T("ldap.err_"+fe.Field)+" ("+fe.Msg+")")
+		s.flash(w, r, "danger", ldapFieldText(v, fe))
 	} else {
 		s.flash(w, r, "danger", v.T("ldap.err_save"))
 	}
@@ -613,16 +626,29 @@ func (s *Server) testPassword(c authcfg.LDAPConfig, typed string) string {
 	return s.ldapBindPassword(c)
 }
 
-// POST /settings/users/ldap/test: prueft die Angaben im Formular (ohne zu speichern), Ergebnis als Meldung.
+// ldapDraft: getestete, nicht gespeicherte Angaben, damit die Karte sie nach dem Test wieder zeigt.
+type ldapDraft struct {
+	Cfg   authcfg.LDAPConfig
+	Probe string
+}
+
+// POST /settings/users/ldap/test: prueft die Angaben im Formular (ohne zu speichern), Ergebnis als Meldung. Die Seite
+// kommt direkt zurueck (ohne Umleitung), damit die getesteten Eingaben im Formular bleiben.
 func (s *Server) ldapSettingsTest(w http.ResponseWriter, r *http.Request) {
-	v := s.view(r, "ldap.title")
+	v := s.userAdminView(r, "login")
 	in := s.ldapForm(r)
+	probe := strings.TrimSpace(r.PostFormValue("probe"))
 	c, err := s.ldapBuild(r.Context(), in)
+	v.ldap = &ldapDraft{Cfg: c, Probe: probe}
 	if err != nil {
-		s.ldapFieldFlash(w, r, v, err)
+		var fe *ldapFieldErr
+		v.Flash = &Flash{Kind: "danger", Text: v.T("ldap.err_save")}
+		if errors.As(err, &fe) {
+			v.Flash.Text = ldapFieldText(v, fe)
+		}
+		s.render(w, r, http.StatusUnprocessableEntity, "useradmin", v)
 		return
 	}
-	probe := strings.TrimSpace(r.PostFormValue("probe"))
 	out := s.ldapTestRun(r, c, s.testPassword(c, in.BindPassword), probe)
 	kind, text := "success", ldapTestText(v, out)
 	if !out.OK {
@@ -630,8 +656,8 @@ func (s *Server) ldapSettingsTest(w http.ResponseWriter, r *http.Request) {
 	} else if probe != "" && (!out.Result.Found || len(out.Matches) == 0) {
 		kind = "warning"
 	}
-	s.flash(w, r, kind, truncate(text, 1000))
-	http.Redirect(w, r, ldapBack, http.StatusSeeOther)
+	v.Flash = &Flash{Kind: kind, Text: truncate(text, 1000)}
+	s.render(w, r, http.StatusOK, "useradmin", v)
 }
 
 // ldapTestText: Ergebnis in einer Zeile fuer die Meldung.
@@ -731,15 +757,22 @@ type ldapCardData struct {
 	OIDCGroups    int // Node64-Gruppen mit SSO-Zuordnung
 	OIDCJIT       bool
 	OIDCClaim     string
-	OIDCEnabled   bool // SSO eingerichtet
+	OIDCEnabled   bool   // SSO eingerichtet
+	Probe         string // Testname nach „Verbindung testen“
 }
 
-// LDAPCard liefert die Daten fuer {{template "ldap_card" .}} (unabhaengig von der Seite, die sie einbindet).
+// LDAPCard liefert die Daten fuer {{template "ldap_card" .}} (unabhaengig von der Seite, die sie einbindet); nach
+// „Verbindung testen“ mit den getesteten Angaben statt der gespeicherten.
 func (v *View) LDAPCard() ldapCardData {
 	ctx := context.Background()
 	st := v.s.Store
 	c := authcfg.LoadLDAP(ctx, st)
-	d := ldapCardData{Cfg: c, URLs: strings.Join(c.URLs, "\n"), PasswordSet: c.BindPasswordEnc != "", DefaultFilter: c.DefaultFilter(),
+	set := c.BindPasswordEnc != "" // gespeichertes Passwort (ein eingegebenes bleibt nach dem Test nicht stehen)
+	probe := ""
+	if v.ldap != nil {
+		c, probe = v.ldap.Cfg, v.ldap.Probe
+	}
+	d := ldapCardData{Cfg: c, URLs: strings.Join(c.URLs, "\n"), PasswordSet: set, Probe: probe, DefaultFilter: c.DefaultFilter(),
 		FilterAD: authcfg.LDAPConfig{Profile: authcfg.ProfileAD}.DefaultFilter(), FilterLDAP: authcfg.LDAPConfig{Profile: authcfg.ProfileLDAP}.DefaultFilter()}
 	d.Cfg.BindPasswordEnc = ""
 	if list, err := st.Groups(ctx); err == nil {

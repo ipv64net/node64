@@ -343,10 +343,21 @@ func TestLDAPCardAndForms(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != ldapBack || c.TimeoutSec != 7 || c.BindPasswordEnc != enc {
 		t.Fatalf("save: %d %s %+v", resp.StatusCode, resp.Header.Get("Location"), c)
 	}
+	// Test: ungespeicherte Eingaben und Testname bleiben im Formular, gespeichert wird nichts; Enter speichert
 	form.Set("probe", "mmuster")
-	if resp, _ = a.post(t, "/settings/users/ldap/test", form); resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("test: %d", resp.StatusCode)
+	form.Set("timeout_sec", "9")
+	resp, body = a.post(t, "/settings/users/ldap/test", form)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `name="timeout_sec" value="9"`) || !strings.Contains(body, `name="probe" value="mmuster"`) {
+		t.Fatalf("test must keep the inputs: %d", resp.StatusCode)
 	}
+	if !strings.Contains(body, "alert-success") || authcfg.LoadLDAP(context.Background(), a.store).TimeoutSec != 7 {
+		t.Fatal("test result or saved state")
+	}
+	if i, j := strings.Index(body, `action="/settings/users/ldap"`), strings.Index(body, `formaction="/settings/users/ldap/test"`); i < 0 ||
+		!strings.Contains(body[i:j], `type="submit"`) {
+		t.Fatal("first submit button of the ldap form must save (Enter)")
+	}
+	form.Set("timeout_sec", "7")
 	if x := e.lastAudit(t, "auth.ldap.test"); x == nil || !strings.Contains(x.Details, "found=true") {
 		t.Fatalf("test audit: %+v", x)
 	}

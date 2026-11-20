@@ -7,6 +7,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"time"
 )
 
 // Probleme im Cluster (Bereich status, Eintraege "problem:<uid>"): das Problem mit seinem Ablauf (Ereignisse je mit
@@ -98,8 +99,21 @@ func (m *Module) problemApply(ctx context.Context, uid string, data json.RawMess
 		// die Aenderung ueberall verloren; auch ein aufgehobenes Quittieren, Review 6)
 		if parseTS(cur.Updated).After(parseTS(in.Updated)) {
 			localNewer = true
-			in.Ack = cur.Ack
 			in.Updated = cur.Updated
+		}
+		// Quittierung: es gilt die Seite mit dem juengeren Quittieren bzw. Aufheben (Ereignisse ack/unack) - die Zeile
+		// wird auch ohne Quittierung juenger (Zustandswechsel, Uhren verschiedener Nodes). Ohne solche Ereignisse die
+		// juengere Zeile.
+		localAck, inAck := m.lastAckEvent(ctx, uid), lastAckOf(in.Events)
+		switch {
+		case localAck.After(inAck):
+			if in.Ack != cur.Ack {
+				in.Ack = cur.Ack
+				localNewer = true // die andere Node erfaehrt die eigene Quittierung
+			}
+		case inAck.After(localAck): // eingehende Quittierung bzw. Aufhebung ist juenger
+		case localNewer:
+			in.Ack = cur.Ack
 		}
 		if stateRank[cur.Worst] > stateRank[in.Worst] {
 			in.Worst = cur.Worst
@@ -142,6 +156,25 @@ func (m *Module) problemApply(ctx context.Context, uid string, data json.RawMess
 	}
 	m.csyncSet(ctx, "problem", uid, m.problemStamp(ctx, uid))
 	return nil
+}
+
+// lastAckEvent: Zeitpunkt des juengsten Quittierens bzw. Aufhebens eines Problems auf dieser Node (Null = keins).
+func (m *Module) lastAckEvent(ctx context.Context, uid string) time.Time {
+	return lastAckOf(m.eventsWhere(ctx, `problem_uid = ? AND kind IN ('ack', 'unack')`, uid))
+}
+
+// lastAckOf: juengstes Ereignis ack bzw. unack der Liste (Null = keins).
+func lastAckOf(evs []eventEntry) time.Time {
+	var last time.Time
+	for _, e := range evs {
+		if e.Kind != "ack" && e.Kind != "unack" {
+			continue
+		}
+		if t := parseTS(e.TS); t.After(last) {
+			last = t
+		}
+	}
+	return last
 }
 
 // stateRankOK: unbekannter Zustand (true = ungueltig).

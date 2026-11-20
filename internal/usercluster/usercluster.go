@@ -20,7 +20,14 @@
 //     Node, deren Benutzer darin abgeloest ist, uebernimmt den gewaehlten an seiner Stelle. Bei zwei Wahlen gilt die
 //     juengere.
 //
-// Dieselbe Kennung auf beiden Seiten (also schon ueber den Cluster abgeglichen): die juengere Aenderung gewinnt.
+// Dieselbe Kennung auf beiden Seiten (also schon ueber den Cluster abgeglichen): die juengere Aenderung gewinnt. Die
+// Felder der Benutzerverwaltung (Rolle, Sperre, Herkunft, E-Mail, Gruppen von Hand) und das Passwort samt „Passwort
+// beim naechsten Anmelden setzen“ tragen je einen eigenen Zeitpunkt (admin_at, password_at): sie gelten nur aus einem
+// Stand, in dem sie juenger (oder gleich alt) sind - eine Anmeldung mit 2FA, Sprache oder der Abgleich mit LDAP auf
+// einer Node nimmt so keine Sperre, Herabstufung oder Passwort-Ruecksetzung einer anderen zurueck. Behaelt die Node
+// dabei Neueres, meldet sie den zusammengefuehrten Stand neu (keptError). Ein hier geloeschter Benutzer kommt nur mit
+// einer juengeren Aenderung der Benutzerverwaltung zurueck; sonst geht die Loeschung erneut hinaus. Nodes ohne die
+// Zeitpunkte (bis 1.7.10) senden sie nicht: dann gilt der Zeitpunkt ihrer Aenderung (wie bisher).
 // Eine aeltere Node ohne Benutzerverwaltung sendet keine Rolle: dann bleiben Rolle, Sperre, Herkunft, E-Mail und Gruppen
 // hier unveraendert (neu angelegt: Administrator, lokal), damit ein gemischter Cluster nichts herauf- oder herabstuft.
 //
@@ -99,6 +106,8 @@ type Cluster struct {
 	log   *slog.Logger
 	names func(ctx context.Context) map[string]string // Node-Kennung -> Name (Audit), nil = Kennung
 	mu    sync.Mutex                                  // Uebernahmen und Wahl nacheinander
+	// gleichnamige Gruppen: erstes Eintreffen je "uid|gleichnamige hier" (mergeDue, unter mu)
+	merges map[string]time.Time
 }
 
 // New baut den Provider (Register haengt ihn an den Cluster).
@@ -167,6 +176,29 @@ type clusterUser struct {
 	// Inhalt (same).
 	ExtCheckedAt string `json:"ext_checked_at,omitempty"`
 	TOTPStep     int64  `json:"totp_last_step,omitempty"`
+	// letzte Aenderung der Benutzerverwaltung bzw. des Passworts (siehe oben, write); fehlt bei aelteren Nodes (dann
+	// der Zeitpunkt der Aenderung), stampUnknown = hier unbekannt (Bestand vor den Feldern). Zaehlen nicht zum Inhalt.
+	AdminAt    string `json:"admin_at,omitempty"`
+	PasswordAt string `json:"password_at,omitempty"`
+}
+
+// stampUnknown: Zeitpunkt admin_at bzw. password_at hier unbekannt (aelter als jede Aenderung).
+const stampUnknown = "0001-01-01T00:00:00Z"
+
+// stampOut: gespeicherter Zeitpunkt fuer den Cluster (leer = unbekannt).
+func stampOut(v string) string {
+	if store.ParseTime(v).IsZero() {
+		return stampUnknown
+	}
+	return v
+}
+
+// stampIn: Zeitpunkt zum Speichern (unbekannt = leer).
+func stampIn(v string) string {
+	if store.ParseTime(v).IsZero() {
+		return ""
+	}
+	return v
 }
 
 // legacy: Stand einer aelteren Node ohne Benutzerverwaltung (sendet keine Rolle).
@@ -187,8 +219,25 @@ func (u clusterUser) norm() clusterUser {
 // adminOf: die Felder der Benutzerverwaltung vom Benutzer hier (eine aeltere Node kennt sie nicht und aendert sie nie).
 func (u clusterUser) adminOf(l clusterUser) clusterUser {
 	u.Role, u.Disabled, u.Source, u.Email, u.MustChange = l.Role, l.Disabled, l.Source, l.Email, l.MustChange
-	u.GroupUIDs, u.ExtGroupUIDs = l.GroupUIDs, l.ExtGroupUIDs
+	u.GroupUIDs, u.ExtGroupUIDs, u.AdminAt = l.GroupUIDs, l.ExtGroupUIDs, l.AdminAt
 	return u
+}
+
+// withAdmin: Rolle, Sperre, Herkunft, E-Mail und Gruppen von Hand samt Zeitpunkt vom Benutzer hier; diff = sie waren
+// anders.
+func (u clusterUser) withAdmin(l clusterUser) (clusterUser, bool) {
+	diff := u.Role != l.Role || u.Disabled != l.Disabled || u.Source != l.Source || u.Email != l.Email ||
+		!slices.Equal(store.NormList(u.GroupUIDs), store.NormList(l.GroupUIDs))
+	u.Role, u.Disabled, u.Source, u.Email, u.GroupUIDs, u.AdminAt = l.Role, l.Disabled, l.Source, l.Email, l.GroupUIDs, l.AdminAt
+	return u, diff
+}
+
+// withPassword: Passwort und „Passwort beim naechsten Anmelden setzen“ samt Zeitpunkt vom Benutzer hier; diff = sie
+// waren anders.
+func (u clusterUser) withPassword(l clusterUser) (clusterUser, bool) {
+	diff := u.Password != l.Password || u.MustChange != l.MustChange
+	u.Password, u.MustChange, u.PasswordAt = l.Password, l.MustChange, l.PasswordAt
+	return u, diff
 }
 
 // adminSame: Rolle, Sperre und Gruppen gleich (sonst enden die Sitzungen).
@@ -237,10 +286,11 @@ func (c *Cluster) load(ctx context.Context, where string, arg any) (*localUser, 
 	var l localUser
 	var repl, groups, ext string
 	err := c.st.Reader().QueryRowContext(ctx, `SELECT id, uid, username, password_hash, totp_secret, totp_recovery, lang, timezone, created_at,
-		cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at, totp_last_step
-		FROM users WHERE `+where, arg).Scan(
+		cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at, totp_last_step,
+		admin_at, password_at FROM users WHERE `+where, arg).Scan(
 		&l.id, &l.uid, &l.u.Username, &l.u.Password, &l.u.TOTP, &l.u.Recovery, &l.u.Lang, &l.u.Timezone, &l.u.CreatedAt, &repl, &l.u.ChosenAt,
-		&l.u.Role, &l.u.Disabled, &l.u.Source, &l.u.Email, &groups, &ext, &l.u.MustChange, &l.u.ExtCheckedAt, &l.u.TOTPStep)
+		&l.u.Role, &l.u.Disabled, &l.u.Source, &l.u.Email, &groups, &ext, &l.u.MustChange, &l.u.ExtCheckedAt, &l.u.TOTPStep,
+		&l.u.AdminAt, &l.u.PasswordAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -353,6 +403,7 @@ func (c *Cluster) ClusterGet(ctx context.Context, item, id string) (json.RawMess
 		if l.totpErr != nil { // nicht mit einem unlesbaren Geheimnis hinaus (spaeter erneut)
 			return nil, false, l.totpErr
 		}
+		l.u.AdminAt, l.u.PasswordAt = stampOut(l.u.AdminAt), stampOut(l.u.PasswordAt)
 		b, err := json.Marshal(l.u)
 		return b, err == nil, err
 	case ItemSSO:
@@ -444,8 +495,13 @@ func (c *Cluster) applyUser(ctx context.Context, uid string, data json.RawMessag
 	if err != nil {
 		return err
 	}
+	_, at, fromCluster := peer.ClusterOrigin(ctx)
 	if deleted {
+		if !fromCluster {
+			at = time.Now()
+		}
 		if cur == nil {
+			_ = c.st.NoteUserDeleted(ctx, uid, at)
 			return c.dropConflicts(ctx, func(x conflict) bool { return x.UID == uid })
 		}
 		if c.userCount(ctx) <= 1 { // nie den letzten Benutzer (Administrator) der Node
@@ -456,6 +512,7 @@ func (c *Cluster) applyUser(ctx context.Context, uid string, data json.RawMessag
 		if err := c.deleteUser(ctx, cur); err != nil {
 			return err
 		}
+		_ = c.st.NoteUserDeleted(ctx, uid, at) // Zeitpunkt der Loeschung auf der Urheberin
 		c.audit(ctx, "user.cluster.delete", cur.u.Username, "")
 		return nil
 	}
@@ -478,6 +535,12 @@ func (c *Cluster) applyUser(ctx context.Context, uid string, data json.RawMessag
 		return c.write(ctx, cur, uid, in, "", "user.cluster.update")
 	}
 	if same == nil {
+		if del := c.st.UserDeletedAt(ctx, uid); fromCluster && !del.IsZero() && !stamp(in.AdminAt, at, in.legacy()).After(del) {
+			// hier geloescht, der Stand dort ist nur eine spaetere eigene Aenderung (z. B. Anmeldung mit 2FA) eines
+			// Benutzers, den die Node noch nicht als geloescht kannte: die Loeschung geht erneut hinaus
+			c.st.LoginChanged(context.Background(), ItemAccounts, uid, true)
+			return goneError{}
+		}
 		return c.write(ctx, nil, uid, in, "", "user.cluster.create")
 	}
 	switch {
@@ -491,10 +554,14 @@ func (c *Cluster) applyUser(ctx context.Context, uid string, data json.RawMessag
 				return err
 			}
 		}
-		if err := c.write(ctx, same, uid, in, "", "user.cluster.choice"); err != nil {
+		err := c.write(ctx, same, uid, in, "", "user.cluster.choice")
+		if err != nil && !errors.As(err, new(keptError)) { // keptError: geschrieben (Neueres behalten und gemeldet)
 			return err
 		}
-		return c.dropConflicts(ctx, func(x conflict) bool { return strings.EqualFold(x.Username, in.Username) })
+		if derr := c.dropConflicts(ctx, func(x conflict) bool { return strings.EqualFold(x.Username, in.Username) }); derr != nil {
+			return derr
+		}
+		return err
 	case slices.Contains(same.u.Replaces, uid):
 		return ErrReplaced
 	case cur == nil && same.u.same(in.norm()):
@@ -586,8 +653,27 @@ func (c *Cluster) deleteUser(ctx context.Context, l *localUser) error {
 // damit die anderen Nodes ihn bekommen. Die Gegenstelle nimmt ihn ohne erneute Meldung (bei ihr ist nichts neuer).
 type keptError struct{}
 
-func (keptError) Error() string    { return "newer own directory groups or totp step kept and announced" }
+func (keptError) Error() string    { return "newer own state kept and announced" }
 func (keptError) Superseded() bool { return true }
+
+// goneError: der Benutzer ist hier geloescht und der Stand der anderen Node nicht juenger (Benutzerverwaltung); die
+// Loeschung ist neu gemeldet (peer: kein Fehler).
+type goneError struct{}
+
+func (goneError) Error() string    { return "user deleted here, deletion announced again" }
+func (goneError) Superseded() bool { return true }
+
+// stamp: Zeitpunkt admin_at bzw. password_at eines Stands; fehlt er (Node ohne die Felder), gilt der Zeitpunkt at der
+// Aenderung - bei einer Node ohne Benutzerverwaltung (legacy) fuer admin_at nichts (Null).
+func stamp(v string, at time.Time, legacy bool) time.Time {
+	switch {
+	case v != "":
+		return store.ParseTime(v)
+	case legacy:
+		return time.Time{}
+	}
+	return at
+}
 
 // laterChoice: die Wahl von in (Kennung uid) ist juenger als die von l (Gleichstand: kleinere Kennung).
 func laterChoice(in clusterUser, uid string, l *localUser) bool {
@@ -607,20 +693,42 @@ func short(uid string) string {
 // Aenderung der Node den letzten aktiven lokalen Administrator, bleibt l (ErrLastAdmin). Aendern sich Passwort, 2FA,
 // Rolle, Sperre oder Gruppen, enden seine Sitzungen hier (ausser keep; gesperrt: alle). Meldet die Aenderung an den
 // Cluster und ins Audit (action "" = kein Audit). Ist das 2FA-Geheimnis von l hier nicht lesbar und bliebe es, wird
-// nichts geschrieben (l.totpErr). Gruppen aus LDAP/SSO mit neuerem Pruefzeitpunkt und einen hoeheren TOTP-Schritt
-// behaelt l; dann geht der zusammengefuehrte Stand neu hinaus (keptError).
+// nichts geschrieben (l.totpErr). Gruppen aus LDAP/SSO mit neuerem Pruefzeitpunkt, einen hoeheren TOTP-Schritt und -
+// bei derselben Kennung aus dem Cluster - Benutzerverwaltung bzw. Passwort mit juengerem Zeitpunkt behaelt l; dann
+// geht der zusammengefuehrte Stand neu hinaus (keptError).
 func (c *Cluster) write(ctx context.Context, l *localUser, uid string, in clusterUser, keep, action string) error {
 	if l != nil && l.totpErr != nil && in.TOTP == l.u.TOTP { // sonst stuende der Chiffretext als Geheimnis da
 		return l.totpErr
 	}
-	if in.legacy() && l != nil {
+	legacy := in.legacy()
+	if legacy && l != nil {
 		in = in.adminOf(l.u)
 	}
 	in = in.norm()
+	_, at, fromCluster := peer.ClusterOrigin(ctx)
+	if fromCluster { // Node ohne die Zeitpunkte: der ihrer Aenderung (ohne Benutzerverwaltung: admin_at von l bzw. keiner)
+		if in.AdminAt == "" && !legacy {
+			in.AdminAt = store.FormatTime(at)
+		}
+		if in.PasswordAt == "" {
+			in.PasswordAt = store.FormatTime(at)
+		}
+	}
 	kept := false
+	if l != nil && fromCluster && l.uid == uid { // je Feldgruppe gilt der juengere Zeitpunkt
+		var diff bool
+		if store.ParseTime(in.AdminAt).Before(store.ParseTime(l.u.AdminAt)) {
+			in, diff = in.withAdmin(l.u)
+			kept = kept || diff
+		}
+		if store.ParseTime(in.PasswordAt).Before(store.ParseTime(l.u.PasswordAt)) {
+			in, diff = in.withPassword(l.u)
+			kept = kept || diff
+		}
+	}
 	if l != nil {
 		if store.ParseTime(in.ExtCheckedAt).Before(store.ParseTime(l.u.ExtCheckedAt)) {
-			kept = in.ExtCheckedAt != "" || !slices.Equal(store.NormList(in.ExtGroupUIDs), l.u.ExtGroupUIDs)
+			kept = kept || in.ExtCheckedAt != "" || !slices.Equal(store.NormList(in.ExtGroupUIDs), l.u.ExtGroupUIDs)
 			in.ExtGroupUIDs, in.ExtCheckedAt = l.u.ExtGroupUIDs, l.u.ExtCheckedAt
 		}
 		if in.TOTPStep < l.u.TOTPStep {
@@ -654,7 +762,7 @@ func (c *Cluster) write(ctx context.Context, l *localUser, uid string, in cluste
 	if action != "" {
 		c.audit(ctx, action, in.Username, details)
 	}
-	if _, _, ok := peer.ClusterOrigin(ctx); ok && kept {
+	if fromCluster && kept {
 		c.st.LoginChanged(context.Background(), ItemAccounts, uid, false) // ohne Herkunft: als eigene, neuere Aenderung
 		return keptError{}
 	}
@@ -678,10 +786,10 @@ func (c *Cluster) writeTx(ctx context.Context, l *localUser, uid string, in clus
 	details := ""
 	if l == nil {
 		res, err := tx.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, totp_secret, totp_recovery, lang, timezone, created_at,
-			cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at, totp_last_step)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			cluster_replaces, cluster_chosen_at, role, disabled, source, email, group_uids, ext_group_uids, must_change, ext_checked_at, totp_last_step,
+			admin_at, password_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			uid, in.Username, in.Password, c.st.EncodeTOTP(in.TOTP), in.Recovery, in.Lang, in.Timezone, created, strings.Join(in.Replaces, ","), in.ChosenAt,
-			in.Role, in.Disabled, in.Source, in.Email, groups, ext, in.MustChange, in.ExtCheckedAt, max(in.TOTPStep, 0))
+			in.Role, in.Disabled, in.Source, in.Email, groups, ext, in.MustChange, in.ExtCheckedAt, max(in.TOTPStep, 0), stampIn(in.AdminAt), stampIn(in.PasswordAt))
 		if err != nil {
 			return "", err
 		}
@@ -690,9 +798,9 @@ func (c *Cluster) writeTx(ctx context.Context, l *localUser, uid string, in clus
 		id = l.id
 		if _, err := tx.ExecContext(ctx, `UPDATE users SET uid = ?, username = ?, password_hash = ?, totp_secret = ?, totp_recovery = ?, lang = ?,
 			timezone = ?, cluster_replaces = ?, cluster_chosen_at = ?, role = ?, disabled = ?, source = ?, email = ?, group_uids = ?, ext_group_uids = ?,
-			must_change = ?, ext_checked_at = ?, totp_last_step = MAX(totp_last_step, ?) WHERE id = ?`, uid, in.Username, in.Password,
-			c.st.EncodeTOTP(in.TOTP), in.Recovery, in.Lang, in.Timezone, strings.Join(in.Replaces, ","), in.ChosenAt, in.Role, in.Disabled, in.Source,
-			in.Email, groups, ext, in.MustChange, in.ExtCheckedAt, in.TOTPStep, id); err != nil {
+			must_change = ?, ext_checked_at = ?, totp_last_step = MAX(totp_last_step, ?), admin_at = ?, password_at = ? WHERE id = ?`, uid, in.Username,
+			in.Password, c.st.EncodeTOTP(in.TOTP), in.Recovery, in.Lang, in.Timezone, strings.Join(in.Replaces, ","), in.ChosenAt, in.Role, in.Disabled,
+			in.Source, in.Email, groups, ext, in.MustChange, in.ExtCheckedAt, in.TOTPStep, stampIn(in.AdminAt), stampIn(in.PasswordAt), id); err != nil {
 			return "", err
 		}
 		var ch []string

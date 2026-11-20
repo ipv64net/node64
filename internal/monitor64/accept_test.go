@@ -181,3 +181,51 @@ func TestAcceptNumber(t *testing.T) {
 		t.Fatalf("nach dem Aufheben: %s", s.State)
 	}
 }
+
+// "In Ordnung, bis der Wert schlechter wird" endet auch nahe 100 % und im Modus "GB frei" (Vergleich in der Einheit
+// der Schwellen; at bleibt wie gespeichert "belegt in %").
+func TestAcceptWorseUnits(t *testing.T) {
+	used := eval.Effective{Dir: eval.Up, Hyst: eval.DefaultHyst, Warn: eval.Limit{V: 80}, Crit: eval.Limit{V: 90}}
+	fs := func(v float64) model.Metric {
+		return model.Metric{Name: "used", Value: v, Unit: "%", Rule: model.RuleFS, Max: 4000e9}
+	}
+	for _, c := range []struct {
+		at, v float64
+		want  bool
+	}{
+		{90, 91, false}, {90, 92.5, true}, // Spielraum 2 Prozentpunkte
+		{99, 99.4, false}, {99, 100, true}, // nahe 100 %: hoechstens die Haelfte des Rests
+		{98.6, 100, true},
+	} {
+		if got := acceptWorse(used, c.at, fs(c.v)); got != c.want {
+			t.Errorf("belegt %%: at %v, Wert %v: %v", c.at, c.v, got)
+		}
+	}
+	// SSD-Verschleiss ueber 100 % moeglich: bei 100 % bleibt der volle Spielraum
+	wear := func(v float64) model.Metric {
+		return model.Metric{Name: "wear", Value: v, Unit: "%", Rule: model.RuleWear}
+	}
+	if acceptWorse(used, 100, wear(101)) || !acceptWorse(used, 100, wear(103)) {
+		t.Error("Verschleiss 100 %")
+	}
+	// Druckerfarbe (unten): nahe 0 % ebenso
+	down := eval.Effective{Dir: eval.Down, Hyst: eval.DefaultHyst, Warn: eval.Limit{V: 15}, Crit: eval.Limit{V: 5}}
+	toner := func(v float64) model.Metric {
+		return model.Metric{Name: "level", Value: v, Unit: "%", Rule: model.RulePrinterSupply}
+	}
+	if acceptWorse(down, 1, toner(0.6)) || !acceptWorse(down, 1, toner(0)) {
+		t.Error("Toner nahe 0 %")
+	}
+	// GB frei (4 TB, Warnung 50 GB frei, geerbte Hysterese 2 GB): 99 % belegt = 40 GB frei
+	free := eval.Effective{Dir: eval.Up, Hyst: eval.DefaultHyst, Mode: eval.ModeFree, WarnFree: eval.Limit{V: 50}, CritFree: eval.Limit{V: 20},
+		Origin: map[string]eval.Stage{eval.FieldMode: eval.StageService}}
+	if acceptWorse(free, 99, fs(99.04)) { // 1,6 GB weniger frei: im Spielraum (2 GB)
+		t.Error("GB frei: innerhalb des Spielraums beendet")
+	}
+	if !acceptWorse(free, 99, fs(99.1)) { // 4 GB weniger frei
+		t.Error("GB frei: schlechterer Wert beendet die Ausnahme nicht")
+	}
+	if acceptWorse(free, 99, fs(90)) { // mehr frei
+		t.Error("GB frei: mehr frei beendet die Ausnahme")
+	}
+}

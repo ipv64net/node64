@@ -284,15 +284,20 @@ func (s *Scheduler) dispatchLocked(ctx context.Context, j *job, now time.Time) {
 
 func (s *Scheduler) exec(ctx context.Context, j *job) {
 	defer s.wg.Done()
-	defer j.running.Store(false)
+	// running wird unten unter mu zurueckgesetzt (kein defer: der liefe erst nach dem RunNow fuer "again" und
+	// markierte den schon gestarteten neuen Lauf als "laeuft nicht")
 	select {
 	case s.sem <- struct{}{}:
 	case <-ctx.Done():
+		j.running.Store(false)
 		return
 	}
 	defer func() { <-s.sem }()
 	s.mu.Lock()
 	stale := j.gen == 0 // waehrend des Wartens entfernt oder ersetzt
+	if stale {
+		j.running.Store(false)
+	}
 	s.mu.Unlock()
 	if stale {
 		return

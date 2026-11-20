@@ -31,7 +31,6 @@ import (
 
 	"github.com/quic-go/quic-go/http3"
 
-	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/ports"
 )
 
@@ -157,7 +156,8 @@ type Route struct {
 	// NoHTTP: kein Port 80 fuer diese Route (keine Weiterleitung). Gibt es nur solche Routen, bleibt 80 zu.
 	NoHTTP bool
 	// Allow begrenzt auf bestimmte Clients (echte Gegenstelle der Verbindung); alle anderen bekommen eine
-	// neutrale 404, als gaebe es den Namen nicht. nil = alle.
+	// neutrale 404, als gaebe es den Namen nicht. nil = alle. Auch das Docker-Gateway kommt als echte Adresse an:
+	// Allow muss es selbst als unbekannte Herkunft werten (localnet.Origin), ausdrueckliche Freigaben aber zulassen.
 	Allow func(ip netip.Addr) bool
 }
 
@@ -205,7 +205,7 @@ type Edge struct {
 	probes   sync.Map                    // Pruefwerte "auf dem Docker-Host veroeffentlicht?" (published.go) -> angekommen
 	pub      atomic.Pointer[pubCache]
 	ppSrc    atomic.Pointer[func(context.Context) []string] // Cluster-Nodes (SetProxyPeers, proxypeers.go)
-	ppHosts  map[string][]netip.Addr                        // letzte Adressen je Name (nur peerLoop)
+	ppHosts  map[string]peerHost                            // letzte Adressen je Name (nur peerLoop)
 	ppPeers  atomic.Pointer[[]netip.Addr]                   // deren Adressen
 	ppOnce   sync.Once
 	ppKick   chan struct{}
@@ -881,7 +881,7 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		e.unknown(w, r)
 		return
 	}
-	if rt.Allow != nil && !rt.Allow(localnet.Origin(peerIP(r))) {
+	if rt.Allow != nil && !rt.Allow(peerIP(r)) {
 		notFound(w)
 		return
 	}
@@ -961,7 +961,7 @@ func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		e.unknown(w, r)
 		return
 	}
-	if rt.Allow != nil && !rt.Allow(localnet.Origin(peerIP(r))) {
+	if rt.Allow != nil && !rt.Allow(peerIP(r)) {
 		notFound(w)
 		return
 	}
@@ -988,7 +988,7 @@ func (e *Edge) serveFallbackHTTP(t *table, w http.ResponseWriter, r *http.Reques
 		if rt.HTTP == nil || rt.NoHTTP || !pathMatches(rt.Path, r.URL.Path) {
 			continue
 		}
-		if rt.Allow != nil && !rt.Allow(localnet.Origin(peerIP(r))) {
+		if rt.Allow != nil && !rt.Allow(peerIP(r)) {
 			continue
 		}
 		rt.HTTP.ServeHTTP(w, r)

@@ -141,6 +141,18 @@ func TestResolvePeers(t *testing.T) {
 	if got, _ := resolvePeers(context.Background(), []string{"https://node-b.lan:8443/"}, failing, byHost); fmtAddrs(got) != "[192.168.20.7 fd00::7]" {
 		t.Fatalf("after DNS error: %v", got)
 	}
+	// ... aber nicht unbegrenzt: nach ppPeerKeep ohne Erfolg fallen sie weg
+	old := map[string]peerHost{"node-b.lan": {addrs: byHost["node-b.lan"].addrs, at: time.Now().Add(-ppPeerKeep - time.Minute)}}
+	if got, _ := resolvePeers(context.Background(), []string{"https://node-b.lan:8443/"}, failing, old); len(got) != 0 {
+		t.Fatalf("stale addresses after a long DNS error: %v", got)
+	}
+	// den Namen gibt es nicht mehr (NXDOMAIN): sofort weg
+	nx := func(context.Context, string) ([]netip.Addr, error) {
+		return nil, &net.DNSError{Err: "no such host", Name: "node-b.lan", IsNotFound: true}
+	}
+	if got, _ := resolvePeers(context.Background(), []string{"https://node-b.lan:8443/"}, nx, byHost); len(got) != 0 {
+		t.Fatalf("addresses kept after NXDOMAIN: %v", got)
+	}
 }
 
 // Review: Mit "PROXY von Cluster-Nodes" gilt eine oeffentliche Node-Adresse als vertraut - hinter einem NAT kann aber

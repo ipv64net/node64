@@ -1,5 +1,23 @@
 # Monitor64 – Changes
 
+## 0.1.26 – unreleased
+
+Fixed:
+
+- “OK until the value gets worse” now also ends for values close to 100 % and in “GB free” mode.
+- “May be switched off”: rejected logins, a changed host key or certificate errors no longer count as switched off and are reported.
+- Cluster: an acknowledgement set on another node is no longer lost.
+- A confirmed SMART rule stays in place when SMART cannot be read in a round (sleeping disk, read error).
+- “Service vanished” can be confirmed as OK.
+- After turning off “Query SMART values”, disks with a warning no longer stay “Unknown” for days.
+- TrueNAS without SMART: “Test connection” in the dialog works without saving first.
+- Agent page: after refreshing, the install command shows the new checksum right away.
+- UniFi: a short error of an app during the hourly detection no longer hides its services.
+- Stability: a database error while closing a problem no longer aborts the polling round; “Check now” during a running poll no longer starts a second concurrent run.
+- **Agent 0.1.12 (Windows):** with “Query SMART values” turned off the agent no longer reads SMART counters; Storage Spaces are still monitored.
+- **Agent 0.1.12 (Linux):** at startup the agent no longer reports “no reboot required” while needs-restarting is still running.
+- **install.sh:** an install command with an older checksum keeps working after a new agent release if the SHA256SUMS signature is valid.
+
 ## 0.1.25 – 2026-11-19
 
 New:

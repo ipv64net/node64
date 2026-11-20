@@ -4,6 +4,7 @@ package procstat
 
 import (
 	"os"
+	"path/filepath"
 
 	"golang.org/x/sys/unix"
 )
@@ -32,9 +33,17 @@ func Self() (Stat, bool) {
 	return st, true
 }
 
-// MemoryLimit liefert die Speichergrenze des Containers (cgroup v2, sonst v1); false ohne Grenze.
+// MemoryLimit liefert die Speichergrenze des Containers bzw. Dienstes (cgroup v2: eigene Gruppe, z. B. MemoryMax von
+// systemd unter /sys/fs/cgroup/system.slice/node64.service, sonst die Wurzel im Container; sonst cgroup v1); false
+// ohne Grenze. Einzige Stelle dafuer (auch die Regelgrenze von DNS64).
 func MemoryLimit() (uint64, bool) {
-	for _, p := range []string{"/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"} {
+	var paths []string
+	if b, err := os.ReadFile("/proc/self/cgroup"); err == nil {
+		if p := cgroupV2Path(string(b)); p != "" && p != "/" {
+			paths = append(paths, filepath.Join("/sys/fs/cgroup", p, "memory.max"))
+		}
+	}
+	for _, p := range append(paths, "/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes") {
 		if b, err := os.ReadFile(p); err == nil {
 			return parseLimit(string(b))
 		}

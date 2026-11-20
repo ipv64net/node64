@@ -350,6 +350,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 			}
 		}
 	}
+	asleep := map[string]bool{} // schlafende Platten ohne Vorstand: SMART in dieser Runde nicht gelesen
 	for i := range cur.SMART {
 		sm := &cur.SMART[i]
 		devName := strings.TrimPrefix(sm.Device, "/dev/")
@@ -368,6 +369,7 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 				cur.SMART[i] = p
 				sm = &cur.SMART[i]
 			} else {
+				asleep["disk:"+firstNonEmpty(sm.Serial, devName)] = true
 				continue // ohne Vorstand: nur I/O (Dienst bleibt ueber die Seriennummer aus sysfs erhalten)
 			}
 		}
@@ -400,6 +402,10 @@ func mapDisks(prev, cur *m64proto.Report, dt float64) []Service {
 	var out []Service
 	for _, k := range order {
 		a := byKey[k]
+		if a.smart == nil && asleep[k] {
+			// Bedingungen der SMART-Regeln unbekannt (nicht "erfuellt nicht"): eine bestaetigte bleibt bestehen
+			a.s.Facts = append(a.s.Facts, Fact{Code: "smart_standby"})
+		}
 		if a.smart != nil {
 			sm := a.smart
 			var parts []string

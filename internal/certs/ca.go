@@ -41,6 +41,10 @@ const (
 // Private Namen, die eine eingeschraenkte CA bestaetigen darf (dazu eigene Domains).
 var privateDomains = []string{"lan", "home.arpa", "internal", "local", "localdomain", "home", "intranet", "corp", "private", "localhost"}
 
+// PrivateRanges: private Adressbereiche, auf die eine eingeschraenkte CA beschraenkt wird (auch die Heimnetz-CA von
+// DNS64).
+func PrivateRanges() []*net.IPNet { return privateRanges() }
+
 func privateRanges() []*net.IPNet {
 	var out []*net.IPNet
 	for _, s := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
@@ -282,20 +286,25 @@ func (m *Manager) CAs(ctx context.Context) ([]*CA, error) {
 	return out, nil
 }
 
-// GetCA liefert eine CA.
 // TrustPool: System-CAs plus die eigenen CAs (ihre Wurzel bzw. die CA selbst) fuer Verbindungen der Node zu Diensten
-// im eigenen Netz, deren Zertifikat von einer eigenen CA stammt (z. B. SSO-Anbieter). nil = keine eigene CA.
-func (m *Manager) TrustPool(ctx context.Context) *x509.CertPool {
-	pool, _ := m.TrustPoolKey(ctx)
-	return pool
+// im eigenen Netz, deren Zertifikat von einer eigenen CA stammt (z. B. SSO-Anbieter). nil = keine eigene CA; Fehler,
+// wenn die CAs nicht lesbar sind (Aufrufer mit Cache merken sich das dann nicht als "keine eigene CA").
+func (m *Manager) TrustPool(ctx context.Context) (*x509.CertPool, error) {
+	pool, _, err := m.trustPool(ctx)
+	return pool, err
 }
 
 // TrustPoolKey: wie TrustPool, dazu ein Schluessel fuer genau diesen Satz eigener CAs (aendert sich, wenn eine CA
 // dazukommt, wegfaellt oder ersetzt wird) - fuer Caches von Clients, die mit dem Pool gebaut sind.
 func (m *Manager) TrustPoolKey(ctx context.Context) (*x509.CertPool, string) {
+	pool, key, _ := m.trustPool(ctx)
+	return pool, key
+}
+
+func (m *Manager) trustPool(ctx context.Context) (*x509.CertPool, string, error) {
 	cas, err := m.CAs(ctx)
 	if err != nil || len(cas) == 0 {
-		return nil, ""
+		return nil, "", err
 	}
 	pool, err := trustRoots()
 	if err != nil || pool == nil {
@@ -307,9 +316,10 @@ func (m *Manager) TrustPoolKey(ctx context.Context) (*x509.CertPool, string) {
 		pool.AddCert(a)
 		h.Write(a.Raw)
 	}
-	return pool, hex.EncodeToString(h.Sum(nil))
+	return pool, hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// GetCA liefert eine CA.
 func (m *Manager) GetCA(ctx context.Context, id int64) (*CA, error) {
 	ca, err := m.loadCA(ctx, id, false)
 	if err != nil {

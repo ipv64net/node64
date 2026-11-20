@@ -612,6 +612,32 @@ func TestCollectNeedsRestarting(t *testing.T) {
 	}
 }
 
+// Laeuft der erste needs-restarting-Lauf noch, meldet der Agent kein "kein Neustart noetig" (die Warnung endete sonst
+// eine Runde), sondern laesst den Abschnitt weg und gibt den Hinweis "wird gelesen".
+func TestCollectNeedsRestartingReading(t *testing.T) {
+	block := make(chan struct{})
+	opt := Options{Root: t.TempDir(), Cache: NewCache(), Sections: []string{m64proto.SecReboot},
+		Has: func(n string) bool { return n == "needs-restarting" },
+		Exec: func(ctx context.Context, name string, args ...string) (ExecResult, error) {
+			select {
+			case <-block:
+			case <-ctx.Done():
+				return ExecResult{}, ctx.Err()
+			}
+			return ExecResult{Code: 1}, nil
+		}}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if r := Collect(ctx, opt); r.Reboot != nil || !hasNote(r, m64proto.SecReboot, NoteReading) {
+		t.Fatalf("waehrend des ersten Laufs: %+v %+v", r.Reboot, r.Notes)
+	}
+	close(block)
+	opt.Cache.Wait()
+	if r := Collect(context.Background(), opt); r.Reboot == nil || !r.Reboot.Required || hasNote(r, m64proto.SecReboot, NoteReading) {
+		t.Fatalf("danach: %+v %+v", r.Reboot, r.Notes)
+	}
+}
+
 // #159: nach "apt upgrade" (Paketdatenbank geaendert) liest der Agent die Updates neu, ohne die Stunde abzuwarten;
 // fruehestens eine Minute nach dem letzten Lauf (waehrend eines Upgrades aendert sich die Datenbank laufend).
 func TestCollectUpdatesPkgChange(t *testing.T) {

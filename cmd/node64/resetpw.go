@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/big"
 	"os"
+	"strings"
 
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/store"
@@ -75,6 +76,7 @@ func resetPassword(args []string) int {
 		}
 	}
 
+	*pw = strings.TrimSpace(*pw) // wie bei der Anmeldung (Leerzeichen am Rand zaehlen nicht)
 	generated := *pw == ""
 	if generated {
 		if *pw, err = randomPassword(20); err != nil {

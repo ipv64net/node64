@@ -110,7 +110,7 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 	if out.Channels == nil {
 		out.Channels = []int64{}
 	}
-	if m.g.IsReadOnly(r) { // Passwort und Kopfzeilen nur fuer Administratoren
+	if m.g.IsReadOnly(r) { // geheime Parameter (Passwort, Kopfzeilen, Body, Send) nur fuer Administratoren
 		out.Params = redactParams(out.Params)
 	}
 	if out.Locations == nil {

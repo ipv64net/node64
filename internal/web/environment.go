@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,8 +17,9 @@ import (
 // Browser spricht immer selbst mit der anderen Node, kein Ticket in URL oder Verlauf).
 
 const (
-	envEnterPath     = "/environment/enter" // ohne CSRF-Pruefung (middleware.go), das Ticket ist die Berechtigung
+	envEnterPath     = "/environment/enter" // ohne CSRF-Pruefung (middleware.go), Ticket bzw. Einmal-Wert sind die Berechtigung
 	envConfirmCookie = "n64_envconfirm"     // Ticket, das auf dieser Node noch bestaetigt werden muss
+	envStepCookie    = "n64_envstep"        // zweiter Schritt von /environment/enter: geparktes Ticket und Einmal-Wert
 	ctxEnvOrigin     = ctxKey(110)          // Herkunft einer ueber Environment geoeffneten Sitzung (*environment.Origin)
 )
 
@@ -117,14 +119,16 @@ func (s *Server) renderEnvOpen(w http.ResponseWriter, r *http.Request, d envOpen
 
 // environmentEnter loest ein Ticket ein (Browser kommt von der anderen Node) und legt eine Sitzung mit begrenzter
 // Rolle an. Ungueltig, abgelaufen, schon benutzt, Benutzer inzwischen gesperrt oder geloescht: Anmeldeseite mit Hinweis.
+// Zwei Schritte: Das Formular der anderen Node kommt cross-site und deshalb ohne die Cookies dieser Node (SameSite=Lax).
+// Schritt 1 prueft Ticket und Herkunft, parkt das Ticket und schickt eine Seite, die sich sofort selbst an diese Node
+// schickt (same-site, mit Cookies, gebunden ueber einen Einmal-Wert in Cookie und Formular). Erst Schritt 2 sieht eine
+// bestehende Anmeldung (anderer Benutzer, CSRF-Token der Sitzung fuer die Bestaetigung).
 func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	ip := s.clientIP(r)
-	deny := func(actor, why string) {
-		s.log.Warn("environment ticket rejected", "reason", why, "ip", ip)
-		s.auditEntry(ctx, store.AuditEntry{Actor: actor, Action: "login.environment_failed", Details: why, IP: ip})
-		http.Redirect(w, r, "/login?env=1", http.StatusSeeOther)
+	if r.PostFormValue("ticket") == "" && r.PostFormValue("step") != "" {
+		s.environmentEnterStep(w, r)
+		return
 	}
+	deny := s.envDeny(w, r)
 	t, ok := s.Env.Redeem(r.PostFormValue("ticket"))
 	if !ok {
 		deny("-", "invalid, used or expired ticket")
@@ -134,6 +138,39 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 	// eine fremde Seite ein eigenes Ticket unterschieben und den Browser mit fremdem Benutzer anmelden
 	if !environment.SameHost(sourceOrigin(r), t.Back) {
 		deny("-", "ticket not sent from "+t.FromName)
+		return
+	}
+	tok, err := s.Env.Park(t)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	step := randomToken(24)
+	s.setCookie(w, r, envStepCookie, tok+"."+step, int(environment.TicketTTL.Seconds()))
+	v := s.view(r, "environment.title")
+	v.Data = map[string]string{"Step": step}
+	v.User, v.Nav, v.ReadOnly, v.Admin = nil, nil, false, false
+	w.Header().Set("Cache-Control", "no-store")
+	s.render(w, r, http.StatusOK, "environment_enter", v)
+}
+
+// environmentEnterStep: zweiter Schritt (Formular dieser Node, mit ihren Cookies).
+func (s *Server) environmentEnterStep(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	deny := s.envDeny(w, r)
+	val := ""
+	if c, err := cookie(r, envStepCookie); err == nil {
+		val = c.Value
+	}
+	s.clearCookie(w, r, envStepCookie)
+	tok, step, _ := strings.Cut(val, ".")
+	if tok == "" || step == "" || subtle.ConstantTimeCompare([]byte(step), []byte(r.PostFormValue("step"))) != 1 {
+		deny("-", "environment step expired or not from this browser")
+		return
+	}
+	t, ok := s.Env.Redeem(tok)
+	if !ok {
+		deny("-", "invalid, used or expired ticket")
 		return
 	}
 	u := s.envUser(w, r, t, deny)
@@ -155,7 +192,7 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 		}
 		v := s.view(r, "environment.confirm_title")
 		v.Data = d
-		v.User, v.Nav = nil, nil
+		v.User, v.Nav, v.ReadOnly, v.Admin = nil, nil, false, false
 		w.Header().Set("Cache-Control", "no-store")
 		s.render(w, r, http.StatusOK, "environment_confirm", v)
 		return
@@ -163,14 +200,25 @@ func (s *Server) environmentEnter(w http.ResponseWriter, r *http.Request) {
 	s.envLogin(w, r, t, u)
 }
 
-// environmentConfirm: Anmeldung ueber Environment auf dieser Node bestaetigt (Formular dieser Node mit CSRF).
-func (s *Server) environmentConfirm(w http.ResponseWriter, r *http.Request) {
+// envDeny: abgelehntes Ticket (Log, Audit-Log, Anmeldeseite mit Hinweis). /environment/enter geht ohne Anmeldung: nach
+// einigen Fehlversuchen je Adresse (wie bei der Anmeldung) nur noch gebremst protokollieren, sonst liesse sich das
+// Audit-Log fluten.
+func (s *Server) envDeny(w http.ResponseWriter, r *http.Request) func(actor, why string) {
 	ip := s.clientIP(r)
-	deny := func(actor, why string) {
-		s.log.Warn("environment ticket rejected", "reason", why, "ip", ip)
-		s.auditEntry(r.Context(), store.AuditEntry{Actor: actor, Action: "login.environment_failed", Details: why, IP: ip})
+	return func(actor, why string) {
+		key := "enventer:" + ipKey(ip)
+		if s.limiter.retryAfter(key) == 0 {
+			s.log.Warn("environment ticket rejected", "reason", why, "ip", ip)
+			s.auditEntry(r.Context(), store.AuditEntry{Actor: actor, Action: "login.environment_failed", Details: why, IP: ip})
+		}
+		s.limiter.fail(key)
 		http.Redirect(w, r, "/login?env=1", http.StatusSeeOther)
 	}
+}
+
+// environmentConfirm: Anmeldung ueber Environment auf dieser Node bestaetigt (Formular dieser Node mit CSRF).
+func (s *Server) environmentConfirm(w http.ResponseWriter, r *http.Request) {
+	deny := s.envDeny(w, r)
 	tok := ""
 	if c, err := cookie(r, envConfirmCookie); err == nil {
 		tok = c.Value
@@ -226,7 +274,7 @@ func (s *Server) envLogin(w http.ResponseWriter, r *http.Request, t *environment
 		s.fail(w, r, err)
 		return
 	}
-	if err := s.Env.SaveSession(ctx, id, environment.Origin{MaxRole: role, FromNode: t.FromNode, FromName: t.FromName, Back: t.Back}); err != nil {
+	if err := s.Env.SaveSession(ctx, id, environment.Origin{MaxRole: role, FromNode: t.FromNode, FromName: t.FromName, Back: t.Back, AccessID: t.AccessID}); err != nil {
 		_ = s.Store.DeleteSession(ctx, id) // ohne Vermerk keine Sitzung (sonst ohne Begrenzung der Rolle)
 		s.clearCookie(w, r, sessionCookie)
 		s.fail(w, r, err)
@@ -275,7 +323,7 @@ func envOrigin(r *http.Request) *environment.Origin {
 }
 
 // envCredentials: Routen, die Zugangsdaten anlegen, aendern oder entfernen (Passwort, 2FA, Passkeys, SSO-Verknuepfung,
-// API- und MCP-Keys). In einer ueber Environment geoeffneten Sitzung gesperrt: solche Zugangsdaten gaelten danach
+// API- und MCP-Keys, auch fuer andere Benutzer, und Zugaenge fuer andere Nodes). In einer ueber Environment geoeffneten Sitzung gesperrt: solche Zugangsdaten gaelten danach
 // ohne die Begrenzung der Sitzung (z. B. ein API-Key mit der vollen Rolle des Benutzers hier).
 var envCredentials = func() *http.ServeMux {
 	m := http.NewServeMux()
@@ -298,6 +346,17 @@ var envCredentials = func() *http.ServeMux {
 		"DELETE /api/keys/{id}",
 		"POST /api/mcp/keys",
 		"DELETE /api/mcp/keys/{id}",
+		// Zugangsdaten anderer Benutzer (Benutzerverwaltung) und Zugaenge fuer andere Nodes (Rolle Administrator)
+		"POST /settings/users",
+		"POST /settings/users/{id}/password",
+		"POST /settings/users/{id}/2fa-reset",
+		"POST /api/users",
+		"POST /api/users/{id}/password",
+		"POST /api/users/{id}/2fa-reset",
+		"POST /environment/access",
+		"POST /environment/access/{id}/delete",
+		"POST /api/environment/access",
+		"DELETE /api/environment/access/{id}",
 	} {
 		m.Handle(p, ok)
 	}
