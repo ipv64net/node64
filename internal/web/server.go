@@ -69,6 +69,9 @@ type Deps struct {
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
 	// nach einer Wiederherstellung der Datenbank.
 	Restart func()
+	// RestartInPlace beendet den Node und startet ihn im selben Prozess neu (z. B. nach dem Wechsel der Ports der
+	// Oberflaeche); nil = wie Restart.
+	RestartInPlace func()
 }
 
 type Server struct {

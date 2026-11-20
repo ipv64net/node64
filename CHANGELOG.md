@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Oberfläche: Web-Port und HTTPS-Port lassen sich unter *Einstellungen › Allgemein › Erreichbarkeit dieser Node* ändern (gilt vor `NODE64_HTTP_PORT`/`NODE64_HTTPS_PORT`); Node64 startet dann neu und die Seite wechselt automatisch auf den neuen Port. Die Karte trennt jetzt „Direkt über die eigenen Ports“ und „Über den gemeinsamen Eingang (PROXY64)“.
 - PROXY64: Über den CDN64-Tunnel ist ein nicht veröffentlichter Host nicht mehr per Host-Kopf erreichbar (auch mit Wildcard-Zertifikat); Limits, Ländersperre bei „TLS durchreichen“ und DoH beachten ausdrückliche Freigaben fürs Docker-Gateway; der Tunnel wechselt nach einer UDP-Störung zuverlässig zurück auf QUIC.
 - Benutzer im Cluster: Eigene Aktionen eines Benutzers (2FA-Anmeldung, Einstellungen, LDAP-Abgleich) nehmen keine Sperre, Herabstufung, Passwort-Rücksetzung oder Löschung einer anderen Node mehr zurück; umbenannte Gruppen verschmelzen nicht mehr falsch; LDAP-Einrichtung und 2FA-Pflicht überschreiben sich nicht mehr gegenseitig.
 - Anmeldung: Abgelaufene AD-Konten und im LDAP gesperrte Konten verlieren ihre Gruppenrolle auch bei Passkey und API-Key; SSO-Gruppen verknüpfter lokaler Konten verfallen nach 7 Tagen; LDAP-Abgleich mit eigenem Benutzerfilter und vielen Benutzern; „Verbindung testen“ behält die Eingaben.

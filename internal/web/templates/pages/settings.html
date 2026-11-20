@@ -33,20 +33,35 @@
 			<div class="card-body small">
 				<p class="text-body-secondary">{{$.T "settings.reach_hint"}}</p>
 				<dl class="row mb-2">
-					{{if .HTTPPort}}<dt class="col-5">{{$.T "settings.reach_web_port"}}</dt><dd class="col-7 font-monospace">{{.HTTPPort}}/tcp <span class="text-body-secondary small">{{$.T "settings.reach_dual"}}</span></dd>{{end}}
-					{{if .HTTPSPort}}<dt class="col-5">{{$.T "settings.reach_https_port"}}</dt><dd class="col-7 font-monospace">{{.HTTPSPort}}/tcp</dd>{{end}}
-					<dt class="col-5">{{$.T "settings.reach_bind"}}</dt><dd class="col-7 font-monospace">{{if .Bind}}{{.Bind}}{{else}}{{$.T "settings.reach_bind_all"}}{{end}}</dd>
 					<dt class="col-5">{{$.T "settings.reach_this"}}</dt><dd class="col-7 font-monospace text-break">{{$.Scheme}}://{{$.Host}}</dd>
 					{{if .URLs}}<dt class="col-5">{{$.T "settings.reach_addrs"}}</dt><dd class="col-7 font-monospace text-break">{{range .URLs}}<div><a href="{{.}}">{{.}}</a></div>{{end}}</dd>{{end}}
-					{{if or .HTTPSPort .HTTPPort}}<dt class="col-5">{{$.T "settings.reach_tls"}}</dt><dd class="col-7"><a href="/settings/certificate">{{$.T "settings.cert_download"}}</a></dd>{{end}}
+					<dt class="col-5">{{$.T "settings.reach_bind"}}</dt><dd class="col-7 font-monospace">{{if .Bind}}{{.Bind}}{{else}}{{$.T "settings.reach_bind_all"}}{{end}}</dd>
+					<dt class="col-5">{{$.T "settings.reach_tls"}}</dt><dd class="col-7"><a href="/settings/certificate">{{$.T "settings.cert_download"}}</a></dd>
 				</dl>
+				{{if .Ignored}}<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle-fill"></i> {{$.T "settings.reach_ignored" "ports" .Ignored}}</div>{{end}}
 				<form method="post" action="/settings/reach">
 					<fieldset class="border-0 p-0 m-0"{{if $.ReadOnly}} disabled{{end}}>
 					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
-					{{if .EdgeOn}}<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>
+					<h3 class="h6 mt-1">{{$.T "settings.reach_direct"}}</h3>
+					<div class="row g-2 mb-1">
+						<div class="col-sm-6">
+							<label class="form-label" for="http_port">{{$.T "settings.reach_web_port"}}</label>
+							<input class="form-control form-control-sm font-monospace" id="http_port" name="http_port" type="number" min="0" max="65535" value="{{.HTTPPort}}">
+							<div class="form-text">{{$.T "settings.reach_web_port_hint" "port" .EnvHTTPPort}}</div>
+						</div>
+						<div class="col-sm-6">
+							<label class="form-label" for="https_port">{{$.T "settings.reach_https_port"}}</label>
+							<input class="form-control form-control-sm font-monospace" id="https_port" name="https_port" type="number" min="0" max="65535" value="{{if .HTTPSPort}}{{.HTTPSPort}}{{end}}" placeholder="{{$.T "settings.reach_off"}}">
+							<div class="form-text">{{$.T "settings.reach_https_port_hint" "port" .EnvHTTPSPort}}</div>
+						</div>
+					</div>
+					<div class="form-text mb-2">{{$.T "settings.reach_restart_hint"}}{{if .Bridge}} <i class="bi bi-info-circle"></i> {{$.T "settings.reach_bridge"}}{{end}}{{if .Cluster}} <i class="bi bi-diagram-3"></i> {{$.T "settings.reach_cluster"}} <a href="/cluster">{{$.T "nav.cluster"}}</a>{{end}}</div>
+					{{if .EdgeOn}}<h3 class="h6 mt-3">{{$.T "settings.reach_edge" "http" .EdgeHTTP "https" .EdgeHTTPS}}</h3>
+					<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>
 					<input class="form-control form-control-sm font-monospace mb-1" id="ui_name" name="ui_name" value="{{.UIName}}" placeholder="node64.example.ipv64.de" maxlength="253">
 					<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="ui_public" name="ui_public"{{if .UIPublic}} checked{{end}}><label class="form-check-label" for="ui_public">{{$.T "ports.ui_public"}}</label></div>
-					<div class="form-text mb-2">{{$.T "ports.ui_hint"}}</div>{{end}}
+					<div class="form-text mb-2">{{$.T "ports.ui_hint"}} {{$.T "settings.reach_edge_ports"}} <a href="/settings/ports#edge">{{$.T "settings.ports_page"}}</a></div>{{end}}
+					<h3 class="h6 mt-3">{{$.T "settings.reach_cert"}}</h3>
 					<label class="form-label" for="ui_cert">{{$.T "ports.ui_cert"}}</label>
 					<select class="form-select form-select-sm mb-1" id="ui_cert" name="ui_cert">
 						<option value="auto"{{if eq .UICert.Value "auto"}} selected{{end}}>{{$.T "ports.ui_cert_auto"}}</option>

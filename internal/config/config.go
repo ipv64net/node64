@@ -21,6 +21,9 @@ type Config struct {
 	HTTPPort int
 	// HTTPSPort fuer die lokale Oberflaeche mit TLS, 0 = aus.
 	HTTPSPort int
+	// EnvHTTPPort / EnvHTTPSPort: Ports aus der Umgebung; HTTPPort/HTTPSPort koennen davon abweichen, wenn sie in
+	// der Oberflaeche eingestellt sind (Einstellungen > Allgemein > Erreichbarkeit).
+	EnvHTTPPort, EnvHTTPSPort int
 	// Bind-Adresse, leer = alle Interfaces.
 	BindAddr string
 	// LogLevel beim Start: debug, info, warn, error.
@@ -43,6 +46,9 @@ func (c *Config) DBPath() string        { return filepath.Join(c.DataDir, "node6
 func (c *Config) BackupDir() string     { return filepath.Join(c.DataDir, "backups") }
 func (c *Config) TLSDir() string        { return filepath.Join(c.DataDir, "tls") }
 func (c *Config) SecretKeyPath() string { return filepath.Join(c.DataDir, "secret.key") }
+
+// PortsFile: wirksame Ports der Oberflaeche fuer "node64 healthcheck" (schreibt der laufende Node beim Start).
+func (c *Config) PortsFile() string { return filepath.Join(c.DataDir, "web-ports") }
 
 // Load liest die Umgebung und prueft die Werte.
 func Load() (*Config, error) {
@@ -70,6 +76,7 @@ func Load() (*Config, error) {
 	if c.HTTPPort == c.HTTPSPort {
 		return nil, errors.New("NODE64_HTTP_PORT and NODE64_HTTPS_PORT must differ")
 	}
+	c.EnvHTTPPort, c.EnvHTTPSPort = c.HTTPPort, c.HTTPSPort
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":
 	default:
@@ -117,4 +124,47 @@ func envBool(key string, def bool) bool {
 		return false
 	}
 	return def
+}
+
+// Fehler von CheckWebPorts.
+var (
+	ErrPortRange = errors.New("ports must be between 0 and 65535")
+	ErrPortsOff  = errors.New("web port and https port are both 0, the UI would be unreachable")
+	ErrPortsSame = errors.New("web port and https port must differ")
+)
+
+// CheckWebPorts prueft die Ports der Oberflaeche (0 = aus, aber nicht beide).
+func CheckWebPorts(httpPort, httpsPort int) error {
+	switch {
+	case httpPort < 0 || httpPort > 65535 || httpsPort < 0 || httpsPort > 65535:
+		return ErrPortRange
+	case httpPort == 0 && httpsPort == 0:
+		return ErrPortsOff
+	case httpPort == httpsPort:
+		return ErrPortsSame
+	}
+	return nil
+}
+
+// WritePortsFile legt die wirksamen Ports fuer "node64 healthcheck" ab.
+func (c *Config) WritePortsFile() error {
+	return os.WriteFile(c.PortsFile(), []byte(fmt.Sprintf("%d %d\n", c.HTTPPort, c.HTTPSPort)), 0o640)
+}
+
+// ReadPortsFile liest die vom laufenden Node abgelegten Ports; false ohne bzw. mit ungueltiger Datei.
+func (c *Config) ReadPortsFile() (httpPort, httpsPort int, ok bool) {
+	b, err := os.ReadFile(c.PortsFile())
+	if err != nil {
+		return 0, 0, false
+	}
+	f := strings.Fields(string(b))
+	if len(f) != 2 {
+		return 0, 0, false
+	}
+	h, err1 := strconv.Atoi(f[0])
+	s, err2 := strconv.Atoi(f[1])
+	if err1 != nil || err2 != nil || CheckWebPorts(h, s) != nil {
+		return 0, 0, false
+	}
+	return h, s, true
 }

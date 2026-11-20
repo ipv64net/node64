@@ -425,8 +425,8 @@ Alternativ `network_mode: host`. `net.ipv4.ping_group_range` gilt trotz des Name
 | Variable | Standard | Bedeutung |
 | --- | --- | --- |
 | `NODE64_DATA_DIR` | `/data` | Einziges beschreibbares Verzeichnis: Datenbank, Backups, Schlüssel, Zertifikat |
-| `NODE64_HTTP_PORT` | `8080` | Port der Oberfläche, `0` = aus |
-| `NODE64_HTTPS_PORT` | `0` | Port für HTTPS mit selbstsigniertem Zertifikat, `0` = aus |
+| `NODE64_HTTP_PORT` | `8080` | Port der Oberfläche, `0` = aus; in der Oberfläche unter *Einstellungen → Allgemein → Erreichbarkeit* änderbar (gilt dann vor der Variable) |
+| `NODE64_HTTPS_PORT` | `0` | Port für HTTPS mit selbstsigniertem Zertifikat, `0` = aus (ebenso änderbar) |
 | `NODE64_BIND_ADDR` | leer (alle) | Bind-Adresse |
 | `NODE64_TLS_CERT` / `NODE64_TLS_KEY` | leer | Eigenes Zertifikat statt des selbstsignierten |
 | `NODE64_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; zur Laufzeit im UI änderbar |

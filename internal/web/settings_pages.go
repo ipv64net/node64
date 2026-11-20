@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -78,18 +79,36 @@ func (s *Server) settingsDataPage(w http.ResponseWriter, r *http.Request) {
 
 // reachView: wie die Oberflaeche erreichbar ist (Karte Erreichbarkeit dieser Node).
 type reachView struct {
-	HTTPPort, HTTPSPort int
-	Bind                string
-	URLs                []string // Adressen dieser Node mit Web-Port
-	EdgeOn              bool     // Name am Eingang moeglich
-	UIName              string
-	UIPublic            bool
-	UICert              uiCertView
+	HTTPPort, HTTPSPort       int
+	EnvHTTPPort, EnvHTTPSPort int    // Standard aus der Umgebung
+	Bridge                    bool   // Docker-Bridge-Netz: Hinweis auf -p
+	Cluster                   bool   // in einem Cluster: die anderen Nodes kennen die alte Adresse
+	Ignored                   string // eingestellte Ports, die sich beim Start nicht oeffnen liessen ("" = keine)
+	Bind                      string
+	URLs                      []string // Adressen dieser Node mit Web-Port
+	EdgeOn                    bool     // Name am Eingang moeglich
+	EdgeHTTP, EdgeHTTPS       int      // Ports des Eingangs
+	UIName                    string
+	UIPublic                  bool
+	UICert                    uiCertView
 }
 
 func (s *Server) reachData(ctx context.Context) *reachView {
-	rv := &reachView{HTTPPort: s.Cfg.HTTPPort, HTTPSPort: s.Cfg.HTTPSPort, Bind: s.Cfg.BindAddr, EdgeOn: s.Edge != nil,
+	rv := &reachView{HTTPPort: s.Cfg.HTTPPort, HTTPSPort: s.Cfg.HTTPSPort, Bind: s.Cfg.BindAddr, EdgeOn: s.Edge != nil, Bridge: bridgeNet(),
 		UIName: s.Store.SettingOr(ctx, setUIName, ""), UIPublic: s.Store.SettingOr(ctx, setUIPublic, "0") == "1", UICert: s.uiCertData(ctx)}
+	rv.EnvHTTPPort, rv.EnvHTTPSPort = s.envPorts()
+	if h, hs, set := WebPorts(ctx, s.Store, rv.EnvHTTPPort, rv.EnvHTTPSPort); set && (h != s.Cfg.HTTPPort || hs != s.Cfg.HTTPSPort) {
+		rv.Ignored = strconv.Itoa(h) + "/" + strconv.Itoa(hs)
+	}
+	if s.Peer != nil {
+		if list, err := s.Peer.Members(ctx); err == nil && len(list) > 0 {
+			rv.Cluster = true
+		}
+	}
+	if s.Edge != nil {
+		ec := s.Edge.Config()
+		rv.EdgeHTTP, rv.EdgeHTTPS = ec.HTTPPort, ec.HTTPSPort
+	}
 	rv.URLs = localURLs(s.Cfg.BindAddr, s.Cfg.HTTPPort, s.Cfg.HTTPSPort)
 	return rv
 }
@@ -127,18 +146,31 @@ func localURLs(bind string, httpPort, httpsPort int) []string {
 	return out
 }
 
-// settingsReach speichert Name und Zertifikat der Oberflaeche (Karte Erreichbarkeit).
+// settingsReach speichert Ports, Name und Zertifikat der Oberflaeche (Karte Erreichbarkeit). Aendern sich die Ports,
+// startet Node64 neu und der Browser wechselt auf den neuen Port.
 func (s *Server) settingsReach(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	v := s.view(r, "settings.title")
+	changed, httpPort, httpsPort, perr := s.saveWebPorts(r)
+	if perr != nil {
+		s.flash(w, r, "danger", s.webPortsError(v, perr))
+		http.Redirect(w, r, "/settings#reach", http.StatusSeeOther)
+		return
+	}
 	err := s.saveUICertForm(r)
 	if err == nil {
 		err = s.saveUIRouteForm(r)
 	}
 	if err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
-	} else {
+	} else if !changed {
 		s.flash(w, r, "success", v.T("common.saved"))
+	}
+	if changed {
+		s.audit(r, "settings.web_ports", "", fmt.Sprintf("http=%d https=%d (before http=%d https=%d)", httpPort, httpsPort, s.Cfg.HTTPPort, s.Cfg.HTTPSPort))
+		s.renderPortSwitch(w, r, portSwitchURL(r, s.Cfg.HTTPPort, s.Cfg.HTTPSPort, httpPort, httpsPort))
+		s.restartInPlace("web ports changed, restarting")
+		return
 	}
 	http.Redirect(w, r, "/settings#reach", http.StatusSeeOther)
 }

@@ -163,6 +163,7 @@ func run() error {
 	if err := st.Migrate(ctx, "core", core); err != nil {
 		return err
 	}
+	applyWebPorts(ctx, cfg, st, log)          // Ports der Oberflaeche aus den Einstellungen, vor allem, was sie liest
 	st.SetTOTPCodec(box.Encrypt, box.Decrypt) // TOTP-Geheimnisse mit secret.key verschluesselt, Altbestand einmalig
 	if n, err := st.EncryptTOTPSecrets(ctx); err != nil {
 		log.Warn("encrypt totp secrets", "err", err)
@@ -327,6 +328,7 @@ func run() error {
 	// unten beim peer-Manager (vor dem Start der Module).
 	m64Module := monitor64.New(st, logger.Slog(), box, cfg.DataDir, Version)
 	m64Module.SetNotifier(dispatcher.Dispatch)
+	m64Module.SetHTTPPort(cfg.HTTPPort) // fuer den Hinweis bei eigenem Zertifikat (Agent-Befehl)
 	m64Module.SetQuiet(dispatcher.InQuietHours)
 	modules.Register(m64Module)
 	m64Module.SetPorts(portReg)                            // Push-Port vor dem Oeffnen pruefen
@@ -588,7 +590,7 @@ func run() error {
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
 		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
 		Ports: portReg, Edge: edgeSrv, Certs: certMgr, Box: box, Updater: upd,
-		Users: userCluster, Env: envSvc,
+		Users: userCluster, Env: envSvc, RestartInPlace: func() { restartAfterStop.Store(true); stop() },
 	})
 	if err != nil {
 		return err
@@ -837,6 +839,9 @@ func healthcheck() int {
 	}
 	if isHoneypotMode() { // ohne Oberflaeche: /health des Info-Ports
 		return honeypotHealthcheck(cfg)
+	}
+	if h, hs, ok := cfg.ReadPortsFile(); ok { // in der Oberflaeche eingestellte Ports (webports.go)
+		cfg.HTTPPort, cfg.HTTPSPort = h, hs
 	}
 	// Bind-Adresse verwenden, wenn gesetzt; sonst beide Loopbacks probieren
 	// (Container ohne IPv4 oder ohne IPv6 sollen beide gesund gemeldet werden).

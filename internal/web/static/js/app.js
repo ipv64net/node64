@@ -379,6 +379,21 @@
 		if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
 	});
 
+	// Ports der Oberflaeche gewechselt (settings_port_switch): Node64 startet neu; warten, bis der neue Port antwortet
+	// (no-cors: nur erreichbar oder nicht), dann dorthin - spaetestens nach 45 Sekunden auf jeden Fall
+	var portSwitch = document.getElementById("port-switch");
+	if (portSwitch) {
+		var target = portSwitch.getAttribute("data-target"), tries = 0;
+		var go = function () { window.location.href = target; };
+		var poll = function () {
+			tries++;
+			fetch(new URL("/api/health", target).href, { mode: "no-cors", cache: "no-store" }).then(go, function () {
+				if (tries >= 40) { go(); } else { setTimeout(poll, 1000); }
+			});
+		};
+		setTimeout(poll, 5000);
+	}
+
 	// Rolle „Nur lesen“ (data-readonly am body): Formulare, die etwas aendern, ausgrauen - ausser dem eigenen Konto
 	// (wie selfService in roles.go). Sicher ist es auch ohne: der Server antwortet mit 403.
 	if (document.body.getAttribute("data-readonly") === "1") {

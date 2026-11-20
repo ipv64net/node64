@@ -265,7 +265,10 @@ func (m *Module) agentCmdInfo() agentCmdInfo {
 	if m.ad.bases != nil {
 		bases = m.ad.bases
 	}
-	info := agentCmdInfo{Internet: bases[0] + "/", HTTPPort: nodeHTTPPort(), Port: m64proto.DefaultPort}
+	info := agentCmdInfo{Internet: bases[0] + "/", HTTPPort: m.httpPort, Port: m64proto.DefaultPort}
+	if !m.httpPortSet {
+		info.HTTPPort = nodeHTTPPort()
+	}
 	if m.scheduler() != nil {
 		// erst ab dem Release, dessen Skripte die Option kennen (aeltere brechen mit "unknown option" ab)
 		if ix := m.agents().dist.Index(); ix != nil && !update.Newer(sumsOptionSince, ix.Version) {

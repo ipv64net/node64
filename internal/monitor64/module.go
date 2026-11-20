@@ -76,6 +76,8 @@ type Module struct {
 	nodeVersion string
 	dispatchFn  func(notify.Alert)
 	quietFn     func(time.Time) bool
+	httpPort    int  // Web-Port der Node (SetHTTPPort)
+	httpPortSet bool // sonst aus der Umgebung
 	g           module.Guards
 	store       *Store
 
@@ -118,6 +120,9 @@ func New(core *store.Store, log *slog.Logger, box *secrets.Box, dataDir, nodeVer
 
 // SetQuiet verbindet die Ruhezeit-Pruefung der Benachrichtigung (fuer Erinnerungen).
 func (m *Module) SetQuiet(fn func(time.Time) bool) { m.quietFn = fn }
+
+// SetHTTPPort setzt den wirksamen Web-Port der Node (auch in der Oberflaeche einstellbar; 0 = aus).
+func (m *Module) SetHTTPPort(p int) { m.httpPort, m.httpPortSet = p, true }
 
 // SetNotifier verbindet den Dispatcher der Benachrichtigungen.
 func (m *Module) SetNotifier(fn func(notify.Alert)) { m.dispatchFn = fn }

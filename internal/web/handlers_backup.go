@@ -163,6 +163,20 @@ func (s *Server) restartSoon(reason string) {
 	}
 }
 
+// restartInPlace startet den Node kurz nach der Antwort im selben Container bzw. Dienst neu (ohne Docker-Neustart,
+// wie nach einem Selbst-Update); ohne diese Moeglichkeit wie restartSoon.
+func (s *Server) restartInPlace(reason string) {
+	if s.RestartInPlace == nil {
+		s.restartSoon(reason)
+		return
+	}
+	go func() {
+		time.Sleep(1500 * time.Millisecond)
+		s.log.Warn(reason)
+		s.RestartInPlace()
+	}()
+}
+
 // resetNode setzt den Node auf den Auslieferungszustand zurueck: nach Passwort-Pruefung wird eine
 // bestehende Verknuepfung sauber getrennt, ein Merker abgelegt und neu gestartet; beim Start
 // leert cmd/node64 dann das Datenverzeichnis (Datenbank, Schluessel, Zertifikat, Backups).
