@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.11 – 2026-11-22
+
 - PROXY64: Let’s-Encrypt-Prüfungen (HTTP-01) scheitern nicht mehr an Blocklisten, Honeypot-Sperre oder Ländersperre – auch hinter Proxy-Hosts mit „HTTPS erzwingen“ (z. B. Mailcow).
 - PROXY64: keine falsche Warnung „Port 80/443 nicht veröffentlicht“ im Docker-Bridge-Netz ohne Hairpin-NAT (#243).
 - Monitor64: Proxmox VE/PBS ohne „SMART-Werte abfragen“ wecken schlafende Festplatten nicht mehr (#215); OPNsense/FreeBSD nennt Funde von `pkg audit` „Pakete mit bekannter Sicherheitslücke“ statt „Sicherheitsupdates“.

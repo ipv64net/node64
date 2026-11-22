@@ -1,6 +1,6 @@
 # Änderungen – PROXY64
 
-## 1.58.0 – unveröffentlicht
+## 1.58.0 – 2026-11-22
 
 ### Neu
 - Let’s-Encrypt-Prüfungen (HTTP-01 auf /.well-known/acme-challenge/) kommen trotz ipv64-Blocklisten, Honeypot-Sperre und Ländersperre durch – für die Zertifikate der Node und für Dienste hinter Proxy-Hosts (z. B. Mailcow), auch mit „HTTPS erzwingen“ (die Prüfung geht dann per HTTP ans Ziel, alles andere weiter auf HTTPS). Eigene Sperrliste, Zugriffslisten und Limits gelten weiter. Auf Port 80 weisen Blocklisten und Honeypot-Sperre dafür je Anfrage ab (403) statt beim Verbindungsaufbau.

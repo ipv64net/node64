@@ -1,6 +1,6 @@
 # Änderungen – DNS64
 
-## 1.45.1 – unveröffentlicht
+## 1.45.1 – 2026-11-22
 
 ### Behoben
 - Texte: Globale Freigaben (auch „Freigeben“ im Abfrage-Log) gelten für alle Gerätegruppen und heben deren Blocklisten auf, nicht aber Sperren, Kategorien und Dienste einer Gruppe – das steht jetzt an der Freigabeliste, in der Rückfrage und in den Regeln der Gruppe.

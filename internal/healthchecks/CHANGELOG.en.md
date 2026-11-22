@@ -1,6 +1,6 @@
 # Changes – Healthchecks
 
-## 3.3.1 – unreleased
+## 3.3.1 – 2026-11-22
 
 ### Fixed
 - The “read only” role no longer sees the request body of HTTP checks or the data sent by TCP checks (API, detail page, online checks).

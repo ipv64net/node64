@@ -1,6 +1,6 @@
 # Änderungen – Healthchecks
 
-## 3.3.1 – unveröffentlicht
+## 3.3.1 – 2026-11-22
 
 ### Behoben
 - Rolle „Nur lesen“ sieht auch den Request-Body von HTTP-Checks und die gesendeten Daten von TCP-Checks nicht mehr (API, Detailseite, Online-Checks).

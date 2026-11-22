@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.11 – 2026-11-22
+
 - PROXY64: Let’s Encrypt HTTP-01 validations no longer fail on blocklists, the honeypot block or country blocking – also behind proxy hosts with “Force HTTPS” (e.g. Mailcow).
 - PROXY64: no false “port 80/443 not published” warning in a Docker bridge network without hairpin NAT (#243).
 - Monitor64: Proxmox VE/PBS with “Query SMART values” off no longer wake sleeping hard disks (#215); OPNsense/FreeBSD calls `pkg audit` findings “packages with a known vulnerability” instead of “security updates”.

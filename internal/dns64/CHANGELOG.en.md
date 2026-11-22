@@ -1,6 +1,6 @@
 # Changes – DNS64
 
-## 1.45.1 – unreleased
+## 1.45.1 – 2026-11-22
 
 ### Fixed
 - Texts: global releases (also “Allow” in the query log) apply to all device groups and lift their blocklists, but not a group’s blocks, categories and services – now stated at the allow list, in the confirmation and in the group rules.

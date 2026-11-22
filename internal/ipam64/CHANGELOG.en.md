@@ -1,6 +1,6 @@
 # IPAM64 – Changes
 
-## 0.6.4 – unreleased
+## 0.6.4 – 2026-11-22
 
 - Takeover from DNS64: the name of a manual DHCP reservation (e.g. “Tablet Lea”) is kept when the address has no host name.
 - Saving an address with a locked DHCP switch no longer deletes its reservation.

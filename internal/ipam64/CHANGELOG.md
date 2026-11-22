@@ -1,6 +1,6 @@
 # IPAM64 – Änderungen
 
-## 0.6.4 – unveröffentlicht
+## 0.6.4 – 2026-11-22
 
 - Übernahme aus DNS64: Der Name einer DHCP-Reservierung von Hand (z. B. „Tablet Lea“) bleibt erhalten, wenn die Adresse keinen Rechnernamen hat.
 - Speichern einer Adresse mit gesperrtem DHCP-Schalter löscht ihre Reservierung nicht mehr.

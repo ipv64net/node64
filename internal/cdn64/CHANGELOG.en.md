@@ -1,6 +1,6 @@
 # Changes – PROXY64
 
-## 1.58.0 – unreleased
+## 1.58.0 – 2026-11-22
 
 ### New
 - Let’s Encrypt validations (HTTP-01 on /.well-known/acme-challenge/) get through ipv64 blocklists, the honeypot block and country blocking – for the node’s own certificates and for services behind proxy hosts (e.g. Mailcow), also with “Force HTTPS” (the validation then goes to the target over HTTP, everything else is still redirected to HTTPS). The own deny list, access lists and limits still apply. On port 80, blocklists and the honeypot block now reject per request (403) instead of at connection setup.
