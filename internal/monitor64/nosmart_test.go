@@ -1,10 +1,13 @@
 package monitor64
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/ipv64net/node64/internal/m64proto"
+	"github.com/ipv64net/node64/internal/monitor64/apis"
+	"github.com/ipv64net/node64/internal/monitor64/model"
 )
 
 // #215: "SMART-Werte abfragen" aus - der Agent bekommt alle Abschnitte ausser smart, im Push-Betrieb wird SMART
@@ -36,5 +39,22 @@ func TestNoSmart(t *testing.T) {
 		if _, err := cleanAccessConfig(c.typ, []byte(c.cfg)); (err == nil) != c.ok {
 			t.Errorf("%s %s: %v", c.typ, c.cfg, err)
 		}
+	}
+}
+
+type refreshSrc struct{ n int }
+
+func (r *refreshSrc) Collect(context.Context) ([]model.Service, error) { return nil, nil }
+func (r *refreshSrc) RefreshDisks()                                    { r.n++ }
+
+// #215 (Nachtrag): "Dienste erkennen" laesst Proxmox VE/PBS ohne SMART die Plattenliste neu lesen.
+func TestRefreshDisks(t *testing.T) {
+	var _ diskRefresher = (*apis.PVE)(nil)
+	var _ diskRefresher = (*apis.PBS)(nil)
+	src := &refreshSrc{}
+	rt := &hostRT{accs: []*accRT{{col: &apiAdapter{apiCollector: apiCollector{src: src}}}, {col: nil}, {col: &agentCollector{}}}}
+	refreshDisks(rt)
+	if src.n != 1 {
+		t.Fatalf("RefreshDisks: %d", src.n)
 	}
 }

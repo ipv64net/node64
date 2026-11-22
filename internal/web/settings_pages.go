@@ -189,7 +189,7 @@ type portRow struct {
 	Kind      string   // listen (Node64 oeffnet ihn), via (laeuft ueber den Port eines anderen Teils), out (ausgehend)
 	Via       string   // bei via: Teil, dem der Port gehoert (edge, web)
 	Open      string   // yes, no, unknown; leer bei via/out
-	Published string   // Docker-Bridge-Netz, Eingang: yes/no = auf dem Docker-Host veroeffentlicht; sonst leer
+	Published string   // Docker-Bridge-Netz, Eingang: yes/no = auf dem Docker-Host veroeffentlicht, unknown = nicht pruefbar; sonst leer
 	Foreign   bool     // offen, aber kein Teil von Node64 hat ihn offen (anderes Programm im selben Netz)
 	Conflicts []string // "dns64 (DoH)" …
 	Low       bool     // Port unter 1024
@@ -337,11 +337,8 @@ func (s *Server) portsPageData(ctx context.Context, module, state string) *ports
 				}
 			}
 		}
-		if d.Pub.Bridge && d.Pub.Gateway != "" && row.Owner == edge.Owner && row.Proto == ports.TCP && row.Active {
-			row.Published = "yes"
-			if d.Pub.MissingPort(row.Port) {
-				row.Published = "no"
-			}
+		if d.Pub.Bridge && row.Owner == edge.Owner && row.Proto == ports.TCP && row.Active {
+			row.Published = d.Pub.PortState(row.Port) // yes, no, unknown (Gateway ohne Hairpin, #243) oder leer
 		}
 		if row.Port > 0 && row.Port < 1024 {
 			row.Low, row.LowDenied = true, d.Priv.Known && !d.Priv.LowPortOK(row.Port)

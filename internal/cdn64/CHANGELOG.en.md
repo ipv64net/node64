@@ -3,6 +3,7 @@
 ## 1.57.1 – unreleased
 
 ### Fixed
+- Docker bridge network: no more false “port not published” warning when the Docker host does not route requests via the gateway back (e.g. UFW, no hairpin NAT). With the Docker API mounted the container’s port mappings count, otherwise the port overview shows “cannot be checked” (#243).
 - Connections through the CDN64 tunnel (TLS, port 443) only serve their own name; other hosts can no longer be reached via the Host header, even with a wildcard certificate.
 - Limits: the allow list and trusted proxies also cover the Docker gateway (front proxy on the Docker host).
 - “TLS passthrough”: the country-block allow list and own deny list also apply to requests via the Docker gateway.

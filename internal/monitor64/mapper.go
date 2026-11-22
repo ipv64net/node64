@@ -153,8 +153,15 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 		sv := Service{Key: "updates", Name: "Updates", Kind: "updates", Default: true,
 			Metrics: []Metric{{Name: "pending", Value: float64(u.Pending)}, {Name: "security", Value: float64(u.Security)}},
 			Text:    model.T("monitor64.txt.updates", "n", u.Pending, "sec", u.Security)}
+		fact := model.T("monitor64.txt.security_updates", "n", u.Security)
+		if u.Manager == "pkg" {
+			// FreeBSD/OPNsense: Security zaehlt die installierten Pakete mit bekannter Luecke (pkg audit), keine
+			// verfuegbaren Updates - ohne Korrektur in der Paketquelle auch bei "0 verfuegbar"
+			sv.Text = model.T("monitor64.txt.updates_vuln", "n", u.Pending, "sec", u.Security)
+			fact = model.T("monitor64.txt.vuln_packages", "n", u.Security)
+		}
 		if u.Security > 0 {
-			sv.Facts = append(sv.Facts, Fact{Code: "updates_security", Text: model.T("monitor64.txt.security_updates", "n", u.Security)})
+			sv.Facts = append(sv.Facts, Fact{Code: "updates_security", Text: fact})
 		}
 		out = append(out, sv)
 	}

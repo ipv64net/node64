@@ -760,3 +760,52 @@ func TestPVENoSmart(t *testing.T) {
 		t.Fatal("Platten fehlen ohne SMART")
 	}
 }
+
+// #215 (Nachtrag): auch disks/list mit skipsmart=1 weckt schlafende Platten - ohne SMART liest Monitor64 die
+// Plattenliste nur einmal und nach "Dienste erkennen" (RefreshDisks); ein Fehler wird in der naechsten Runde wiederholt.
+func TestPVENoSmartListOnce(t *testing.T) {
+	f, cfg := pveFake(t)
+	list := "/nodes/pve1/disks/list?skipsmart=1"
+	f.ok(list, "@pve/disks_list.json")
+	cfg.NoSmart = true
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	p := newTestPVE(t, cfg, &now)
+	diskCount := func(svcs []model.Service) int {
+		n := 0
+		for _, s := range svcs {
+			if s.Kind == "disk" {
+				n++
+			}
+		}
+		return n
+	}
+	collect := func(want, hits int) {
+		t.Helper()
+		svcs, _ := p.Collect(context.Background())
+		if n := diskCount(svcs); n != want {
+			t.Fatalf("Platten: %d, erwartet %d", n, want)
+		}
+		if n := f.count(list); n != hits {
+			t.Fatalf("disks/list: %d Abfragen, erwartet %d", n, hits)
+		}
+	}
+	collect(4, 1)
+	for range 4 { // auch nach Stunden kein neuer Zugriff auf die Platten
+		now = now.Add(31 * time.Minute)
+		collect(4, 1)
+	}
+	p.RefreshDisks()
+	collect(4, 2)
+	now = now.Add(31 * time.Minute)
+	collect(4, 2)
+	// "Dienste erkennen" waehrend die Platte anlaeuft (Proxmox: 500): voriger Stand bleibt, naechste Runde neu
+	f.set(list, http.StatusInternalServerError, "got timeout")
+	p.RefreshDisks()
+	collect(4, 3)
+	f.ok(list, "@pve/disks_list.json")
+	collect(4, 4)
+	collect(4, 4)
+	if q := strings.Join(p.Queries(), "\n"); strings.Contains(q, "disks/smart") || !strings.Contains(q, "skipsmart") {
+		t.Fatalf("Queries ohne SMART: %s", q)
+	}
+}

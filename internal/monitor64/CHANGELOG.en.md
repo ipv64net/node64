@@ -4,6 +4,8 @@
 
 Fixed:
 
+- Proxmox VE and PBS with “Query SMART values” off: the disk list is read only at startup and on “Discover services” instead of every 30 minutes – that query also woke sleeping hard disks (#215).
+- FreeBSD/OPNsense: the “Updates” service calls `pkg audit` findings “installed packages with a known vulnerability” instead of “security updates” – they can exist with “0 available” when the package repository has no fix yet.
 - “OK until the value gets worse” now also ends for values close to 100 % and in “GB free” mode.
 - “May be switched off”: rejected logins, a changed host key or certificate errors no longer count as switched off and are reported.
 - Cluster: an acknowledgement set on another node is no longer lost.

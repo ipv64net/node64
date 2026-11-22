@@ -83,7 +83,7 @@
 					<div class="form-check"><input class="form-check-input" type="radio" name="secrets" value="none" id="exp_none" checked><label class="form-check-label small" for="exp_none">{{.T "backup.export_none"}}</label></div>
 					<div class="form-check mb-2"><input class="form-check-input" type="radio" name="secrets" value="password" id="exp_pw"><label class="form-check-label small" for="exp_pw">{{.T "backup.export_password"}}</label></div>
 					<div class="input-group input-group-sm">
-						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="new-password">
+						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="new-password" data-check="#exp_pw">
 						<button class="btn btn-outline-primary" type="submit"><i class="bi bi-download"></i> {{.T "backup.export_btn"}}</button>
 					</div>
 					<div class="form-text">{{.T "backup.export_hint"}}</div>

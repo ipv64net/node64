@@ -27,6 +27,17 @@ func TestExportImportCertificates(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &cf); err != nil || !strings.HasPrefix(cf.Certs, "enc:") || strings.Contains(body, "PRIVATE KEY") {
 		t.Fatalf("certs not encrypted in export: %v %q", err, cf.Certs[:min(len(cf.Certs), 10)])
 	}
+	// Audit-Log nennt die tatsaechlich gewaehlte Art (Forum 5255)
+	entries, _ := a.store.AuditList(ctx, 50, 0)
+	var modes []string
+	for _, e := range entries {
+		if e.Action == "config.export" {
+			modes = append(modes, e.Details)
+		}
+	}
+	if strings.Join(modes, ",") != "secrets=password,secrets=none" {
+		t.Fatalf("audit export: %v", modes)
+	}
 
 	b, mgr2 := newCertsApp(t)
 	if _, _, err := b.s.applyImport(ctx, []byte(body), "falsches-passwort"); err != errPasswordWrong {

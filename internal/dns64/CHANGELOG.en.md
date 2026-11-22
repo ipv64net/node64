@@ -3,6 +3,7 @@
 ## 1.45.1 – unreleased
 
 ### Fixed
+- Texts: global releases (also “Allow” in the query log) apply to all device groups and lift their blocklists, but not a group’s blocks, categories and services – now stated at the allow list, in the confirmation and in the group rules.
 - Blocklists, allow lists and upstreams are switched and removed by address; a list changed in the meantime (cluster, second tab) no longer hits the wrong entry.
 - DoH via the shared entrance honours “additional allowed client networks” for the Docker gateway too.
 - Rebinding protection: device-group releases apply only to that group, regardless of who asked first (shared cache).

@@ -152,7 +152,8 @@ func TestSettingsPages(t *testing.T) {
 		t.Fatalf("data: %d", resp.StatusCode)
 	}
 	for _, want := range []string{`id="retention"`, `id="backup"`, `id="restore"`, `id="export"`, `id="import"`, `id="reset"`, `name="audit_days"`,
-		`action="/settings/data"`, `action="/settings/backup"`, `action="/settings/restore"`, `action="/settings/export"`, `action="/settings/import"`, `action="/settings/reset"`} {
+		`action="/settings/data"`, `action="/settings/backup"`, `action="/settings/restore"`, `action="/settings/export"`, `action="/settings/import"`, `action="/settings/reset"`,
+		`data-check="#exp_pw"`} { // Passwort eingeben waehlt "mit Passwort" (Forum 5255)
 		if !strings.Contains(body, want) {
 			t.Errorf("data page lacks %s", want)
 		}

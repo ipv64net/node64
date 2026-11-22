@@ -3,6 +3,7 @@
 ## 1.57.1 – unveröffentlicht
 
 ### Behoben
+- Docker-Bridge-Netz: keine falsche Warnung „Port nicht veröffentlicht“ mehr, wenn der Docker-Host Anfragen über das Gateway nicht zurückleitet (z. B. UFW, kein Hairpin-NAT). Mit eingebundener Docker-API zählen die Portfreigaben des Containers, sonst zeigt die Port-Übersicht „nicht prüfbar“ (#243).
 - Über den CDN64-Tunnel (TLS, Port 443) gilt eine Verbindung nur für ihren Namen; andere Hosts sind auch mit Wildcard-Zertifikat per Host-Kopf nicht mehr erreichbar.
 - Limits: Freigabeliste und vertrauenswürdige Proxys gelten auch für das Docker-Gateway (Vorproxy auf dem Docker-Host).
 - „TLS durchreichen“: Freigabeliste der Ländersperre und eigene Sperrliste wirken auch für Zugriffe über das Docker-Gateway.

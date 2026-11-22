@@ -1692,6 +1692,20 @@ func (m *Module) repollWait(ctx context.Context, uid string, d time.Duration) {
 	}
 }
 
+// diskRefresher: Sammler, die ohne SMART die Plattenliste nur auf Anforderung neu lesen (Proxmox VE, PBS; #215).
+type diskRefresher interface{ RefreshDisks() }
+
+// refreshDisks: "Dienste erkennen" liest bei diesen Sammlern die Plattenliste neu (rt.mu gehalten).
+func refreshDisks(rt *hostRT) {
+	for _, a := range rt.accs {
+		if ad, ok := a.col.(*apiAdapter); ok {
+			if r, ok := ad.src.(diskRefresher); ok {
+				r.RefreshDisks()
+			}
+		}
+	}
+}
+
 // apiDiscover: POST Dienste jetzt erkennen (eine Runde sofort, mit Erkennung) und Ergebnis melden.
 func (m *Module) apiDiscover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1714,6 +1728,7 @@ func (m *Module) apiDiscover(w http.ResponseWriter, r *http.Request) {
 	}
 	rt.mu.Lock()
 	rt.LastDisc = time.Time{}
+	refreshDisks(rt)
 	rt.mu.Unlock()
 	// eigene Runde wie die geplante (gleiches Zeitlimit, unabhaengig von der Anfrage): bricht der Besucher ab oder
 	// braucht ein Zugang laenger als das Test-Zeitlimit, zaehlte das sonst als Ausfall des Zugangs

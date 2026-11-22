@@ -109,6 +109,12 @@
 		var el = ev.target.closest ? ev.target.closest("[data-autosubmit]") : null;
 		if (el && el.form) { el.form.submit(); }
 	});
+	// Eingabe in ein Feld mit data-check="#id" waehlt die zugehoerige Option (z. B. Export: Passwort -> "mit Passwort")
+	document.addEventListener("input", function (ev) {
+		var sel = ev.target.getAttribute ? ev.target.getAttribute("data-check") : null;
+		var opt = sel && ev.target.value ? document.querySelector(sel) : null;
+		if (opt) { opt.checked = true; }
+	});
 	document.addEventListener("click", function (ev) {
 		var btn = ev.target.closest("[data-copy-target],[data-copy-text]");
 		if (!btn) { return; }

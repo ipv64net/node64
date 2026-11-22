@@ -4,6 +4,8 @@
 
 Behoben:
 
+- Proxmox VE und PBS mit ausgeschaltetem „SMART-Werte abfragen“: Die Plattenliste wird nur noch beim Start und bei „Dienste erkennen“ gelesen statt alle 30 Minuten – auch diese Abfrage hat schlafende Festplatten geweckt (#215).
+- FreeBSD/OPNsense: Der Dienst „Updates“ nennt Funde von `pkg audit` „installierte Pakete mit bekannter Sicherheitslücke“ statt „Sicherheitsupdates“ – sie können auch bei „0 verfügbar“ bestehen, wenn die Paketquelle noch keine Korrektur hat.
 - „In Ordnung, bis der Wert schlechter wird“ endet jetzt auch bei Werten nahe 100 % und im Modus „GB frei“.
 - „Darf ausgeschaltet sein“: Abgewiesene Anmeldung, geänderter Hostschlüssel oder ein Zertifikatsfehler gelten nicht mehr als ausgeschaltet und werden gemeldet.
 - Cluster: Eine auf einer anderen Node gesetzte Quittierung geht nicht mehr verloren.

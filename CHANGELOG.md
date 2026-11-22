@@ -4,6 +4,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: keine falsche Warnung „Port 80/443 nicht veröffentlicht“ im Docker-Bridge-Netz ohne Hairpin-NAT (#243).
+- Monitor64: Proxmox VE/PBS ohne „SMART-Werte abfragen“ wecken schlafende Festplatten nicht mehr (#215); OPNsense/FreeBSD nennt Funde von `pkg audit` „Pakete mit bekannter Sicherheitslücke“ statt „Sicherheitsupdates“.
+- Konfigurations-Export: Wer ein Passwort eingibt, wählt damit „Geheimnisse mit Passwort verschlüsselt“ – vorher blieb „ohne Geheimnisse“ gewählt.
+- DNS64: Die Texte sagen klar, dass globale Freigaben auch für alle Gerätegruppen gelten (nur Blocklisten, nicht Sperren, Kategorien und Dienste einer Gruppe).
 - Oberfläche: Web-Port und HTTPS-Port lassen sich unter *Einstellungen › Allgemein › Erreichbarkeit dieser Node* ändern (gilt vor `NODE64_HTTP_PORT`/`NODE64_HTTPS_PORT`); Node64 startet dann neu und die Seite wechselt automatisch auf den neuen Port. Die Karte trennt jetzt „Direkt über die eigenen Ports“ und „Über den gemeinsamen Eingang (PROXY64)“.
 - PROXY64: Über den CDN64-Tunnel ist ein nicht veröffentlichter Host nicht mehr per Host-Kopf erreichbar (auch mit Wildcard-Zertifikat); Limits, Ländersperre bei „TLS durchreichen“ und DoH beachten ausdrückliche Freigaben fürs Docker-Gateway; der Tunnel wechselt nach einer UDP-Störung zuverlässig zurück auf QUIC.
 - Benutzer im Cluster: Eigene Aktionen eines Benutzers (2FA-Anmeldung, Einstellungen, LDAP-Abgleich) nehmen keine Sperre, Herabstufung, Passwort-Rücksetzung oder Löschung einer anderen Node mehr zurück; umbenannte Gruppen verschmelzen nicht mehr falsch; LDAP-Einrichtung und 2FA-Pflicht überschreiben sich nicht mehr gegenseitig.

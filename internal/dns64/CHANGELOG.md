@@ -3,6 +3,7 @@
 ## 1.45.1 – unveröffentlicht
 
 ### Behoben
+- Texte: Globale Freigaben (auch „Freigeben“ im Abfrage-Log) gelten für alle Gerätegruppen und heben deren Blocklisten auf, nicht aber Sperren, Kategorien und Dienste einer Gruppe – das steht jetzt an der Freigabeliste, in der Rückfrage und in den Regeln der Gruppe.
 - Block- und Freigabe-Listen sowie Upstreams werden nach Adresse geschaltet und gelöscht; eine zwischendurch geänderte Liste (Cluster, zweiter Tab) trifft nicht mehr den falschen Eintrag.
 - DoH über den gemeinsamen Eingang beachtet „Weitere erlaubte Client-Netze“ auch für das Docker-Gateway.
 - Rebinding-Schutz: Freigaben einer Gerätegruppe wirken nur für diese Gruppe, unabhängig davon, wer zuerst gefragt hat (gemeinsamer Cache).

@@ -167,5 +167,7 @@ docker exec node64 /node64 reset-password
 - Alle Sitzungen des Benutzers werden beendet; der Vorgang steht im Audit-Log (`settings.password`,
   „reset-password (Kommandozeile)“).
 - Mit docker compose: `docker compose exec node /node64 reset-password` (Dienstname wie in der compose-Datei).
+- Debian-Paket (ohne Docker): `sudo -u node64 NODE64_DATA_DIR=/var/lib/node64 /usr/bin/node64 reset-password`
+  (Datenordner wie in `/etc/default/node64`).
 - Im Cluster gilt das neue Passwort nur auf dieser Node; damit es überall gilt, danach in der Oberfläche einmal das
   Passwort ändern.

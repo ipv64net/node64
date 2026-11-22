@@ -400,15 +400,29 @@ func (p *PVE) Queries() []string {
 	return []string{"GET /cluster/status", "GET " + n + "/status", "GET " + n + "/storage", "GET " + n + "/disks/zfs",
 		"GET " + n + "/qemu?full=1", "GET " + n + "/lxc", "GET " + n + "/{qemu|lxc}/{vmid}/config (alle 10 min)",
 		"GET /cluster/ha/status/current", "GET /cluster/ceph/status (falls eingerichtet)",
-		"GET " + n + "/disks/list, " + n + "/disks/smart?disk=… (alle 30 min)", "GET " + n + "/apt/update (alle 60 min)"}
+		disksQuery(n, p.cfg.NoSmart), "GET " + n + "/apt/update (alle 60 min)"}
 }
 
 // Queries nennt die API-Pfade (PBS).
 func (p *PBS) Queries() []string {
 	return []string{"GET /nodes/localhost/status", "GET /status/datastore-usage",
 		"GET /admin/verify, /admin/prune, /admin/sync, /admin/gc", "GET /admin/datastore/{store}/namespace, /groups (alle 10 min)",
-		"GET /nodes/localhost/disks/list, /disks/smart?disk=… (alle 30 min)", "GET /nodes/localhost/apt/update (alle 60 min)"}
+		disksQuery("/nodes/localhost", p.cfg.NoSmart), "GET /nodes/localhost/apt/update (alle 60 min)"}
 }
+
+// disksQuery nennt die Abfrage der Platten (Proxmox VE, PBS); ohne SMART nur einmal (#215).
+func disksQuery(n string, noSmart bool) string {
+	if noSmart {
+		return "GET " + n + "/disks/list?skipsmart=1 (einmal beim Start und bei „Dienste erkennen“)"
+	}
+	return "GET " + n + "/disks/list, " + n + "/disks/smart?disk=… (alle 30 min)"
+}
+
+// RefreshDisks: ohne SMART die Plattenliste in der naechsten Runde neu lesen ("Dienste erkennen", #215).
+func (p *PVE) RefreshDisks() { p.disks.refresh() }
+
+// RefreshDisks wie bei Proxmox VE.
+func (p *PBS) RefreshDisks() { p.disks.refresh() }
 
 // Queries nennt die API-Pfade (Docker).
 func (d *Docker) Queries() []string {

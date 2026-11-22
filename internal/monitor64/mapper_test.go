@@ -1,6 +1,7 @@
 package monitor64
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ipv64net/node64/internal/m64proto"
@@ -136,5 +137,22 @@ func TestMapFacts(t *testing.T) {
 func TestTextHelpers(t *testing.T) {
 	if bytesText(7_644_000_000_000) != "7,6 TB" || speedText(10000) != "10 Gbit/s" || speedText(2500) != "2,5 Gbit/s" || mbitText(312.4) != "312 Mbit/s" {
 		t.Fatal(bytesText(7_644_000_000_000), speedText(2500), mbitText(312.4))
+	}
+}
+
+// Forum 5256: FreeBSD/OPNsense zaehlt "pkg audit" (installierte Pakete mit bekannter Luecke), keine verfuegbaren
+// Updates - der Text darf nicht "0 verfuegbar, 2 Sicherheitsupdates" lauten; die Warnung (updates_security) bleibt.
+func TestMapUpdatesPkgAudit(t *testing.T) {
+	out := MapReport(nil, &m64proto.Report{Time: 1, Updates: &m64proto.Updates{Manager: "pkg", Pending: 0, Security: 2}})
+	u := svcBy(out, "updates")
+	if u == nil || !hasFact(u, "updates_security") {
+		t.Fatalf("updates: %+v", u)
+	}
+	if !strings.Contains(u.Text, "monitor64.txt.updates_vuln") || !strings.Contains(u.Facts[0].Text, "monitor64.txt.vuln_packages") {
+		t.Fatalf("Texte: %q / %q", u.Text, u.Facts[0].Text)
+	}
+	out = MapReport(nil, &m64proto.Report{Time: 1, Updates: &m64proto.Updates{Manager: "apt", Pending: 3, Security: 1}})
+	if u := svcBy(out, "updates"); !strings.Contains(u.Text, "monitor64.txt.updates?") || !strings.Contains(u.Facts[0].Text, "monitor64.txt.security_updates") {
+		t.Fatalf("apt: %q / %q", u.Text, u.Facts[0].Text)
 	}
 }

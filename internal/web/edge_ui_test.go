@@ -64,6 +64,7 @@ func TestUIViaEdge(t *testing.T) {
 		}
 	}
 	// Docker-Bridge-Netz ohne veroeffentlichte Ports (Gateway ohne Dienst): Seite Ports warnt mit Beispiel
+	t.Setenv("NODE64_DOCKER_HOST", "none") // keine Docker-API: nur die Pruefanfrage zaehlt
 	defer edge.BridgeForTest(true, netip.MustParseAddr("127.0.0.2"))()
 	if d := a.s.portsPageData(ctx, "", ""); !d.Pub.Bridge || !d.Pub.MissingPort(cfg.HTTPSPort) {
 		t.Fatalf("published: %+v", d.Pub)
@@ -75,6 +76,37 @@ func TestUIViaEdge(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("ports page lacks %q", want)
 		}
+	}
+	// Docker-Host ohne Hairpin (#243): das Gateway nimmt an, antwortet aber nie - keine Warnung, nur "nicht pruefbar"
+	for _, p := range []int{cfg.HTTPPort, cfg.HTTPSPort} {
+		ln, err := net.Listen("tcp", "127.0.0.4:"+strconv.Itoa(p))
+		if err != nil {
+			t.Skip("no fourth loopback address:", err)
+		}
+		defer ln.Close()
+		go func() {
+			var held []net.Conn // offen halten, bis der Listener schliesst
+			defer func() {
+				for _, c := range held {
+					_ = c.Close()
+				}
+			}()
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				held = append(held, c)
+			}
+		}()
+	}
+	defer edge.BridgeForTest(true, netip.MustParseAddr("127.0.0.4"))()
+	d := a.s.portsPageData(ctx, "", "")
+	if len(d.Pub.Missing) != 0 || d.Pub.PortState(cfg.HTTPSPort) != "unknown" {
+		t.Fatalf("published without hairpin: %+v", d.Pub)
+	}
+	if _, body = a.get(t, "/settings/ports"); strings.Contains(body, `id="published"`) {
+		t.Error("ports page warns without hairpin")
 	}
 	_ = a.store.SetSetting(ctx, setUIName, "")
 	if err := a.s.uiRoute(ctx); err != nil || len(e.Status().Names) != 0 {

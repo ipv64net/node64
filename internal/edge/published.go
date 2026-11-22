@@ -5,16 +5,23 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/localnet"
+	"github.com/ipv64net/node64/internal/proxmox"
 )
 
 // Docker-Bridge-Netz: Lauschen im Container reicht fuer PROXY64 nicht, HTTP- und HTTPS-Port muessen auf dem
@@ -22,6 +29,11 @@ import (
 // Pruefwert ueber das Gateway (den Docker-Host) an denselben Port; kommt sie beim eigenen Listener an, ist der Port
 // veroeffentlicht (Hairpin, siehe localnet.Gateway). Ein anderes Programm auf dem Host antwortet nicht mit dem
 // Pruefwert und zaehlt deshalb nicht.
+// Nicht jeder Docker-Host leitet Anfragen aus dem Bridge-Netz ueber das Gateway zurueck (UFW auf dem Host, DNAT nur
+// fuer fremde Schnittstellen, #243). Kommt die Pruefanfrage nicht an, entscheiden die Port-Bindings des eigenen
+// Containers (Docker-API, falls erreichbar). Ohne Docker-API fehlt ein Port nur, wenn der Host die Verbindung abgelehnt
+// oder ein anderes Programm geantwortet hat; eine Zeitueberschreitung beweist nichts - der Port gilt dann als nicht
+// pruefbar (Unknown, keine Warnung).
 
 const (
 	probePath   = "/.well-known/node64-probe/" // Port 80: Pfad mit Pruefwert
@@ -41,8 +53,29 @@ type Published struct {
 	Bridge  bool             `json:"bridge"`            // Container im Bridge-Netz (sonst ist nichts zu pruefen)
 	Gateway string           `json:"gateway,omitempty"` // Docker-Host
 	Missing []ListenerStatus `json:"missing,omitempty"` // laufende Dienste (http, https), deren Port auf dem Host fehlt
+	Unknown []ListenerStatus `json:"unknown,omitempty"` // laufende Dienste ohne eindeutiges Ergebnis (keine Warnung)
+	Found   []int            `json:"found,omitempty"`   // TCP-Ports, die nachweislich veroeffentlicht sind
 	H3Port  int              `json:"h3_port,omitempty"` // HTTP/3 laeuft (UDP, nicht pruefbar, aber fuer das Beispiel)
 	At      time.Time        `json:"at"`
+}
+
+// PortState: Ergebnis fuer einen TCP-Port des Eingangs - "yes" (veroeffentlicht), "no" (fehlt), "unknown" (nicht
+// eindeutig pruefbar) oder "" (nicht geprueft).
+func (p Published) PortState(port int) string {
+	if p.MissingPort(port) {
+		return "no"
+	}
+	for _, l := range p.Unknown {
+		if l.Port == port {
+			return "unknown"
+		}
+	}
+	for _, f := range p.Found {
+		if f == port {
+			return "yes"
+		}
+	}
+	return ""
 }
 
 // MissingPort: der TCP-Port des Eingangs ist auf dem Host nicht veroeffentlicht.
@@ -102,6 +135,82 @@ type pubCache struct {
 	res Published
 }
 
+// probeResult: Ausgang einer Pruefanfrage ueber das Gateway.
+type probeResult int
+
+const (
+	probeVague probeResult = iota // keine Aussage (Zeitueberschreitung, Netz nicht erreichbar, Abbruch)
+	probeHit                      // kam beim eigenen Listener an: veroeffentlicht
+	probeOther                    // vom Host abgelehnt oder ein anderes Programm hat geantwortet: fuehrt nicht hierher
+)
+
+// Tests: Docker-API und Name des eigenen Containers (Docker setzt den Hostnamen auf die kurze Kennung).
+var (
+	pubDockerHost = proxmox.DefaultDockerHost
+	pubSelf       = os.Hostname
+)
+
+// pubBinding ist ein Port-Binding des eigenen Containers (/containers/{id}/json, NetworkSettings.Ports).
+type pubBinding struct {
+	HostIP   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
+}
+
+// pubBindings liest die Port-Bindings des eigenen Containers ("443/tcp" -> Bindings, wie DNS64); nil, wenn die
+// Docker-API nicht erreichbar ist (kein Socket eingebunden, Container nicht gefunden) - dann zaehlt nur die Pruefanfrage.
+func pubBindings(ctx context.Context) map[string][]pubBinding {
+	self, err := pubSelf()
+	if err != nil || self == "" {
+		return nil
+	}
+	hc, base, err := proxmox.DockerClient(pubDockerHost())
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/containers/"+url.PathEscape(self)+"/json", nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var in struct {
+		NetworkSettings struct {
+			Ports map[string][]pubBinding `json:"Ports"`
+		} `json:"NetworkSettings"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&in) != nil {
+		return nil
+	}
+	if in.NetworkSettings.Ports == nil { // Container ohne Ports: erreichbar, aber leer
+		return map[string][]pubBinding{}
+	}
+	return in.NetworkSettings.Ports
+}
+
+// pubBound: der TCP-Port des Containers ist laut Binding unter einer der Nummern hostPorts auf dem Host veroeffentlicht
+// (auch nur an eine Host-Adresse gebunden; 127.0.0.1 erreicht von aussen nichts).
+func pubBound(b map[string][]pubBinding, port int, hostPorts ...int) bool {
+	for _, x := range b[strconv.Itoa(port)+"/tcp"] {
+		if a, err := netip.ParseAddr(x.HostIP); err == nil && a.Unmap().IsLoopback() {
+			continue
+		}
+		for _, hp := range hostPorts {
+			if x.HostPort == strconv.Itoa(hp) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Published prueft (hoechstens einmal je Minute bei gleichen Ports), ob HTTP- und HTTPS-Port des Eingangs auf dem
 // Docker-Host veroeffentlicht sind. Ausserhalb des Bridge-Netzes leer.
 func (e *Edge) Published(ctx context.Context) Published {
@@ -132,32 +241,59 @@ func (e *Edge) Published(ctx context.Context) Published {
 	res := Published{Bridge: true, H3Port: h3, At: time.Now()}
 	if gw.IsValid() {
 		res.Gateway = gw.String()
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		for _, l := range run {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				ok := e.probe(ctx, gw, l.Name, l.Port)
-				if !ok && l.Name == "https" && pub != l.Port { // anders veroeffentlicht (-p 8443:443, Einstellung Port nach aussen)
-					ok = e.probe(ctx, gw, l.Name, pub)
-				}
-				if !ok {
-					mu.Lock()
-					res.Missing = append(res.Missing, l)
-					mu.Unlock()
-				}
-			}()
+	}
+	out := make([]probeResult, len(run))
+	var wg sync.WaitGroup
+	for i, l := range run {
+		if !gw.IsValid() {
+			continue // ohne Gateway nur die Docker-API
 		}
-		wg.Wait()
-		sort.Slice(res.Missing, func(i, j int) bool { return res.Missing[i].Port < res.Missing[j].Port })
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out[i] = e.probe(ctx, gw, l.Name, l.Port)
+			if out[i] != probeHit && l.Name == "https" && pub != l.Port { // anders veroeffentlicht (-p 8443:443, Einstellung Port nach aussen)
+				if r := e.probe(ctx, gw, l.Name, pub); r != probeOther {
+					out[i] = r // fehlend nur, wenn beide Wege eindeutig nicht hierher fuehren
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	var binds map[string][]pubBinding
+	loaded := false
+	for i, l := range run {
+		if out[i] != probeHit {
+			if !loaded { // Docker-API nur fragen, wenn die Pruefanfrage nicht reicht
+				binds, loaded = pubBindings(ctx), true
+			}
+			switch {
+			case pubBound(binds, l.Port, l.Port, pub):
+				out[i] = probeHit
+			case binds != nil: // Docker-API erreichbar, aber kein passendes Binding: fehlt sicher
+				out[i] = probeOther
+			}
+		}
+		switch out[i] {
+		case probeHit:
+			res.Found = append(res.Found, l.Port)
+		case probeOther:
+			res.Missing = append(res.Missing, l)
+		default:
+			res.Unknown = append(res.Unknown, l)
+		}
+	}
+	sort.Slice(res.Missing, func(i, j int) bool { return res.Missing[i].Port < res.Missing[j].Port })
+	if ctx.Err() != nil { // abgebrochener Seitenaufruf: Ergebnis nicht merken
+		return res
 	}
 	e.pub.Store(&pubCache{key: key, res: res})
 	return res
 }
 
-// probe schickt eine Pruefanfrage an gw:port und meldet, ob sie beim eigenen Listener ankam.
-func (e *Edge) probe(ctx context.Context, gw netip.Addr, name string, port int) bool {
+// probe schickt eine Pruefanfrage an gw:port und meldet, ob sie beim eigenen Listener ankam (probeHit), eindeutig
+// woanders endete (probeOther: abgelehnt bzw. fremde Antwort) oder offen blieb (probeVague).
+func (e *Edge) probe(ctx context.Context, gw netip.Addr, name string, port int) probeResult {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	nonce := hex.EncodeToString(b[:])
@@ -166,25 +302,35 @@ func (e *Edge) probe(ctx context.Context, gw netip.Addr, name string, port int) 
 	ctx, cancel := context.WithTimeout(ctx, probeWait)
 	defer cancel()
 	addr := net.JoinHostPort(gw.String(), strconv.Itoa(port))
+	var err error
 	if name == "http" {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+probePath+nonce, nil)
-		if err != nil {
-			return false
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+probePath+nonce, nil)
+		if rerr != nil {
+			return probeVague
 		}
 		req.Host = "probe" + probeSuffix
 		cl := &http.Client{Transport: &http.Transport{DisableKeepAlives: true},
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-		if resp, err := cl.Do(req); err == nil {
+		var resp *http.Response
+		if resp, err = cl.Do(req); err == nil {
 			_ = resp.Body.Close()
 		}
 	} else {
 		d := tls.Dialer{Config: &tls.Config{ServerName: nonce + probeSuffix, InsecureSkipVerify: true}} // nur der Name zaehlt
-		if c, err := d.DialContext(ctx, "tcp", addr); err == nil {
+		var c net.Conn
+		if c, err = d.DialContext(ctx, "tcp", addr); err == nil {
 			_ = c.Close()
 		}
 	}
-	v, _ := e.probes.Load(nonce)
-	return v == true
+	if v, _ := e.probes.Load(nonce); v == true {
+		return probeHit
+	}
+	// Antwort ohne Pruefwert (anderes Programm) oder vom Host abgelehnt (dort lauscht nichts): fuehrt nicht hierher.
+	// Alles andere (Zeitueberschreitung, z. B. Firewall auf dem Host ohne Hairpin) bleibt offen.
+	if err == nil || errors.Is(err, syscall.ECONNREFUSED) {
+		return probeOther
+	}
+	return probeVague
 }
 
 // probeHit vermerkt eine angekommene Pruefanfrage (false = kein offener Pruefwert).
