@@ -91,12 +91,14 @@ type reachView struct {
 	UIName                    string
 	UIPublic                  bool
 	UICert                    uiCertView
+	HTTPSRedirect             bool // Seitenaufrufe per HTTP auf HTTPS umleiten
 }
 
 func (s *Server) reachData(ctx context.Context) *reachView {
 	rv := &reachView{HTTPPort: s.Cfg.HTTPPort, HTTPSPort: s.Cfg.HTTPSPort, Bind: s.Cfg.BindAddr, EdgeOn: s.Edge != nil, Bridge: bridgeNet(),
 		UIName: s.Store.SettingOr(ctx, setUIName, ""), UIPublic: s.Store.SettingOr(ctx, setUIPublic, "0") == "1", UICert: s.uiCertData(ctx)}
 	rv.EnvHTTPPort, rv.EnvHTTPSPort = s.envPorts()
+	rv.HTTPSRedirect = s.httpsRedirect.Load()
 	if h, hs, set := WebPorts(ctx, s.Store, rv.EnvHTTPPort, rv.EnvHTTPSPort); set && (h != s.Cfg.HTTPPort || hs != s.Cfg.HTTPSPort) {
 		rv.Ignored = strconv.Itoa(h) + "/" + strconv.Itoa(hs)
 	}
@@ -160,6 +162,9 @@ func (s *Server) settingsReach(w http.ResponseWriter, r *http.Request) {
 	err := s.saveUICertForm(r)
 	if err == nil {
 		err = s.saveUIRouteForm(r)
+	}
+	if err == nil {
+		err = s.saveHTTPSRedirect(r)
 	}
 	if err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))

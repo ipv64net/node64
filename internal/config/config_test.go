@@ -26,6 +26,16 @@ func TestPortsFile(t *testing.T) {
 	}
 }
 
+// Gleicher Port in beiden Variablen: der Web-Port spricht HTTPS ohnehin mit, kein eigener HTTPS-Port.
+func TestLoadSamePort(t *testing.T) {
+	t.Setenv("NODE64_HTTP_PORT", "8091")
+	t.Setenv("NODE64_HTTPS_PORT", "8091")
+	c, err := Load()
+	if err != nil || c.HTTPPort != 8091 || c.HTTPSPort != 0 {
+		t.Fatalf("gleicher Port: %+v %v", c, err)
+	}
+}
+
 func TestLoadKeepsEnvPorts(t *testing.T) {
 	t.Setenv("NODE64_HTTP_PORT", "8091")
 	t.Setenv("NODE64_HTTPS_PORT", "8443")

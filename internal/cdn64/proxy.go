@@ -1025,7 +1025,11 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			page(sw, http.StatusForbidden)
 			return
 		}
-		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
+		// Let's-Encrypt-Pruefung ueber HTTP (GET/HEAD auf /.well-known/acme-challenge/<token>): Blocklisten,
+		// Honeypot-Sperre und Laendersperre gelten nicht - die Pruefer stehen u. a. in Rechenzentren (Forum 5245).
+		// Eigene Sperrliste, Limits, Zugriffsliste und Exploit-Schutz bleiben.
+		acme := edge.ACMEChallenge(r)
+		if !acme && m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
 			*reject = rejBlocklist
 			st.blocked.Add(1)
 			if !m.hpDivert(sw, r, client, rejBlocklist) {
@@ -1033,7 +1037,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			return
 		}
-		if m.hpBlocked(client) { // vom Honeypot gemeldet (Sofort-Sperre)
+		if !acme && m.hpBlocked(client) { // vom Honeypot gemeldet (Sofort-Sperre)
 			*reject = rejHoneypot
 			st.blocked.Add(1)
 			if !m.hpDivert(sw, r, client, rejHoneypot) {
@@ -1041,7 +1045,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			return
 		}
-		if m.geoBlocked(&h.Advanced, client) { // Laendersperre des Hosts
+		if !acme && m.geoBlocked(&h.Advanced, client) { // Laendersperre des Hosts
 			*reject = rejGeo
 			st.blocked.Add(1)
 			if !m.hpDivert(sw, r, client, rejGeo) {
@@ -1448,6 +1452,17 @@ func (m *Module) routeFor(h *Host) edge.Route {
 	rt.Handler = handler
 	if !h.ForceSSL {
 		rt.HTTP = handler
+	} else if h.Kind == KindProxy {
+		// HTTPS erzwingen: Let's-Encrypt-Pruefungen des Ziels (HTTP-01, z. B. Mailcow) gehen ueber HTTP direkt hin -
+		// mit der Ausnahme von Blocklisten, Honeypot und Laendern (Forum 5245); alles andere auf HTTPS umleiten. Eigene
+		// Tokens der Node beantwortet der Eingang vorher.
+		rt.HTTP = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if edge.ACMEChallenge(r) {
+				handler.ServeHTTP(w, r)
+				return
+			}
+			m.toHTTPS(w, r)
+		})
 	}
 	return rt
 }

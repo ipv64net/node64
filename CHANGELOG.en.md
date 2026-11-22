@@ -4,11 +4,12 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: Let’s Encrypt HTTP-01 validations no longer fail on blocklists, the honeypot block or country blocking – also behind proxy hosts with “Force HTTPS” (e.g. Mailcow).
 - PROXY64: no false “port 80/443 not published” warning in a Docker bridge network without hairpin NAT (#243).
 - Monitor64: Proxmox VE/PBS with “Query SMART values” off no longer wake sleeping hard disks (#215); OPNsense/FreeBSD calls `pkg audit` findings “packages with a known vulnerability” instead of “security updates”.
 - Configuration export: entering a password selects “secrets encrypted with a password” – before, “without secrets” stayed selected.
 - DNS64: the texts state clearly that global releases apply to all device groups too (blocklists only, not a group’s blocks, categories and services).
-- Interface: web port and HTTPS port can be changed under *Settings › General › Reachability of this node* (takes precedence over `NODE64_HTTP_PORT`/`NODE64_HTTPS_PORT`); Node64 then restarts and the page moves to the new port automatically. The card now separates “Directly on its own ports” and “Through the shared entry (PROXY64)”.
+- Interface: web port and HTTPS port can be changed under *Settings › General › Reachability of this node* (takes precedence over `NODE64_HTTP_PORT`/`NODE64_HTTPS_PORT`); Node64 then restarts and the page moves to the new port automatically. The same port in both fields is allowed (the web port speaks HTTP and HTTPS), plus a “Redirect HTTP to HTTPS” switch for page requests – **on by default**: the interface then runs over HTTPS with a self-signed (or chosen) certificate; API, health check, cluster, DoH, status pages and agent downloads are not redirected. The card now separates “Directly on its own ports” and “Through the shared entry (PROXY64)”.
 - PROXY64: through the CDN64 tunnel an unpublished host can no longer be reached via the Host header (even with a wildcard certificate); limits, the country block for “TLS passthrough” and DoH honour explicit releases for the Docker gateway; the tunnel reliably switches back to QUIC after a UDP outage.
 - Users in a cluster: a user's own actions (2FA login, preferences, LDAP sync) no longer undo a lock, demotion, password reset or deletion made on another node; renamed groups no longer merge wrongly; the LDAP setup and the 2FA requirement no longer overwrite each other.
 - Sign-in: expired AD accounts and accounts locked in LDAP lose their group role for passkeys and API keys too; SSO groups of linked local accounts expire after 7 days; LDAP sync with a custom user filter and many users; “Test connection” keeps the inputs.

@@ -95,8 +95,9 @@ type Server struct {
 	mcpLimit   *ipLimiter  // Rate-Limit je MCP-Schluessel
 	newKeys    newKeyStore // eben angelegte Schluessel bis zur naechsten Seite (newkey.go)
 
-	loginWatch atomic.Pointer[LoginWatcher] // Fehlversuche an Honeypot64 (login_watch.go), nil = keiner
-	apiLogOn   atomic.Int32                 // API-Log: apiLogOff, apiLogKeys, apiLogAll (api_log.go)
+	loginWatch    atomic.Pointer[LoginWatcher] // Fehlversuche an Honeypot64 (login_watch.go), nil = keiner
+	apiLogOn      atomic.Int32                 // API-Log: apiLogOff, apiLogKeys, apiLogAll (api_log.go)
+	httpsRedirect atomic.Bool                  // Web-Port: Seitenaufrufe per HTTP auf HTTPS umleiten (webports.go)
 
 	mu      sync.Mutex
 	servers []*http.Server
@@ -107,6 +108,7 @@ const maxBody = 1 << 20 // 1 MB fuer Formulare und JSON
 // New baut Router und Templates.
 func New(d Deps) (*Server, error) {
 	s := &Server{Deps: d, log: d.Log.Slog().With("module", "web"), mux: http.NewServeMux(), limiter: newLoginLimiter(), ipLimit: newIPLimiter(300, 600)}
+	s.httpsRedirect.Store(d.Store.SettingOr(context.Background(), SettingHTTPSRedirect, "1") == "1") // Standard: an
 	if d.Certs != nil {
 		s.certsUI = certsui.New(d.Certs)
 		d.Certs.SetUsers("web", s.uiCertUsers)
@@ -310,6 +312,7 @@ func (s *Server) Run(ctx context.Context) error {
 			return err
 		}
 		s.track(srv)
+		srv.Handler = s.redirectHTTPS(s.handler) // nur hier: nicht ueber den gemeinsamen Eingang
 		// HTTP und HTTPS auf demselben Port (dualport.go): https://<node>:<port> geht ohne eigenen HTTPS-Port
 		dl := newDualListener(ln, &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.uiCertificate, NextProtos: []string{"http/1.1"}})
 		s.log.Info("http listening", "addr", ln.Addr().String(), "https", "same port")

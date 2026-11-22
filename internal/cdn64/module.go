@@ -50,7 +50,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.57.1"
+	Version = "1.58.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -205,6 +205,7 @@ func (m *Module) Start(ctx context.Context) error {
 	go func() { defer m.wg.Done(); m.dockerLoop(ctx) }()
 	if m.edge != nil {
 		m.edge.SetBlocker(m.blockedAny)
+		m.edge.SetHTTPBlocker(m.httpConnBlocked, m.httpGuard)
 		m.edge.SetGate(m.gateOpen)
 		m.edge.SetTunnelHTTP3(m.onlineHTTP3)
 		m.edge.SetWatch(m.watchEdge)
@@ -231,6 +232,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	if m.edge != nil {
 		m.edge.Remove(Name)
 		m.edge.SetBlocker(nil)
+		m.edge.SetHTTPBlocker(nil, nil)
 		m.edge.SetGate(nil)
 		m.edge.SetTunnelHTTP3(nil)
 		m.edge.SetWatch(nil)

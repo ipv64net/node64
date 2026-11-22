@@ -5,7 +5,7 @@
 # Datenordner (Datenbank, Zertifikate, Selbst-Update)
 NODE64_DATA_DIR=/var/lib/node64
 
-# Oberflaeche und API: http://<Rechner>:8080 (Standard; in der Oberflaeche unter Einstellungen > Allgemein >
+# Oberflaeche und API: https://<Rechner>:8080 (selbst signiert, http:// leitet um; Standard; in der Oberflaeche unter Einstellungen > Allgemein >
 # Erreichbarkeit aenderbar, das gilt dann vor diesen Werten)
 NODE64_HTTP_PORT=8080
 NODE64_HTTPS_PORT=0

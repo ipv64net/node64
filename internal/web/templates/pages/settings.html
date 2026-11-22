@@ -55,6 +55,8 @@
 							<div class="form-text">{{$.T "settings.reach_https_port_hint" "port" .EnvHTTPSPort}}</div>
 						</div>
 					</div>
+					<div class="form-check form-switch mt-2 mb-1"><input class="form-check-input" type="checkbox" id="https_redirect" name="https_redirect"{{if .HTTPSRedirect}} checked{{end}}><label class="form-check-label" for="https_redirect">{{$.T "settings.reach_redirect"}}</label></div>
+					<div class="form-text mb-2">{{$.T "settings.reach_redirect_hint"}}</div>
 					<div class="form-text mb-2">{{$.T "settings.reach_restart_hint"}}{{if .Bridge}} <i class="bi bi-info-circle"></i> {{$.T "settings.reach_bridge"}}{{end}}{{if .Cluster}} <i class="bi bi-diagram-3"></i> {{$.T "settings.reach_cluster"}} <a href="/cluster">{{$.T "nav.cluster"}}</a>{{end}}</div>
 					{{if .EdgeOn}}<h3 class="h6 mt-3">{{$.T "settings.reach_edge" "http" .EdgeHTTP "https" .EdgeHTTPS}}</h3>
 					<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>

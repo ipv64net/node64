@@ -192,8 +192,9 @@ type Edge struct {
 	table    atomic.Pointer[table]
 	cfgNow   atomic.Pointer[Config] // Kopie von cfg fuer Config(): Abnehmer fragen sie auch waehrend e.mu (Port-Pruefung)
 	h3On     atomic.Bool
-	block    atomic.Pointer[BlockFunc] // Sperrliste (z. B. ipv64-Blocklisten von CDN64), vor TLS geprueft
-	gate     atomic.Pointer[ConnGate]  // Verbindungs-Limits (z. B. Schutz vor Ueberlastung von CDN64), nach der Sperrliste
+	block    atomic.Pointer[BlockFunc]   // Sperrliste (z. B. ipv64-Blocklisten von CDN64), vor TLS geprueft
+	block80  atomic.Pointer[httpBlocker] // Port 80: Sperren beim Annehmen und je Anfrage (SetHTTPBlocker); nil = block
+	gate     atomic.Pointer[ConnGate]    // Verbindungs-Limits (z. B. Schutz vor Ueberlastung von CDN64), nach der Sperrliste
 	defClose atomic.Bool
 	vonce    sync.Once // interne Server fuer ServeConn (conn.go)
 	virt     *virtual
@@ -376,6 +377,58 @@ func (e *Edge) blocked(a net.Addr) bool {
 	return f != nil && (*f)(addrIP(a))
 }
 
+// HTTPGuard prueft eine Anfrage auf Port 80 vor der Verteilung; true = schon beantwortet (abgewiesen).
+type HTTPGuard func(w http.ResponseWriter, r *http.Request) bool
+
+type httpBlocker struct {
+	conn  BlockFunc // beim Annehmen (nil = keine)
+	guard HTTPGuard // je Anfrage (nil = keine)
+}
+
+// SetHTTPBlocker setzt die Sperren fuer Port 80 (auch ServeConn mit Port 80): conn entscheidet beim Annehmen, guard je
+// Anfrage - ausser fuer Let's-Encrypt-Pruefungen (ACMEChallenge), die auch von gesperrten Adressen ankommen muessen
+// (Pruefer u. a. in Rechenzentren, Forum 5245). conn und guard nil = wie die anderen Ports (SetBlocker).
+func (e *Edge) SetHTTPBlocker(conn BlockFunc, guard HTTPGuard) {
+	if conn == nil && guard == nil {
+		e.block80.Store(nil)
+		return
+	}
+	e.block80.Store(&httpBlocker{conn: conn, guard: guard})
+}
+
+// blocked80: Sperre beim Annehmen auf Port 80.
+func (e *Edge) blocked80(a net.Addr) bool {
+	b := e.block80.Load()
+	if b == nil {
+		return e.blocked(a)
+	}
+	return b.conn != nil && b.conn(addrIP(a))
+}
+
+// guard80: Anfrage auf Port 80 abgewiesen (true = beantwortet); Let's-Encrypt-Pruefungen gehen immer durch.
+func (e *Edge) guard80(w http.ResponseWriter, r *http.Request) bool {
+	b := e.block80.Load()
+	return b != nil && b.guard != nil && !ACMEChallenge(r) && b.guard(w, r)
+}
+
+// ACMEChallenge: HTTP-01-Pruefung (Let's Encrypt & Co.) - GET oder HEAD ueber HTTP (ohne TLS) auf
+// /.well-known/acme-challenge/<token>, Token nur aus Base64url-Zeichen (RFC 8555, kein Unterpfad, kein "..").
+func ACMEChallenge(r *http.Request) bool {
+	if r.TLS != nil || (r.Method != http.MethodGet && r.Method != http.MethodHead) || r.URL == nil {
+		return false
+	}
+	tok, ok := strings.CutPrefix(r.URL.Path, acmePath)
+	if !ok || tok == "" || len(tok) > 256 {
+		return false
+	}
+	for _, c := range tok {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 // ConnGate entscheidet beim Annehmen einer Verbindung (z. B. Limits je IP). ok=false trennt sofort; release
 // (darf nil sein) wird genau einmal gerufen, wenn die Verbindung endet.
 type ConnGate func(netip.Addr) (release func(), ok bool)
@@ -389,9 +442,9 @@ func (e *Edge) SetGate(g ConnGate) {
 	e.gate.Store(&g)
 }
 
-// admit: Sperrliste und Limits beim Annehmen; nil = getrennt.
-func (e *Edge) admit(c net.Conn) net.Conn {
-	if e.blocked(c.RemoteAddr()) {
+// admit: Sperrliste und Limits beim Annehmen; nil = getrennt. port80: Sperren nach SetHTTPBlocker.
+func (e *Edge) admit(c net.Conn, port80 bool) net.Conn {
+	if (port80 && e.blocked80(c.RemoteAddr())) || (!port80 && e.blocked(c.RemoteAddr())) {
 		_ = c.Close()
 		return nil
 	}
@@ -441,7 +494,7 @@ func (l blockListener) Accept() (net.Conn, error) {
 		if err != nil {
 			return c, err
 		}
-		if c = l.e.admit(c); c != nil {
+		if c = l.e.admit(c, true); c != nil {
 			return c, nil
 		}
 	}
@@ -938,6 +991,9 @@ func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if nonce, ok := strings.CutPrefix(r.URL.Path, probePath); ok && e.probeHit(nonce) {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if e.guard80(w, r) { // Sperren je Anfrage (SetHTTPBlocker), Let's-Encrypt-Pruefungen ausgenommen
 		return
 	}
 	if tok, ok := strings.CutPrefix(r.URL.Path, acmePath); ok {

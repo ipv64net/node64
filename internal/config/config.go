@@ -73,8 +73,8 @@ func Load() (*Config, error) {
 	if c.HTTPPort == 0 && c.HTTPSPort == 0 {
 		return nil, errors.New("NODE64_HTTP_PORT and NODE64_HTTPS_PORT are both 0, the UI would be unreachable")
 	}
-	if c.HTTPPort == c.HTTPSPort {
-		return nil, errors.New("NODE64_HTTP_PORT and NODE64_HTTPS_PORT must differ")
+	if c.HTTPPort == c.HTTPSPort { // gleicher Port: der Web-Port spricht HTTPS ohnehin mit
+		c.HTTPSPort = 0
 	}
 	c.EnvHTTPPort, c.EnvHTTPSPort = c.HTTPPort, c.HTTPSPort
 	switch c.LogLevel {

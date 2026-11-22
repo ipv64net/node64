@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/http"
 	"net/netip"
 	"slices"
 	"sort"
@@ -481,6 +482,42 @@ func (m *Module) overload(kind, host string) {
 // blockedAny: eigene Sperrliste, ipv64-Blocklisten oder gesperrt wegen Ueberlastung (am Eingang vor TLS).
 func (m *Module) blockedAny(a netip.Addr) bool {
 	return m.connBlocked(a, "")
+}
+
+// httpConnBlocked: Port 80 beim Annehmen - nur eigene Sperrliste und Ueberlastung. ipv64-Blocklisten und
+// Honeypot-Sperre prueft httpGuard je Anfrage, damit Let's-Encrypt-Pruefungen durchkommen (Forum 5245).
+func (m *Module) httpConnBlocked(a netip.Addr) bool {
+	switch {
+	case m.bl.Denied(a):
+		m.rejectConn(a, rejDeny, "")
+	case m.lim.banned(a):
+		m.rejectConn(a, rejBan, "")
+	default:
+		return false
+	}
+	return true
+}
+
+// httpGuard: Anfrage auf Port 80 (ausser Let's-Encrypt-Pruefungen, edge.ACMEChallenge) von einer Adresse der
+// ipv64-Blocklisten bzw. der Honeypot-Sperre: 403 wie bisher beim Annehmen. Mit Weg an den Koeder geht sie weiter an
+// die Verteilung (Koeder bzw. Host entscheiden, wie bisher mit offener Verbindung).
+func (m *Module) httpGuard(w http.ResponseWriter, r *http.Request) bool {
+	a := peerIP(r)
+	reason := ""
+	switch {
+	case m.bl.Blocked(a):
+		reason = rejBlocklist
+	case m.hpBlocked(a):
+		reason = rejHoneypot
+	default:
+		return false
+	}
+	if m.hpRoute(reason) {
+		return false
+	}
+	m.rejectConn(a, reason, "")
+	page(w, http.StatusForbidden)
+	return true
 }
 
 func (m *Module) connBlocked(a netip.Addr, where string) bool {

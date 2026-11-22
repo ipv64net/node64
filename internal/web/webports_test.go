@@ -99,7 +99,7 @@ func TestSettingsReachPorts(t *testing.T) {
 	}
 
 	// ungueltig: nichts gespeichert, kein Neustart
-	for _, bad := range [][2]string{{"0", ""}, {"8443", "8443"}, {"70000", ""}, {"abc", ""}} {
+	for _, bad := range [][2]string{{"0", ""}, {"0", "0"}, {"70000", ""}, {"abc", ""}} {
 		resp, _ := post(bad[0], bad[1])
 		if resp.StatusCode != http.StatusSeeOther || a.store.SettingOr(ctx, SettingHTTPPort, "") != "" || a.store.SettingOr(ctx, SettingHTTPSPort, "") != "" {
 			t.Fatalf("%v: %d gespeichert", bad, resp.StatusCode)
@@ -139,5 +139,99 @@ func TestSettingsReachPorts(t *testing.T) {
 	busy := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 	if resp, _ := post(busy, ""); resp.StatusCode != http.StatusSeeOther || a.store.SettingOr(ctx, SettingHTTPPort, "") == busy {
 		t.Fatal("belegter Port gespeichert")
+	}
+}
+
+func TestRedirectHTTPS(t *testing.T) {
+	s := &Server{}
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	h := s.redirectHTTPS(next)
+	do := func(method, host, path, remote string, hdr ...string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, nil)
+		r.Host, r.RemoteAddr = host, remote
+		if len(hdr) == 2 {
+			r.Header.Set(hdr[0], hdr[1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if w := do("GET", "node.lan:8080", "/settings", "192.0.2.7:5000"); w.Code != http.StatusTeapot {
+		t.Fatalf("Schalter aus: %d", w.Code)
+	}
+	s.httpsRedirect.Store(true)
+	if w := do("GET", "node.lan:8080", "/settings?x=1", "192.0.2.7:5000"); w.Code != http.StatusFound || w.Header().Get("Location") != "https://node.lan:8080/settings?x=1" {
+		t.Fatalf("Umleitung: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	if w := do("GET", "[fd00::5]:8080", "/", "[fd00::9]:5000"); w.Header().Get("Location") != "https://[fd00::5]:8080/" {
+		t.Fatalf("IPv6: %s", w.Header().Get("Location"))
+	}
+	for name, w := range map[string]*httptest.ResponseRecorder{
+		"api":       do("GET", "node.lan:8080", "/api/health", "192.0.2.7:5000"),
+		"status":    do("GET", "node.lan:8080", "/status/haus", "192.0.2.7:5000"),
+		"agent":     do("GET", "node.lan:8080", "/monitor64/agent/install.sh", "192.0.2.7:5000"),
+		"doh":       do("GET", "node.lan:8080", "/dns-query?dns=AAAB", "192.0.2.7:5000"),
+		"loopback":  do("GET", "127.0.0.1:8080", "/settings", "127.0.0.1:5000"),
+		"ohne Port": do("GET", "nas", "/settings", "192.0.2.7:5000"),
+		"POST":      do("POST", "node.lan:8080", "/settings", "192.0.2.7:5000"),
+		"Bearer":    do("GET", "node.lan:8080", "/settings", "192.0.2.7:5000", "Authorization", "Bearer x"),
+	} {
+		if w.Code != http.StatusTeapot {
+			t.Errorf("%s: umgeleitet (%d)", name, w.Code)
+		}
+	}
+}
+
+// Gleicher Port in beiden Feldern: kein eigener HTTPS-Port (der Web-Port spricht HTTPS mit); Schalter Umleitung.
+func TestSettingsReachSamePortAndRedirect(t *testing.T) {
+	a := newTestAppDeps(t, func(d *Deps) {
+		d.Cfg.EnvHTTPPort = 8080
+		d.RestartInPlace = func() {}
+	})
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	ctx := context.Background()
+	_, body := a.get(t, "/settings")
+	if !strings.Contains(body, `name="https_redirect"`) {
+		t.Fatal("Schalter fehlt")
+	}
+	csrf := csrfOf(t, body)
+	if !strings.Contains(body, `id="https_redirect" name="https_redirect" checked`) {
+		t.Fatal("Schalter muss standardmaessig an sein")
+	}
+	// nur der Schalter (Ports unveraendert): gespeichert, kein Neustart; gleicher Port = kein eigener HTTPS-Port
+	resp, _ := a.post(t, "/settings/reach", url.Values{"_csrf": {csrf}, "http_port": {"8080"}, "https_port": {"8080"}, "ui_cert": {"auto"}})
+	if resp.Header.Get("Location") != "/settings#reach" || a.s.httpsRedirect.Load() || a.store.SettingOr(ctx, SettingHTTPSRedirect, "") != "0" {
+		t.Fatalf("Schalter aus: %s %v", resp.Header.Get("Location"), a.s.httpsRedirect.Load())
+	}
+	if a.store.SettingOr(ctx, SettingHTTPSPort, "x") != "x" {
+		t.Fatal("gleicher Port als eigener HTTPS-Port gespeichert")
+	}
+	resp, _ = a.post(t, "/settings/reach", url.Values{"_csrf": {csrf}, "http_port": {"8080"}, "https_port": {""}, "https_redirect": {"on"}, "ui_cert": {"auto"}})
+	if !a.s.httpsRedirect.Load() || a.store.SettingOr(ctx, SettingHTTPSRedirect, "") != "1" {
+		t.Fatal("Schalter an nicht gespeichert")
+	}
+	// neuer gleicher Port in beiden Feldern: Wechsel ohne eigenen HTTPS-Port
+	p := strconv.Itoa(freeTCPPort(t))
+	resp, _ = a.post(t, "/settings/reach", url.Values{"_csrf": {csrf}, "http_port": {p}, "https_port": {p}, "ui_cert": {"auto"}})
+	if resp.StatusCode != http.StatusOK || a.store.SettingOr(ctx, SettingHTTPPort, "") != p || a.store.SettingOr(ctx, SettingHTTPSPort, "x") != "x" {
+		t.Fatalf("gleicher Port: %d %s %s", resp.StatusCode, a.store.SettingOr(ctx, SettingHTTPPort, ""), a.store.SettingOr(ctx, SettingHTTPSPort, "x"))
+	}
+}
+
+// Standard ist "umleiten"; hinter einem vertrauenswuerdigen Proxy mit X-Forwarded-Proto: https nicht.
+func TestRedirectHTTPSDefaultAndProxy(t *testing.T) {
+	a := newTestApp(t)
+	if !a.s.httpsRedirect.Load() {
+		t.Fatal("Standard muss umleiten")
+	}
+	a.s.Cfg.TrustProxyHeaders = true
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	r := httptest.NewRequest("GET", "/settings", nil)
+	r.Host, r.RemoteAddr = "node.lan:8080", "192.0.2.7:5000"
+	r.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+	a.s.redirectHTTPS(next).ServeHTTP(w, r)
+	if w.Code != http.StatusTeapot {
+		t.Fatalf("hinter HTTPS-Proxy umgeleitet: %d", w.Code)
 	}
 }

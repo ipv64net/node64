@@ -71,7 +71,7 @@ docker run -d --name node64 \
   ghcr.io/ipv64net/node64:latest
 ```
 
-Danach `http://<host>:8080` öffnen. Beim ersten Start führt ein Assistent durch Sprache und Admin-Konto. Es gibt kein Standardpasswort.
+Danach `https://<host>:8080` öffnen (selbst signiertes Zertifikat, einmal im Browser bestätigen; `http://` leitet dorthin um). Beim ersten Start führt ein Assistent durch Sprache und Admin-Konto. Es gibt kein Standardpasswort.
 
 Dasselbe Image gibt es mit denselben Tags auch auf [Docker Hub](https://hub.docker.com/r/x64gmbh/node64) als `x64gmbh/node64`.
 
@@ -141,7 +141,7 @@ PROXY64 und DNS64 lesen auf Wunsch Docker-Labels (`node64.proxy.*`, `node64.dns.
 ### Ohne Docker: Debian-Paket (Debian, Ubuntu, Raspberry Pi OS 64 Bit)
 
 Node64 gibt es auch als `.deb` für `amd64`, `arm64` und `armhf` (ARMv7). Das Paket richtet einen Systemdienst `node64` unter
-einem eigenen Benutzer ein; die Oberfläche ist danach unter `http://<Rechner>:8080` erreichbar.
+einem eigenen Benutzer ein; die Oberfläche ist danach unter `https://<Rechner>:8080` erreichbar (selbst signiertes Zertifikat).
 
 ```bash
 curl -fLO https://github.com/ipv64net/node64/releases/latest/download/node64_amd64.deb
@@ -426,7 +426,7 @@ Alternativ `network_mode: host`. `net.ipv4.ping_group_range` gilt trotz des Name
 | --- | --- | --- |
 | `NODE64_DATA_DIR` | `/data` | Einziges beschreibbares Verzeichnis: Datenbank, Backups, Schlüssel, Zertifikat |
 | `NODE64_HTTP_PORT` | `8080` | Port der Oberfläche, `0` = aus; in der Oberfläche unter *Einstellungen → Allgemein → Erreichbarkeit* änderbar (gilt dann vor der Variable) |
-| `NODE64_HTTPS_PORT` | `0` | Port für HTTPS mit selbstsigniertem Zertifikat, `0` = aus (ebenso änderbar) |
+| `NODE64_HTTPS_PORT` | `0` | zusätzlicher Port nur für HTTPS, `0` oder gleich `NODE64_HTTP_PORT` = keiner (der Web-Port spricht HTTPS ohnehin mit; ebenso änderbar) |
 | `NODE64_BIND_ADDR` | leer (alle) | Bind-Adresse |
 | `NODE64_TLS_CERT` / `NODE64_TLS_KEY` | leer | Eigenes Zertifikat statt des selbstsignierten |
 | `NODE64_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; zur Laufzeit im UI änderbar |

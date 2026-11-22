@@ -21,8 +21,9 @@ import (
 // Neustart, den das Speichern ausloest (cmd/node64 liest sie vor dem Start der Oberflaeche). Nie im Cluster
 // abgeglichen und nicht im Konfigurations-Export: Ports gehoeren zur einzelnen Node.
 const (
-	SettingHTTPPort  = "web.http_port"
-	SettingHTTPSPort = "web.https_port"
+	SettingHTTPPort      = "web.http_port"
+	SettingHTTPSPort     = "web.https_port"
+	SettingHTTPSRedirect = "web.https_redirect" // Seitenaufrufe per HTTP auf dem Web-Port auf HTTPS umleiten; Standard "1"
 )
 
 // WebPorts liefert die eingestellten Ports der Oberflaeche, je Port mit Rueckfall auf die Umgebung; set=false ohne
@@ -34,6 +35,9 @@ func WebPorts(ctx context.Context, st *store.Store, envHTTP, envHTTPS int) (http
 	}
 	if v, err := strconv.Atoi(st.SettingOr(ctx, SettingHTTPSPort, "")); err == nil {
 		httpsPort, set = v, true
+	}
+	if httpsPort == httpPort && httpPort > 0 { // gleicher Port: der Web-Port spricht HTTPS ohnehin mit
+		httpsPort = 0
 	}
 	return httpPort, httpsPort, set
 }
@@ -93,6 +97,9 @@ func (s *Server) saveWebPorts(r *http.Request) (changed bool, httpPort, httpsPor
 	}
 	if httpsPort, err = portField(r, "https_port", 0); err != nil { // leer = aus
 		return false, 0, 0, err
+	}
+	if httpsPort == httpPort && httpPort > 0 { // gleicher Port: der Web-Port spricht HTTPS ohnehin mit (dualport.go)
+		httpsPort = 0
 	}
 	if err = config.CheckWebPorts(httpPort, httpsPort); err != nil {
 		return false, 0, 0, err
@@ -189,4 +196,69 @@ func (s *Server) renderPortSwitch(w http.ResponseWriter, r *http.Request, target
 	v := s.view(r, "settings.reach_switch_title")
 	v.Data = portSwitchData{Target: target, Bridge: bridgeNet()}
 	s.render(w, r, http.StatusOK, "settings_port_switch", v)
+}
+
+// saveHTTPSRedirect speichert den Schalter "HTTP auf HTTPS umleiten" (nur mit dem Formular der Ports).
+func (s *Server) saveHTTPSRedirect(r *http.Request) error {
+	if !r.PostForm.Has("http_port") {
+		return nil
+	}
+	on := r.PostFormValue("https_redirect") == "on"
+	if on == s.httpsRedirect.Load() {
+		return nil
+	}
+	v := "0"
+	if on {
+		v = "1"
+	}
+	if err := s.Store.SetSetting(r.Context(), SettingHTTPSRedirect, v); err != nil {
+		return err
+	}
+	s.httpsRedirect.Store(on)
+	s.audit(r, "settings.https_redirect", "", v)
+	return nil
+}
+
+// noHTTPSRedirect: Pfade fuer Programme statt Browser (API, Cluster, DoH, Agent-Dateien, oeffentliche Statusseiten,
+// ACME) - dort bliebe eine Umleitung auf das (oft selbst signierte) HTTPS haengen.
+var noHTTPSRedirect = []string{"/api/", "/mcp", "/peer/", "/dns-query", "/monitor64/agent/", "/status/", "/.well-known/"}
+
+// redirectHTTPS leitet auf dem Web-Port Seitenaufrufe ohne TLS auf https://<gleicher Name und Port> um, wenn der
+// Schalter an ist. Nicht umgeleitet: andere Methoden als GET/HEAD, Anfragen mit Authorization, Zugriffe von der Node
+// selbst (Loopback, z. B. "node64 healthcheck"), Pfade fuer Programme und Namen ohne Port (der Port von aussen ist
+// dann unbekannt, z. B. -p 80:8080).
+func (s *Server) redirectHTTPS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil && s.httpsRedirect.Load() && httpsRedirectable(r) && !s.proxiedHTTPS(r) {
+			http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusFound)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func httpsRedirectable(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead || r.Header.Get("Authorization") != "" {
+		return false
+	}
+	if _, port, err := net.SplitHostPort(r.Host); err != nil || port == "" {
+		return false
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return false
+		}
+	}
+	for _, p := range noHTTPSRedirect {
+		if strings.HasPrefix(r.URL.Path, p) {
+			return false
+		}
+	}
+	return true
+}
+
+// proxiedHTTPS: Anfrage kam ueber einen eigenen Reverse Proxy, der selbst HTTPS spricht (NODE64_TRUST_PROXY und
+// X-Forwarded-Proto: https) - dann keine Umleitung, sonst entstuende eine Schleife.
+func (s *Server) proxiedHTTPS(r *http.Request) bool {
+	return s.Cfg != nil && s.Cfg.TrustProxyHeaders && strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
 }

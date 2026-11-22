@@ -1,6 +1,9 @@
 # Changes – PROXY64
 
-## 1.57.1 – unreleased
+## 1.58.0 – unreleased
+
+### New
+- Let’s Encrypt validations (HTTP-01 on /.well-known/acme-challenge/) get through ipv64 blocklists, the honeypot block and country blocking – for the node’s own certificates and for services behind proxy hosts (e.g. Mailcow), also with “Force HTTPS” (the validation then goes to the target over HTTP, everything else is still redirected to HTTPS). The own deny list, access lists and limits still apply. On port 80, blocklists and the honeypot block now reject per request (403) instead of at connection setup.
 
 ### Fixed
 - Docker bridge network: no more false “port not published” warning when the Docker host does not route requests via the gateway back (e.g. UFW, no hairpin NAT). With the Docker API mounted the container’s port mappings count, otherwise the port overview shows “cannot be checked” (#243).

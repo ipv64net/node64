@@ -70,7 +70,7 @@ func (e *Edge) ServeConnFor(c net.Conn, port int, host string) {
 			_ = c.Close()
 			return
 		}
-	} else if c = e.admit(c); c == nil {
+	} else if c = e.admit(c, port == 80); c == nil {
 		return
 	}
 	if host != "" {

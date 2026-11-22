@@ -71,9 +71,19 @@ func TestApplyWebPorts(t *testing.T) {
 		t.Fatalf("belegt: %d, Datei %d", cfg.HTTPPort, h)
 	}
 
-	// ungueltig (gleich dem HTTPS-Port): Umgebung
-	st.SetSetting(ctx, web.SettingHTTPPort, "8443")
-	st.SetSetting(ctx, web.SettingHTTPSPort, "8443")
+	// gleicher Port in beiden: Web-Port (spricht HTTPS mit), kein eigener HTTPS-Port
+	same := strconv.Itoa(freePort(t))
+	st.SetSetting(ctx, web.SettingHTTPPort, same)
+	st.SetSetting(ctx, web.SettingHTTPSPort, same)
+	cfg = newCfg()
+	applyWebPorts(ctx, cfg, st, log)
+	if strconv.Itoa(cfg.HTTPPort) != same || cfg.HTTPSPort != 0 {
+		t.Fatalf("gleicher Port: %d %d", cfg.HTTPPort, cfg.HTTPSPort)
+	}
+
+	// ungueltig (beide aus): Umgebung
+	st.SetSetting(ctx, web.SettingHTTPPort, "0")
+	st.SetSetting(ctx, web.SettingHTTPSPort, "0")
 	cfg = newCfg()
 	applyWebPorts(ctx, cfg, st, log)
 	if cfg.HTTPPort != 8080 || cfg.HTTPSPort != 0 {

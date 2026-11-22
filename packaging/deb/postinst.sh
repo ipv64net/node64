@@ -30,7 +30,7 @@ configure)
 			systemctl try-restart node64.service >/dev/null 2>&1 || true
 		fi
 		if systemctl is-active --quiet node64.service 2>/dev/null; then
-			echo "Node64 laeuft: http://$(hostname -f 2>/dev/null || hostname):8080  (Einstellungen: /etc/default/node64)"
+			echo "Node64 laeuft: https://$(hostname -f 2>/dev/null || hostname):8080  (Einstellungen: /etc/default/node64)"
 		elif systemctl is-enabled --quiet node64.service 2>/dev/null; then
 			echo "Node64 ist installiert, startet aber nicht - siehe: systemctl status node64 / journalctl -u node64"
 		else
