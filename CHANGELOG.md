@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 1.7.12 – 2026-11-23
+
 - Monitor64: keine „Unbekannt“-Meldung mit Entwarnung mehr nach dem Einschalten eines Hosts (Anlaufzeit, #275, #274); fehlende Daten heißen „keine Daten“; nach dem Löschen eines Hosts keine Meldung mehr (#263); UniFi-Bestätigungen überstehen einen kurz offline gemeldeten Switch (#272); SNMP-Geräte ohne GETBULK (z. B. Brother, HP) werden wieder vollständig abgefragt (#269).
 - Healthchecks: „Jetzt prüfen“ im Cluster ohne ipv64-Konto (#271); Sortierung bleibt beim Aktualisieren (#261); pausierte Checks ohne Erinnerungen; Node-Namen statt IDs bei „teilweise gestört“ (#273).
 ## 1.7.11 – 2026-11-22

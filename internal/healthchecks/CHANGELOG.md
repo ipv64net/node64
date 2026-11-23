@@ -1,6 +1,6 @@
 # Änderungen – Healthchecks
 
-## 3.3.2 – unveröffentlicht
+## 3.3.2 – 2026-11-23
 
 ### Behoben
 - „Jetzt prüfen“ funktioniert im Cluster auch ohne ipv64-Konto, wenn eine andere Node den Check misst (#271).

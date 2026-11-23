@@ -1,6 +1,6 @@
 # Changes – Healthchecks
 
-## 3.3.2 – unreleased
+## 3.3.2 – 2026-11-23
 
 ### Fixed
 - “Check now” works in a cluster without an ipv64 account when another node measures the check (#271).
