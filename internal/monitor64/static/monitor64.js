@@ -359,6 +359,8 @@ function fmtDur(sec) {
 }
 function since(s) { var d = toDate(s); return d ? L('time.since', { d: fmtDur((Date.now() - d.getTime()) / 1000) }) : ''; }
 function ago(s) { var d = toDate(s); return d ? L('time.ago', { d: fmtDur((Date.now() - d.getTime()) / 1000) }) : ''; }
+// staleHTML: Messwert eines gerade fehlenden Dienstes (Host nicht erreichbar) - letzter Wert mit Zeitpunkt
+function staleHTML(m) { return m && m.stale_at ? ' <span class="small text-body-tertiary fw-normal text-nowrap" title="' + esc(fmtTime(m.stale_at)) + '"><i class="bi bi-clock-history"></i> ' + esc(L('si.stale', { t: ago(m.stale_at) })) + '</span>' : ''; }
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 var ST = { ok: L('state.ok'), warn: L('state.warn'), crit: L('state.crit'), unknown: L('state.unknown'), unreachable: L('state.unreachable') };
 function stLabel(s) { return ST[s] || s; }
@@ -885,7 +887,7 @@ function pageHost() {
 		var mt = s.primary >= 0 ? s.metrics[s.primary] : (s.metrics && s.metrics.length && !s.text ? s.metrics[0] : null);
 		var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state, html = '';
 		if (mt) {
-			html = '<span class="fw-semibold">' + esc(fmtVal(mt.value, mt.unit)) + '</span>';
+			html = '<span class="fw-semibold' + (mt.stale_at ? ' text-body-secondary' : '') + '">' + esc(fmtVal(mt.value, mt.unit)) + '</span>' + staleHTML(mt);
 			if (mt.unit === '%') { html += '<span class="bar"><span class="' + (st === 'ok' ? '' : esc(st)) + '" style="width:' + Math.max(0, Math.min(100, mt.value)) + '%"></span></span>'; }
 			var p = mt.status || {};
 			if ((p.pending === 'warn' || p.pending === 'crit') && toDate(p.pending_since)) {
@@ -1333,7 +1335,7 @@ function pageHost() {
 		$('#m64-sd-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
 		$('#m64-sd-title').textContent = svcName(s);
 		var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, rules = s.rules || [];
-		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(tx(s.text || '')) + '</span></div>';
+		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span>' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + (mt && s.text ? ' · ' : '') + esc(tx(s.text || '')) + '</span>' + staleHTML(mt) + '</div>';
 		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
 		html += pendHTML(s);
@@ -1515,7 +1517,7 @@ function pageHost() {
 		var st = H.view === 'unreachable' || H.view === 'offline' || clAway() ? 'unknown' : s.state, mt = s.primary >= 0 ? s.metrics[s.primary] : null, list = chartable(s);
 		$('#m64-si-host').textContent = H.host.name + ' · ' + ((D.cats || {})[s.category] || s.category);
 		$('#m64-si-title').textContent = svcName(s);
-		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span class="fw-semibold">' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + '</span>' + (s.text ? '<span class="text-body-secondary">' + esc(tx(s.text)) + '</span>' : '') +
+		var html = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">' + stBadge(st) + '<span class="fw-semibold">' + esc(mt ? fmtVal(mt.value, mt.unit) : '') + '</span>' + staleHTML(mt) + (s.text ? '<span class="text-body-secondary">' + esc(tx(s.text)) + '</span>' : '') +
 			(s.ack ? '<span class="small text-primary"><i class="bi bi-check2-square"></i> ' + esc(L('ov.acked')) + '</span>' : '') + '</div>';
 		if (s.cause && st !== 'ok') { html += '<div class="alert alert-' + (st === 'crit' ? 'danger' : 'warning') + ' py-2 small">' + esc(tx(s.cause)) + '</div>'; }
 		if (s.vanished) { html += '<div class="alert alert-warning py-2 small"><i class="bi bi-question-diamond"></i> ' + esc(L('sd.vanished')) + '</div>'; }
@@ -1538,7 +1540,7 @@ function pageHost() {
 			html += '<h6>' + esc(L('si.metrics')) + '</h6><div class="table-responsive"><table class="table table-sm small align-middle mb-3"><thead><tr><th>' + esc(L('si.metric')) + '</th><th class="text-end">' + esc(L('col.value')) + '</th><th>' + esc(L('col.state')) + '</th><th>' + esc(L('col.thresholds')) + '</th></tr></thead><tbody>' +
 				s.metrics.map(function (m) {
 					var r = ruleFor(s, m.name), ms = m.status || {};
-					return '<tr><td>' + esc(metricLabel(m)) + (m.rule_kind || m.rule ? ' <span class="text-body-tertiary">' + esc(m.name) + '</span>' : '') + '</td><td class="text-end text-nowrap fw-semibold">' + esc(fmtVal(m.value, m.unit)) + maxText(m) + '</td>' +
+					return '<tr><td>' + esc(metricLabel(m)) + (m.rule_kind || m.rule ? ' <span class="text-body-tertiary">' + esc(m.name) + '</span>' : '') + '</td><td class="text-end text-nowrap fw-semibold' + (m.stale_at ? ' text-body-secondary' : '') + '"' + (m.stale_at ? ' title="' + esc(L('si.stale', { t: fmtTime(m.stale_at) })) + '"' : '') + '>' + esc(fmtVal(m.value, m.unit)) + maxText(m) + '</td>' +
 						'<td>' + (r && ms.state ? stBadge(ms.state) : '<span class="text-body-tertiary">–</span>') + '</td><td>' + (r && !r.state ? thrVals(r.eff, m.unit) : '<span class="text-body-tertiary">–</span>') + '</td></tr>';
 				}).join('') + '</tbody></table></div>';
 		}

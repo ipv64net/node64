@@ -44,6 +44,9 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 			sl := append(append([]string{}, base...), "service", name(s.Name), "key", s.Key)
 			w.Gauge("node64_monitor_state", "Monitor64: Zustand eines Dienstes (0=OK 1=Warnung 2=Kritisch 3=Unbekannt)", float64(s.State), sl...)
 			for _, mt := range s.Metrics {
+				if !mt.StaleAt.IsZero() {
+					continue // letzter Wert eines fehlenden Dienstes: nicht als aktueller Messwert ausgeben
+				}
 				ml := append(append([]string{}, sl...), "metric", mt.Name, "unit", promUnit(mt.Unit))
 				w.Gauge("node64_monitor_value", "Monitor64: Messwert eines Dienstes", mt.Value, ml...)
 			}

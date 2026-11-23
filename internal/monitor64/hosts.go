@@ -110,7 +110,7 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 		old.mu.Lock()
 		rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = old.Trackers, old.Kinds, old.Failures, old.Missing, old.Provider
 		rt.Rising, rt.Local, rt.Trend, rt.Traps, rt.SeenUp, rt.Moved = old.Rising, old.Local, old.Trend, old.Traps, old.SeenUp, old.Moved
-		rt.Seen, rt.Back, rt.Away = old.Seen, old.Back, old.Away
+		rt.Seen, rt.Back, rt.Away, rt.LastMetrics = old.Seen, old.Back, old.Away, old.LastMetrics
 		old.mu.Unlock()
 		if v := old.getView(); v != nil { // Ansicht mit dem neuen Host (Pause, Name, Gruppe gleich sichtbar)
 			nv := *v

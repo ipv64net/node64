@@ -193,6 +193,15 @@ type MetricView struct {
 	model.Metric
 	Status   eval.Status `json:"status"`
 	RuleKind string      `json:"rule_kind,omitempty"`
+	// StaleAt: nicht aktuell - letzter Wert von diesem Zeitpunkt (Dienst in dieser Runde nicht geliefert); nur Anzeige,
+	// weder bewertet noch im Verlauf oder im Prometheus-Export
+	StaleAt time.Time `json:"stale_at,omitzero"`
+}
+
+// lastMetrics sind die zuletzt gelieferten Messwerte eines Dienstes.
+type lastMetrics struct {
+	At      time.Time      `json:"at"`
+	Metrics []model.Metric `json:"m"`
 }
 
 // SvcView ist ein Dienst fuer die Oberflaeche.
@@ -272,9 +281,12 @@ type hostRT struct {
 	Seen     time.Time                `json:"seen,omitzero"` // letzte Runde, in der der Host Daten lieferte
 	Back     time.Time                `json:"back,omitzero"` // wieder da seit (erste Runde mit Daten nach einer Luecke, #275)
 	Away     time.Time                `json:"away,omitzero"` // letzte Runde mit Daten vor dieser Luecke
-	known    map[string]bool          // bei der Erkennung schon gesehene Dienste (nur im Speicher)
-	follow   []string                 // uebernommene Proxmox-Gaeste fuer den Sammler (nil = noch aus der Datenbank lesen)
-	dirty    bool
+	// LastMetrics: Dienst -> Messwerte der letzten Runde, in der er Werte lieferte. Fehlt er (Host nicht erreichbar,
+	// Geraet offline), zeigt die Oberflaeche sie als "letzter Wert" - Diagramme und Verlauf bleiben erreichbar.
+	LastMetrics map[string]lastMetrics `json:"last_metrics,omitempty"`
+	known       map[string]bool        // bei der Erkennung schon gesehene Dienste (nur im Speicher)
+	follow      []string               // uebernommene Proxmox-Gaeste fuer den Sammler (nil = noch aus der Datenbank lesen)
+	dirty       bool
 
 	viewMu         sync.Mutex // eigene Sperre: die Oberflaeche wartet nicht auf eine laufende Abfrage
 	view           *HostView
@@ -603,6 +615,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	}
 
 	// 3. bewerten und speichern
+	if len(rows) > 0 {
+		rt.pruneLastValues(rows)
+	}
 	cfg := m.config()
 	open := m.loadOpen(dbctx, h.UID)
 	var views []SvcView
@@ -690,6 +705,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		}
 		// fehlende Messgroessen (Dienst oder einzelner Wert nicht geliefert): letzter Zustand, nach 3 Intervallen Unbekannt
 		prefix := r.Key + "|"
+		missingSt := map[string]eval.Status{}
 		for key, kind := range rt.Kinds {
 			if !strings.HasPrefix(key, prefix) || strings.HasPrefix(key[len(prefix):], "state:") {
 				continue
@@ -725,7 +741,9 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				continue
 			}
 			ms = append(ms, eval.MetricStatus{Name: name, Status: st, Notify: e.Notify()})
+			missingSt[name] = st
 		}
+		m.lastValues(rt, r.Key, &sv, g.svc, ok, now, missingSt)
 		// Zustandsregeln (Facts)
 		facts := map[string]string{}
 		for _, f := range g.svc.Facts {
@@ -1357,3 +1375,58 @@ func (m *Module) defaultChannelIDs(ctx context.Context) map[int64]bool {
 
 // defaultChannels steht in der Benachrichtigung fuer "Standardkanaele der Node" (keine eigene Auswahl).
 const defaultChannels = "default"
+
+// lastValues merkt sich die Messwerte eines gelieferten Dienstes bzw. zeigt fuer einen fehlenden (Host nicht
+// erreichbar, Geraet offline) die zuletzt gelieferten als "letzter Wert" an: Diagramme der Host-Seite und der Verlauf
+// im Dienst bleiben so erreichbar. Bewertet werden sie nicht (das erledigen die Tracker), der Zustand fehlender Werte
+// kommt aus missing.
+func (m *Module) lastValues(rt *hostRT, key string, sv *SvcView, svc model.Service, ok bool, now time.Time, missing map[string]eval.Status) {
+	noData := false
+	for _, f := range svc.Facts {
+		if f.Code == model.FactNoData {
+			noData = true
+		}
+	}
+	if ok && !noData {
+		if len(svc.Metrics) > 0 {
+			if rt.LastMetrics == nil {
+				rt.LastMetrics = map[string]lastMetrics{}
+			}
+			rt.LastMetrics[key] = lastMetrics{At: now, Metrics: append([]model.Metric(nil), svc.Metrics...)}
+		}
+		return
+	}
+	last, have := rt.LastMetrics[key]
+	if !have || len(sv.Metrics) > 0 {
+		return
+	}
+	if now.Sub(last.At) > staleKindAfter {
+		delete(rt.LastMetrics, key)
+		return
+	}
+	for _, mt := range last.Metrics {
+		mv := MetricView{Metric: mt, StaleAt: last.At}
+		if st, has := missing[mt.Name]; has {
+			mv.Status, mv.RuleKind = st, mt.Rule
+		} else if mt.Rule != "" {
+			mv.Status, mv.RuleKind = eval.Status{State: eval.Unknown, At: last.At}, mt.Rule
+		}
+		sv.Metrics = append(sv.Metrics, mv)
+	}
+}
+
+// pruneLastValues vergisst die letzten Werte von Diensten, die es nicht mehr gibt.
+func (rt *hostRT) pruneLastValues(rows []*ServiceRow) {
+	if len(rt.LastMetrics) == 0 {
+		return
+	}
+	have := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		have[r.Key] = true
+	}
+	for k := range rt.LastMetrics {
+		if !have[k] {
+			delete(rt.LastMetrics, k)
+		}
+	}
+}

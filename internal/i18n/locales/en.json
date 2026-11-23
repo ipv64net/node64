@@ -6479,7 +6479,8 @@
       "key": "Key",
       "smart": "SMART values",
       "traps": "Recent traps",
-      "of_size": "of {s}"
+      "of_size": "of {s}",
+      "stale": "last value, {t}"
     },
     "f": {
       "name": "Name",

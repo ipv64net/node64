@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: when a host is unreachable, its last values stay visible ("last value, … ago") – CPU, RAM and the like can still be clicked, charts and history stay available.
 ## 1.7.12 – 2026-11-23
 
 - Monitor64: no “unknown” alert followed by an all-clear after a host is switched on (start-up period, #275, #274); missing data is called “no data”; no alert after deleting a host (#263); UniFi acknowledgements survive a switch briefly reported offline (#272); SNMP devices without GETBULK (e.g. Brother, HP) are fully queried again (#269).

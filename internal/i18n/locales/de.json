@@ -6479,7 +6479,8 @@
       "key": "Schlüssel",
       "smart": "SMART-Werte",
       "traps": "Letzte Traps",
-      "of_size": "von {s}"
+      "of_size": "von {s}",
+      "stale": "letzter Wert, {t}"
     },
     "f": {
       "name": "Name",

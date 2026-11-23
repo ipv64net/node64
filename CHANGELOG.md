@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Monitor64: Ist ein Host nicht erreichbar, bleiben seine letzten Messwerte sichtbar („letzter Wert, vor …“) – CPU, RAM und Co. lassen sich weiter anklicken, Diagramme und Verlauf bleiben erreichbar.
 ## 1.7.12 – 2026-11-23
 
 - Monitor64: keine „Unbekannt“-Meldung mit Entwarnung mehr nach dem Einschalten eines Hosts (Anlaufzeit, #275, #274); fehlende Daten heißen „keine Daten“; nach dem Löschen eines Hosts keine Meldung mehr (#263); UniFi-Bestätigungen überstehen einen kurz offline gemeldeten Switch (#272); SNMP-Geräte ohne GETBULK (z. B. Brother, HP) werden wieder vollständig abgefragt (#269).

@@ -189,17 +189,17 @@ func (m *Module) overview(ctx context.Context) ovData {
 			}
 			switch s.Kind {
 			case "cpu":
-				if mt, ok := metricOf(s, "util"); ok {
+				if mt, ok := metricOf(s, "util"); ok && mt.StaleAt.IsZero() { // alte Werte (Host nicht erreichbar) nicht als Balken
 					o.CPU, o.HasCPU = mt.Value, true
 					o.Meters = append(o.Meters, ovMeter{Label: "cpu", Value: mt.Value, State: stateName(mt.Status.Level)})
 				}
 			case "mem":
-				if mt, ok := metricOf(s, "used"); ok {
+				if mt, ok := metricOf(s, "used"); ok && mt.StaleAt.IsZero() {
 					o.RAM, o.HasRAM = mt.Value, true
 					o.Meters = append(o.Meters, ovMeter{Label: "ram", Value: mt.Value, State: stateName(mt.Status.Level)})
 				}
 			case "fs", "zfs", "store", "ds":
-				if mt, ok := metricOf(s, "used"); ok && mt.Unit == "%" && (disk == nil || mt.Value > disk.Value) {
+				if mt, ok := metricOf(s, "used"); ok && mt.StaleAt.IsZero() && mt.Unit == "%" && (disk == nil || mt.Value > disk.Value) {
 					disk = &ovMeter{Label: "disk", Value: mt.Value, State: stateName(mt.Status.Level)}
 				}
 			}
