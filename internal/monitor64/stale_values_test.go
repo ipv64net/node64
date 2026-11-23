@@ -117,6 +117,24 @@ func TestStaleValuesWhenUnreachable(t *testing.T) {
 		t.Fatalf("nach Neustart: %+v", back.LastMetrics)
 	}
 
+	// Host fehlte schon, bevor sich die Node die letzten Werte merkte (Update auf 0.1.28 waehrend des Ausfalls):
+	// die letzten Werte kommen aus dem Verlauf, mit Einheit
+	rt.mu.Lock()
+	rt.LastMetrics, rt.seeded = nil, nil
+	rt.mu.Unlock()
+	e.m.poll(ctx, rt)
+	for _, s := range rt.getView().Services {
+		if s.Key != "cpu" {
+			continue
+		}
+		if len(s.Metrics) != 1 || s.Metrics[0].Value != 42 || s.Metrics[0].Unit != "%" || s.Metrics[0].StaleAt.IsZero() || s.Metrics[0].RuleKind != model.RuleCPU {
+			t.Fatalf("aus dem Verlauf: %+v", s.Metrics)
+		}
+	}
+	if d := get(); len(d.Charts) != 2 {
+		t.Fatalf("Diagramme ohne gemerkte Werte: %+v", d.Charts)
+	}
+
 	// wieder erreichbar: frische Werte ohne stale_at
 	cpu.Metrics[0].Value = 17
 	fake.set([]model.Service{cpu, mem}, nil)

@@ -4,7 +4,7 @@
 
 Fixed:
 
-- When a host was unreachable (e.g. SNMP device not answering, agent off), all values disappeared: CPU, RAM and the like could no longer be clicked, the charts on the host page and the history of the service were gone although the values are stored. Now the last delivered values stay visible – grey with "last value, … ago" –, charts and history stay available. The state stays "Unknown"; the Prometheus export does not show the old values. The last values also survive a restart of the node.
+- When a host was unreachable (e.g. SNMP device not answering, agent off), all values disappeared: CPU, RAM and the like could no longer be clicked, the charts on the host page and the history of the service were gone although the values are stored. Now the last delivered values stay visible – grey with "last value, … ago" –, charts and history stay available. The state stays "Unknown"; the Prometheus export does not show the old values. The last values also survive a restart of the node; if a host was already off before the update, they come from the stored history.
 
 ## 0.1.27 – 2026-11-23
 

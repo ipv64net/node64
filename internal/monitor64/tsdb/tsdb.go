@@ -20,6 +20,8 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -411,6 +413,20 @@ func (db *DB) get(key string) *series {
 		db.series[key] = s
 	}
 	return s
+}
+
+// Keys nennt die bekannten Reihen mit diesem Praefix (sortiert).
+func (db *DB) Keys(prefix string) []string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	var out []string
+	for k, s := range db.series {
+		if strings.HasPrefix(k, prefix) && !s.gone {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (db *DB) lookup(key string) *series {

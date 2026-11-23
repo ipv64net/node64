@@ -285,6 +285,7 @@ type hostRT struct {
 	// Geraet offline), zeigt die Oberflaeche sie als "letzter Wert" - Diagramme und Verlauf bleiben erreichbar.
 	LastMetrics map[string]lastMetrics `json:"last_metrics,omitempty"`
 	known       map[string]bool        // bei der Erkennung schon gesehene Dienste (nur im Speicher)
+	seeded      map[string]bool        // letzte Werte schon im Verlauf gesucht (lastFromHistory, nur im Speicher)
 	follow      []string               // uebernommene Proxmox-Gaeste fuer den Sammler (nil = noch aus der Datenbank lesen)
 	dirty       bool
 
@@ -1396,13 +1397,14 @@ func (m *Module) lastValues(rt *hostRT, key string, sv *SvcView, svc model.Servi
 		}
 		return
 	}
-	last, have := rt.LastMetrics[key]
-	if !have || len(sv.Metrics) > 0 {
+	if len(sv.Metrics) > 0 {
 		return
 	}
-	if now.Sub(last.At) > staleKindAfter {
-		delete(rt.LastMetrics, key)
-		return
+	last, have := rt.LastMetrics[key]
+	if !have {
+		if last, have = m.lastFromHistory(rt, key, sv.Kind); !have {
+			return
+		}
 	}
 	for _, mt := range last.Metrics {
 		mv := MetricView{Metric: mt, StaleAt: last.At}
@@ -1413,6 +1415,85 @@ func (m *Module) lastValues(rt *hostRT, key string, sv *SvcView, svc model.Servi
 		}
 		sv.Metrics = append(sv.Metrics, mv)
 	}
+}
+
+// lastFromHistory sucht die letzten Werte eines fehlenden Dienstes im Verlauf (einmal je Dienst und Laufzeit): fuer
+// Hosts, die schon fehlten, bevor sich die Node ihre letzten Werte merkte (LastMetrics ab Monitor64 0.1.28). Der
+// Verlauf kennt keine Einheiten: sie kommen aus dem Namen der Messgroesse (unitOf), die Regel aus den Trackern.
+func (m *Module) lastFromHistory(rt *hostRT, key, kind string) (lastMetrics, bool) {
+	if rt.seeded[key] {
+		return lastMetrics{}, false
+	}
+	if rt.seeded == nil {
+		rt.seeded = map[string]bool{}
+	}
+	rt.seeded[key] = true
+	hs := m.history()
+	ks, ok := m.seriesStore().(interface{ Keys(prefix string) []string })
+	if hs == nil || !ok {
+		return lastMetrics{}, false
+	}
+	prefix := seriesKey(rt.host.UID, key, "")
+	keys := ks.Keys(prefix)
+	if len(keys) == 0 || len(keys) > 32 {
+		return lastMetrics{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	now := time.Now()
+	var out lastMetrics
+	for _, span := range []time.Duration{6 * time.Hour, 30 * 24 * time.Hour, 365 * 24 * time.Hour} { // juengste Werte zuerst
+		res, err := hs.QueryMulti(ctx, keys, now.Add(-span), now, 0)
+		if err != nil {
+			return lastMetrics{}, false
+		}
+		for i, s := range res {
+			if len(s.Points) == 0 || i >= len(keys) {
+				continue
+			}
+			p := s.Points[len(s.Points)-1]
+			name := strings.TrimPrefix(keys[i], prefix)
+			if name == "trend_days" {
+				continue
+			}
+			mt := model.Metric{Name: name, Value: p.Avg, Unit: unitOf(kind, name), Rule: rt.Kinds[key+"|"+name]}
+			out.Metrics = append(out.Metrics, mt)
+			if at := time.Unix(p.T+p.S, 0); at.After(out.At) {
+				out.At = at
+			}
+		}
+		if len(out.Metrics) > 0 {
+			if rt.LastMetrics == nil {
+				rt.LastMetrics = map[string]lastMetrics{}
+			}
+			rt.LastMetrics[key] = out
+			return out, true
+		}
+	}
+	return lastMetrics{}, false
+}
+
+// unitOf: Einheit einer Messgroesse nach ihrem Namen (wie sie die Sammler liefern), fuer Werte aus dem Verlauf.
+func unitOf(kind, name string) string {
+	switch name {
+	case "util", "inodes", "wear", "errrate", "frag", "battery", "charge", "load_pct":
+		return "%"
+	case "used":
+		if kind == "cpu" || kind == "mem" || kind == "swap" || kind == "fs" || kind == "zfs" || kind == "store" || kind == "ds" {
+			return "%"
+		}
+	case "in", "out":
+		return "Mbit/s"
+	case "read", "write":
+		return "B/s"
+	case "temp":
+		return "°C"
+	case "uptime":
+		return "s"
+	case "free":
+		return "B"
+	}
+	return ""
 }
 
 // pruneLastValues vergisst die letzten Werte von Diensten, die es nicht mehr gibt.
