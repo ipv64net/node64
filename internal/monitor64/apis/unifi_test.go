@@ -659,3 +659,27 @@ func TestReviewUnifiDetectAmbiguous(t *testing.T) {
 	}
 	f.mu.Unlock()
 }
+
+// #272: Meldet der Controller einen Switch kurz als offline bzw. ohne Zustand, kommen Ports und PoE ohne Werte und
+// als "ohne Daten" markiert (keine Aenderung des Zustands) - nicht als Port ohne Link und nicht als verschwunden.
+func TestUnifiSwitchOfflineNoData(t *testing.T) {
+	for _, state := range []string{`"state":0`, `"state":4`, `"state":null`} {
+		f := newFakeUnifi(true)
+		f.set("/api/s/default/stat/device", strings.Replace(ufDevicesJSON, `"mac":"fc:ec:da:11:22:33","state":1`, `"mac":"fc:ec:da:11:22:33",`+state, 1))
+		u, _ := unifiFor(t, f, UnifiConfig{Secret: ufTestKey})
+		svcs, err := u.Collect(context.Background())
+		if err != nil {
+			t.Fatalf("%s: %v", state, deErr(err))
+		}
+		for _, idx := range []string{"3", "4", "5", "6"} {
+			p := svcByKey(t, svcs, "port:fc:ec:da:11:22:33:"+idx)
+			if !hasFact(p, model.FactNoData) || hasFact(p, "if_down") || len(p.Metrics) != 0 || p.Default || p.Text != "Gerät nicht verbunden" {
+				t.Errorf("%s Port %s: %+v", state, idx, p)
+			}
+		}
+		poe := svcByKey(t, svcs, "poe:fc:ec:da:11:22:33")
+		if !hasFact(poe, model.FactNoData) || len(poe.Metrics) != 0 || poe.Kind != "poe" || poe.Name != "Switch 16 · PoE" {
+			t.Errorf("%s PoE: %+v", state, poe)
+		}
+	}
+}

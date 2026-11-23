@@ -253,12 +253,25 @@
 				if (!fresh) { return; }
 				var checked = {};
 				live.querySelectorAll("input[name=tokens]:checked").forEach(function (c) { checked[c.value] = 1; });
+				// im Browser gewaehlte Sortierung (table-sort.js, z. B. nach Ziel) bleibt beim Neuschreiben der Tabelle (#261)
+				var sorted = live.querySelector('table.hc-table thead th[aria-sort="ascending"], table.hc-table thead th[aria-sort="descending"]');
+				var sortCol = sorted ? Array.prototype.indexOf.call(sorted.parentNode.cells, sorted) : -1;
+				var sortDesc = !!sorted && sorted.getAttribute("aria-sort") === "descending";
 				if (window.bootstrap && bootstrap.Tooltip) {
 					live.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) { var t = bootstrap.Tooltip.getInstance(el); if (t) { t.dispose(); } });
 				}
 				live.innerHTML = fresh.innerHTML;
 				live.querySelectorAll("input[name=tokens]").forEach(function (c) { if (checked[c.value]) { c.checked = true; } });
 				initTips(live); initConfirm(live); initSelectAll(live); initGroups(live);
+				if (sortCol >= 0) {
+					setTimeout(function () { // erst nachdem table-sort.js die neue Tabelle eingerichtet hat (MutationObserver)
+						var head = live.querySelector("table.hc-table thead tr:last-child");
+						var th = head && head.cells[sortCol];
+						if (!th || !th.hasAttribute("data-sortable")) { return; }
+						th.click();
+						if (sortDesc) { th.click(); }
+					}, 0);
+				}
 				tick();
 			}).catch(function () {}).then(function () { busy = false; lastRefresh = Date.now(); });
 		};

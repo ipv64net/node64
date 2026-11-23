@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 3.3.2 – unveröffentlicht
+
+### Behoben
+- „Jetzt prüfen“ funktioniert im Cluster auch ohne ipv64-Konto, wenn eine andere Node den Check misst (#271).
+- In der Übersicht bleibt eine selbst gewählte Sortierung (z. B. nach Ziel/IP-Adresse) bei der automatischen Aktualisierung erhalten (#261).
+- Pausierte Checks schicken keine Erinnerungen „noch gestört“ mehr (auf ipv64.net mit dem Update der ipv64-Server).
+- Bei „teilweise gestört“ nennt der Ereignistext die Nodes mit Namen statt mit ihrer ID (#273, mit dem Update der ipv64-Server).
+
 ## 3.3.1 – 2026-11-22
 
 ### Behoben

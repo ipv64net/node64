@@ -269,6 +269,9 @@ type hostRT struct {
 	SeenUp   map[string][]string      `json:"seen_up,omitempty"`  // merkbarer Zustand der Sammler je Zugang (memo: SNMP-Ports mit Link, NUT TLS)
 	Moved    map[string]string        `json:"moved,omitempty"`    // Proxmox-Gast -> Node, auf der er hier weitergefuehrt wird (#165)
 	LastDisc time.Time                `json:"last_disc,omitzero"`
+	Seen     time.Time                `json:"seen,omitzero"` // letzte Runde, in der der Host Daten lieferte
+	Back     time.Time                `json:"back,omitzero"` // wieder da seit (erste Runde mit Daten nach einer Luecke, #275)
+	Away     time.Time                `json:"away,omitzero"` // letzte Runde mit Daten vor dieser Luecke
 	known    map[string]bool          // bei der Erkennung schon gesehene Dienste (nur im Speicher)
 	follow   []string                 // uebernommene Proxmox-Gaeste fuer den Sammler (nil = noch aus der Datenbank lesen)
 	dirty    bool
@@ -349,6 +352,10 @@ const (
 	trendEvery     = time.Hour          // Trend "voll in N Tagen" hoechstens so oft neu rechnen
 	dbTimeout      = 20 * time.Second   // Datenbank-Schritte einer Runde (eigenes Zeitlimit, unabhaengig von den Zugaengen)
 	staleKindAfter = 7 * 24 * time.Hour // Messgroesse so lange nicht geliefert: Tracker vergessen
+	// Anlaufzeit nach dem Wiederkommen eines Hosts (#275): so lange (mindestens aber die ueblichen 3 Intervalle)
+	// bleiben Werte, die seit dem Wiederkommen noch nicht kamen, auf ihrem letzten Stand statt "unbekannt" - langsame
+	// Abschnitte (Windows-Updates bis 10 min, SMART) liefert der Agent nach dem Start erst nach einer Weile
+	startupGrace = 15 * time.Minute
 
 	// Obergrenzen fuer Berichte, die vom ueberwachten Host kommen (nicht vertrauenswuerdig): sonst fuellte ein
 	// manipulierter Agent mit immer neuen Namen je Runde Datenbank und Speicher
@@ -516,6 +523,11 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 	maint, win := m.inMaintenance(now, ref)
 	hres0 := eval.HostState(eval.HostInput{Maintenance: maint, Accesses: accInputs})
 	reachable := !hres0.Unreachable && len(found) > 0
+	iv := time.Duration(h.IntervalSec) * time.Second
+	if reachable {
+		rt.markBack(now, iv)
+	}
+	startup := reachable && rt.inStartup(now, iv)
 
 	// 2. Dienste erkennen (beim ersten Mal, stuendlich und sobald ein bisher nicht gesehener Dienst auftaucht, z. B.
 	// "Updates", wenn der Agent die erste Suche erst nach der ersten Abfrage fertig hat); nie automatisch uebernehmen.
@@ -592,7 +604,6 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 
 	// 3. bewerten und speichern
 	cfg := m.config()
-	iv := time.Duration(h.IntervalSec) * time.Second
 	open := m.loadOpen(dbctx, h.UID)
 	var views []SvcView
 	var states []eval.State
@@ -701,7 +712,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				continue // Dienst geliefert, Wert gewollt weggelassen (gestoppte VM, schlafende Platte, Port ohne Link)
 			}
 			e := eval.Resolve(cfg.std, cfg.overrides, ref, m.hostLevel(r.HostUID, hostRules, kind), kind)
-			st := tr.Status(e, now)
+			st := rt.missingStatus(tr, e, now, iv, startup)
 			if ok && st.State == eval.Unknown && (svcStopped(g.svc) || smartOff[g.acc] && smartMetric(kind)) {
 				// Dienst kommt weiter, ist aber aus (gestoppte VM mit Warnung zu CPU/RAM): Wert gewollt weggelassen - die
 				// Warnung gilt nicht mehr, statt 7 Tage "unbekannt". Laeuft der Dienst, bleibt der fehlende Wert nach 3
@@ -725,6 +736,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		}
 		_, smartUnreadable := facts["smart_unreadable"]
 		_, smartAsleep := facts["smart_standby"] // schlafende Platte ohne Vorstand (mapper.go): SMART nicht gelesen
+		_, noData := facts[model.FactNoData]     // Dienst ohne Daten (Geraet offline): Zustand unbekannt, keine Aenderung
 		kinds := map[string]bool{}
 		for _, k := range factKinds[r.Kind] {
 			kinds[k] = true
@@ -745,7 +757,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		// bestaetigte Zustaende, deren Bedingung entfallen ist (bzw. deren Regel-Art der Dienst nicht mehr hat): Ausnahme
 		// entfernen, damit der naechste Eintritt wieder meldet
 		accDone := numDone
-		if ok || !r.VanishedAt.IsZero() {
+		if (ok && !noData) || !r.VanishedAt.IsZero() {
 			for k, hr := range hostRules {
 				if hr.Accepted != nil && *hr.Accepted && !kinds[k] {
 					accDone = append(accDone, k)
@@ -799,8 +811,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				case cond:
 					cond = false
 					sv.Accepted = append(sv.Accepted, k)
-				case isSmart && (smartUnreadable || smartAsleep):
-					sv.Accepted = append(sv.Accepted, k) // SMART in dieser Runde nicht gelesen: Bedingung unbekannt, bleibt
+				case isSmart && (smartUnreadable || smartAsleep), noData:
+					sv.Accepted = append(sv.Accepted, k) // SMART bzw. Dienst in dieser Runde nicht gelesen: Bedingung unbekannt, bleibt
 				default:
 					accDone = append(accDone, k)
 				}
@@ -814,7 +826,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			case isSmart && smartUnreadable && !cond && tr.Level == eval.OK:
 				continue // SMART nicht lesbar (z. B. virtuelle Platte) und vorher kein Problem: nicht bewerten
 			case !ok || (isSmart && smartUnreadable && !cond):
-				st = tr.Status(e, now) // keine (lesbaren) Daten: letzter Stand, dann Unbekannt
+				st = rt.missingStatus(tr, e, now, iv, startup) // keine (lesbaren) Daten: letzter Stand, dann Unbekannt
 			default:
 				st = tr.Observe(e, eval.Sample{At: now, Value: eval.Bool(cond)})
 			}
@@ -850,7 +862,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				rt.Local[r.Key] = ls
 			}
 			st := ls.State
-			if !ok && (!had || now.Sub(ls.At) > time.Duration(eval.UnknownAfter)*iv) {
+			if !ok && (!had || now.Sub(ls.At) > time.Duration(eval.UnknownAfter)*iv) && !(startup && rt.lastBeforeBack(ls.At, iv)) {
 				st = eval.Unknown
 			}
 			ms = append(ms, eval.MetricStatus{Name: "local", Status: eval.Status{State: st, Level: st, At: ls.At}, Notify: r.Report != "show"})
@@ -928,7 +940,10 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			hostMem, _ = json.Marshal(m.notifier.Hosts[h.UID])
 		}
 		m.notifyMu.Unlock()
-	} else if role == roleReport {
+	} else if role == roleReport && len(rt.accs) > 0 {
+		// ohne Zugang (letzter entfernt bzw. ausgeschaltet, Host wird gerade entfernt) liefert der Host nichts: weder
+		// Probleme abgleichen noch melden - ohne Zugang hiesse er sonst erreichbar, mit "wieder erreichbar" und allen
+		// Diensten "noch offen - Unbekannt" (#263)
 		m.syncProblems(dbctx, h, open, inputs, hres, unreachDetail, now)
 		round := eval.Round{At: now, Host: ref, Unreachable: hres.Unreachable, Maintenance: maint, Quiet: m.quietNow(now), Services: inputs}
 		if op := open[""]; op != nil {
@@ -1152,6 +1167,14 @@ func describe(ms eval.MetricStatus, kind string, free bool) string {
 	if known {
 		label = model.Sub(model.T("monitor64.kind." + kindKey(rk.Kind)))
 	}
+	if st.State == eval.Unknown && st.Level != eval.Unknown {
+		// keine aktuellen Daten (nicht die Bezeichnung der Regel - "Unbekannt - Firmware-Update verfuegbar" klang wie ein
+		// gefundenes Update, #275); Zustandsregeln ohne eigenen Namen, Messgroessen mit ihrer Bezeichnung
+		if known && rk.State {
+			return i18nText("monitor64.detail.no_data")
+		}
+		return model.T("monitor64.detail.no_data_of", "metric", label)
+	}
 	if st.Threshold.Off || (known && rk.State) {
 		return string(label)
 	}
@@ -1197,6 +1220,52 @@ func (rt *hostRT) tracker(key string, iv time.Duration) *eval.Tracker {
 	}
 	tr.Interval = eval.Dur(iv)
 	return tr
+}
+
+// markBack merkt sich das Wiederkommen des Hosts (#275): eine Runde mit Daten nach mindestens einer Runde ohne Daten
+// (ausgeschaltet, nicht erreichbar, Neustart, Node bzw. Monitor64 aus).
+func (rt *hostRT) markBack(now time.Time, iv time.Duration) {
+	if iv <= 0 {
+		iv = eval.DefaultInterval
+	}
+	if rt.Seen.IsZero() || now.Before(rt.Seen) || now.Sub(rt.Seen) > iv+iv/2 {
+		rt.Back, rt.Away, rt.dirty = now, rt.Seen, true
+	}
+	rt.Seen = now
+}
+
+// startupFor: Dauer der Anlaufzeit nach dem Wiederkommen - startupGrace, mindestens die Zeit, nach der fehlende Werte
+// sonst "unbekannt" werden (3 Intervalle).
+func startupFor(iv time.Duration) time.Duration {
+	if iv <= 0 {
+		iv = eval.DefaultInterval
+	}
+	return max(startupGrace, time.Duration(eval.UnknownAfter)*iv)
+}
+
+// inStartup: der Host ist erst seit kurzem wieder da (Anlaufzeit laeuft).
+func (rt *hostRT) inStartup(now time.Time, iv time.Duration) bool {
+	return !rt.Back.IsZero() && !rt.Away.IsZero() && !now.Before(rt.Back) && now.Sub(rt.Back) < startupFor(iv)
+}
+
+// lastBeforeBack: ein Wert mit letzter Messung last kam seit dem Wiederkommen noch nicht, war aber vor der Luecke
+// aktuell. Werte, die schon vorher fehlten (bzw. "unbekannt" waren), bekommen keine Anlaufzeit.
+func (rt *hostRT) lastBeforeBack(last time.Time, iv time.Duration) bool {
+	if iv <= 0 {
+		iv = eval.DefaultInterval
+	}
+	return !last.IsZero() && last.Before(rt.Back) && rt.Away.Sub(last) <= time.Duration(eval.UnknownAfter)*iv
+}
+
+// missingStatus: Zustand eines Werts ohne Messung in dieser Runde - letzter Stand, nach 3 Intervallen Unbekannt. In
+// der Anlaufzeit nach dem Wiederkommen (startup) bleibt ein vor der Luecke aktueller Wert auf seinem letzten Stand,
+// bis er wieder kommt (#275: sonst meldet jedes Einschalten "Updates: Unbekannt" und eine Runde spaeter "wieder OK").
+func (rt *hostRT) missingStatus(tr *eval.Tracker, e eval.Effective, now time.Time, iv time.Duration, startup bool) eval.Status {
+	st := tr.Status(e, now)
+	if st.State == eval.Unknown && startup && rt.lastBeforeBack(tr.LastAt, iv) {
+		st.State, st.Since = st.Level, tr.Changed
+	}
+	return st
 }
 
 func hostRef(h *Host) eval.HostRef {

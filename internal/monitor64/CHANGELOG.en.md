@@ -1,5 +1,15 @@
 # Monitor64 – Changes
 
+## 0.1.27 – unreleased
+
+Fixed:
+
+- After a host is switched on or comes back there is a 15-minute start-up period: values the agent delivers only after a while (e.g. Windows updates, SMART) no longer report “unknown” followed by an all-clear a minute later. Real problems are reported immediately; values missing for longer are reported as before (#275, #274).
+- Missing data is now described as “no data” instead of the rule name – previously e.g. “unknown – firmware update available” or “SMART: status FAILED” (#275).
+- Deleting a host or its last access no longer sends “reachable again” with all services “still open – unknown” (#263).
+- UniFi: “OK until the next change” is kept when the controller briefly reports a switch as offline; ports and PoE of a disconnected device count as “no data”, not as a change (#272).
+- SNMP: devices that don’t answer GETBULK, or answer it incorrectly (e.g. Brother, HP OfficeJet), are queried via GETNEXT or column by column automatically; toner, trays, page counter and custom OIDs show up again (#269).
+
 ## 0.1.26 – 2026-11-22
 
 Fixed:

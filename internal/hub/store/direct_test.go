@@ -65,6 +65,44 @@ func TestReverdictDirectNode(t *testing.T) {
 	}
 }
 
+// Teilweise gestoert im Cluster (GitHub #273): der Hinweistext nennt die Nodes mit Namen statt node:<id>.
+func TestReverdictNodeNames(t *testing.T) {
+	now := time.Now().UTC()
+	s, _ := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
+		switch {
+		case strings.HasPrefix(q, "SELECT userid, policy"):
+			return fakeResult{cols: []string{"userid", "policy", "state", "name", "interval_sec", "incident_id", "down_since", "type", "target", "critical", "channels",
+				"notify_down", "notify_up", "notify_degraded", "execution", "paused", "nodes", "node_id", "params"},
+				rows: [][]driver.Value{{int64(7), "all", "up", "DNS", int64(60), nil, nil, "dns", "8.8.8.8", int64(0), "", int64(1), int64(1), int64(1), "local", int64(0), "a,b", "a", "{}"}}}
+		case strings.Contains(q, "FROM hc2_check_states"):
+			u := now.Format(TimeFormat)
+			return fakeResult{cols: []string{"source", "state", "last_status", "last_reason", "last_message", "last_latency_ms", "updated_at", "since"},
+				rows: [][]driver.Value{
+					{"node:a", "down", "down", "timeout", "no answer from 8.8.8.8:53 after 5s", 0.0, u, u},
+					{"node:b", "up", "up", "", "", 3.0, u, u},
+				}}
+		case strings.HasPrefix(q, "SELECT online, last_seen"):
+			return fakeResult{cols: []string{"online", "last_seen"}, rows: [][]driver.Value{{int64(1), now.Format(TimeFormat)}}}
+		case strings.HasPrefix(q, "SELECT node_id, name FROM hc2_nodes"):
+			return fakeResult{cols: []string{"node_id", "name"}, rows: [][]driver.Value{{"a", "docker-netcup"}, {"b", "Box"}}}
+		case strings.HasPrefix(q, "SELECT"):
+			return fakeResult{cols: []string{"x"}}
+		}
+		return fakeResult{affected: 1}
+	})
+	var got []OverallEvent
+	s.OnOverall = func(e OverallEvent) { got = append(got, e) }
+	if err := s.Reverdict(context.Background(), "tok"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Kind != "degraded" {
+		t.Fatalf("events: %+v", got)
+	}
+	if want := "no answer from 8.8.8.8:53 after 5s | gestört: docker-netcup; OK: Box"; got[0].Message != want {
+		t.Fatalf("message %q, want %q", got[0].Message, want)
+	}
+}
+
 // Erinnerungen: lokale Checks nur mit notify-direct der Node (dann DirectNode: der hub sendet nur die uebrigen
 // Portal-Kanaele), Online/Hybrid wie bisher.
 func TestDueRemindersDirectNode(t *testing.T) {
@@ -72,6 +110,10 @@ func TestDueRemindersDirectNode(t *testing.T) {
 	s, f := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
 		if !strings.Contains(q, "FIND_IN_SET('notify-direct', d.modules)") || !strings.Contains(q, "execution = 'local'") {
 			t.Errorf("query without capability check: %s", q)
+		}
+		// pausierte Checks erinnern nie (Forum 5272: Zustand bleibt nach dem Pausieren auf down stehen)
+		if !strings.Contains(q, "deleted_at IS NULL AND paused = 0 AND") {
+			t.Errorf("query without pause check: %s", q)
 		}
 		return fakeResult{cols: []string{"token", "userid", "name", "type", "target", "critical", "channels", "notify_down", "notify_up", "notify_degraded", "repeat_minutes",
 			"down_since", "last_reason", "last_message", "execution", "node_id"},

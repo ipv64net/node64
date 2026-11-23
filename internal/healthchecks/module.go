@@ -162,8 +162,8 @@ func (m *Module) remind(ctx context.Context) {
 	}
 	now := time.Now()
 	for _, c := range list {
-		if c.RepeatMinutes <= 0 {
-			continue
+		if c.RepeatMinutes <= 0 || c.Paused {
+			continue // pausiert: keine Erinnerung, auch wenn der letzte (Gruppen-)Zustand noch gestoert ist
 		}
 		rt := m.liveRuntime(c)
 		if group, me, ready := m.role(ctx, c); group { // Gruppe: nur die Node, die an der Reihe ist, nach dem Gesamtzustand
@@ -242,7 +242,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "3.3.1", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "3.3.2", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

@@ -123,6 +123,7 @@ type Collector struct {
 	noHC     bool                 // keine 64-Bit-Zaehler (ifHC*): 32-Bit-Spalten nehmen
 	bulkMax  atomic.Int32         // gelernte Grenze Varbinds je GETBULK (gsConn.getBulk)
 	bulkAt   atomic.Int64         // ... wann gelernt
+	noBulk   atomic.Int64         // wann gelernt, dass das Geraet GETBULK nicht beantwortet (gsConn.bulkUnsupported)
 
 	ifStatic   map[string]ifInfo // ifIndex -> Name, Typ, Alias
 	ifStaticAt time.Time
@@ -383,7 +384,7 @@ func (c *Collector) dialGoSNMP() (conn, error) {
 	if err := g.Connect(); err != nil {
 		return nil, err
 	}
-	return &gsConn{g: g, bulk: &c.bulkMax, bulkAt: &c.bulkAt}, nil
+	return &gsConn{g: g, bulk: &c.bulkMax, bulkAt: &c.bulkAt, noBulk: &c.noBulk}, nil
 }
 
 // Close beendet die Verbindung.

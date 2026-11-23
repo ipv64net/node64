@@ -36,20 +36,28 @@ func TestEventKind(t *testing.T) {
 }
 
 func TestDiagnosis(t *testing.T) {
-	if d := diagnosis([]string{"node:abc"}, []string{"loc:nbg", "loc:fsn"}); d != "innen gestört, außen OK → Heimnetz/Node" {
+	if d := diagnosis([]string{"node:abc"}, []string{"loc:nbg", "loc:fsn"}, nil); d != "innen gestört, außen OK → Heimnetz/Node" {
 		t.Errorf("inside: %q", d)
 	}
-	if d := diagnosis([]string{"loc:nbg", "loc:fsn"}, []string{"node:abc"}); !strings.HasPrefix(d, "außen") {
+	if d := diagnosis([]string{"loc:nbg", "loc:fsn"}, []string{"node:abc"}, nil); !strings.HasPrefix(d, "außen") {
 		t.Errorf("outside: %q", d)
 	}
-	if d := diagnosis([]string{"loc:nbg"}, []string{"loc:fsn"}); d != "gestört: loc:nbg; OK: loc:fsn" {
+	if d := diagnosis([]string{"loc:nbg"}, []string{"loc:fsn"}, nil); d != "gestört: loc:nbg; OK: loc:fsn" {
 		t.Errorf("mixed: %q", d)
 	}
-	if d := diagnosis([]string{"loc:nbg", "loc:fsn"}, nil); d == "" {
+	if d := diagnosis([]string{"loc:nbg", "loc:fsn"}, nil, nil); d == "" {
 		t.Errorf("all down should mention it")
 	}
-	if d := diagnosis(nil, []string{"loc:nbg"}); d != "" {
+	if d := diagnosis(nil, []string{"loc:nbg"}, nil); d != "" {
 		t.Errorf("all up: %q", d)
+	}
+	// Cluster aus zwei Nodes (GitHub #273): Namen statt node:<id>, ohne Namen bleibt die Kennung
+	names := map[string]string{"node:n1": "docker-netcup", "node:n2": "Box"}
+	if d := diagnosis([]string{"node:n1"}, []string{"node:n2", "node:n3"}, names); d != "gestört: docker-netcup; OK: Box, node:n3" {
+		t.Errorf("node names: %q", d)
+	}
+	if d := diagnosis([]string{"node:n1", "node:n2"}, nil, names); d != "alle Messstellen gestört: docker-netcup, Box" {
+		t.Errorf("all down with names: %q", d)
 	}
 }
 

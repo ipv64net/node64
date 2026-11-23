@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
@@ -1214,19 +1216,71 @@ func (c *Check) TargetBadge() Badge {
 // Runnable: "Jetzt pruefen" geht bei allen Checks mit Node-Messstellen (hier oder ueber den hub).
 func (c *Check) Runnable() bool { return c.Type != checks.TypePush && c.Execution != "online" }
 
-// runNow misst sofort: hier, wenn diese Node misst, und ueber den hub bei den anderen messenden Nodes.
-func (m *Module) runNow(c *Check) error {
+// runNow misst sofort: hier, wenn diese Node misst, und ueber den hub bei den anderen messenden Nodes; ohne hub (nicht
+// verknuepft oder nicht erreichbar) ueber den Cluster bei den anderen messenden Nodes (#271).
+func (m *Module) runNow(ctx context.Context, c *Check) error {
 	ran := false
 	if c.MeasuredHere() {
 		if s := m.scheduler(); s != nil && s.RunNow(c.Token) {
 			ran = true
 		}
 	}
-	if m.runRemote != nil && m.linked != nil && m.linked() && (!c.MeasuredHere() || len(c.Nodes) > 1) && m.runRemote(c.Token) {
+	others := !c.MeasuredHere() || len(c.Nodes) > 1
+	if others && m.runRemote != nil && m.linked != nil && m.linked() && m.runRemote(c.Token) {
+		ran = true
+	} else if others && m.cluster.RunNow != nil && m.runCluster(ctx, c) {
 		ran = true
 	}
 	if !ran {
 		return errors.New("no measuring node reachable")
+	}
+	return nil
+}
+
+// runCluster bittet die anderen messenden Nodes ueber den Cluster, den Check sofort zu messen (gleichzeitig, je Node
+// hoechstens 5 s); true, wenn mindestens eine es angenommen hat.
+func (m *Module) runCluster(ctx context.Context, c *Check) bool {
+	me := selfNodeID()
+	var wg sync.WaitGroup
+	var ok atomic.Bool
+	for _, n := range c.Nodes {
+		if n == "" || n == me {
+			continue
+		}
+		wg.Go(func() {
+			cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			if err := m.cluster.RunNow(cctx, n, c.Token); err == nil {
+				ok.Store(true)
+			} else {
+				m.log.Debug("run now via cluster failed", "check", c.Name, "node", n, "err", err)
+			}
+		})
+	}
+	wg.Wait()
+	return ok.Load()
+}
+
+// ClusterCallRun: Anfrage einer anderen Node des Clusters, einen Check sofort zu messen (peer.Manager.RegisterCall).
+const ClusterCallRun = "run_check"
+
+// HandleClusterRun misst einen Check auf Bitte einer anderen Node des Clusters sofort, wenn diese Node ihn misst.
+func (m *Module) HandleClusterRun(ctx context.Context, body []byte) error {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(body, &in); err != nil || in.Token == "" {
+		return errors.New("token missing")
+	}
+	c, err := m.st.Check(ctx, in.Token)
+	if err != nil {
+		return err
+	}
+	if c == nil || c.Type == checks.TypePush || !c.MeasuredHere() {
+		return errors.New("check is not measured on this node")
+	}
+	if s := m.scheduler(); s == nil || !s.RunNow(c.Token) {
+		return errors.New("check is not running on this node")
 	}
 	return nil
 }
@@ -1278,7 +1332,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		if c.Type == checks.TypePush {
 			return fmt.Errorf("%s", m.g.T(r, "hc.run_push"))
 		}
-		if err := m.runNow(c); err != nil {
+		if err := m.runNow(ctx, c); err != nil {
 			return fmt.Errorf("%s", m.g.T(r, "hc.run_unreachable"))
 		}
 		m.audit(r, "check.run", c)

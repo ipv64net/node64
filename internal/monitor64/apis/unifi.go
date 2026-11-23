@@ -901,8 +901,9 @@ func ufHasPorts(typ string) bool {
 }
 
 // ufPortServices: je Port ein Dienst (Zustand, Durchsatz aus den Raten des Controllers, Fehler aus den Zaehlern,
-// PoE-Leistung) und je Switch mit PoE-Budget ein Dienst "PoE". Ist das Geraet nicht verbunden, bleiben die Ports
-// ohne Werte stehen (statt als verschwunden zu gelten).
+// PoE-Leistung) und je Switch mit PoE-Budget ein Dienst "PoE". Ist das Geraet nicht verbunden (bzw. sein Zustand
+// unbekannt), bleiben Ports und PoE ohne Werte stehen (statt als verschwunden zu gelten), markiert als "ohne Daten":
+// das ist keine Aenderung des Zustands, bestaetigte Zustaende wie "Port ohne Link ist in Ordnung" bleiben (#272).
 func ufPortServices(d ufDevice, online bool, prev, cur *counter) []model.Service {
 	var out []model.Service
 	mac := strings.ToLower(strings.TrimSpace(d.Mac))
@@ -921,6 +922,7 @@ func ufPortServices(d ufDevice, online bool, prev, cur *counter) []model.Service
 		s := model.Service{Key: "port:" + mac + ":" + idx, Name: model.Raw(dev) + " · " + model.Raw(pname), Kind: "if", Default: online && p.Up.V}
 		if !online {
 			s.Text = model.T("monitor64.txt.uf_dev_offline")
+			s.Facts = []model.Fact{{Code: model.FactNoData}}
 			out = append(out, s)
 			continue
 		}
@@ -975,6 +977,10 @@ func ufPortServices(d ufDevice, online bool, prev, cur *counter) []model.Service
 		}
 		s.Text = strings.Join(parts, " · ")
 		out = append(out, s)
+	}
+	if !online && d.TotalMaxPower.Set && d.TotalMaxPower.V > 0 {
+		out = append(out, model.Service{Key: "poe:" + mac, Name: model.Raw(dev) + " · PoE", Kind: "poe", Default: true,
+			Text: model.T("monitor64.txt.uf_dev_offline"), Facts: []model.Fact{{Code: model.FactNoData}}})
 	}
 	if online && d.TotalMaxPower.Set && d.TotalMaxPower.V > 0 {
 		used := math.Min(100, poeSum/d.TotalMaxPower.V*100)

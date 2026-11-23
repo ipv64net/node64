@@ -1,5 +1,15 @@
 # Monitor64 – Änderungen
 
+## 0.1.27 – unveröffentlicht
+
+Behoben:
+
+- Nach dem Einschalten oder Wiederkommen eines Hosts gibt es eine Anlaufzeit von 15 Minuten: Werte, die der Agent erst nach einer Weile liefert (z. B. Windows-Updates, SMART), melden in dieser Zeit nicht mehr „Unbekannt“ mit Entwarnung eine Minute später. Echte Probleme melden sofort, fehlen die Werte länger, wird wie bisher gemeldet (#275, #274).
+- Fehlen Daten, nennt die Meldung „keine Daten“ statt der Regel – bisher stand dort z. B. „Unbekannt – Firmware-Update verfügbar“ oder „SMART: Status FAILED“ (#275).
+- Nach dem Löschen eines Hosts oder seines letzten Zugangs kommt keine Meldung „wieder erreichbar“ mit allen Diensten „noch offen – Unbekannt“ mehr (#263).
+- UniFi: „In Ordnung – bis zur nächsten Änderung“ bleibt bestehen, wenn der Controller einen Switch kurz als offline meldet; Ports und PoE eines nicht verbundenen Geräts zählen als „ohne Daten“, nicht als Änderung (#272).
+- SNMP: Geräte, die GETBULK nicht oder fehlerhaft beantworten (z. B. Brother, HP OfficeJet), werden automatisch per GETNEXT bzw. Spalte für Spalte abgefragt; Toner, Fächer, Seitenzähler und eigene OIDs erscheinen wieder (#269).
+
 ## 0.1.26 – 2026-11-22
 
 Behoben:

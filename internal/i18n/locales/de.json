@@ -7094,6 +7094,7 @@
       "unack": "Quittierung aufgehoben (verschlechtert)",
       "secret_unreadable": "Zugangsdaten nicht lesbar",
       "no_data": "keine Daten",
+      "no_data_of": "{metric}: keine Daten",
       "host_removed": "Host entfernt",
       "zfs_errors": "Datenfehler: {text}",
       "traps": "{n} Trap(s) offen, zuletzt {name} ({at})",

@@ -58,6 +58,24 @@ func (m *Module) ReloadHost(ctx context.Context, uid string) {
 	m.scheduleHost(ctx, h, old)
 }
 
+// deleteHost entfernt einen Host: erst aus dem Planer (wartet auf eine laufende Runde), dann der Loeschvermerk - eine
+// gerade laufende Runde fande sonst keine Dienste und Zugaenge mehr und meldete fuer den geloeschten Host (#263).
+// Schlaegt das Loeschen fehl, laeuft der Host mit seinem Stand weiter.
+func (m *Module) deleteHost(ctx context.Context, h *Host, by Actor) error {
+	m.reloadMu.Lock()
+	old := m.removeHost(h.UID)
+	err := m.store.DeleteHost(ctx, h.UID, by)
+	if err != nil && old != nil {
+		m.scheduleHost(ctx, h, old)
+	}
+	m.reloadMu.Unlock()
+	if err != nil {
+		return err
+	}
+	m.ReloadHost(ctx, h.UID) // vergisst das Gedaechtnis der Meldungen, gleicht Push-Lauscher und Trap-Absender ab
+	return nil
+}
+
 // removeHost nimmt einen Host aus dem Planer; liefert den bisherigen Laufzeitstand (zum Weiterverwenden).
 func (m *Module) removeHost(uid string) *hostRT {
 	if s := m.scheduler(); s != nil {
@@ -92,6 +110,7 @@ func (m *Module) scheduleHost(ctx context.Context, h *Host, old *hostRT) {
 		old.mu.Lock()
 		rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = old.Trackers, old.Kinds, old.Failures, old.Missing, old.Provider
 		rt.Rising, rt.Local, rt.Trend, rt.Traps, rt.SeenUp, rt.Moved = old.Rising, old.Local, old.Trend, old.Traps, old.SeenUp, old.Moved
+		rt.Seen, rt.Back, rt.Away = old.Seen, old.Back, old.Away
 		old.mu.Unlock()
 		if v := old.getView(); v != nil { // Ansicht mit dem neuen Host (Pause, Name, Gruppe gleich sichtbar)
 			nv := *v

@@ -34,6 +34,10 @@ type Metric struct {
 	Max   float64 `json:"max,omitempty"`  // z. B. Groesse in Bytes (fuer "GB frei")
 }
 
+// FactNoData: der Dienst kommt, sein Zustand ist in dieser Runde aber unbekannt (z. B. UniFi-Switch laut Controller
+// offline). Ohne Regel; bestaetigte Zustaende ("in Ordnung, bis sich der Zustand aendert") bleiben dann bestehen.
+const FactNoData = "no_data"
+
 // Fact ist ein Zustand ohne Zahl, den die festen Regeln bewerten (SMART FAILED, RAID degraded ...).
 type Fact struct {
 	Code string `json:"code"` // smart_failed, smart_sectors, smart_sectors_rising, raid_degraded, zfs_degraded,

@@ -666,11 +666,10 @@ func (m *Module) apiHostDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	by := m.actor(r)
-	if err := m.store.DeleteHost(ctx, h.UID, by); err != nil {
+	if err := m.deleteHost(ctx, h, by); err != nil {
 		m.fail(w, r, err)
 		return
 	}
-	m.ReloadHost(ctx, h.UID)
 	// offene Probleme schliessen (sonst blieben sie ohne Host offen und zaehlten weiter am Reiter Probleme)
 	if err := m.CloseHostProblems(ctx, h.UID, by); err != nil {
 		m.log.Warn("monitor64: close problems of removed host", "host", h.Name, "err", err)

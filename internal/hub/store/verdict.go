@@ -141,7 +141,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 			upList = append(upList, x.Source)
 		}
 	}
-	diag := diagnosis(downList, upList)
+	diag := diagnosis(downList, upList, sourceNames(ctx, tx, append(append([]string(nil), downList...), upList...)))
 	if diag != "" {
 		message = strings.TrimSpace(message + " | " + diag)
 	}
@@ -503,11 +503,23 @@ func eventKind(from, to scheduler.State, incidentOpen bool) (string, bool) {
 	}
 }
 
-// diagnosis liefert den Hinweistext zu den beteiligten Messstellen.
-func diagnosis(down, up []string) string {
+// diagnosis liefert den Hinweistext zu den beteiligten Messstellen. names: Anzeigenamen je Messstelle (Nodes), ohne
+// Namen bleibt die Kennung (node:<id>, loc:<code>) stehen.
+func diagnosis(down, up []string, names map[string]string) string {
+	label := func(list []string) string {
+		out := make([]string, len(list))
+		for i, s := range list {
+			if n := names[s]; n != "" {
+				out[i] = n
+			} else {
+				out[i] = s
+			}
+		}
+		return strings.Join(out, ", ")
+	}
 	if len(down) == 0 || len(up) == 0 {
 		if len(down) > 1 {
-			return "alle Messstellen gestört: " + strings.Join(down, ", ")
+			return "alle Messstellen gestört: " + label(down)
 		}
 		return ""
 	}
@@ -531,20 +543,49 @@ func diagnosis(down, up []string) string {
 	case inside(down) && !outside(down) && outside(up):
 		return "innen gestört, außen OK → Heimnetz/Node"
 	case outside(down) && !inside(down) && inside(up):
-		return "außen gestört (" + strings.Join(down, ", ") + "), innen OK → Router/Portfreigabe/CDN"
+		return "außen gestört (" + label(down) + "), innen OK → Router/Portfreigabe/CDN"
 	default:
-		return "gestört: " + strings.Join(down, ", ") + "; OK: " + strings.Join(up, ", ")
+		return "gestört: " + label(down) + "; OK: " + label(up)
 	}
+}
+
+// sourceNames liefert die Namen der Node-Messstellen (node:<id> -> Name) fuer den Hinweistext; Nodes ohne Namen
+// fehlen (dann bleibt die Kennung stehen).
+func sourceNames(ctx context.Context, q rowQuerier, sources []string) map[string]string {
+	var args []any
+	for _, s := range sources {
+		if id, ok := strings.CutPrefix(s, "node:"); ok && id != "" {
+			args = append(args, id)
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	rows, err := q.QueryContext(ctx, `SELECT node_id, name FROM hc2_nodes WHERE node_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(args)), ",")+`)`, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id string
+		var name sql.NullString
+		if rows.Scan(&id, &name) == nil && strings.TrimSpace(name.String) != "" {
+			out["node:"+id] = strings.TrimSpace(name.String)
+		}
+	}
+	return out
 }
 
 // DueReminders liefert gestoerte Checks mit Wiederholung (repeat_minutes > 0).
 // Time = down_since, Duration = Wiederholungsabstand.
 func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
 	// lokale Checks nur, wenn ihre Node die eigenen Erinnerungen selbst schickt (wire.NotifyDirect): hier dann nur die
-	// uebrigen Portal-Kanaele (bei aelteren Nodes erinnert wie bisher niemand)
+	// uebrigen Portal-Kanaele (bei aelteren Nodes erinnert wie bisher niemand). Pausierte Checks nie: das Pausieren
+	// setzt nur paused, der Zustand bleibt (ohne Messung kein neuer Gesamtzustand) auf down stehen.
 	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message, execution,
 			COALESCE(node_id, '')
-		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping')
+		FROM hc2_checks WHERE deleted_at IS NULL AND paused = 0 AND repeat_minutes > 0 AND state IN ('down','flapping')
 		AND (execution IN ('online','both') OR (execution = 'local' AND node_id IS NOT NULL AND (nodes = '' OR nodes = node_id)
 			AND EXISTS (SELECT 1 FROM hc2_nodes d WHERE d.node_id = hc2_checks.node_id AND d.revoked_at IS NULL AND d.proxy_via IS NULL
 				AND FIND_IN_SET('`+wire.NotifyDirect+`', d.modules) > 0)))

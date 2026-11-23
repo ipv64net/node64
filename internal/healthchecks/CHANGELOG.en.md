@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 3.3.2 – unreleased
+
+### Fixed
+- “Check now” works in a cluster without an ipv64 account when another node measures the check (#271).
+- A sort order chosen in the overview (e.g. by target/IP address) survives the automatic refresh (#261).
+- Paused checks no longer send “still down” reminders (on ipv64.net with the update of the ipv64 servers).
+- For “partially down” the event text names the nodes instead of showing their IDs (#273, with the update of the ipv64 servers).
+
 ## 3.3.1 – 2026-11-22
 
 ### Fixed

@@ -191,6 +191,11 @@ type fakeConn struct {
 	fail      bool   // jede Anfrage scheitert (Zeitueberschreitung)
 	maxResp   int    // hoechstens so viele Varbinds je Antwort (abgeschnittene GETBULK-Antworten)
 	onReq     func() // vor jeder Anfrage (z. B. Uhr weiterstellen)
+	// Drucker-Agenten (#269): bulkErr = GETBULK scheitert immer mit diesem Status; nextMax > 0 = GETNEXT ueber mehr OIDs
+	// scheitert mit tooBig; colMajor = GETBULK liefert Spalte fuer Spalte statt Zeile fuer Zeile
+	bulkErr  gosnmp.SNMPError
+	nextMax  int
+	colMajor bool
 }
 
 func (f *fakeConn) v1() bool { return f.isV1 }
@@ -237,6 +242,9 @@ func (f *fakeConn) getNext(_ context.Context, oids []string) ([]pdu, error) {
 	if err := f.check(oids); err != nil {
 		return nil, err
 	}
+	if f.nextMax > 0 && len(oids) > f.nextMax {
+		return nil, &snmpError{status: gosnmp.TooBig}
+	}
 	out := make([]pdu, 0, len(oids))
 	for i, o := range oids {
 		p := f.m.next(o)
@@ -259,6 +267,21 @@ func (f *fakeConn) getBulk(_ context.Context, oids []string, maxRep uint32) ([]p
 		if f.emptyOn != "" && strings.HasPrefix(normOID(o), f.emptyOn) {
 			return nil, nil
 		}
+	}
+	if f.bulkErr != gosnmp.NoError {
+		return nil, &snmpError{status: f.bulkErr, index: 1}
+	}
+	if f.colMajor {
+		var out []pdu
+		for _, o := range oids {
+			cur := o
+			for r := 0; r < int(maxRep); r++ {
+				p := f.m.next(cur)
+				out = append(out, p)
+				cur = p.Name
+			}
+		}
+		return out, nil
 	}
 	cur := append([]string(nil), oids...)
 	var out []pdu
@@ -303,6 +326,8 @@ type udpAgent struct {
 	pc        net.PacketConn
 	done      chan struct{}
 	routerOS  atomic.Int32 // > 0: wie RouterOS - GETBULK ueber so viele Varbinds still verwerfen, noSuchName ohne Index
+	noBulk    atomic.Bool  // wie manche Drucker (#269): GETBULK still verwerfen
+	bulkReqs  atomic.Int32 // erhaltene GETBULK-Anfragen
 }
 
 func startAgent(t testing.TB, m *mib, community string) *udpAgent {
@@ -355,6 +380,12 @@ func (a *udpAgent) serve() {
 			}
 			if req.PDUType != gosnmp.GetBulkRequest {
 				resp.Variables = append(resp.Variables, p)
+			}
+		}
+		if req.PDUType == gosnmp.GetBulkRequest {
+			a.bulkReqs.Add(1)
+			if a.noBulk.Load() {
+				continue
 			}
 		}
 		if req.PDUType == gosnmp.GetBulkRequest && a.routerOS.Load() > 0 && int(req.MaxRepetitions)*len(req.Variables) > int(a.routerOS.Load()) {

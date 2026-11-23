@@ -7094,6 +7094,7 @@
       "unack": "acknowledgement cleared (got worse)",
       "secret_unreadable": "credentials unreadable",
       "no_data": "no data",
+      "no_data_of": "{metric}: no data",
       "host_removed": "host removed",
       "zfs_errors": "data errors: {text}",
       "traps": "{n} trap(s) open, last {name} ({at})",

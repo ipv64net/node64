@@ -163,10 +163,9 @@ func (m *Module) orphanAssign(ctx context.Context, h *Host, prev string, s *clus
 // orphanRemove entfernt den Host wie "Host entfernen" (Zugaenge, Dienste und Einstellungen mit; offene Probleme
 // schliessen; Verlauf und Problem-Historie bleiben).
 func (m *Module) orphanRemove(ctx context.Context, h *Host, by Actor) error {
-	if err := m.store.DeleteHost(ctx, h.UID, by); err != nil {
+	if err := m.deleteHost(ctx, h, by); err != nil {
 		return err
 	}
-	m.ReloadHost(ctx, h.UID)
 	if err := m.CloseHostProblems(ctx, h.UID, by); err != nil {
 		m.log.Warn("monitor64: close problems of removed host", "host", h.Name, "err", err)
 	}

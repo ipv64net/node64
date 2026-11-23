@@ -29,6 +29,8 @@ const ClusterItemStatusPages = "statuspages"
 type ClusterHooks struct {
 	// Change meldet eine Aenderung einer Statusseite (id = UID); ctx traegt bei Uebernahmen die Herkunft.
 	Change func(ctx context.Context, item, id string, deleted bool)
+	// RunNow bittet eine andere Node des Clusters, einen Check sofort zu messen ("Jetzt pruefen" ohne ipv64, #271).
+	RunNow func(ctx context.Context, node, token string) error
 }
 
 // SetCluster haengt den Cluster an (vor Start).

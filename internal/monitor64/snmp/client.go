@@ -88,6 +88,7 @@ type gsConn struct {
 	g      *gosnmp.GoSNMP
 	bulk   *atomic.Int32 // gelernte Grenze Varbinds je GETBULK (0 = keine; gehoert dem Collector, ueberlebt neue Verbindungen)
 	bulkAt *atomic.Int64 // wann gelernt (Unix-Sekunden): nach bulkRelearn wieder mit voller Groesse versuchen
+	noBulk *atomic.Int64 // wann gelernt, dass das Geraet GETBULK nicht beantwortet (Unix-Sekunden, 0 = GETBULK geht)
 }
 
 func (c *gsConn) v1() bool { return c.g.Version == gosnmp.Version1 }
@@ -126,6 +127,14 @@ func (c *gsConn) getNext(ctx context.Context, oids []string) ([]pdu, error) {
 // antwortet, wird so nicht dauerhaft gedrosselt).
 func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]pdu, error) {
 	c.g.Context = ctx
+	if c.noBulk != nil {
+		if at := c.noBulk.Load(); at > 0 {
+			if time.Since(time.Unix(at, 0)) <= bulkRelearn {
+				return c.check(c.g.GetNext(oids)) // Geraet ohne GETBULK: GETNEXT, eine Zeile je Spalte
+			}
+			c.noBulk.Store(0) // nach einer Weile wieder versuchen (Firmware-Update)
+		}
+	}
 	n := uint32(max(1, len(oids)))
 	if c.bulk != nil {
 		// gelernte Grenze nur eine Weile: ein einzelner Verlust (WLAN, VPN) drosselt sonst fuer immer
@@ -136,7 +145,7 @@ func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]p
 			maxRep = max(1, lim/n)
 		}
 	}
-	shrunk := false
+	shrunk, probed := false, false
 	for {
 		res, err := c.check(c.g.GetBulk(oids, 0, maxRep))
 		if err == nil {
@@ -148,11 +157,42 @@ func (c *gsConn) getBulk(ctx context.Context, oids []string, maxRep uint32) ([]p
 			}
 			return res, nil
 		}
-		if maxRep <= 1 || ctx.Err() != nil || !isTimeout(err) {
+		if ctx.Err() != nil || !isTimeout(err) {
+			return res, err
+		}
+		if !probed {
+			probed = true
+			if next, ok := c.bulkUnsupported(oids, maxRep); ok {
+				return next, nil
+			}
+		}
+		if maxRep <= 1 {
 			return res, err
 		}
 		maxRep, shrunk = max(1, maxRep/2), true
 	}
+}
+
+// bulkUnsupported klaert nach der ersten GETBULK-Anfrage ohne Antwort, ob das Geraet GETBULK ueberhaupt beantwortet:
+// Manche Drucker (Brother, HP OfficeJet, #269) verwerfen GETBULK still, beantworten GETNEXT aber (snmpwalk geht).
+// Antworten GETNEXT, aber nicht die kleinste GETBULK-Anfrage, gilt GETBULK als nicht unterstuetzt (gemerkt fuer
+// bulkRelearn) und die Antwort von GETNEXT ist das Ergebnis. Antwortet auch GETNEXT nicht, bleibt es beim Timeout
+// (Geraet weg); kommt die kleine GETBULK-Anfrage durch, war nur die Antwort zu gross (RouterOS) - weiter verkleinern.
+func (c *gsConn) bulkUnsupported(oids []string, maxRep uint32) ([]pdu, bool) {
+	if c.noBulk == nil {
+		return nil, false
+	}
+	res, err := c.check(c.g.GetNext(oids))
+	if err != nil {
+		return nil, false
+	}
+	if maxRep > 1 {
+		if _, err := c.check(c.g.GetBulk(oids, 0, 1)); err == nil {
+			return nil, false
+		}
+	}
+	c.noBulk.Store(time.Now().Unix())
+	return res, true
 }
 
 // bulkRelearn: so lange gilt eine gelernte GETBULK-Grenze.
@@ -525,16 +565,23 @@ func sortIdx(l []string) {
 // walkReqLimit: hoechstens so viele Anfragen je Tabellen-Abfrage mit n Spalten.
 func walkReqLimit(n int) int { return n*(maxTableRows+1) + 64 }
 
+// colState ist der Stand einer Spalte in walkColumns.
+type colState struct {
+	name   string
+	prefix oid
+	last   oid
+	done   bool
+	rows   int
+}
+
 // walkColumns fragt mehrere Spalten gleichzeitig ab (GETBULK mit mehreren OIDs, v1 GETNEXT). Jede Spalte endet,
 // sobald eine Antwort ausserhalb ihres Praefixes liegt, nicht steigt oder endOfMibView meldet.
+//
+// Rueckfall fuer Agenten, die GETBULK bzw. mehrere Spalten je Anfrage schlecht beherrschen (Drucker, #269): Scheitert
+// GETBULK mit einem Fehlerstatus (genErr, tooBig auch bei einer Zeile ...) oder springt eine Antwort zurueck (Werte
+// falsch zugeordnet), geht die Abfrage mit GETNEXT weiter; scheitert auch GETNEXT ueber mehrere Spalten, Spalte fuer
+// Spalte (wie snmpwalk). Verwirft ein Agent GETBULK still, stellt gsConn.getBulk selbst auf GETNEXT um.
 func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table, error) {
-	type colState struct {
-		name   string
-		prefix oid
-		last   oid
-		done   bool
-		rows   int
-	}
 	out := table{}
 	states := make([]*colState, 0, len(cols))
 	for _, s := range cols {
@@ -550,6 +597,8 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 		maxRep = 20
 	}
 	total := 0
+	next := c.v1()  // GETNEXT statt GETBULK
+	oneCol := false // je Anfrage nur eine Spalte
 	// Jede verwertbare Antwort beendet eine Spalte oder bringt sie mindestens eine Zeile weiter, und keine Spalte geht
 	// ueber maxTableRows: so viele Anfragen reichen fuer jede Tabelle (auch grosse IF-Tabellen mit vielen Spalten und
 	// wenigen Zeilen je GETBULK). Zeitlich begrenzt die Runde.
@@ -564,6 +613,9 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 		if len(active) == 0 {
 			return out, nil
 		}
+		if oneCol {
+			active = active[:1]
+		}
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
@@ -573,7 +625,7 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 		}
 		var res []pdu
 		var err error
-		if c.v1() {
+		if next {
 			res, err = c.getNext(ctx, oids)
 			if statusOf(err) == gosnmp.NoSuchName { // v1: Ende der MIB fuer eine Spalte
 				var se *snmpError
@@ -594,8 +646,22 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 				maxRep = max(1, rep/2)
 				continue
 			}
+			if err == nil && bulkBackwards(res, active) {
+				next = true // Antwort falsch zugeordnet: mit GETNEXT neu fragen
+				continue
+			}
 		}
 		if err != nil {
+			if statusOf(err) != gosnmp.NoError && ctx.Err() == nil {
+				switch {
+				case !next:
+					next = true
+					continue
+				case !oneCol && len(active) > 1:
+					oneCol = true
+					continue
+				}
+			}
 			return out, err
 		}
 		if len(res) == 0 {
@@ -635,4 +701,33 @@ func walkColumns(ctx context.Context, c conn, cols []string, maxRep int) (table,
 		}
 	}
 	return out, errors.New(model.T("monitor64.txt.snmp_table_loop"))
+}
+
+// bulkBackwards: eine GETBULK-Antwort liefert fuer eine Spalte vor deren Ende eine OID, die nicht hinter der vorigen
+// liegt. Das darf kein Agent; manche ordnen die Werte falsch an (z. B. Spalte fuer Spalte statt Zeile fuer Zeile) -
+// dann stimmte die Zuordnung zu den Spalten nicht und Zeilen fehlten.
+func bulkBackwards(res []pdu, active []*colState) bool {
+	last := make([]oid, len(active))
+	done := make([]bool, len(active))
+	for i, st := range active {
+		last[i], done[i] = st.last, st.done
+	}
+	for i, p := range res {
+		j := i % len(active)
+		if done[j] {
+			continue
+		}
+		o, ok := parseOID(p.Name)
+		switch {
+		case !ok || p.Type == gosnmp.EndOfMibView:
+			done[j] = true
+		case cmpOID(o, last[j]) <= 0:
+			return true
+		case !o.hasPrefix(active[j].prefix):
+			done[j] = true
+		default:
+			last[j] = o
+		}
+	}
+	return false
 }

@@ -601,7 +601,8 @@ func TestWalkLimits(t *testing.T) {
 	if err != nil || len(rawBytes(tab.col(ifDescr)["1"])) != maxValueBytes {
 		t.Fatalf("kuerzen: %v", err)
 	}
-	// feindlicher Agent: liefert immer dieselbe OID -> Abbruch statt Endlosschleife
+	// feindlicher Agent: liefert immer dieselbe OID -> einmal GETNEXT (Antwort springt zurueck), dann Abbruch statt
+	// Endlosschleife
 	loop := &loopConn{}
 	_, err = walkColumns(context.Background(), loop, []string{ifDescr}, 20)
 	if err != nil || loop.reqs > 2 {
@@ -622,8 +623,9 @@ func (l *loopConn) close()   {}
 func (l *loopConn) get(context.Context, []string) ([]pdu, error) {
 	return nil, errors.New("nicht benutzt")
 }
-func (l *loopConn) getNext(context.Context, []string) ([]pdu, error) {
-	return nil, errors.New("nicht benutzt")
+func (l *loopConn) getNext(_ context.Context, oids []string) ([]pdu, error) {
+	l.reqs++
+	return []pdu{{Name: oids[0], Type: gosnmp.Integer, Value: 1}}, nil
 }
 func (l *loopConn) getBulk(_ context.Context, oids []string, _ uint32) ([]pdu, error) {
 	l.reqs++

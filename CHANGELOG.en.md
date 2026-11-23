@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Monitor64: no “unknown” alert followed by an all-clear after a host is switched on (start-up period, #275, #274); missing data is called “no data”; no alert after deleting a host (#263); UniFi acknowledgements survive a switch briefly reported offline (#272); SNMP devices without GETBULK (e.g. Brother, HP) are fully queried again (#269).
+- Healthchecks: “Check now” in a cluster without an ipv64 account (#271); sort order kept on refresh (#261); no reminders for paused checks; node names instead of IDs for “partially down” (#273).
 ## 1.7.11 – 2026-11-22
 
 - PROXY64: Let’s Encrypt HTTP-01 validations no longer fail on blocklists, the honeypot block or country blocking – also behind proxy hosts with “Force HTTPS” (e.g. Mailcow).

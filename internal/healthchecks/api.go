@@ -605,7 +605,7 @@ func (m *Module) apiRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "measured by ipv64 only; online checks run on their interval")
 		return
 	}
-	if err := m.runNow(c); err != nil {
+	if err := m.runNow(r.Context(), c); err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}

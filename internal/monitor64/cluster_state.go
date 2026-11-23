@@ -319,6 +319,7 @@ func (m *Module) adoptState(ctx context.Context, rt *hostRT) {
 			tmp.initMaps()
 			rt.Trackers, rt.Kinds, rt.Failures, rt.Missing, rt.Provider = tmp.Trackers, tmp.Kinds, tmp.Failures, tmp.Missing, tmp.Provider
 			rt.Rising, rt.Local, rt.Trend = tmp.Rising, tmp.Local, tmp.Trend
+			rt.Seen, rt.Back, rt.Away = tmp.Seen, tmp.Back, tmp.Away
 			if m.traps != nil && trapAccess(rt) != "" { // offene Traps der bisher zustaendigen Node weiterfuehren (traps_cluster.go)
 				m.traps.adopt(rt.host.UID, tmp.Traps, best.At)
 			}
