@@ -1,6 +1,6 @@
 # Änderungen – Healthchecks
 
-## 3.3.3 – unveröffentlicht
+## 3.3.3 – 2026-11-25
 
 ### Behoben
 - Benachrichtigungen, die ipv64.net für den Check einer einzelnen Node verschickt (z. B. Check einer Cluster-Node), nennen in „Node:“ diese Node statt „ipv64.net Healthchecks“; ebenso Erinnerungen und die Sammelmeldung nach der Ruhezeit, wenn alle Checks von derselben Node kommen (#278, mit dem Update der ipv64-Server).

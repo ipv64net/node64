@@ -1,6 +1,6 @@
 # Changes – Healthchecks
 
-## 3.3.3 – unreleased
+## 3.3.3 – 2026-11-25
 
 ### Fixed
 - Notifications that ipv64.net sends for a check measured by a single node (e.g. a cluster node’s check) show that node under “Node:” instead of “ipv64.net Healthchecks”; the same applies to reminders and the quiet-hours digest when all checks come from the same node (#278, with the update of the ipv64 servers).

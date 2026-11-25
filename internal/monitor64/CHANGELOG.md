@@ -1,6 +1,6 @@
 # Monitor64 – Änderungen
 
-## 0.1.28 – unveröffentlicht
+## 0.1.28 – 2026-11-25
 
 Behoben:
 

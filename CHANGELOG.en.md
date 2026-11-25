@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 1.7.13 – 2026-11-25
+
 - PROXY64: the PROXY64 page and Settings › Ports load instantly again instead of waiting up to 3 s every minute (#276).
 - Monitor64: “OK until the state changes” on systemd or Windows services reports again when another service fails (#283).
 - Healthchecks: notifications via ipv64.net name the measuring node instead of “ipv64.net Healthchecks” (#278); API docs on the push deadline (#280).

@@ -1,6 +1,6 @@
 # Changes – PROXY64
 
-## 1.58.1 – unreleased
+## 1.58.1 – 2026-11-25
 
 ### Fixed
 - The PROXY64 page and Settings › Ports load instantly again: the check whether the HTTP and HTTPS ports are published on the Docker host now runs in the background instead of delaying a page load by up to 3 s every minute (#276).
