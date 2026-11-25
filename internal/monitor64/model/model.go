@@ -43,6 +43,9 @@ type Fact struct {
 	Code string `json:"code"` // smart_failed, smart_sectors, smart_sectors_rising, raid_degraded, zfs_degraded,
 	// bond_member_down, lacp_mismatch, updates_security, reboot_required, systemd_failed, local_warn, local_crit
 	Text string `json:"text,omitempty"`
+	// Items: vollstaendige Liste der betroffenen Elemente (fehlgeschlagene Units, gestoppte Dienste), stabil benannt;
+	// "in Ordnung, bis sich der Zustand aendert" merkt sich diese Menge (eval.Rule.AcceptedItems)
+	Items []string `json:"items,omitempty"`
 }
 
 // Service ist ein Dienst mit seinen Messgroessen.

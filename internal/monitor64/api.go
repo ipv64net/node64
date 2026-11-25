@@ -1316,13 +1316,18 @@ type acceptIn struct {
 }
 
 // acceptState: Zustandsregel - "change" bis sich der Zustand aendert (die Runde entfernt die Ausnahme), "always"
-// dauerhaft nicht melden (Severity off), "" aufheben.
-func acceptState(rule *eval.Rule, mode string) error {
+// dauerhaft nicht melden (Severity off), "" aufheben. items: betroffene Elemente dieser Runde (fehlgeschlagene
+// Units ...); bei "change" gespeichert, ein weiteres Element beendet die Ausnahme. nil = ohne Menge.
+func acceptState(rule *eval.Rule, mode string, items []string) error {
 	off := eval.SevOff
+	rule.AcceptedItems = nil
 	switch mode {
 	case "change":
 		t := true
 		rule.Accepted = &t
+		if set := acceptItemSet(items); set != nil {
+			rule.AcceptedItems = &set
+		}
 		if rule.Severity != nil && *rule.Severity == eval.SevOff {
 			rule.Severity = nil
 		}
@@ -1388,6 +1393,20 @@ func (m *Module) metricValue(hostUID, key, kind string) *float64 {
 				x := mt.Value
 				return &x
 			}
+		}
+	}
+	return nil
+}
+
+// stateItems: betroffene Elemente einer Zustandsregel an einem Dienst (aus dem Stand der Runde, SvcView.Items).
+func (m *Module) stateItems(hostUID, key, kind string) []string {
+	v := m.viewOf(hostUID)
+	if v == nil {
+		return nil
+	}
+	for _, s := range v.Services {
+		if s.Key == key {
+			return s.Items[kind]
 		}
 	}
 	return nil
@@ -1535,7 +1554,7 @@ func (m *Module) apiServiceUpdate(w http.ResponseWriter, r *http.Request) {
 		rule := svcRules[a.Kind]
 		var err error
 		if rk.State {
-			err = acceptState(&rule, a.Mode)
+			err = acceptState(&rule, a.Mode, m.stateItems(h.UID, row.Key, a.Kind))
 		} else {
 			err = acceptNumber(&rule, a.Mode, m.metricValue(h.UID, row.Key, a.Kind))
 		}

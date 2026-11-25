@@ -5467,7 +5467,7 @@
       "h2": "DNS über TLS, HTTPS und QUIC, eigene Einträge und Zonen"
     },
     "honeypot": {
-      "desc": "Lockvogel im Netz: erkennt Angreifer, die Zugangsdaten durchprobieren, und meldet sie an die IPv64-Blocklisten.",
+      "desc": "Lockvogel im Netz: erkennt Angreifer, die Zugangsdaten durchprobieren, und meldet sie an die ipv64-Blocklisten.",
       "h1": "Simuliert gängige Dienste wie SSH, Telnet und Web-Logins",
       "h2": "Frühwarnung und Beitrag zu den gemeinsamen Blocklisten"
     },

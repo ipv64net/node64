@@ -1,5 +1,10 @@
 # Änderungen – PROXY64
 
+## 1.58.1 – unveröffentlicht
+
+### Behoben
+- Die Seite PROXY64 und Einstellungen › Ports laden wieder sofort: Die Prüfung, ob HTTP- und HTTPS-Port auf dem Docker-Host veröffentlicht sind, läuft im Hintergrund, statt den Seitenaufruf jede Minute bis zu 3 s aufzuhalten (#276).
+
 ## 1.58.0 – 2026-11-22
 
 ### Neu

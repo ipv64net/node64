@@ -226,6 +226,8 @@ type SvcView struct {
 	// aber als gewollt bestaetigt sind ("in Ordnung, bis sich der Zustand aendert") - beides fuer den Dienst-Dialog
 	Firing   []string `json:"firing,omitempty"`
 	Accepted []string `json:"accepted,omitempty"`
+	// Items: Zustandsregel -> betroffene Elemente dieser Runde (fehlgeschlagene Units ...); beim Bestaetigen gespeichert
+	Items map[string][]string `json:"items,omitempty"`
 }
 
 // HostView ist der aktuelle Stand eines Hosts fuer die Oberflaeche.
@@ -747,8 +749,15 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		m.lastValues(rt, r.Key, &sv, g.svc, ok, now, missingSt)
 		// Zustandsregeln (Facts)
 		facts := map[string]string{}
+		items := map[string][]string{} // Regel-Art -> betroffene Elemente (Fact.Items, z. B. fehlgeschlagene Units)
 		for _, f := range g.svc.Facts {
 			facts[f.Code] = f.Text
+			if k := factKind(f.Code); k != "" && len(f.Items) > 0 {
+				items[k] = append(items[k], f.Items...)
+			}
+		}
+		if len(items) > 0 {
+			sv.Items = items
 		}
 		if _, has := facts["smart_sectors_rising"]; has {
 			rt.Rising[r.Key] = now.Add(risingHold)
@@ -776,6 +785,7 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 		// bestaetigte Zustaende, deren Bedingung entfallen ist (bzw. deren Regel-Art der Dienst nicht mehr hat): Ausnahme
 		// entfernen, damit der naechste Eintritt wieder meldet
 		accDone := numDone
+		accShrink := map[string][]string{} // bestaetigte Mengen, aus denen Elemente weggefallen sind
 		if (ok && !noData) || !r.VanishedAt.IsZero() {
 			for k, hr := range hostRules {
 				if hr.Accepted != nil && *hr.Accepted && !kinds[k] {
@@ -828,8 +838,16 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 			if hr := hostRules[k]; hr.Accepted != nil && *hr.Accepted && (ok || k == eval.KindServiceGone) {
 				switch {
 				case cond:
-					cond = false
-					sv.Accepted = append(sv.Accepted, k)
+					// mit gespeicherter Menge: ein neues Element (weitere Unit fehlgeschlagen) beendet die Ausnahme
+					if rest, more := acceptedItemsLeft(hr.AcceptedItems, items[k]); more {
+						accDone = append(accDone, k)
+					} else {
+						cond = false
+						sv.Accepted = append(sv.Accepted, k)
+						if rest != nil {
+							accShrink[k] = rest
+						}
+					}
 				case isSmart && (smartUnreadable || smartAsleep), noData:
 					sv.Accepted = append(sv.Accepted, k) // SMART bzw. Dienst in dieser Runde nicht gelesen: Bedingung unbekannt, bleibt
 				default:
@@ -860,8 +878,8 @@ func (m *Module) poll(ctx context.Context, rt *hostRT) {
 				sv.Pending = append(sv.Pending, PendView{Kind: k, State: st.Pending, Since: st.PendingSince, At: st.PendingAt})
 			}
 		}
-		if len(accDone) > 0 && role == roleReport {
-			m.clearAccepted(dbctx, h.UID, r, hostRules, accDone)
+		if (len(accDone) > 0 || len(accShrink) > 0) && role == roleReport {
+			m.clearAccepted(dbctx, h.UID, r, hostRules, accDone, accShrink)
 		}
 		// eigene Skripte: Zustand direkt aus dem Skript; ohne Daten letzter Zustand, nach 3 Intervallen Unbekannt
 		if r.Kind == "local" {
@@ -1113,6 +1131,43 @@ func partialAffects(err error, key string) bool {
 		return pe.Affects(key)
 	}
 	return true
+}
+
+// maxAcceptedItems begrenzt die gespeicherte Menge einer Bestaetigung (eval.Rule.AcceptedItems).
+const maxAcceptedItems = 256
+
+// acceptItemSet macht aus den Elementen einer Runde die gespeicherte Menge: sortiert, ohne Doppelte, begrenzt.
+// nil, wenn es keine gibt (Bestaetigung ohne Menge).
+func acceptItemSet(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := slices.Clone(items)
+	slices.Sort(out)
+	out = slices.Compact(out)
+	if len(out) > maxAcceptedItems {
+		out = out[:maxAcceptedItems]
+	}
+	return out
+}
+
+// acceptedItemsLeft vergleicht die Elemente dieser Runde mit der bestaetigten Menge: more = es ist ein neues dazu
+// (die Ausnahme endet); rest = die kleinere Menge, wenn Elemente weggefallen sind (sonst nil). Ohne gespeicherte
+// Menge (aeltere Bestaetigung) bzw. ohne Elemente dieser Runde gilt die Ausnahme wie bisher weiter.
+func acceptedItemsLeft(accepted *[]string, cur []string) (rest []string, more bool) {
+	if accepted == nil || len(cur) == 0 {
+		return nil, false
+	}
+	set := acceptItemSet(cur)
+	for _, it := range set {
+		if !slices.Contains(*accepted, it) {
+			return nil, true
+		}
+	}
+	if len(set) < len(*accepted) {
+		return set, false
+	}
+	return nil, false
 }
 
 // parseHostRules liest die Schwellen der Stufe "dieser Host, nur dieser Dienst" (Regel-Art -> Regel).

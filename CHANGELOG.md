@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Die PROXY64-Seite und Einstellungen › Ports laden wieder sofort, statt jede Minute bis zu 3 s zu warten (#276).
+- Monitor64: „In Ordnung, bis sich der Zustand ändert“ bei systemd- bzw. Windows-Diensten meldet wieder, wenn ein weiterer Dienst ausfällt (#283).
+- Healthchecks: Meldungen über ipv64.net nennen die messende Node statt „ipv64.net Healthchecks“ (#278); API-Doku zur Frist bei Push-Checks (#280).
 - Monitor64: Ist ein Host nicht erreichbar, bleiben seine letzten Messwerte sichtbar („letzter Wert, vor …“) – CPU, RAM und Co. lassen sich weiter anklicken, Diagramme und Verlauf bleiben erreichbar.
 ## 1.7.12 – 2026-11-23
 

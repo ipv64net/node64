@@ -692,10 +692,11 @@ func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 				link = d.baseURL(uid, p)
 			}
 		}
+		node, _ := d.nodeOf(commonNode(uid, items))
 		m := Message{Kind: kind, Priority: 4, Time: d.now(), Language: lang, EventID: "quiet-" + strconv.FormatInt(d.now().UnixNano(), 36), Check: CheckInfo{UserID: uid},
 			Title: d.i18n.T(lang, subject, "count", len(items), "down", stillDown),
-			Text:  d.i18n.T(lang, "notify.body.digest_intro") + "\n" + strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: link}
-		m.Payload = map[string]any{"kind": string(kind), "count": len(items), "down": stillDown, "checks": names(items), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
+			Text:  d.i18n.T(lang, "notify.body.digest_intro") + "\n" + strings.Join(lines, "\n") + "\n" + d.i18n.T(lang, "notify.body.node", "node", node), URL: link}
+		m.Payload = map[string]any{"kind": string(kind), "count": len(items), "down": stillDown, "checks": names(items), "node": node, "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
 		d.send(ctx, ch, m)
 	}
 }
@@ -823,10 +824,11 @@ func (d *Dispatcher) sendSummary(ctx context.Context, list0 []Alert, up bool) {
 		if up {
 			kind, prio, key, path = KindSummaryUp, 3, "notify.subject.summary_up", "/healthchecks"
 		}
+		node, _ := d.nodeOf(commonNode(uid, list))
 		m := Message{Kind: kind, Priority: prio, Time: d.now(), Language: lang, EventID: list[0].EventID, Check: CheckInfo{UserID: uid},
 			Title: d.i18n.T(lang, key, "count", len(list)),
-			Text:  strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: d.listURL(uid, path)}
-		m.Payload = map[string]any{"kind": string(kind), "count": len(list), "checks": names(list), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
+			Text:  strings.Join(lines, "\n") + "\n" + d.i18n.T(lang, "notify.body.node", "node", node), URL: d.listURL(uid, path)}
+		m.Payload = map[string]any{"kind": string(kind), "count": len(list), "checks": names(list), "node": node, "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
 		d.send(ctx, ch, m)
 	}
 }
@@ -850,6 +852,33 @@ func (d *Dispatcher) nodeName(uid int64) string {
 
 func (d *Dispatcher) nodeLine(uid int64, lang string) string {
 	return d.i18n.T(lang, "notify.body.node", "node", d.nodeName(uid))
+}
+
+// nodeOf: Name (mit Standort) und Payload der Node, die den Check misst (CheckInfo.NodeName, vom hub gesetzt),
+// sonst die eigene Einstellung.
+func (d *Dispatcher) nodeOf(c CheckInfo) (string, map[string]any) {
+	if c.NodeName == "" {
+		set := d.settings(c.UserID)
+		return d.nodeName(c.UserID), map[string]any{"name": set(SetNodeName, ""), "location": set(SetNodeLocation, "")}
+	}
+	name := c.NodeName
+	if c.NodeLocation != "" {
+		name += " (" + c.NodeLocation + ")"
+	}
+	return name, map[string]any{"name": c.NodeName, "location": c.NodeLocation}
+}
+
+// commonNode: Check-Angaben fuer die Zeile "Node:" einer Sammelmeldung - die messende Node, wenn alle Meldungen
+// von derselben kommen, sonst die eigene Einstellung (mehrere Nodes: der hub als Absender).
+func commonNode(uid int64, list []Alert) CheckInfo {
+	c := CheckInfo{UserID: uid}
+	for i, a := range list {
+		if a.Check.NodeName == "" || (i > 0 && (a.Check.NodeName != c.NodeName || a.Check.NodeLocation != c.NodeLocation)) {
+			return CheckInfo{UserID: uid}
+		}
+		c.NodeName, c.NodeLocation = a.Check.NodeName, a.Check.NodeLocation
+	}
+	return c
 }
 
 func (d *Dispatcher) baseURL(uid int64, path string) string {
@@ -951,7 +980,8 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if a.Flaps > 0 {
 		lines = append(lines, t("notify.body.flaps", "count", a.Flaps))
 	}
-	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.nodeLine(uid, lang))
+	node, nodePayload := d.nodeOf(a.Check)
+	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), t("notify.body.node", "node", node))
 	m.Text = strings.Join(lines, "\n")
 	status := "down"
 	if a.Kind == KindUp || a.Kind == KindFlappingEnd || a.Kind == KindDegradedEnd || a.Kind == KindRechecked {
@@ -967,7 +997,7 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		"event_id": a.EventID, "kind": string(a.Kind), "status": status, "time": m.Time.UTC().Format(time.RFC3339),
 		"check":  map[string]any{"token": a.Check.Token, "name": a.Check.Name, "type": a.Check.Type, "target": a.Check.Target, "critical": a.Check.Critical},
 		"reason": a.Reason, "message": a.Message, "duration_seconds": int(a.Duration.Seconds()), "flaps": a.Flaps,
-		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}, "url": m.URL,
+		"node": nodePayload, "url": m.URL,
 		"title": m.Title, "text": m.Text,
 	}
 	return m

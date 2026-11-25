@@ -65,6 +65,68 @@ func TestReverdictDirectNode(t *testing.T) {
 	}
 }
 
+// #278: misst eine einzelne Node den lokalen Check (auch wenn er einer anderen gehoert und der hub die Meldung
+// verschickt), nennt die Meldung sie in "Node:"; bei mehreren Nodes und online bleibt es beim Portal.
+func TestReverdictMeasuringNodeName(t *testing.T) {
+	now := time.Now().UTC()
+	for _, tc := range []struct {
+		name, execution, nodes string
+		wantName, wantDirect   string
+	}{
+		{"cluster member measures the main node's check", "local", "b", "docker-netcup", ""},
+		{"owner measures alone", "local", "a", "docker-netcup", "a"},
+		{"several nodes", "local", "a,b", "", ""},
+		{"online", "online", "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
+				switch {
+				case strings.HasPrefix(q, "SELECT userid, policy"):
+					return fakeResult{cols: []string{"userid", "policy", "state", "name", "interval_sec", "incident_id", "down_since", "type", "target", "critical", "channels",
+						"notify_down", "notify_up", "notify_degraded", "execution", "paused", "nodes", "node_id", "params"},
+						rows: [][]driver.Value{{int64(7), "all", "up", "TEST", int64(60), nil, nil, "port", "192.168.177.1", int64(0), "", int64(1), int64(1), int64(0), tc.execution, int64(0), tc.nodes, "a", "{}"}}}
+				case strings.Contains(q, "FROM hc2_check_states"):
+					src := []string{"loc:fsn"}
+					if tc.execution == "local" {
+						src = nil
+						for _, n := range measuringNodes(splitList(tc.nodes), "a") {
+							src = append(src, "node:"+n)
+						}
+					}
+					var rows [][]driver.Value
+					for _, x := range src {
+						rows = append(rows, []driver.Value{x, "down", "down", "port_closed", "port 1234 closed", 0.0, now.Format(TimeFormat), now.Add(-time.Minute).Format(TimeFormat)})
+					}
+					return fakeResult{cols: []string{"source", "state", "last_status", "last_reason", "last_message", "last_latency_ms", "updated_at", "since"}, rows: rows}
+				case strings.HasPrefix(q, "SELECT online, last_seen"):
+					return fakeResult{cols: []string{"online", "last_seen"}, rows: [][]driver.Value{{int64(1), now.Format(TimeFormat)}}}
+				case strings.HasPrefix(q, "SELECT modules FROM hc2_nodes"):
+					return fakeResult{cols: []string{"modules"}, rows: [][]driver.Value{{"healthchecks,notify-direct"}}}
+				case strings.HasPrefix(q, "SELECT name, location FROM hc2_nodes"):
+					if args[0].Value != tc.nodes {
+						t.Errorf("name of node %v, want %v", args[0].Value, tc.nodes)
+					}
+					return fakeResult{cols: []string{"name", "location"}, rows: [][]driver.Value{{"docker-netcup", "Netcup"}}}
+				case strings.HasPrefix(q, "SELECT"):
+					return fakeResult{cols: []string{"x"}}
+				}
+				return fakeResult{affected: 1}
+			})
+			var got []OverallEvent
+			s.OnOverall = func(e OverallEvent) { got = append(got, e) }
+			if err := s.Reverdict(context.Background(), "tok"); err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got[0].Kind != "down" {
+				t.Fatalf("events: %+v", got)
+			}
+			if got[0].NodeName != tc.wantName || got[0].DirectNode != tc.wantDirect || (tc.wantName != "" && got[0].NodeLocation != "Netcup") {
+				t.Fatalf("node %q (%q) direct %q, want %q direct %q", got[0].NodeName, got[0].NodeLocation, got[0].DirectNode, tc.wantName, tc.wantDirect)
+			}
+		})
+	}
+}
+
 // Teilweise gestoert im Cluster (GitHub #273): der Hinweistext nennt die Nodes mit Namen statt node:<id>.
 func TestReverdictNodeNames(t *testing.T) {
 	now := time.Now().UTC()
@@ -108,6 +170,12 @@ func TestReverdictNodeNames(t *testing.T) {
 func TestDueRemindersDirectNode(t *testing.T) {
 	ds := time.Now().UTC().Add(-time.Hour).Format(TimeFormat)
 	s, f := fakeStore(func(q string, args []driver.NamedValue) fakeResult {
+		if strings.HasPrefix(q, "SELECT name, location FROM hc2_nodes") { // Zeile "Node:" (#278)
+			if args[0].Value != "a" {
+				t.Errorf("name of node %v", args[0].Value)
+			}
+			return fakeResult{cols: []string{"name", "location"}, rows: [][]driver.Value{{"docker-netcup", "Netcup"}}}
+		}
 		if !strings.Contains(q, "FIND_IN_SET('notify-direct', d.modules)") || !strings.Contains(q, "execution = 'local'") {
 			t.Errorf("query without capability check: %s", q)
 		}
@@ -134,6 +202,9 @@ func TestDueRemindersDirectNode(t *testing.T) {
 	for _, e := range list {
 		if e.DirectNode != want[e.Token] {
 			t.Errorf("%s: direct node %q", e.Token, e.DirectNode)
+		}
+		if wantName := map[string]string{"loc": "docker-netcup"}[e.Token]; e.NodeName != wantName || (wantName != "" && e.NodeLocation != "Netcup") {
+			t.Errorf("%s: node %q (%q)", e.Token, e.NodeName, e.NodeLocation)
 		}
 	}
 	if len(list[1].Channels) != 2 || list[1].Duration != 30*time.Minute {

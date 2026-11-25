@@ -116,6 +116,10 @@ type CheckInfo struct {
 	// DirectNode (hub): diese Node sendet die ipv64-Kanaele und ihre eigenen Kanaele selbst (Direct), der hub
 	// nur die uebrigen Portal-Kanaele und die Kanaele anderer Nodes.
 	DirectNode string
+	// NodeName/NodeLocation (hub): die eine Node, die den lokalen Check misst, fuer die Zeile "Node:" (leer = die
+	// Einstellungen node.name/node.location, auf dem hub "ipv64.net Healthchecks").
+	NodeName     string
+	NodeLocation string
 }
 
 // IsDynDNS: Meldung des DynDNS-Moduls.

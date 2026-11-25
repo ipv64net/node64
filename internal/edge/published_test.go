@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // Docker-Bridge-Netz: HTTP- und HTTPS-Port gelten als veroeffentlicht, wenn die Pruefanfrage ueber das Gateway beim
@@ -21,8 +22,9 @@ func TestPublished(t *testing.T) {
 	if err := e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: http.NotFoundHandler(), HTTP3: true}}); err != nil {
 		t.Fatal(err)
 	}
-	oldNet, oldGw, oldDocker := bridgeNet, bridgeGateway, pubDockerHost
-	defer func() { bridgeNet, bridgeGateway, pubDockerHost = oldNet, oldGw, oldDocker }()
+	oldNet, oldGw, oldDocker, oldWait := bridgeNet, bridgeGateway, pubDockerHost, pubFirstWait
+	defer func() { bridgeNet, bridgeGateway, pubDockerHost, pubFirstWait = oldNet, oldGw, oldDocker, oldWait }()
+	pubFirstWait = time.Minute                      // ohne gemerktes Ergebnis auf die Pruefung warten
 	pubDockerHost = func() string { return "none" } // keine Docker-API: nur die Pruefanfrage zaehlt
 	gw := netip.MustParseAddr("127.0.0.1")
 	bridgeGateway = func() netip.Addr { return gw }
@@ -153,6 +155,115 @@ func TestPublishedNoHairpin(t *testing.T) {
 	e.pub.Store(nil)
 	if p := e.Published(ctx); len(p.Missing) != 2 || len(p.Unknown) != 0 || p.PortState(cfg.HTTPSPort) != "no" {
 		t.Fatalf("docker api without bindings: %+v", p)
+	}
+}
+
+// #276: ein abgelaufenes Ergebnis kommt sofort zurueck, die Neupruefung laeuft einmal im Hintergrund (auch bei
+// mehreren Seitenaufrufen zugleich); ohne Ergebnis wartet der Aufruf nur kurz und liefert dann "nicht geprueft".
+func TestPublishedStale(t *testing.T) {
+	e, cfg := newEdge(t, nil)
+	if err := e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: http.NotFoundHandler()}}); err != nil {
+		t.Fatal(err)
+	}
+	h, s := strconv.Itoa(cfg.HTTPPort), strconv.Itoa(cfg.HTTPSPort)
+	bound := `{"` + h + `/tcp":[{"HostIp":"0.0.0.0","HostPort":"` + h + `"}],"` + s + `/tcp":[{"HostIp":"0.0.0.0","HostPort":"` + s + `"}]}`
+	var calls atomic.Int32
+	var ports atomic.Pointer[string]
+	ports.Store(&bound)
+	gate := make(chan struct{}) // Docker-API antwortet erst, wenn geschlossen
+	close(gate)
+	var gateMu sync.Mutex
+	asked := make(chan struct{}, 10)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		asked <- struct{}{}
+		gateMu.Lock()
+		g := gate
+		gateMu.Unlock()
+		<-g
+		fmt.Fprintf(w, `{"NetworkSettings":{"Ports":%s}}`, *ports.Load())
+	}))
+	defer api.Close()
+	defer BridgeForTest(true, netip.Addr{})() // ohne Gateway: nur die Docker-API (eine Anfrage je Pruefung)
+	oldDocker, oldSelf := pubDockerHost, pubSelf
+	defer func() { pubDockerHost, pubSelf = oldDocker, oldSelf }()
+	pubDockerHost = func() string { return api.URL }
+	pubSelf = func() (string, error) { return "self", nil }
+	ctx := context.Background()
+
+	if p := e.Published(ctx); p.PortState(cfg.HTTPSPort) != "yes" || calls.Load() != 1 {
+		t.Fatalf("first: %+v (%d calls)", p, calls.Load())
+	}
+	<-asked
+
+	// Ergebnis abgelaufen, die Docker-API haengt und meldet danach fehlende Ports
+	c := e.pub.Load()
+	old := *c
+	old.res.At = time.Now().Add(-2 * probeTTL)
+	e.pub.Store(&old)
+	none := `{}`
+	ports.Store(&none)
+	gateMu.Lock()
+	gate = make(chan struct{})
+	held := gate
+	gateMu.Unlock()
+	start := time.Now()
+	var wg sync.WaitGroup
+	for range 5 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if p := e.Published(ctx); p.PortState(cfg.HTTPSPort) != "yes" || len(p.Missing) != 0 {
+				t.Errorf("stale result not returned: %+v", p)
+			}
+		}()
+	}
+	wg.Wait()
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("stale result took %v", d)
+	}
+	select {
+	case <-asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no refresh in the background")
+	}
+	if p := e.Published(ctx); p.PortState(cfg.HTTPSPort) != "yes" || calls.Load() != 2 {
+		t.Fatalf("during refresh: %+v (%d calls)", p, calls.Load())
+	}
+	close(held)
+	deadline := time.Now().Add(5 * time.Second)
+	for e.Published(ctx).PortState(cfg.HTTPSPort) != "no" {
+		if time.Now().After(deadline) {
+			t.Fatal("refreshed result not stored")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("refresh ran %d times", n)
+	}
+
+	// kein gemerktes Ergebnis und eine haengende Pruefung: nach kurzer Wartezeit leer, ohne Warnung
+	gateMu.Lock()
+	gate = make(chan struct{})
+	held = gate
+	gateMu.Unlock()
+	defer func() { // Pruefung im Hintergrund beenden, bevor die Testwerte zurueckgesetzt werden
+		e.pubMu.Lock()
+		run := e.pubRun
+		e.pubMu.Unlock()
+		close(held)
+		if run != nil {
+			<-run
+		}
+	}()
+	e.pub.Store(nil)
+	pubFirstWait = 50 * time.Millisecond
+	start = time.Now()
+	if p := e.Published(ctx); !p.Bridge || len(p.Missing) != 0 || len(p.Found) != 0 || p.PortState(cfg.HTTPSPort) != "" {
+		t.Fatalf("unchecked: %+v", p)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("first call took %v", d)
 	}
 }
 

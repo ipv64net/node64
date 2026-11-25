@@ -358,7 +358,7 @@ func pmgServices(list []pmgService) model.Service {
 		Metrics: []model.Metric{{Name: "failed", Value: float64(len(failed))}}}
 	if len(failed) > 0 {
 		l := model.Raw(strings.Join(limitList(failed, 5), ", "))
-		sv.Facts = append(sv.Facts, model.Fact{Code: "systemd_failed", Text: l})
+		sv.Facts = append(sv.Facts, model.Fact{Code: "systemd_failed", Text: l, Items: failed})
 		sv.Text = model.T("monitor64.txt.failed_list", "n", len(failed), "list", l)
 	} else {
 		sv.Text = model.T("monitor64.txt.pmg_services_ok", "n", run)

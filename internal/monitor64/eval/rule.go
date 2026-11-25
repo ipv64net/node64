@@ -151,6 +151,11 @@ type Rule struct {
 	// Ordnung") und meldet nichts, bis die Bedingung wieder entfaellt; dann entfernt die Runde die Ausnahme, der
 	// naechste Eintritt meldet wieder. Dauerhaft nicht melden ist Severity "off".
 	Accepted *bool `json:"accepted,omitempty"`
+	// AcceptedItems: zu Accepted die beim Bestaetigen betroffenen Elemente (z. B. fehlgeschlagene systemd-Units).
+	// Kommt ein weiteres dazu, endet die Ausnahme (ein spaeterer Ausfall meldet); faellt eines weg, gilt sie fuer die
+	// uebrigen weiter. nil = ohne Menge (aeltere Bestaetigung): gilt, solange die Bedingung besteht. Zeiger, damit
+	// Rule vergleichbar bleibt (Empty).
+	AcceptedItems *[]string `json:"accepted_items,omitempty"`
 	// AcceptedAt: nur Stufe "dieser Dienst", Zahlenwerte - der Wert ist bis zu diesem Stand gewollt ("SSD-Verschleiss
 	// 100 % ist in Ordnung"): bis dahin meldet die Regel nichts. Wird der Wert schlechter (Richtung der Regel) oder
 	// faellt er unter die Warnschwelle, entfernt die Runde die Ausnahme. Dauerhaft nicht melden ist Warn/Crit "off".

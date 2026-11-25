@@ -64,7 +64,7 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 	}
 	sum := Service{Key: "winsvc", Name: model.T("monitor64.svc.winsvc"), Kind: "winsvc", Default: true}
 	perUser := winSvcPerUser(list)
-	var stopped []string
+	var stopped, stoppedIDs []string // Anzeigenamen bzw. Dienstnamen (Items)
 	auto := 0
 	out := make([]Service, 0, len(list)+1)
 	out = append(out, Service{}) // Platz fuer die Zusammenfassung vorne
@@ -89,12 +89,13 @@ func mapWinSvc(list []m64proto.WinService) []Service {
 		auto++
 		if winSvcStopped(w.State) && !winSvcIgnore.MatchString(w.Name) {
 			stopped = append(stopped, name)
+			stoppedIDs = append(stoppedIDs, w.Name)
 		}
 	}
 	sum.Metrics = []Metric{{Name: "auto", Value: float64(auto)}, {Name: "stopped", Value: float64(len(stopped))}}
 	if len(stopped) > 0 {
 		list := strings.Join(limitList(stopped, 5), ", ")
-		sum.Facts = append(sum.Facts, Fact{Code: "winsvc_stopped", Text: list})
+		sum.Facts = append(sum.Facts, Fact{Code: "winsvc_stopped", Text: list, Items: stoppedIDs})
 		sum.Text = model.T("monitor64.txt.winsvc_stopped", "n", len(stopped), "total", auto, "list", list)
 	} else {
 		sum.Text = model.T("monitor64.txt.winsvc_ok", "n", auto)

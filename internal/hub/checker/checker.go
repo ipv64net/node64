@@ -96,7 +96,8 @@ func (c *Checker) onOverall(e store.OverallEvent) {
 	}
 	c.dispatcher.Dispatch(notify.Alert{EventID: e.EventID, Kind: kind, Time: e.Time, Reason: e.Reason, Message: e.Message, Duration: e.Duration,
 		Check: notify.CheckInfo{UserID: e.UserID, Token: e.Token, Name: e.Name, Type: e.Type, Target: e.Target, Critical: e.Critical, Channels: e.Channels,
-			NotifyDown: e.NotifyDown, NotifyUp: e.NotifyUp, NotifyDegraded: e.NotifyDegraded, DirectNode: e.DirectNode}})
+			NotifyDown: e.NotifyDown, NotifyUp: e.NotifyUp, NotifyDegraded: e.NotifyDegraded, DirectNode: e.DirectNode,
+			NodeName: e.NodeName, NodeLocation: e.NodeLocation}})
 }
 
 // remind schickt Erinnerungen fuer laenger gestoerte Checks (repeat_minutes);
@@ -133,7 +134,8 @@ func (c *Checker) remind(ctx context.Context) {
 		}
 		c.dispatcher.Dispatch(notify.Alert{EventID: scheduler.NewID(), Kind: notify.KindReminder, Time: now, Reason: e.Reason, Message: e.Message, Duration: now.Sub(e.Time),
 			Check: notify.CheckInfo{UserID: e.UserID, Token: e.Token, Name: e.Name, Type: e.Type, Target: e.Target, Critical: e.Critical, Channels: e.Channels,
-				NotifyDown: e.NotifyDown, NotifyUp: e.NotifyUp, NotifyDegraded: e.NotifyDegraded, DirectNode: e.DirectNode}})
+				NotifyDown: e.NotifyDown, NotifyUp: e.NotifyUp, NotifyDegraded: e.NotifyDegraded, DirectNode: e.DirectNode,
+				NodeName: e.NodeName, NodeLocation: e.NodeLocation}})
 	}
 }
 

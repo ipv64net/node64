@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,15 +49,22 @@ func (s *Store) UpdateService(ctx context.Context, hostUID, key string, p svcPat
 
 // clearAccepted entfernt erledigte Ausnahmen "in Ordnung, bis sich der Zustand aendert" (eval.Rule.Accepted bzw.
 // AcceptedAt bei Zahlenwerten) aus den Schwellen "nur dieser Dienst" - die Bedingung ist entfallen, der naechste
-// Eintritt meldet wieder.
-func (m *Module) clearAccepted(ctx context.Context, hostUID string, r *ServiceRow, rules map[string]eval.Rule, kinds []string) {
+// Eintritt meldet wieder. shrink: bestaetigte Mengen (AcceptedItems), aus denen Elemente weggefallen sind - die
+// Ausnahme gilt fuer die uebrigen weiter, ein spaeter wieder fehlschlagendes Element meldet.
+func (m *Module) clearAccepted(ctx context.Context, hostUID string, r *ServiceRow, rules map[string]eval.Rule, kinds []string, shrink map[string][]string) {
 	next := make(map[string]eval.Rule, len(rules))
 	for k, v := range rules {
 		next[k] = v
 	}
+	for k, items := range shrink {
+		if v, ok := next[k]; ok && v.Accepted != nil && *v.Accepted && !slices.Contains(kinds, k) {
+			v.AcceptedItems = &items
+			next[k] = v
+		}
+	}
 	for _, k := range kinds {
 		v := next[k]
-		v.Accepted, v.AcceptedAt = nil, nil
+		v.Accepted, v.AcceptedAt, v.AcceptedItems = nil, nil, nil
 		if v.Empty() {
 			delete(next, k)
 		} else {

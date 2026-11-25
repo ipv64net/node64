@@ -5467,7 +5467,7 @@
       "h2": "DNS over TLS, HTTPS and QUIC, own records and zones"
     },
     "honeypot": {
-      "desc": "A decoy in your network: detects attackers trying credentials and reports them to the IPv64 blocklists.",
+      "desc": "A decoy in your network: detects attackers trying credentials and reports them to the ipv64 blocklists.",
       "h1": "Simulates common services such as SSH, Telnet and web logins",
       "h2": "Early warning and a contribution to the shared blocklists"
     },

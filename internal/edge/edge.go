@@ -205,6 +205,8 @@ type Edge struct {
 	watch    atomic.Pointer[WatchFunc]   // Debug-Beobachter (SetWatch, watch.go)
 	probes   sync.Map                    // Pruefwerte "auf dem Docker-Host veroeffentlicht?" (published.go) -> angekommen
 	pub      atomic.Pointer[pubCache]
+	pubMu    sync.Mutex                                     // pubRun
+	pubRun   chan struct{}                                  // laufende Pruefung im Hintergrund (published.go), geschlossen wenn fertig; nil = keine
 	ppSrc    atomic.Pointer[func(context.Context) []string] // Cluster-Nodes (SetProxyPeers, proxypeers.go)
 	ppHosts  map[string]peerHost                            // letzte Adressen je Name (nur peerLoop)
 	ppPeers  atomic.Pointer[[]netip.Addr]                   // deren Adressen

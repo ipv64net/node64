@@ -35,7 +35,7 @@ func Service(lang string, s model.Service) model.Service {
 	s.Name, s.Text = Lang(lang, s.Name), Lang(lang, s.Text)
 	facts := make([]model.Fact, len(s.Facts))
 	for i, f := range s.Facts {
-		facts[i] = model.Fact{Code: f.Code, Text: Lang(lang, f.Text)}
+		facts[i] = model.Fact{Code: f.Code, Text: Lang(lang, f.Text), Items: f.Items}
 	}
 	if len(facts) > 0 {
 		s.Facts = facts

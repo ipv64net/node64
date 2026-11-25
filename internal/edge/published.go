@@ -211,37 +211,110 @@ func pubBound(b map[string][]pubBinding, port int, hostPorts ...int) bool {
 	return false
 }
 
-// Published prueft (hoechstens einmal je Minute bei gleichen Ports), ob HTTP- und HTTPS-Port des Eingangs auf dem
-// Docker-Host veroeffentlicht sind. Ausserhalb des Bridge-Netzes leer.
+// Published liefert, ob HTTP- und HTTPS-Port des Eingangs auf dem Docker-Host veroeffentlicht sind. Ausserhalb des
+// Bridge-Netzes leer. Die Pruefung laeuft im Hintergrund (hoechstens eine zugleich, #276): ein gemerktes Ergebnis
+// kommt sofort zurueck, nach einer Minute (probeTTL) wird es beim naechsten Aufruf im Hintergrund erneuert. Ohne
+// Ergebnis (erster Aufruf, Ports geaendert) wartet der Aufruf hoechstens pubFirstWait; reicht das nicht, ist das
+// Ergebnis leer (nicht geprueft, keine Warnung) und steht beim naechsten Seitenaufruf bereit.
 func (e *Edge) Published(ctx context.Context) Published {
-	if !bridgeNet() {
+	in, ok := e.pubInput()
+	if !ok {
 		return Published{}
 	}
-	gw := bridgeGateway()
+	if c := e.pub.Load(); c != nil && c.key == in.key {
+		if time.Since(c.res.At) >= probeTTL {
+			e.refreshPublished(in)
+		}
+		return c.res
+	}
+	done := e.refreshPublished(in)
+	t := time.NewTimer(pubFirstWait)
+	defer t.Stop()
+	select {
+	case <-done:
+		if c := e.pub.Load(); c != nil && c.key == in.key {
+			return c.res
+		}
+	case <-t.C:
+	case <-ctx.Done():
+	}
+	return in.empty()
+}
+
+// pubFirstWait: so lange wartet ein Seitenaufruf ohne gemerktes Ergebnis auf die Pruefung (Tests: laenger).
+var pubFirstWait = 500 * time.Millisecond
+
+// pubIn: die zu pruefenden Dienste des Eingangs; key aendert sich mit Gateway und Ports (dann neu pruefen).
+type pubIn struct {
+	key string
+	gw  netip.Addr
+	run []ListenerStatus
+	h3  int
+	pub int // HTTPS-Port nach aussen (Einstellung)
+}
+
+// pubInput: false ausserhalb des Bridge-Netzes (nichts zu pruefen).
+func (e *Edge) pubInput() (pubIn, bool) {
+	if !bridgeNet() {
+		return pubIn{}, false
+	}
+	in := pubIn{gw: bridgeGateway()}
 	st := e.Status()
-	key := gw.String()
-	var run []ListenerStatus
-	h3 := 0
+	in.key = in.gw.String()
 	for _, l := range st.Listeners {
 		if !l.Running {
 			continue
 		}
 		if l.Name == "http3" {
-			h3 = l.Port
+			in.h3 = l.Port
 			continue
 		}
-		run = append(run, l)
-		key += " " + l.Name + ":" + strconv.Itoa(l.Port)
+		in.run = append(in.run, l)
+		in.key += " " + l.Name + ":" + strconv.Itoa(l.Port)
 	}
-	pub := st.Config.publicPort()
-	key += " " + strconv.Itoa(pub)
-	if c := e.pub.Load(); c != nil && c.key == key && time.Since(c.res.At) < probeTTL {
-		return c.res
+	in.pub = st.Config.publicPort()
+	in.key += " " + strconv.Itoa(in.pub)
+	return in, true
+}
+
+// empty: Ergebnis ohne Pruefung (Bridge-Netz erkannt, Ports noch nicht geprueft).
+func (in pubIn) empty() Published {
+	res := Published{Bridge: true, H3Port: in.h3, At: time.Now()}
+	if in.gw.IsValid() {
+		res.Gateway = in.gw.String()
 	}
-	res := Published{Bridge: true, H3Port: h3, At: time.Now()}
-	if gw.IsValid() {
-		res.Gateway = gw.String()
+	return res
+}
+
+// refreshPublished startet die Pruefung im Hintergrund, falls keine laeuft, und liefert einen Kanal, der nach ihrem
+// Ende geschlossen ist (auch den einer schon laufenden Pruefung). Die Pruefung haengt nicht am Seitenaufruf.
+func (e *Edge) refreshPublished(in pubIn) <-chan struct{} {
+	e.pubMu.Lock()
+	defer e.pubMu.Unlock()
+	if e.pubRun != nil {
+		return e.pubRun
 	}
+	done := make(chan struct{})
+	e.pubRun = done
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		res := e.checkPublished(ctx, in)
+		if ctx.Err() == nil {
+			e.pub.Store(&pubCache{key: in.key, res: res})
+		}
+		e.pubMu.Lock()
+		e.pubRun = nil
+		close(done)
+		e.pubMu.Unlock()
+	}()
+	return done
+}
+
+// checkPublished prueft die Ports (Pruefanfrage ueber das Gateway, sonst Docker-API) und wartet auf das Ergebnis.
+func (e *Edge) checkPublished(ctx context.Context, in pubIn) Published {
+	gw, run, pub := in.gw, in.run, in.pub
+	res := in.empty()
 	out := make([]probeResult, len(run))
 	var wg sync.WaitGroup
 	for i, l := range run {
@@ -284,10 +357,6 @@ func (e *Edge) Published(ctx context.Context) Published {
 		}
 	}
 	sort.Slice(res.Missing, func(i, j int) bool { return res.Missing[i].Port < res.Missing[j].Port })
-	if ctx.Err() != nil { // abgebrochener Seitenaufruf: Ergebnis nicht merken
-		return res
-	}
-	e.pub.Store(&pubCache{key: key, res: res})
 	return res
 }
 
@@ -338,9 +407,10 @@ func (e *Edge) probeHit(nonce string) bool {
 	return e.probes.CompareAndSwap(nonce, false, true)
 }
 
-// BridgeForTest setzt Erkennung und Gateway fuer Tests anderer Pakete; restore stellt beides wieder her.
+// BridgeForTest setzt Erkennung und Gateway fuer Tests anderer Pakete; restore stellt beides wieder her. Solange
+// wartet Published ohne gemerktes Ergebnis auf die Pruefung (Tests erwarten das Ergebnis sofort).
 func BridgeForTest(bridge bool, gw netip.Addr) (restore func()) {
-	oldNet, oldGw := bridgeNet, bridgeGateway
-	bridgeNet, bridgeGateway = func() bool { return bridge }, func() netip.Addr { return gw }
-	return func() { bridgeNet, bridgeGateway = oldNet, oldGw }
+	oldNet, oldGw, oldWait := bridgeNet, bridgeGateway, pubFirstWait
+	bridgeNet, bridgeGateway, pubFirstWait = func() bool { return bridge }, func() netip.Addr { return gw }, time.Minute
+	return func() { bridgeNet, bridgeGateway, pubFirstWait = oldNet, oldGw, oldWait }
 }

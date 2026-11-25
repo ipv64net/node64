@@ -212,6 +212,11 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 			return err
 		}
 	}
+	// Zeile "Node:" der Meldung: die eine messende Node (der hub ist nur der Absender)
+	nodeName, nodeLoc := "", ""
+	if !silent {
+		nodeName, nodeLoc = measuringNode(ctx, tx, execution, nodesCol, ownerNode.String)
+	}
 	nowS := now.Format(TimeFormat)
 	var durationSec int64
 	ds := pt(downSince)
@@ -287,7 +292,8 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		s.OnOverall(OverallEvent{EventID: eventID, Token: token, UserID: userid, Name: name, Type: ctype, Target: target, Kind: kind, Time: now,
 			From: old, To: overall, Reason: reason, Message: message, Duration: time.Duration(durationSec) * time.Second,
-			Critical: critical == 1, Channels: chIDs, NotifyDown: nd == 1, NotifyUp: nu == 1, NotifyDegraded: ndeg == 1, DirectNode: directTo})
+			Critical: critical == 1, Channels: chIDs, NotifyDown: nd == 1, NotifyUp: nu == 1, NotifyDegraded: ndeg == 1, DirectNode: directTo,
+			NodeName: nodeName, NodeLocation: nodeLoc})
 	}
 	return nil
 }
@@ -309,6 +315,34 @@ type OverallEvent struct {
 	Execution            string // nur bei Erinnerungen gesetzt (online, both, local)
 	// DirectNode: diese Node sendet ipv64-Kanaele und eigene Kanaele selbst (wire.NotifyDirect), der hub nur den Rest
 	DirectNode string
+	// NodeName/NodeLocation: die eine Node, die den lokalen Check misst (Zeile "Node:"); leer = mehrere Messstellen
+	// oder online, dann steht dort der Name des Portals
+	NodeName, NodeLocation string
+}
+
+// measuringNode liefert Name und Standort der einen Node, die einen lokalen Check misst (Zeile "Node:" der Meldung,
+// auch wenn der hub sie verschickt). Messen mehrere Nodes oder die Standorte von ipv64, bleibt es leer: der
+// Gesamtzustand ist dann die Entscheidung von ipv64.net.
+func measuringNode(ctx context.Context, q rowQuerier, execution, nodesCol, owner string) (name, location string) {
+	if execution != "local" {
+		return "", ""
+	}
+	ids := measuringNodes(splitList(nodesCol), owner)
+	if len(ids) != 1 {
+		return "", ""
+	}
+	rows, err := q.QueryContext(ctx, `SELECT name, location FROM hc2_nodes WHERE node_id = ?`, ids[0])
+	if err != nil {
+		return "", ""
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var n, l sql.NullString
+		if rows.Scan(&n, &l) == nil {
+			return strings.TrimSpace(n.String), strings.TrimSpace(l.String)
+		}
+	}
+	return "", ""
 }
 
 // directKind: Ereignisse, die eine Node bei ihren lokalen Checks selbst meldet ("nicht geprueft"/"wieder geprueft"
@@ -451,6 +485,7 @@ func (s *Store) maintenanceOver(ctx context.Context, token, state, since string,
 			return nil, err
 		}
 	}
+	e.NodeName, e.NodeLocation = measuringNode(ctx, tx, execution, nodesCol, owner)
 	var incidentID any
 	if incident.Valid && incident.Int64 > 0 {
 		incidentID = incident.Int64
@@ -618,7 +653,16 @@ func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
 		}
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if out[i].Execution == "local" { // lokal nur, wenn die Besitzerin allein misst (siehe oben)
+			out[i].NodeName, out[i].NodeLocation = measuringNode(ctx, s.db, "local", "", out[i].DirectNode)
+		}
+	}
+	return out, nil
 }
 
 func inList(list []string, v string) bool {

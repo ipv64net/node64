@@ -3,6 +3,7 @@ package monitor64
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -142,7 +143,7 @@ func MapReport(prev, cur *m64proto.Report) []Service {
 			Metrics: []Metric{{Name: "failed", Value: float64(len(s.Failed))}}}
 		if len(s.Failed) > 0 {
 			list := strings.Join(limitList(s.Failed, 5), ", ")
-			sv.Facts = append(sv.Facts, Fact{Code: "systemd_failed", Text: model.Raw(list)})
+			sv.Facts = append(sv.Facts, Fact{Code: "systemd_failed", Text: model.Raw(list), Items: slices.Clone(s.Failed)})
 			sv.Text = model.T("monitor64.txt.failed_list", "n", len(s.Failed), "list", list)
 		} else {
 			sv.Text = model.T("monitor64.txt.none_failed")

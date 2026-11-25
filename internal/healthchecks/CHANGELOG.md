@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 3.3.3 – unveröffentlicht
+
+### Behoben
+- Benachrichtigungen, die ipv64.net für den Check einer einzelnen Node verschickt (z. B. Check einer Cluster-Node), nennen in „Node:“ diese Node statt „ipv64.net Healthchecks“; ebenso Erinnerungen und die Sammelmeldung nach der Ruhezeit, wenn alle Checks von derselben Node kommen (#278, mit dem Update der ipv64-Server).
+- API-Doku: Bei Push-Checks ist erklärt, dass die Frist über `params.period_seconds` und `params.grace_seconds` eingestellt wird (Standard 60 + 10 Minuten) (#280).
+
 ## 3.3.2 – 2026-11-23
 
 ### Behoben

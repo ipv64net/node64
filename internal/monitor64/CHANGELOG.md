@@ -4,6 +4,7 @@
 
 Behoben:
 
+- Zustand gewollt: „In Ordnung, bis sich der Zustand ändert“ merkt sich bei „systemd-Dienste“ (auch Windows-Dienste und PMG) die betroffenen Dienste. Fällt danach ein weiterer aus, wird wieder gemeldet; bisher blieb die Bestätigung bestehen, solange irgendein Dienst fehlgeschlagen war. Eine schon vorhandene Bestätigung einmal neu setzen (#283).
 - War ein Host nicht erreichbar (z. B. SNMP-Gerät ohne Antwort, Agent aus), verschwanden alle Messwerte: CPU, RAM und Co. ließen sich nicht mehr anklicken, die Diagramme der Host-Seite und der Verlauf im Dienst fehlten, obwohl die Werte gespeichert sind. Jetzt bleiben die zuletzt gelieferten Werte sichtbar – grau mit „letzter Wert, vor …“ –, Diagramme und Verlauf bleiben erreichbar. Der Zustand bleibt „Unbekannt“; im Prometheus-Export erscheinen die alten Werte nicht. Die letzten Werte überstehen auch einen Neustart der Node; war ein Host schon vor dem Update aus, kommen sie aus dem gespeicherten Verlauf.
 
 ## 0.1.27 – 2026-11-23
